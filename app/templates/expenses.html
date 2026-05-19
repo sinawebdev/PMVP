@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block page_title %}Expenses{% endblock %}
+{% block page_intro %}Record and filter company operating expenses such as supplies, transport, office costs, procurement, and miscellaneous spend for management review.{% endblock %}
+{% block header_visual %}<img src="{{ url_for('static', filename='img/finance-ops.svg') }}" alt="Expense tracking illustration">{% endblock %}
+{% block content %}
+<section class="stats-grid"><div class="stat-card"><i class="bi bi-wallet2 stat-icon"></i><span>Total Expenses</span><strong>{{ total_expenses|cedis }}</strong></div></section>
+<div class="row g-4 mt-1">
+    <div class="col-lg-4">
+        <section class="panel">
+            <div class="panel-header"><h2><i class="bi bi-plus-circle"></i>Add Expense</h2></div>
+            <form method="post" class="vstack gap-3">
+                <input class="form-control" type="date" name="expense_date" required>
+                <select class="form-select" name="category" required>{% for category in categories %}<option>{{ category }}</option>{% endfor %}</select>
+                <input class="form-control" name="description" placeholder="Description" required>
+                <input class="form-control" type="number" step="0.01" name="amount" placeholder="Amount" required>
+                <input class="form-control" name="payment_method" placeholder="Payment method">
+                <input class="form-control" name="receipt_reference" placeholder="Receipt reference">
+                <button class="btn btn-primary"><i class="bi bi-plus-circle"></i>Record Expense</button>
+            </form>
+        </section>
+    </div>
+    <div class="col-lg-8">
+        <div class="toolbar">
+            <form method="get" class="d-flex gap-2">
+                <select class="form-select" name="category"><option value="">All categories</option>{% for category in categories %}<option value="{{ category }}" {% if selected_category == category %}selected{% endif %}>{{ category }}</option>{% endfor %}</select>
+                <button class="btn btn-outline-primary">Filter</button>
+            </form>
+            <a class="btn btn-outline-secondary" href="{{ url_for('finance.export_expense_list') }}"><i class="bi bi-download"></i>Export Expenses</a>
+        </div>
+        <section class="panel">
+            <table class="table">
+                <thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Method</th></tr></thead>
+                <tbody>{% for expense in expenses %}<tr><td>{{ expense.expense_date }}</td><td>{{ expense.category }}</td><td>{{ expense.description }}</td><td>{{ expense.amount|cedis }}</td><td>{{ expense.payment_method }}</td></tr>{% endfor %}</tbody>
+            </table>
+        </section>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block page_title %}{{ client.name }}{% endblock %}
+{% block page_intro %}Review the workers and payroll history connected to this client before importing, approving, or preparing finance summaries.{% endblock %}
+{% block header_visual %}<img src="{{ url_for('static', filename='img/people-ops.svg') }}" alt="Client detail illustration">{% endblock %}
+{% block content %}
+<section class="panel">
+    <div class="row g-3">
+        <div class="col-md-3"><strong>Contact</strong><p>{{ client.contact_person }}</p></div>
+        <div class="col-md-3"><strong>Phone</strong><p>{{ client.phone }}</p></div>
+        <div class="col-md-3"><strong>Email</strong><p>{{ client.email }}</p></div>
+        <div class="col-md-3">
+            <strong>Status</strong>
+            <p><span class="badge text-bg-{{ 'success' if client.status == 'Active' else 'danger' }}">{{ client.status }}</span></p>
+        </div>
+    </div>
+</section>
+<div class="row g-4 mt-1">
+    <div class="col-lg-5">
+        <section class="panel">
+            <div class="panel-header"><h2><i class="bi bi-person-lines-fill"></i>Workers</h2><span>{{ client.employees|length }}</span></div>
+            <ul class="list-group list-group-flush">
+                {% for employee in client.employees %}
+                    <li class="list-group-item">{{ employee.staff_id }} · {{ employee.full_name }}</li>
+                {% endfor %}
+            </ul>
+        </section>
+    </div>
+    <div class="col-lg-7">
+        <section class="panel">
+            <div class="panel-header"><h2><i class="bi bi-cash-coin"></i>Payroll Runs</h2></div>
+            <table class="table">
+                <thead><tr><th>Month</th><th>Workers</th><th>Net Pay</th><th>Status</th></tr></thead>
+                <tbody>
+                {% for run in client.payroll_runs %}
+                    <tr>
+                        <td><a href="{{ url_for('payroll.detail', run_id=run.id) }}">{{ run.month }} {{ run.year }}</a></td>
+                        <td>{{ run.total_workers }}</td>
+                        <td>{{ run.total_net_pay|cedis }}</td>
+                        <td>{{ run.status }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </div>
+</div>
+{% endblock %}

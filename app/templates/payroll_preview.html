@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block page_title %}Payroll Preview{% endblock %}
+{% block page_intro %}Check the selected client, detected company name, smart field mapping, unique worker count, duplicates, and row warnings before saving this payroll run.{% endblock %}
+{% block content %}
+<section class="stats-grid">
+    <div class="stat-card"><i class="bi bi-building stat-icon"></i><span>Client Company</span><strong>{{ client.name }}</strong></div>
+    <div class="stat-card"><i class="bi bi-search stat-icon"></i><span>Detected Company</span><strong>{{ payload.detected_company_name or "Not detected" }}</strong></div>
+    <div class="stat-card"><i class="bi bi-table stat-icon"></i><span>Total Rows Found</span><strong>{{ payload.worker_stats.total_rows }}</strong></div>
+    <div class="stat-card"><i class="bi bi-person-check stat-icon"></i><span>Total Unique Workers</span><strong>{{ payload.worker_stats.total_unique_workers }}</strong></div>
+    <div class="stat-card"><i class="bi bi-copy stat-icon"></i><span>Duplicate Entries Found</span><strong>{{ payload.worker_stats.duplicate_count }}</strong></div>
+</section>
+
+{% if payload.validation.summary_warnings %}
+<section class="alert alert-warning mt-3">
+    <strong>Upload warnings</strong>
+    <ul class="mb-0">
+        {% for warning in payload.validation.summary_warnings %}
+            <li>{{ warning }}</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<section class="panel mt-3">
+    <div class="panel-header"><h2><i class="bi bi-diagram-3"></i>Suggested Column Mappings</h2></div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead><tr><th>Original Column</th><th>Mapped Field</th></tr></thead>
+            <tbody>
+            {% for original, mapped in payload.mapping.items() %}
+                <tr><td>{{ original }}</td><td><span class="badge text-bg-{{ 'secondary' if mapped == 'unmapped' else 'primary' }}">{{ mapped }}</span></td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel mt-3">
+    <div class="panel-header"><h2><i class="bi bi-exclamation-triangle"></i>Validation Warnings</h2></div>
+    {% if payload.validation.per_row_warnings %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead><tr><th>Row</th><th>Warnings</th></tr></thead>
+                <tbody>
+                {% for row_number, warnings in payload.validation.per_row_warnings.items() %}
+                    <tr><td>{{ row_number }}</td><td>{{ warnings|join("; ") }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="text-muted mb-0">No row-level warnings found.</p>
+    {% endif %}
+</section>
+
+<section class="panel mt-3">
+    <div class="panel-header"><h2><i class="bi bi-table"></i>First 20 Rows</h2></div>
+    <div class="table-responsive">
+        <table class="table table-sm">
+            <thead><tr>{% for column in payload.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+            <tbody>
+            {% for row in payload.preview_rows %}
+                <tr>{% for column in payload.columns %}<td>{{ row[column] }}</td>{% endfor %}</tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<form method="post" action="{{ url_for('payroll.confirm', import_id=import_id) }}" class="mt-3">
+    <button class="btn btn-success btn-lg"><i class="bi bi-check2-circle"></i>Confirm and Create Payroll Run</button>
+    <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('payroll.upload') }}">Cancel</a>
+</form>
+{% endblock %}

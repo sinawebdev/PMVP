@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block page_title %}{{ "Edit" if employee else "Add" }} Employee{% endblock %}
+{% block page_intro %}Create or update an employee profile so imported payroll rows can be matched against reliable Chrisnat records.{% endblock %}
+{% block header_visual %}<img src="{{ url_for('static', filename='img/people-ops.svg') }}" alt="Employee form illustration">{% endblock %}
+{% block content %}
+<section class="panel form-panel">
+    <form method="post" class="row g-3">
+        <div class="col-md-3"><label class="form-label">Staff ID</label><input class="form-control" name="staff_id" value="{{ employee.staff_id if employee else '' }}" required></div>
+        <div class="col-md-5"><label class="form-label">Full Name</label><input class="form-control" name="full_name" value="{{ employee.full_name if employee else '' }}" required></div>
+        <div class="col-md-4"><label class="form-label">Phone</label><input class="form-control" name="phone" value="{{ employee.phone if employee else '' }}"></div>
+        <div class="col-md-4"><label class="form-label">Client Company</label><select class="form-select" name="client_company_id"><option value="">Select client</option>{% for client in clients %}<option value="{{ client.id }}" {% if employee and employee.client_company_id == client.id %}selected{% endif %}>{{ client.name }}</option>{% endfor %}</select></div>
+        <div class="col-md-4"><label class="form-label">Assigned Client Fallback</label><input class="form-control" name="assigned_client" value="{{ employee.assigned_client if employee else '' }}"></div>
+        <div class="col-md-4"><label class="form-label">Basic Salary</label><input class="form-control" type="number" step="0.01" name="basic_salary" value="{{ employee.basic_salary if employee else '' }}"></div>
+        <div class="col-md-4"><label class="form-label">Ghana Card Number</label><input class="form-control" name="ghana_card_number" value="{{ employee.ghana_card_number if employee else '' }}"></div>
+        <div class="col-md-4"><label class="form-label">SSNIT Number</label><input class="form-control" name="ssnit_number" value="{{ employee.ssnit_number if employee else '' }}"></div>
+        <div class="col-md-4"><label class="form-label">Bank Name</label><input class="form-control" name="bank_name" value="{{ employee.bank_name if employee else '' }}"></div>
+        <div class="col-md-4"><label class="form-label">Bank Account Number</label><input class="form-control" name="bank_account_number" value="{{ employee.bank_account_number if employee else '' }}"></div>
+        <div class="col-md-4"><label class="form-label">MoMo Number</label><input class="form-control" name="momo_number" value="{{ employee.momo_number if employee else '' }}"></div>
+        <div class="col-md-4"><label class="form-label">Employment Type</label><input class="form-control" name="employment_type" value="{{ employee.employment_type if employee else '' }}"></div>
+        <div class="col-md-4"><label class="form-label">Service Line</label><input class="form-control" name="service_line" value="{{ employee.service_line if employee else '' }}"></div>
+        <div class="col-md-4"><label class="form-label">Status</label><select class="form-select" name="status"><option>Active</option><option {% if employee and employee.status == "Inactive" %}selected{% endif %}>Inactive</option></select></div>
+        <div class="col-12"><button class="btn btn-primary"><i class="bi bi-check2-circle"></i>Save Employee</button></div>
+    </form>
+</section>
+{% endblock %}

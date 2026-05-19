@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block page_title %}Payroll Runs{% endblock %}
+{% block page_intro %}Monitor every company-specific payroll run, including worker totals, source Excel files, review status, approvals, and export actions.{% endblock %}
+{% block content %}
+{% if selected_client %}
+<div class="mini-note mb-3">
+    <i class="bi bi-building-check"></i>
+    Showing payroll runs imported for <strong>{{ selected_client.name }}</strong>. Use the client tabs in the left pane to switch companies.
+</div>
+{% else %}
+<div class="mini-note mb-3">
+    <i class="bi bi-grid"></i>
+    Showing payroll runs for all client companies. Select a client company tab in the left pane to focus the payroll list.
+</div>
+{% endif %}
+<div class="toolbar">
+    <a class="btn btn-primary" href="{{ url_for('payroll.upload') }}"><i class="bi bi-file-earmark-arrow-up"></i>Upload Payroll Excel</a>
+</div>
+<section class="panel">
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Payroll Month</th><th>Client Company</th><th>Total Workers</th><th>Gross Pay</th><th>Deductions</th><th>Net Pay</th><th>Status</th><th>Uploaded File</th><th>Actions</th></tr></thead>
+            <tbody>
+            {% for run in payroll_runs %}
+                <tr>
+                    <td>{{ run.month }} {{ run.year }}</td>
+                    <td>{{ run.client_company.name if run.client_company else "" }}</td>
+                    <td>{{ run.total_workers }}</td>
+                    <td>{{ run.total_gross_pay|cedis }}</td>
+                    <td>{{ run.total_deductions|cedis }}</td>
+                    <td>{{ run.total_net_pay|cedis }}</td>
+                    <td><span class="badge text-bg-secondary">{{ run.status }}</span></td>
+                    <td>{{ run.source_filename }}</td>
+                    <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.detail', run_id=run.id) }}">View</a></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="9" class="text-muted">No payroll runs yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

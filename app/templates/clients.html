@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block page_title %}Client Companies{% endblock %}
+{% block page_intro %}Maintain the client companies Chrisnat serves, then attach employees and payroll imports to the right business before review or approval begins.{% endblock %}
+{% block header_visual %}<img src="{{ url_for('static', filename='img/people-ops.svg') }}" alt="Client company illustration">{% endblock %}
+{% block content %}
+<div class="toolbar">
+    <a class="btn btn-primary" href="{{ url_for('main.add_client') }}"><i class="bi bi-building-add"></i>Add Client Company</a>
+</div>
+<section class="panel">
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Name</th><th>Contact</th><th>Location</th><th>Service Type</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            {% for client in clients %}
+                <tr>
+                    <td><a href="{{ url_for('main.client_detail', client_id=client.id) }}">{{ client.name }}</a></td>
+                    <td>{{ client.contact_person }}</td>
+                    <td>{{ client.location }}</td>
+                    <td>{{ client.service_type }}</td>
+                    <td>
+                        <span class="badge text-bg-{{ 'success' if client.status == 'Active' else 'danger' }}">
+                            {{ client.status }}
+                        </span>
+                    </td>
+                    <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.edit_client', client_id=client.id) }}">Edit</a></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

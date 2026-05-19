@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block page_title %}Proposal Drafting{% endblock %}
+{% block page_intro %}Create early proposal drafts for client services before the final invoicing and contract workflow is agreed. Keep the draft tied to a client company for future follow-up.{% endblock %}
+{% block header_visual %}<img src="{{ url_for('static', filename='img/people-ops.svg') }}" alt="Proposal drafting illustration">{% endblock %}
+{% block content %}
+<div class="row g-4">
+    <div class="col-lg-4">
+        <section class="panel">
+            <div class="panel-header"><h2><i class="bi bi-pencil-square"></i>New Proposal Draft</h2></div>
+            <form method="post" class="vstack gap-3">
+                <div>
+                    <label class="form-label">Client Company</label>
+                    <select class="form-select" name="client_company_id" required>
+                        <option value="">Select client</option>
+                        {% for client in clients %}
+                            <option value="{{ client.id }}">{{ client.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label">Proposal Title</label>
+                    <input class="form-control" name="title" placeholder="Payroll outsourcing proposal" required>
+                </div>
+                <div>
+                    <label class="form-label">Service Summary</label>
+                    <textarea class="form-control" name="service_summary" rows="5" placeholder="Describe the scope, staffing need, payroll support, reporting, and finance expectations." required></textarea>
+                </div>
+                <div>
+                    <label class="form-label">Proposed Amount</label>
+                    <input class="form-control" type="number" step="0.01" name="proposed_amount" placeholder="0.00">
+                </div>
+                <div>
+                    <label class="form-label">Status</label>
+                    <select class="form-select" name="status">
+                        <option>Draft</option>
+                        <option>Under Review</option>
+                        <option>Sent</option>
+                        <option>Accepted</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary"><i class="bi bi-file-earmark-plus"></i>Save Proposal Draft</button>
+            </form>
+        </section>
+    </div>
+    <div class="col-lg-8">
+        <section class="panel">
+            <div class="panel-header">
+                <h2><i class="bi bi-files"></i>Draft Library</h2>
+                <span>{{ proposals|length }} drafts</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Title</th><th>Client</th><th>Amount</th><th>Status</th><th>Drafted By</th><th>Created</th></tr></thead>
+                    <tbody>
+                    {% for proposal in proposals %}
+                        <tr>
+                            <td><strong>{{ proposal.title }}</strong><br><small class="text-muted">{{ proposal.service_summary }}</small></td>
+                            <td>{{ proposal.client_company.name if proposal.client_company else "" }}</td>
+                            <td>{{ proposal.proposed_amount|cedis }}</td>
+                            <td><span class="badge text-bg-secondary">{{ proposal.status }}</span></td>
+                            <td>{{ proposal.drafter.name if proposal.drafter else "" }}</td>
+                            <td>{{ proposal.created_at.strftime("%Y-%m-%d") if proposal.created_at else "" }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="6" class="text-muted">No proposal drafts yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}

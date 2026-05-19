@@ -1,0 +1,151 @@
+from app.excel_utils import normalize_label, normalize_worker
+from app.models import Employee, PayrollItem, PayrollRun
+
+
+def client_name_matches(selected_name, detected_name):
+    if not detected_name:
+        return True
+    selected = normalize_label(selected_name)
+    detected = normalize_label(detected_name)
+    return selected in detected or detected in selected
+
+
+def build_worker_key(row):
+    staff_id = normalize_worker(row.get("staff_id"))
+    full_name = normalize_worker(row.get("full_name"))
+    if staff_id:
+        return f"staff:{staff_id}"
+    if full_name:
+        return f"name:{full_name}"
+    return ""
+
+
+def validate_payroll_rows(
+    mapped_rows,
+    client_company,
+    month,
+    year,
+    detected_company_name="",
+    current_run_id=None,
+):
+    seen_keys = set()
+    duplicate_keys = set()
+    for row in mapped_rows:
+        key = build_worker_key(row)
+        if not key:
+            continue
+        if key in seen_keys:
+            duplicate_keys.add(key)
+        seen_keys.add(key)
+
+    warnings = []
+    per_row_warnings = {}
+
+    existing_run = PayrollRun.query.filter(
+        PayrollRun.client_company_id == client_company.id,
+        PayrollRun.month == month,
+        PayrollRun.year == int(year),
+    )
+    if current_run_id:
+        existing_run = existing_run.filter(PayrollRun.id != current_run_id)
+    if existing_run.first():
+        warnings.append(
+            f"Payroll already exists for {client_company.name} in {month} {year}."
+        )
+
+    if detected_company_name and not client_name_matches(
+        client_company.name, detected_company_name
+    ):
+        warnings.append(
+            f"Selected client is {client_company.name}, but Excel appears to mention {detected_company_name}."
+        )
+
+    for index, row in enumerate(mapped_rows, start=1):
+        row_warnings = validate_single_row(row)
+        key = build_worker_key(row)
+        if key and key in duplicate_keys:
+            row_warnings.append("Worker appears more than once in this client payroll.")
+
+        if key:
+            cross_client_item = (
+                PayrollItem.query.join(PayrollRun)
+                .filter(
+                    PayrollRun.month == month,
+                    PayrollRun.year == int(year),
+                    PayrollRun.client_company_id != client_company.id,
+                )
+                .filter(
+                    (PayrollItem.staff_id == row.get("staff_id"))
+                    | (PayrollItem.full_name == row.get("full_name"))
+                )
+                .first()
+            )
+            if cross_client_item:
+                other_client = cross_client_item.payroll_run.client_company
+                row_warnings.append(
+                    f"Worker also appears in {other_client.name} payroll for {month} {year}."
+                )
+
+        if row_warnings:
+            per_row_warnings[index] = row_warnings
+
+    if duplicate_keys:
+        warnings.append(
+            f"{len(duplicate_keys)} worker identifier(s) appear more than once in this upload."
+        )
+
+    return {
+        "summary_warnings": warnings,
+        "per_row_warnings": per_row_warnings,
+        "duplicate_keys": list(duplicate_keys),
+    }
+
+
+def validate_single_row(row):
+    warnings = []
+    staff_id = str(row.get("staff_id") or "").strip()
+    full_name = str(row.get("full_name") or "").strip()
+    ssnit_number = str(row.get("ssnit_number") or "").strip()
+    net_pay = row.get("net_pay")
+
+    if not staff_id:
+        warnings.append("Missing staff ID.")
+    if not full_name:
+        warnings.append("Missing employee name.")
+    if not ssnit_number:
+        employee = Employee.query.filter_by(staff_id=staff_id).first() if staff_id else None
+        if not employee or not employee.ssnit_number:
+            warnings.append("Missing SSNIT number.")
+    if net_pay in (None, ""):
+        warnings.append("Missing net pay.")
+    if float(row.get("net_pay") or 0) < 0:
+        warnings.append("Negative net pay.")
+
+    gross_pay = float(row.get("gross_pay") or 0)
+    basic_salary = float(row.get("basic_salary") or 0)
+    calculated_gross = (
+        basic_salary
+        + float(row.get("transport_allowance") or 0)
+        + float(row.get("housing_allowance") or 0)
+        + float(row.get("overtime_pay") or 0)
+        + float(row.get("other_allowances") or 0)
+    )
+    total_deductions = (
+        float(row.get("paye") or 0)
+        + float(row.get("ssnit") or 0)
+        + float(row.get("other_deductions") or 0)
+    )
+    expected_net_pay = gross_pay - total_deductions
+
+    if gross_pay < basic_salary:
+        warnings.append("Gross pay is less than basic salary.")
+    if abs(gross_pay - calculated_gross) > 1:
+        warnings.append("Gross pay does not match allowance calculation.")
+    if abs(float(row.get("net_pay") or 0) - expected_net_pay) > 1:
+        warnings.append("Net pay calculation mismatch.")
+    if not row.get("paye"):
+        warnings.append("PAYE is empty.")
+    if not row.get("ssnit"):
+        warnings.append("SSNIT is empty.")
+
+    return warnings

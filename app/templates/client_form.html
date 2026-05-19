@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block page_title %}{{ "Edit" if client else "Add" }} Client Company{% endblock %}
+{% block page_intro %}Capture the contact, location, and service details needed to keep payroll imports separated by client company.{% endblock %}
+{% block header_visual %}<img src="{{ url_for('static', filename='img/people-ops.svg') }}" alt="Client setup illustration">{% endblock %}
+{% block content %}
+<section class="panel form-panel">
+    <form method="post" class="row g-3">
+        <div class="col-md-6"><label class="form-label">Name</label><input class="form-control" name="name" value="{{ client.name if client else '' }}" required></div>
+        <div class="col-md-6"><label class="form-label">Contact Person</label><input class="form-control" name="contact_person" value="{{ client.contact_person if client else '' }}"></div>
+        <div class="col-md-4"><label class="form-label">Phone</label><input class="form-control" name="phone" value="{{ client.phone if client else '' }}"></div>
+        <div class="col-md-4"><label class="form-label">Email</label><input class="form-control" type="email" name="email" value="{{ client.email if client else '' }}"></div>
+        <div class="col-md-4"><label class="form-label">Location</label><input class="form-control" name="location" value="{{ client.location if client else '' }}"></div>
+        <div class="col-md-8"><label class="form-label">Service Type</label><input class="form-control" name="service_type" value="{{ client.service_type if client else '' }}"></div>
+        <div class="col-md-4">
+            <label class="form-label">Status</label>
+            <select class="form-select" name="status">
+                {% for status in ["Active", "Inactive"] %}
+                    <option value="{{ status }}" {% if client and client.status == status %}selected{% endif %}>{{ status }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-12"><button class="btn btn-primary"><i class="bi bi-check2-circle"></i>Save Client</button></div>
+    </form>
+</section>
+{% endblock %}

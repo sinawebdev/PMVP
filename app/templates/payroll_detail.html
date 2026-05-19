@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block page_title %}Payroll Detail{% endblock %}
+{% block page_intro %}Review totals, imported worker counts, duplicates, statutory figures, and row-level warnings before exporting or approving payroll for accounts.{% endblock %}
+{% block content %}
+<section class="stats-grid">
+    <div class="stat-card"><i class="bi bi-building stat-icon"></i><span>Client Company</span><strong>{{ payroll_run.client_company.name if payroll_run.client_company else "" }}</strong></div>
+    <div class="stat-card"><i class="bi bi-calendar2-week stat-icon"></i><span>Payroll Month</span><strong>{{ payroll_run.month }} {{ payroll_run.year }}</strong></div>
+    <div class="stat-card"><i class="bi bi-table stat-icon"></i><span>Total Rows Imported</span><strong>{{ payroll_run.total_rows_imported }}</strong></div>
+    <div class="stat-card"><i class="bi bi-person-check stat-icon"></i><span>Total Unique Workers</span><strong>{{ payroll_run.total_workers }}</strong></div>
+    <div class="stat-card"><i class="bi bi-copy stat-icon"></i><span>Duplicate Workers Found</span><strong>{{ payroll_run.duplicate_workers_found }}</strong></div>
+    <div class="stat-card"><i class="bi bi-cash-coin stat-icon"></i><span>Total Net Pay</span><strong>{{ payroll_run.total_net_pay|cedis }}</strong></div>
+</section>
+<section class="panel mt-3">
+    <div class="row g-3">
+        <div class="col-md-3"><strong>Source Excel File</strong><p>{{ payroll_run.source_filename }}</p></div>
+        <div class="col-md-3"><strong>Total Gross Pay</strong><p>{{ payroll_run.total_gross_pay|cedis }}</p></div>
+        <div class="col-md-3"><strong>PAYE Total</strong><p>{{ payroll_run.total_paye|cedis }}</p></div>
+        <div class="col-md-3"><strong>SSNIT Total</strong><p>{{ payroll_run.total_ssnit|cedis }}</p></div>
+    </div>
+    <div class="d-flex flex-wrap gap-2 mt-2">
+        {% if payroll_run.status == "Draft" %}
+            <form method="post" action="{{ url_for('payroll.mark_reviewed', run_id=payroll_run.id) }}"><button class="btn btn-primary"><i class="bi bi-clipboard-check"></i>Mark as Reviewed</button></form>
+        {% endif %}
+        {% if current_user.role in ["admin", "md"] and payroll_run.status in ["Draft", "Reviewed"] %}
+            <form method="post" action="{{ url_for('payroll.approve', run_id=payroll_run.id) }}"><button class="btn btn-success"><i class="bi bi-patch-check"></i>Approve Payroll</button></form>
+        {% endif %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export', run_id=payroll_run.id) }}"><i class="bi bi-download"></i>Export Payroll</a>
+    </div>
+</section>
+<section class="panel mt-3">
+    <div class="panel-header"><h2><i class="bi bi-grid-3x3-gap"></i>Payroll Items Grid</h2><span>{{ payroll_run.items|length }} rows</span></div>
+    <div class="mini-note mb-3"><i class="bi bi-table"></i> This section is styled as an Excel-like grid for scanning payroll rows, totals, warnings, and payslip actions.</div>
+    <div class="excel-grid-wrap">
+        <table class="table table-sm align-middle excel-grid">
+            <thead><tr><th>Staff ID</th><th>Name</th><th>Gross</th><th>PAYE</th><th>SSNIT</th><th>Deductions</th><th>Net Pay</th><th>Status</th><th>Warnings</th><th>Payslip</th></tr></thead>
+            <tbody>
+            {% for item in payroll_run.items %}
+                <tr>
+                    <td>{{ item.staff_id }}</td>
+                    <td>{{ item.full_name }}</td>
+                    <td class="money-cell">{{ item.gross_pay|cedis }}</td>
+                    <td class="money-cell">{{ item.paye|cedis }}</td>
+                    <td class="money-cell">{{ item.ssnit|cedis }}</td>
+                    <td class="money-cell">{{ item.total_deductions|cedis }}</td>
+                    <td class="money-cell">{{ item.net_pay|cedis }}</td>
+                    <td><span class="badge text-bg-{{ 'warning' if item.validation_status == 'Warning' else 'success' }}">{{ item.validation_status }}</span></td>
+                    <td>{{ item.warning_notes }}</td>
+                    <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.payslip', item_id=item.id) }}"><i class="bi bi-file-earmark-pdf"></i>Payslip</a></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

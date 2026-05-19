@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block page_title %}Payment Vouchers{% endblock %}
+{% block page_intro %}Payment vouchers are prepared after payroll approval and grouped by client company so accounts can process payroll funding clearly.{% endblock %}
+{% block header_visual %}<img src="{{ url_for('static', filename='img/finance-ops.svg') }}" alt="Voucher illustration">{% endblock %}
+{% block content %}
+<div class="toolbar"><a class="btn btn-outline-secondary" href="{{ url_for('finance.export_vouchers') }}"><i class="bi bi-download"></i>Export Vouchers</a></div>
+<section class="panel">
+    <table class="table align-middle">
+        <thead><tr><th>Voucher Number</th><th>Client Company</th><th>Payroll Month</th><th>Total Workers</th><th>Total Net Pay</th><th>Prepared By</th><th>Approved By</th><th>Status</th></tr></thead>
+        <tbody>
+        {% for voucher in vouchers %}
+            <tr><td>{{ voucher.voucher_number }}</td><td>{{ voucher.payroll_run.client_company.name if voucher.payroll_run.client_company else "" }}</td><td>{{ voucher.payroll_run.month }} {{ voucher.payroll_run.year }}</td><td>{{ voucher.payroll_run.total_workers }}</td><td>{{ voucher.total_amount|cedis }}</td><td>{{ voucher.preparer.name if voucher.preparer else "" }}</td><td>{{ voucher.approver.name if voucher.approver else "" }}</td><td>{{ voucher.status }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}
