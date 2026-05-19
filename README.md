@@ -39,7 +39,7 @@ This repo includes `render.yaml` and a `Procfile`.
 Render settings:
 
 - Build command: `pip install -r requirements.txt`
-- Start command: `gunicorn run:app --bind 0.0.0.0:$PORT`
+- Start command: `python run.py`
 - Health check: `/health`
 - Database: Render Postgres through `DATABASE_URL`
 
