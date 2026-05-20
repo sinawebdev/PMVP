@@ -40,13 +40,6 @@
                 <input class="form-control" value="{{ pending_source_filename }}" readonly>
             </div>
         {% else %}
-            <div class="col-md-4">
-                <label class="form-label">Import Mode</label>
-                <select class="form-select" name="import_mode">
-                    <option value="single_client">Single client workbook</option>
-                    <option value="multi_client">Multi-sheet workbook preview</option>
-                </select>
-            </div>
             <div class="col-12"><label class="form-label">Payroll File (.xlsx, .xls, .csv)</label><input class="form-control" type="file" name="payroll_file" accept=".xlsx,.xls,.csv" required></div>
         {% endif %}
         <div class="col-12">
