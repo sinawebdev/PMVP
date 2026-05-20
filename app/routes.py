@@ -1,3 +1,4 @@
+from calendar import month_name
 from datetime import datetime
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, url_for
@@ -26,9 +27,20 @@ def health():
 @login_required
 def dashboard():
     now = datetime.now()
-    current_month = now.strftime("%B")
+    valid_months = [month_name[index] for index in range(1, 13)]
+    selected_month = request.args.get("month") or now.strftime("%B")
+    if selected_month not in valid_months:
+        selected_month = now.strftime("%B")
+    try:
+        selected_year = int(request.args.get("year") or now.year)
+    except ValueError:
+        selected_year = now.year
 
-    current_runs = PayrollRun.query.filter_by(month=current_month, year=now.year).all()
+    current_runs = PayrollRun.query.filter_by(
+        month=selected_month,
+        year=selected_year,
+    ).all()
+    pending_statuses = ("Draft", "Reviewed")
     client_costs = [
         {
             "client": client.name,
@@ -36,17 +48,56 @@ def dashboard():
             "payroll_cost": sum(
                 run.total_net_pay
                 for run in client.payroll_runs
-                if run.month == current_month and run.year == now.year
+                if run.month == selected_month and run.year == selected_year
             ),
             "pending": sum(
                 1
                 for run in client.payroll_runs
-                if run.status in ("Draft", "Reviewed")
+                if run.month == selected_month
+                and run.year == selected_year
+                and run.status in pending_statuses
             ),
+            "runs": [
+                run
+                for run in client.payroll_runs
+                if run.month == selected_month and run.year == selected_year
+            ],
         }
         for client in ClientCompany.query.order_by(ClientCompany.name).all()
     ]
+    max_cost = max((item["payroll_cost"] for item in client_costs), default=0)
+    for item in client_costs:
+        item["bar_percent"] = round((item["payroll_cost"] / max_cost) * 100, 1) if max_cost else 0
+        statuses = {run.status for run in item["runs"]}
+        if not item["runs"]:
+            item["submission_status"] = "No run submitted"
+            item["submission_class"] = "text-bg-light"
+        elif item["pending"]:
+            item["submission_status"] = "Needs approval"
+            item["submission_class"] = "text-bg-warning"
+        elif "Exported" in statuses:
+            item["submission_status"] = "Exported"
+            item["submission_class"] = "text-bg-success"
+        elif "Approved" in statuses:
+            item["submission_status"] = (
+                "Approved: GH\u20b5 0.00" if item["payroll_cost"] == 0 else "Approved"
+            )
+            item["submission_class"] = "text-bg-success"
+        else:
+            item["submission_status"] = "Submitted"
+            item["submission_class"] = "text-bg-secondary"
+
     highest_client = max(client_costs, key=lambda item: item["payroll_cost"], default=None)
+    if highest_client and highest_client["payroll_cost"] <= 0:
+        highest_client = None
+    known_years = {
+        row[0]
+        for row in db.session.query(PayrollRun.year).distinct().all()
+        if row[0]
+    }
+    known_years.update({now.year - 1, now.year, now.year + 1, selected_year})
+    pending_approvals = PayrollRun.query.filter(PayrollRun.status.in_(pending_statuses)).count()
+    warning_count = PayrollItem.query.filter_by(validation_status="Warning").count()
 
     return render_template(
         "dashboard.html",
@@ -54,14 +105,22 @@ def dashboard():
         active_employees=Employee.query.filter_by(status="Active").count(),
         total_clients=ClientCompany.query.count(),
         current_month_total=sum(run.total_net_pay for run in current_runs),
-        pending_approvals=PayrollRun.query.filter(PayrollRun.status.in_(["Draft", "Reviewed"])).count(),
+        pending_approvals=pending_approvals,
         paye_total=sum(run.total_paye for run in current_runs),
         ssnit_total=sum(run.total_ssnit for run in current_runs),
         total_expenses=sum(expense.amount for expense in Expense.query.all()),
-        recent_runs=PayrollRun.query.order_by(PayrollRun.created_at.desc()).limit(8).all(),
-        warning_count=PayrollItem.query.filter_by(validation_status="Warning").count(),
+        recent_runs=PayrollRun.query.filter_by(month=selected_month, year=selected_year)
+        .order_by(PayrollRun.created_at.desc())
+        .limit(8)
+        .all(),
+        warning_count=warning_count,
         client_costs=client_costs,
         highest_client=highest_client,
+        selected_month=selected_month,
+        selected_year=selected_year,
+        month_options=valid_months,
+        year_options=sorted(known_years, reverse=True),
+        action_required_count=pending_approvals + warning_count,
     )
 
 

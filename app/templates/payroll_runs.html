@@ -7,6 +7,11 @@
     <i class="bi bi-building-check"></i>
     Showing payroll runs imported for <strong>{{ selected_client.name }}</strong>. Use the client tabs in the left pane to switch companies.
 </div>
+{% elif status_filter == "needs_approval" %}
+<div class="mini-note mb-3">
+    <i class="bi bi-hourglass-split"></i>
+    Approval queue showing Draft and Reviewed payroll runs that still need review or MD approval.
+</div>
 {% else %}
 <div class="mini-note mb-3">
     <i class="bi bi-grid"></i>
@@ -15,6 +20,10 @@
 {% endif %}
 <div class="toolbar">
     <a class="btn btn-primary" href="{{ url_for('payroll.upload') }}"><i class="bi bi-file-earmark-arrow-up"></i>Upload Payroll Excel</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('payroll.runs', status='needs_approval') }}"><i class="bi bi-check2-square"></i>Approval Queue</a>
+    {% if status_filter %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('payroll.runs') }}"><i class="bi bi-x-circle"></i>Clear Filter</a>
+    {% endif %}
 </div>
 <section class="panel">
     <div class="table-responsive">

@@ -1,6 +1,6 @@
 from functools import wraps
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 
 from app.models import User
@@ -35,6 +35,7 @@ def login():
         password = request.form.get("password", "")
         user = User.query.filter_by(email=email).first()
         if user and user.check_password(password):
+            session.clear()
             login_user(user)
             return redirect(url_for("main.dashboard"))
         flash("Invalid email or password.", "danger")

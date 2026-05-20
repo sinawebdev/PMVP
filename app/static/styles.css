@@ -206,6 +206,13 @@ body {
     font-size: 13px;
 }
 
+.topbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
+
 .topbar-visual {
     align-items: center;
     display: flex;
@@ -223,6 +230,40 @@ body {
     object-fit: cover;
 }
 
+.dashboard-signal {
+    align-self: stretch;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 18px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 170px;
+    padding: 22px;
+    width: 100%;
+}
+
+.dashboard-signal .signal-label {
+    color: #fef3c7;
+    font-size: 12px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.dashboard-signal strong {
+    font-size: 28px;
+    line-height: 1.1;
+}
+
+.dashboard-signal small {
+    color: #d1fae5;
+    font-size: 14px;
+    margin-top: 8px;
+}
+
 .page-enter {
     animation: slideFade 520ms ease both;
 }
@@ -235,6 +276,10 @@ body {
     display: grid;
     gap: 16px;
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.dashboard-controls {
+    margin-bottom: 16px;
 }
 
 .stat-card,
@@ -257,6 +302,16 @@ body {
     overflow: hidden;
     padding: 18px;
     position: relative;
+}
+
+.stat-link {
+    color: inherit;
+    display: block;
+    text-decoration: none;
+}
+
+.stat-link:hover {
+    color: inherit;
 }
 
 .stat-card::after {
@@ -354,6 +409,70 @@ body {
 .table tbody tr:hover {
     background: rgba(204, 251, 241, 0.36);
     transform: scale(1.002);
+}
+
+.sparkbar {
+    background: #e2e8f0;
+    border-radius: 999px;
+    height: 11px;
+    min-width: 120px;
+    overflow: hidden;
+}
+
+.sparkbar span {
+    animation: barGrow 620ms ease both;
+    background: linear-gradient(90deg, var(--brand), var(--gold));
+    border-radius: inherit;
+    display: block;
+    height: 100%;
+    min-width: 4px;
+    transform-origin: left center;
+}
+
+.sparkbar span[style*="0%"] {
+    min-width: 0;
+}
+
+.action-required {
+    background:
+        linear-gradient(135deg, rgba(254, 243, 199, 0.78), rgba(255, 255, 255, 0.95));
+}
+
+.action-row {
+    align-items: center;
+    border-top: 1px solid rgba(15, 118, 110, 0.13);
+    color: var(--ink);
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 0;
+    text-decoration: none;
+}
+
+.action-row:first-of-type {
+    border-top: 0;
+}
+
+.action-row span {
+    align-items: center;
+    display: flex;
+    gap: 9px;
+}
+
+.action-row i {
+    color: var(--brand);
+}
+
+.action-row strong {
+    background: var(--brand);
+    border-radius: 999px;
+    color: #fff;
+    min-width: 34px;
+    padding: 5px 10px;
+    text-align: center;
+}
+
+.action-row:hover {
+    color: var(--brand-dark);
 }
 
 .excel-grid-wrap {
@@ -519,6 +638,15 @@ body {
     }
     50% {
         transform: translateY(-8px);
+    }
+}
+
+@keyframes barGrow {
+    from {
+        transform: scaleX(0);
+    }
+    to {
+        transform: scaleX(1);
     }
 }
 

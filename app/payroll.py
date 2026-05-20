@@ -47,14 +47,20 @@ def runs():
     selected_client = None
     query = PayrollRun.query
     client_id = request.args.get("client_id")
+    status_filter = request.args.get("status", "")
     if client_id:
         selected_client = db.get_or_404(ClientCompany, client_id)
         query = query.filter(PayrollRun.client_company_id == selected_client.id)
+    if status_filter == "needs_approval":
+        query = query.filter(PayrollRun.status.in_(["Draft", "Reviewed"]))
+    elif status_filter:
+        query = query.filter(PayrollRun.status == status_filter)
     payroll_runs = query.order_by(PayrollRun.created_at.desc()).all()
     return render_template(
         "payroll_runs.html",
         payroll_runs=payroll_runs,
         selected_client=selected_client,
+        status_filter=status_filter,
     )
 
 

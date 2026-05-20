@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 
 from dotenv import load_dotenv
 from flask import Flask
@@ -22,12 +23,21 @@ def create_app():
     load_dotenv()
 
     app = Flask(__name__, instance_relative_config=True)
+    is_production = os.getenv("RENDER") == "true" or os.getenv("FLASK_ENV") == "production"
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
     app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
         "DATABASE_URL",
         f"sqlite:///{os.path.join(app.instance_path, 'chrisnat_payroll.db')}",
     )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_SECURE"] = (
+        os.getenv("SESSION_COOKIE_SECURE", "true" if is_production else "false").lower()
+        == "true"
+    )
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
+    app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 16 * 1024 * 1024))
     app.config["UPLOAD_FOLDER"] = os.path.abspath(
         os.path.join(app.root_path, "..", "uploads")
     )

@@ -80,6 +80,12 @@ class MvpTestCase(unittest.TestCase):
     def test_money_is_formatted_as_comma_separated_ghana_cedis(self):
         self.assertEqual(format_ghana_cedis(1234567.5), "GH₵ 1,234,567.50")
 
+    def test_dashboard_requires_authentication(self):
+        response = self.client.get("/dashboard")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login", response.headers["Location"])
+
     def test_worker_stats_use_unique_worker_identity(self):
         rows = [
             {"staff_id": "CN-001", "full_name": "Kwame Mensah"},
@@ -112,11 +118,29 @@ class MvpTestCase(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 200)
 
+    def test_dashboard_has_month_filter_sparkbars_and_action_queue(self):
+        self.login_admin()
+        response = self.client.get("/dashboard?month=May&year=2026")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"dashboard-controls", response.data)
+        self.assertIn(b"sparkbar", response.data)
+        self.assertIn(b"Approval Queue", response.data)
+        self.assertIn(b"No run submitted", response.data)
+
     def test_health_endpoint_is_available_for_render(self):
         response = self.client.get("/health")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["status"], "ok")
+
+    def test_payroll_approval_queue_filter_is_server_side(self):
+        self.login_admin()
+        response = self.client.get("/payroll/runs?status=needs_approval")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Approval queue", response.data)
+        self.assertNotIn(b"Approved</span>", response.data)
 
     def test_approval_creates_voucher_and_remittances(self):
         self.login_admin()

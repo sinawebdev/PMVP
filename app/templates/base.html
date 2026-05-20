@@ -47,6 +47,9 @@
                 <h1>{% block page_title %}Dashboard{% endblock %}</h1>
                 <p class="page-intro">{% block page_intro %}Track payroll, approvals, client costs, and finance work from one calm command center.{% endblock %}</p>
                 <p class="signed-in mb-0">Signed in as {{ current_user.name }} | {{ current_user.role.replace('_', ' ').title() }}</p>
+                <div class="topbar-actions">
+                    {% block page_actions %}{% endblock %}
+                </div>
             </div>
             <div class="topbar-visual">
                 {% block header_visual %}
