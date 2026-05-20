@@ -19,6 +19,17 @@ def format_ghana_cedis(value):
     return f"GH₵ {amount:,.2f}"
 
 
+def format_role_label(value):
+    labels = {
+        "admin": "Admin",
+        "md": "MD",
+        "accounts_officer": "Accounts Officer",
+        "payroll_officer": "Payroll Officer",
+        "viewer": "Viewer",
+    }
+    return labels.get(str(value or "").lower(), str(value or "").replace("_", " ").title())
+
+
 def create_app():
     load_dotenv()
 
@@ -56,6 +67,7 @@ def create_app():
     db.init_app(app)
     login_manager.init_app(app)
     app.jinja_env.filters["cedis"] = format_ghana_cedis
+    app.jinja_env.filters["role_label"] = format_role_label
 
     from app.audit import audit_bp
     from app.auth import auth_bp

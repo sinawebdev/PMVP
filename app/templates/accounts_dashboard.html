@@ -1,25 +1,115 @@
 {% extends "base.html" %}
 {% block page_title %}Accounts Dashboard{% endblock %}
-{% block page_intro %}See the finance side of approved payrolls: vouchers, statutory remittances, client payroll cost, and expenses ready for reconciliation.{% endblock %}
-{% block header_visual %}<img src="{{ url_for('static', filename='img/finance-ops.svg') }}" alt="Finance operations illustration">{% endblock %}
+{% block page_intro %}A finance control center for payment vouchers, statutory remittances, client payroll costs, and expense review for {{ current_month }} {{ current_year }}.{% endblock %}
+{% block topbar_class %}compact-topbar{% endblock %}
+{% block header_visual %}
+<div class="dashboard-signal finance-signal" aria-label="Finance workflow summary">
+    <span class="signal-label">Finance Queue</span>
+    <strong>{{ awaiting_payment_runs|length }} payroll{{ "" if awaiting_payment_runs|length == 1 else "s" }}</strong>
+    <small>{{ (pending_paye|length + pending_ssnit|length) }} statutory item{{ "" if (pending_paye|length + pending_ssnit|length) == 1 else "s" }} pending</small>
+</div>
+{% endblock %}
 {% block content %}
 <section class="stats-grid">
-    <div class="stat-card"><i class="bi bi-patch-check stat-icon"></i><span>Approved Payroll Runs</span><strong>{{ approved_runs|length }}</strong></div>
-    <div class="stat-card"><i class="bi bi-receipt stat-icon"></i><span>Voucher Total</span><strong>{{ total_vouchers|cedis }}</strong></div>
-    <div class="stat-card"><i class="bi bi-wallet2 stat-icon"></i><span>Total Expenses</span><strong>{{ total_expenses|cedis }}</strong></div>
-    <div class="stat-card"><i class="bi bi-shield-check stat-icon"></i><span>Remittances</span><strong>{{ remittances|length }}</strong></div>
+    <div class="stat-card"><i class="bi bi-credit-card-2-front stat-icon"></i><span>Approved Payrolls Awaiting Payment</span><strong>{{ awaiting_payment_runs|length }}</strong></div>
+    <div class="stat-card"><i class="bi bi-cash-coin stat-icon"></i><span>Total Net Pay This Month</span><strong>{{ total_net_pay_this_month|cedis }}</strong></div>
+    <div class="stat-card"><i class="bi bi-receipt-cutoff stat-icon"></i><span>PAYE Due</span><strong>{{ paye_due|cedis }}</strong></div>
+    <div class="stat-card"><i class="bi bi-shield-check stat-icon"></i><span>SSNIT Due</span><strong>{{ ssnit_due|cedis }}</strong></div>
+    <div class="stat-card"><i class="bi bi-wallet2 stat-icon"></i><span>Expenses This Month</span><strong>{{ expenses_this_month|cedis }}</strong></div>
+    <div class="stat-card"><i class="bi bi-exclamation-octagon stat-icon"></i><span>Overdue Remittances</span><strong>{{ overdue_remittances|length }}</strong></div>
 </section>
+
 <div class="row g-4 mt-1">
-    <div class="col-lg-6">
-        <section class="panel"><div class="panel-header"><h2><i class="bi bi-patch-check"></i>Approved Payroll Runs</h2></div>
-            <table class="table"><thead><tr><th>Client</th><th>Month</th><th>Workers</th><th>Net Pay</th></tr></thead><tbody>
-            {% for run in approved_runs %}<tr><td>{{ run.client_company.name if run.client_company else "" }}</td><td>{{ run.month }} {{ run.year }}</td><td>{{ run.total_workers }}</td><td>{{ run.total_net_pay|cedis }}</td></tr>{% endfor %}
-            </tbody></table>
+    <div class="col-xl-4">
+        <section class="panel action-required h-100">
+            <div class="panel-header"><h2><i class="bi bi-lightning-charge"></i>Action Required</h2></div>
+            <a class="action-row" href="{{ url_for('payroll.runs', status='Approved') }}"><span><i class="bi bi-receipt"></i>Approved payrolls without payment vouchers</span><strong>{{ approved_without_voucher|length }}</strong></a>
+            <a class="action-row" href="{{ url_for('finance.remittances') }}"><span><i class="bi bi-receipt-cutoff"></i>Pending PAYE remittances</span><strong>{{ pending_paye|length }}</strong></a>
+            <a class="action-row" href="{{ url_for('finance.remittances') }}"><span><i class="bi bi-shield-check"></i>Pending SSNIT remittances</span><strong>{{ pending_ssnit|length }}</strong></a>
+            <a class="action-row" href="{{ url_for('finance.remittances') }}"><span><i class="bi bi-exclamation-octagon"></i>Overdue remittances</span><strong>{{ overdue_remittances|length }}</strong></a>
+            <a class="action-row" href="{{ url_for('finance.expenses') }}"><span><i class="bi bi-clipboard-check"></i>Expenses needing review</span><strong>{{ expenses_needing_review|length }}</strong></a>
         </section>
     </div>
-    <div class="col-lg-6">
-        <section class="panel"><div class="panel-header"><h2><i class="bi bi-wallet2"></i>Recent Expenses</h2></div>
-            <ul class="list-group list-group-flush">{% for expense in expenses %}<li class="list-group-item d-flex justify-content-between"><span>{{ expense.category }} | {{ expense.description }}</span><strong>{{ expense.amount|cedis }}</strong></li>{% endfor %}</ul>
+    <div class="col-xl-8">
+        <section class="panel h-100">
+            <div class="panel-header"><h2><i class="bi bi-buildings"></i>Client Payroll Cost Breakdown</h2></div>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Client Company</th><th>Payroll Month</th><th>Total Workers</th><th>Gross Pay</th><th>PAYE</th><th>SSNIT</th><th>Net Pay</th><th>Voucher Status</th></tr></thead>
+                    <tbody>
+                    {% for run in month_runs %}
+                        <tr>
+                            <td>{{ run.client_company.name if run.client_company else "" }}</td>
+                            <td>{{ run.month }} {{ run.year }}</td>
+                            <td>{{ run.total_workers }}</td>
+                            <td>{{ run.total_gross_pay|cedis }}</td>
+                            <td>{{ run.total_paye|cedis }}</td>
+                            <td>{{ run.total_ssnit|cedis }}</td>
+                            <td>{{ run.total_net_pay|cedis }}</td>
+                            <td><span class="badge text-bg-{{ 'success' if run.voucher and run.voucher.status == 'Paid' else 'warning' }}">{{ run.voucher.status if run.voucher else "No voucher" }}</span></td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="8" class="text-muted">No client payroll cost has been posted for this month yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-xl-7">
+        <section class="panel">
+            <div class="panel-header"><h2><i class="bi bi-receipt"></i>Recent Payment Vouchers</h2><a class="btn btn-sm btn-outline-primary" href="{{ url_for('finance.vouchers') }}">View all</a></div>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Voucher Number</th><th>Client Company</th><th>Payroll Month</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+                    <tbody>
+                    {% for voucher in recent_vouchers %}
+                        <tr>
+                            <td>{{ voucher.voucher_number }}</td>
+                            <td>{{ voucher.payroll_run.client_company.name if voucher.payroll_run and voucher.payroll_run.client_company else "" }}</td>
+                            <td>{{ voucher.payroll_run.month }} {{ voucher.payroll_run.year }}</td>
+                            <td>{{ voucher.net_amount_payable|cedis }}</td>
+                            <td><span class="badge text-bg-{{ 'success' if voucher.status == 'Paid' else 'warning' }}">{{ voucher.status }}</span></td>
+                            <td>
+                                {% if voucher.status != "Paid" %}
+                                    <form method="post" action="{{ url_for('finance.mark_voucher_paid', voucher_id=voucher.id) }}"><button class="btn btn-sm btn-outline-success">Mark Paid</button></form>
+                                {% else %}
+                                    <span class="text-muted">Complete</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="6" class="text-muted">No payment vouchers have been generated yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+    <div class="col-xl-5">
+        <section class="panel">
+            <div class="panel-header"><h2><i class="bi bi-wallet2"></i>Recent Expenses</h2><a class="btn btn-sm btn-outline-primary" href="{{ url_for('finance.expenses') }}">Review</a></div>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Recorded By</th></tr></thead>
+                    <tbody>
+                    {% for expense in expenses %}
+                        <tr>
+                            <td>{{ expense.expense_date }}</td>
+                            <td>{{ expense.category }}</td>
+                            <td>{{ expense.description }}</td>
+                            <td>{{ expense.amount|cedis }}</td>
+                            <td>{{ expense.recorder.name if expense.recorder else "" }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="5" class="text-muted">No recent expenses recorded.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </section>
     </div>
 </div>

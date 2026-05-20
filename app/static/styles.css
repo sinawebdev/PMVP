@@ -160,6 +160,31 @@ body {
     position: relative;
 }
 
+.compact-topbar {
+    grid-template-columns: minmax(0, 1fr) 240px;
+    margin-bottom: 18px;
+    padding: 18px 22px;
+}
+
+.compact-topbar h1 {
+    font-size: clamp(24px, 3vw, 34px);
+}
+
+.compact-topbar .page-intro {
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 8px;
+}
+
+.compact-topbar .dashboard-signal {
+    min-height: 118px;
+    padding: 16px;
+}
+
+.finance-signal strong {
+    font-size: 23px;
+}
+
 .topbar::after {
     background: radial-gradient(circle, rgba(250, 204, 21, 0.28), transparent 15rem);
     content: "";

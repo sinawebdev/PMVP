@@ -69,18 +69,51 @@ def create_finance_records_for_payroll(payroll_run, approved_by_user_id):
 @finance_bp.route("/")
 @role_required("admin", "md", "accounts_officer")
 def accounts_dashboard():
+    today = date.today()
+    current_month = today.strftime("%B")
+    current_year = today.year
     approved_runs = PayrollRun.query.filter_by(status="Approved").order_by(PayrollRun.created_at.desc()).all()
+    month_runs = PayrollRun.query.filter_by(month=current_month, year=current_year).order_by(PayrollRun.created_at.desc()).all()
     vouchers = PaymentVoucher.query.order_by(PaymentVoucher.created_at.desc()).all()
+    recent_vouchers = vouchers[:8]
     remittances = Remittance.query.order_by(Remittance.due_date.asc()).all()
-    expenses = Expense.query.order_by(Expense.expense_date.desc()).limit(5).all()
+    pending_paye = [item for item in remittances if item.remittance_type == "PAYE" and item.status != "Paid"]
+    pending_ssnit = [item for item in remittances if item.remittance_type == "SSNIT" and item.status != "Paid"]
+    overdue_remittances = [
+        item for item in remittances if item.status != "Paid" and item.due_date and item.due_date < today
+    ]
+    expenses = Expense.query.order_by(Expense.expense_date.desc()).limit(8).all()
+    month_expenses = Expense.query.filter(
+        db.extract("month", Expense.expense_date) == today.month,
+        db.extract("year", Expense.expense_date) == today.year,
+    ).all()
+    expenses_needing_review = Expense.query.filter(Expense.status.in_(["Pending", "Review"])).all()
+    approved_without_voucher = [run for run in approved_runs if not run.voucher]
+    awaiting_payment_runs = [
+        run for run in approved_runs if not run.voucher or run.voucher.status != "Paid"
+    ]
     return render_template(
         "accounts_dashboard.html",
         approved_runs=approved_runs,
+        month_runs=month_runs,
         vouchers=vouchers,
+        recent_vouchers=recent_vouchers,
         remittances=remittances,
         expenses=expenses,
         total_expenses=sum(expense.amount for expense in Expense.query.all()),
+        expenses_this_month=sum(expense.amount for expense in month_expenses),
         total_vouchers=sum(voucher.total_amount for voucher in vouchers),
+        awaiting_payment_runs=awaiting_payment_runs,
+        approved_without_voucher=approved_without_voucher,
+        pending_paye=pending_paye,
+        pending_ssnit=pending_ssnit,
+        overdue_remittances=overdue_remittances,
+        expenses_needing_review=expenses_needing_review,
+        total_net_pay_this_month=sum(run.total_net_pay for run in month_runs),
+        paye_due=sum(item.amount_due for item in pending_paye),
+        ssnit_due=sum(item.amount_due for item in pending_ssnit),
+        current_month=current_month,
+        current_year=current_year,
     )
 
 

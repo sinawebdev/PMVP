@@ -234,6 +234,49 @@ class MvpTestCase(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 200)
 
+    def test_accounts_dashboard_is_finance_control_center(self):
+        self.login_admin()
+        with self.app.app_context():
+            admin = User.query.filter_by(email="admin@chrisnat.local").first()
+            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            missing_voucher_run = PayrollRun(
+                month="May",
+                year=2026,
+                status="Approved",
+                created_by=admin.id,
+                client_company_id=client_company.id,
+                total_workers=2,
+                total_gross_pay=3000,
+                total_deductions=500,
+                total_net_pay=2500,
+                total_paye=300,
+                total_ssnit=200,
+            )
+            db.session.add(missing_voucher_run)
+            db.session.commit()
+
+        response = self.client.get("/accounts/")
+
+        self.assertEqual(response.status_code, 200)
+        for text in [
+            b"Approved Payrolls Awaiting Payment",
+            b"Total Net Pay This Month",
+            b"PAYE Due",
+            b"SSNIT Due",
+            b"Expenses This Month",
+            b"Overdue Remittances",
+            b"Action Required",
+            b"Approved payrolls without payment vouchers",
+            b"Client Payroll Cost Breakdown",
+            b"Recent Payment Vouchers",
+            b"Recent Expenses",
+            b"Recorded By",
+            b"Remittances",
+        ]:
+            self.assertIn(text, response.data)
+        self.assertIn(b"compact-topbar", response.data)
+        self.assertNotIn(b"Admin User | Admin", response.data)
+
     def test_dashboard_has_month_filter_sparkbars_and_action_queue(self):
         self.login_admin()
         response = self.client.get("/dashboard?month=May&year=2026")
