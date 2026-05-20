@@ -1,6 +1,6 @@
 import json
 import os
-import uuid
+import tempfile
 from datetime import datetime, timezone
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, url_for
@@ -16,8 +16,8 @@ from app.excel_utils import (
     export_payroll_run,
     export_import_error_report,
     match_client_sheet,
+    normalize_company_key,
     payroll_sheet_candidates,
-    save_uploaded_file,
     workbook_sheet_names,
 )
 from app.finance import create_finance_records_for_payroll
@@ -28,20 +28,16 @@ from app.validators import validate_payroll_rows
 payroll_bp = Blueprint("payroll", __name__, url_prefix="/payroll")
 
 
-def import_session_path(import_id):
-    return os.path.join(current_app.config["IMPORT_SESSION_FOLDER"], f"{import_id}.json")
-
-
 def save_import_session(payload):
-    import_id = str(uuid.uuid4())
-    with open(import_session_path(import_id), "w", encoding="utf-8") as file:
-        json.dump(payload, file, indent=2)
-    return import_id
+    batch = db.session.get(ImportBatch, int(payload["import_batch_id"]))
+    batch.payload_json = json.dumps(payload, indent=2)
+    db.session.commit()
+    return str(batch.id)
 
 
 def load_import_session(import_id):
-    with open(import_session_path(import_id), "r", encoding="utf-8") as file:
-        return json.load(file)
+    batch = db.get_or_404(ImportBatch, int(import_id))
+    return json.loads(batch.payload_json or "{}")
 
 
 def summarize_import(mapped_rows, validation):
@@ -54,6 +50,7 @@ def summarize_import(mapped_rows, validation):
         "net_total": sum(float(row.get("net_pay") or 0) for row in mapped_rows),
         "paye_total": sum(float(row.get("paye") or 0) for row in mapped_rows),
         "ssnit_total": sum(float(row.get("ssnit") or 0) for row in mapped_rows),
+        "deductions_total": sum(float(row.get("total_deductions") or 0) for row in mapped_rows),
     }
 
 
@@ -66,6 +63,155 @@ def has_duplicate_payroll(client_id, month, year):
         ).first()
         is not None
     )
+
+
+def save_temporary_upload(file_storage):
+    """Render files are ephemeral; uploaded workbooks are saved only long enough to parse."""
+    suffix = os.path.splitext(file_storage.filename or "")[1]
+    handle = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    handle.close()
+    file_storage.save(handle.name)
+    return handle.name
+
+
+def match_client_for_sheet(sheet_name, clients):
+    sheet_key = normalize_company_key(sheet_name)
+    for client in clients:
+        client_key = normalize_company_key(client.name)
+        if client_key == sheet_key or client_key in sheet_key or sheet_key in client_key:
+            return client
+    return None
+
+
+def build_single_payload(file_path, source_filename, client, month, year, selected_sheet_name=None):
+    known_names = [company.name for company in ClientCompany.query.all()]
+    sheet_names = workbook_sheet_names(file_path)
+    candidates = payroll_sheet_candidates(file_path)
+    current_app.logger.info(
+        "Smart Excel Import Engine: workbook sheets=%s selected_client=%s candidates=%s",
+        sheet_names,
+        client.name,
+        candidates,
+    )
+    if not candidates:
+        return None, "No valid payroll rows were found. Please check the selected sheet, header row, or Excel format."
+
+    matched_sheet_name = selected_sheet_name or match_client_sheet(
+        client.name, [candidate["sheet_name"] for candidate in candidates]
+    )
+    if not matched_sheet_name and len(candidates) == 1:
+        matched_sheet_name = candidates[0]["sheet_name"]
+    if not matched_sheet_name:
+        available = ", ".join(candidate["sheet_name"] for candidate in candidates)
+        return None, f"No matching payroll sheet found for selected client company. Available payroll-looking sheets are: {available}"
+
+    extraction = extract_payroll_sheet(file_path, matched_sheet_name)
+    mapped_rows = extraction["mapped_rows"]
+    if not mapped_rows:
+        current_app.logger.warning(
+            "Smart Excel Import Engine extracted 0 rows from sheet=%s file=%s",
+            matched_sheet_name,
+            source_filename,
+        )
+        return None, "No valid payroll rows were found. Please check the selected sheet, header row, or Excel format."
+
+    detected_company_name = detect_company_name(file_path, known_names, matched_sheet_name)
+    validation = validate_payroll_rows(mapped_rows, client, month, year, detected_company_name)
+    import_summary = summarize_import(mapped_rows, validation)
+    current_app.logger.info(
+        "Smart Excel Import Engine: matched_sheet=%s header_row=%s columns=%s mapping=%s rows=%s ignored=%s warnings=%s",
+        matched_sheet_name,
+        extraction["detected_header_row"],
+        extraction["columns"],
+        extraction["mapping"],
+        len(mapped_rows),
+        extraction["ignored_rows"],
+        len(validation["per_row_warnings"]) + len(validation["summary_warnings"]),
+    )
+
+    return {
+        "mode": "single_client",
+        "source_filename": source_filename,
+        "matched_sheet_name": matched_sheet_name,
+        "detected_header_row": extraction["detected_header_row"],
+        "client_company_id": client.id,
+        "client_company_name": client.name,
+        "month": month,
+        "year": year,
+        "columns": extraction["columns"],
+        "mapping": extraction["mapping"],
+        "unmapped_columns": [column for column, field in extraction["mapping"].items() if field == "unmapped"],
+        "preview_rows": extraction["preview_rows"],
+        "mapped_rows": mapped_rows,
+        "worker_stats": extraction["worker_stats"],
+        "status_breakdown": extraction["status_breakdown"],
+        "import_summary": import_summary,
+        "detected_company_name": detected_company_name,
+        "validation": validation,
+    }, None
+
+
+def build_multi_client_payload(file_path, source_filename, month, year):
+    clients = ClientCompany.query.filter_by(status="Active").all()
+    candidates = payroll_sheet_candidates(file_path)
+    current_app.logger.info(
+        "Smart Excel Import Engine multi-client: workbook sheets=%s candidates=%s",
+        workbook_sheet_names(file_path),
+        candidates,
+    )
+    if not candidates:
+        return None, "No valid payroll rows were found. Please check the selected sheet, header row, or Excel format."
+
+    runs = []
+    unmatched_sheets = []
+    known_names = [company.name for company in ClientCompany.query.all()]
+    for candidate in candidates:
+        client = match_client_for_sheet(candidate["sheet_name"], clients)
+        if not client:
+            unmatched_sheets.append(candidate)
+            continue
+        extraction = extract_payroll_sheet(file_path, candidate["sheet_name"])
+        if not extraction["mapped_rows"]:
+            continue
+        detected_company_name = detect_company_name(file_path, known_names, candidate["sheet_name"])
+        validation = validate_payroll_rows(
+            extraction["mapped_rows"], client, month, year, detected_company_name
+        )
+        import_summary = summarize_import(extraction["mapped_rows"], validation)
+        runs.append(
+            {
+                "mode": "single_client",
+                "source_filename": source_filename,
+                "matched_sheet_name": candidate["sheet_name"],
+                "detected_header_row": extraction["detected_header_row"],
+                "client_company_id": client.id,
+                "client_company_name": client.name,
+                "month": month,
+                "year": year,
+                "columns": extraction["columns"],
+                "mapping": extraction["mapping"],
+                "unmapped_columns": [column for column, field in extraction["mapping"].items() if field == "unmapped"],
+                "preview_rows": extraction["preview_rows"],
+                "mapped_rows": extraction["mapped_rows"],
+                "worker_stats": extraction["worker_stats"],
+                "status_breakdown": extraction["status_breakdown"],
+                "import_summary": import_summary,
+                "detected_company_name": detected_company_name,
+                "validation": validation,
+            }
+        )
+
+    if not runs:
+        return None, "No valid matched client payroll rows were found. Please check client sheet names and Excel format."
+
+    return {
+        "mode": "multi_client",
+        "source_filename": source_filename,
+        "month": month,
+        "year": year,
+        "runs": runs,
+        "unmatched_sheets": unmatched_sheets,
+    }, None
 
 
 @payroll_bp.route("/runs")
@@ -97,147 +243,75 @@ def upload():
     clients = ClientCompany.query.filter_by(status="Active").order_by(ClientCompany.name).all()
     now = datetime.now()
     if request.method == "POST":
+        import_mode = request.form.get("import_mode") or "single_client"
         client_id = request.form.get("client_company_id")
-        if not client_id:
+        if import_mode == "single_client" and not client_id:
             flash("Select a client company before uploading payroll.", "warning")
             return redirect(url_for("payroll.upload"))
 
-        client = db.get_or_404(ClientCompany, client_id)
-        known_names = [company.name for company in ClientCompany.query.all()]
         month = request.form.get("month") or now.strftime("%B")
         year = int(request.form.get("year") or now.year)
-        selected_sheet_name = request.form.get("selected_sheet_name")
-        existing_file_path = request.form.get("existing_file_path")
-        source_filename = request.form.get("source_filename")
-
-        if existing_file_path:
-            file_path = os.path.abspath(existing_file_path)
-            upload_root = os.path.abspath(current_app.config["UPLOAD_FOLDER"])
-            if not file_path.startswith(upload_root) or not os.path.exists(file_path):
-                flash("The saved workbook could not be found. Please upload it again.", "warning")
-                return redirect(url_for("payroll.upload"))
-            source_filename = source_filename or os.path.basename(file_path)
-        else:
-            file_storage = request.files.get("payroll_file")
-            if not file_storage or not file_storage.filename:
-                flash("Choose an Excel file to upload.", "warning")
-                return redirect(url_for("payroll.upload"))
-            if not allowed_excel_file(file_storage.filename):
-                flash("Only .xlsx, .xls, or .csv files are supported.", "warning")
-                return redirect(url_for("payroll.upload"))
-            file_path, source_filename = save_uploaded_file(
-                file_storage, current_app.config["UPLOAD_FOLDER"]
-            )
-
-        sheet_names = workbook_sheet_names(file_path)
-        candidates = payroll_sheet_candidates(file_path)
-        current_app.logger.info(
-            "Smart Excel Import Engine: workbook sheets=%s selected_client=%s candidates=%s",
-            sheet_names,
-            client.name,
-            candidates,
-        )
-        if not candidates:
-            flash(
-                "No valid payroll rows were found. Please check the selected sheet, header row, or Excel format.",
-                "danger",
-            )
+        file_storage = request.files.get("payroll_file")
+        if not file_storage or not file_storage.filename:
+            flash("Choose an Excel file to upload.", "warning")
+            return redirect(url_for("payroll.upload"))
+        if not allowed_excel_file(file_storage.filename):
+            flash("Only .xlsx, .xls, or .csv files are supported.", "warning")
             return redirect(url_for("payroll.upload"))
 
-        matched_sheet_name = selected_sheet_name or match_client_sheet(
-            client.name, [candidate["sheet_name"] for candidate in candidates]
-        )
-        if not matched_sheet_name and len(candidates) == 1:
-            matched_sheet_name = candidates[0]["sheet_name"]
-        if not matched_sheet_name:
-            flash(
-                "No matching sheet was found for the selected client. Choose the correct payroll sheet below.",
-                "warning",
-            )
-            return render_template(
-                "payroll_upload.html",
-                clients=clients,
-                current_month=month,
-                current_year=year,
-                selected_client_id=int(client_id),
-                pending_file_path=file_path,
-                pending_source_filename=source_filename,
-                available_sheets=candidates,
-            )
+        source_filename = file_storage.filename
+        file_path = save_temporary_upload(file_storage)
+        try:
+            if import_mode == "multi_client":
+                payload, error = build_multi_client_payload(file_path, source_filename, month, year)
+                client_for_batch = None
+            else:
+                client = db.get_or_404(ClientCompany, client_id)
+                payload, error = build_single_payload(file_path, source_filename, client, month, year)
+                client_for_batch = client
+        finally:
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
 
-        extraction = extract_payroll_sheet(file_path, matched_sheet_name)
-        mapped_rows = extraction["mapped_rows"]
-        if not mapped_rows:
-            current_app.logger.warning(
-                "Smart Excel Import Engine extracted 0 rows from sheet=%s file=%s",
-                matched_sheet_name,
-                source_filename,
-            )
-            flash(
-                "No valid payroll rows were found. Please check the selected sheet, header row, or Excel format.",
-                "danger",
-            )
+        if error:
+            flash(error, "danger")
             return redirect(url_for("payroll.upload"))
 
-        detected_company_name = detect_company_name(file_path, known_names, matched_sheet_name)
-        worker_stats = extraction["worker_stats"]
-        validation = validate_payroll_rows(
-            mapped_rows, client, month, year, detected_company_name
-        )
-        import_summary = summarize_import(mapped_rows, validation)
-
-        current_app.logger.info(
-            "Smart Excel Import Engine: matched_sheet=%s header_row=%s columns=%s mapping=%s rows=%s ignored=%s warnings=%s",
-            matched_sheet_name,
-            extraction["detected_header_row"],
-            extraction["columns"],
-            extraction["mapping"],
-            len(mapped_rows),
-            extraction["ignored_rows"],
-            len(validation["per_row_warnings"]) + len(validation["summary_warnings"]),
+        batch_client_id = (
+            client_for_batch.id
+            if client_for_batch
+            else payload["runs"][0]["client_company_id"]
         )
 
         batch = ImportBatch(
-            client_company_id=client.id,
+            client_company_id=batch_client_id,
             payroll_month=month,
             payroll_year=year,
             uploaded_by=current_user.id,
             original_filename=source_filename,
+            import_mode=payload["mode"],
+            source_sheet_name=payload.get("matched_sheet_name"),
             status="Previewed",
-            total_rows=import_summary["total_rows"],
-            valid_rows=import_summary["valid_rows"],
-            invalid_rows=import_summary["invalid_rows"],
-            total_workers=worker_stats["total_unique_workers"],
-            gross_total=import_summary["gross_total"],
-            net_total=import_summary["net_total"],
-            paye_total=import_summary["paye_total"],
-            ssnit_total=import_summary["ssnit_total"],
-            validation_summary="\n".join(validation["summary_warnings"]),
+            total_rows=(payload["import_summary"]["total_rows"] if payload["mode"] == "single_client" else sum(run["import_summary"]["total_rows"] for run in payload["runs"])),
+            valid_rows=(payload["import_summary"]["valid_rows"] if payload["mode"] == "single_client" else sum(run["import_summary"]["valid_rows"] for run in payload["runs"])),
+            invalid_rows=(payload["import_summary"]["invalid_rows"] if payload["mode"] == "single_client" else sum(run["import_summary"]["invalid_rows"] for run in payload["runs"])),
+            total_workers=(payload["worker_stats"]["total_unique_workers"] if payload["mode"] == "single_client" else sum(run["worker_stats"]["total_unique_workers"] for run in payload["runs"])),
+            gross_total=(payload["import_summary"]["gross_total"] if payload["mode"] == "single_client" else sum(run["import_summary"]["gross_total"] for run in payload["runs"])),
+            net_total=(payload["import_summary"]["net_total"] if payload["mode"] == "single_client" else sum(run["import_summary"]["net_total"] for run in payload["runs"])),
+            paye_total=(payload["import_summary"]["paye_total"] if payload["mode"] == "single_client" else sum(run["import_summary"]["paye_total"] for run in payload["runs"])),
+            ssnit_total=(payload["import_summary"]["ssnit_total"] if payload["mode"] == "single_client" else sum(run["import_summary"]["ssnit_total"] for run in payload["runs"])),
+            validation_summary=(
+                "\n".join(payload["validation"]["summary_warnings"])
+                if payload["mode"] == "single_client"
+                else "\n".join(warning for run in payload["runs"] for warning in run["validation"]["summary_warnings"])
+            ),
         )
         db.session.add(batch)
         db.session.flush()
         record_audit("Payroll upload", batch, f"Uploaded {source_filename} for preview.")
-        db.session.commit()
-
-        payload = {
-            "import_batch_id": batch.id,
-            "file_path": file_path,
-            "source_filename": source_filename,
-            "matched_sheet_name": matched_sheet_name,
-            "detected_header_row": extraction["detected_header_row"],
-            "client_company_id": client.id,
-            "month": month,
-            "year": year,
-            "columns": extraction["columns"],
-            "mapping": extraction["mapping"],
-            "preview_rows": extraction["preview_rows"],
-            "mapped_rows": mapped_rows,
-            "worker_stats": worker_stats,
-            "status_breakdown": extraction["status_breakdown"],
-            "import_summary": import_summary,
-            "detected_company_name": detected_company_name,
-            "validation": validation,
-        }
+        payload["import_batch_id"] = batch.id
         import_id = save_import_session(payload)
         return redirect(url_for("payroll.preview", import_id=import_id))
 
@@ -253,7 +327,9 @@ def upload():
 @role_required("admin")
 def preview(import_id):
     payload = load_import_session(import_id)
-    client = db.get_or_404(ClientCompany, payload["client_company_id"])
+    client = None
+    if payload.get("mode") != "multi_client":
+        client = db.get_or_404(ClientCompany, payload["client_company_id"])
     return render_template(
         "payroll_preview.html",
         import_id=import_id,
@@ -274,6 +350,8 @@ def error_report(import_id):
 @role_required("admin")
 def confirm(import_id):
     payload = load_import_session(import_id)
+    if payload.get("mode") == "multi_client":
+        return confirm_multi_client_import(import_id, payload)
     if not payload.get("mapped_rows"):
         flash(
             "No valid payroll rows were found. Please check the selected sheet, header row, or Excel format.",
@@ -293,6 +371,65 @@ def confirm(import_id):
         flash("Duplicate payroll found. Tick confirm replacement before importing this client/month again.", "warning")
         return redirect(url_for("payroll.preview", import_id=import_id))
 
+    payroll_run = create_payroll_run_from_payload(payload, client, validation, "single_client")
+    batch_id = payload.get("import_batch_id")
+    if batch_id:
+        batch = db.session.get(ImportBatch, batch_id)
+        if batch:
+            batch.status = "Imported"
+            batch.payroll_run_id = payroll_run.id
+    record_audit("Payroll import confirmed", payroll_run, f"Created payroll run from {payload['source_filename']}.")
+    db.session.commit()
+
+    flash("Company-specific payroll run created in Draft status.", "success")
+    return redirect(url_for("payroll.detail", run_id=payroll_run.id))
+
+
+def confirm_multi_client_import(import_id, payload):
+    runs = payload.get("runs", [])
+    if not runs:
+        flash(
+            "No valid payroll rows were found. Please check the selected sheet, header row, or Excel format.",
+            "danger",
+        )
+        return redirect(url_for("payroll.upload"))
+
+    duplicates = []
+    for run_payload in runs:
+        if has_duplicate_payroll(run_payload["client_company_id"], run_payload["month"], run_payload["year"]):
+            duplicates.append(run_payload["client_company_name"])
+    if duplicates and request.form.get("replace_existing") != "1":
+        flash(
+            f"Duplicate payroll found for: {', '.join(duplicates)}. Tick confirm replacement before importing again.",
+            "warning",
+        )
+        return redirect(url_for("payroll.preview", import_id=import_id))
+
+    created_runs = []
+    for run_payload in runs:
+        client = db.get_or_404(ClientCompany, run_payload["client_company_id"])
+        validation = validate_payroll_rows(
+            run_payload["mapped_rows"],
+            client,
+            run_payload["month"],
+            run_payload["year"],
+            run_payload.get("detected_company_name", ""),
+        )
+        payroll_run = create_payroll_run_from_payload(run_payload, client, validation, "multi_client")
+        created_runs.append(payroll_run)
+        record_audit("Payroll import confirmed", payroll_run, f"Created multi-client payroll run from {run_payload['source_filename']}.")
+
+    batch = db.session.get(ImportBatch, int(import_id))
+    batch.status = "Imported"
+    if created_runs:
+        batch.payroll_run_id = created_runs[0].id
+    db.session.commit()
+    flash(f"{len(created_runs)} client payroll runs created in Draft status.", "success")
+    return redirect(url_for("payroll.runs"))
+
+
+def create_payroll_run_from_payload(payload, client, validation, import_mode):
+    status_breakdown = payload.get("status_breakdown") or {}
     payroll_run = PayrollRun(
         month=payload["month"],
         year=int(payload["year"]),
@@ -306,9 +443,14 @@ def confirm(import_id):
         source_filename=payload["source_filename"],
         source_sheet_name=payload.get("matched_sheet_name"),
         detected_header_row=payload.get("detected_header_row") or 0,
-        import_mode="single_client",
-        import_type="Single Company Upload",
+        import_mode=import_mode,
+        import_type="Multi-Sheet Upload" if import_mode == "multi_client" else "Single Company Upload",
         detected_company_name=payload.get("detected_company_name"),
+        active_workers=status_breakdown.get("active", 0),
+        inactive_workers=status_breakdown.get("inactive", 0),
+        terminated_workers=status_breakdown.get("terminated", 0),
+        on_leave_workers=status_breakdown.get("on_leave", 0),
+        unknown_status_workers=status_breakdown.get("unknown", 0),
         notes="\n".join(validation["summary_warnings"]),
     )
     db.session.add(payroll_run)
@@ -336,15 +478,26 @@ def confirm(import_id):
             employee_id=employee.id if employee else None,
             staff_id=row.get("staff_id"),
             full_name=row.get("full_name"),
+            status=row.get("status"),
+            service_line=row.get("service_line"),
+            job_role=row.get("job_role"),
+            payroll_month=row.get("payroll_month"),
             ssnit_number=row.get("ssnit_number"),
+            ghana_card_number=row.get("ghana_card_number"),
+            bank_name=row.get("bank_name"),
+            bank_account_number=row.get("bank_account_number"),
+            momo_number=row.get("momo_number"),
             basic_salary=float(row.get("basic_salary") or 0),
             transport_allowance=float(row.get("transport_allowance") or 0),
             housing_allowance=float(row.get("housing_allowance") or 0),
+            overtime_hours=float(row.get("overtime_hours") or 0),
             overtime_pay=float(row.get("overtime_pay") or 0),
             other_allowances=float(row.get("other_allowances") or 0),
             gross_pay=float(row.get("gross_pay") or 0),
             paye=float(row.get("paye") or 0),
             ssnit=float(row.get("ssnit") or 0),
+            tier_2_pension=float(row.get("tier_2_pension") or 0),
+            loan_deduction=float(row.get("loan_deduction") or 0),
             other_deductions=float(row.get("other_deductions") or 0),
             total_deductions=float(row.get("total_deductions") or 0),
             net_pay=float(row.get("net_pay") or 0),
@@ -363,17 +516,7 @@ def confirm(import_id):
     payroll_run.total_net_pay = totals["net"]
     payroll_run.total_paye = totals["paye"]
     payroll_run.total_ssnit = totals["ssnit"]
-    batch_id = payload.get("import_batch_id")
-    if batch_id:
-        batch = db.session.get(ImportBatch, batch_id)
-        if batch:
-            batch.status = "Imported"
-            batch.payroll_run_id = payroll_run.id
-    record_audit("Payroll import confirmed", payroll_run, f"Created payroll run from {payload['source_filename']}.")
-    db.session.commit()
-
-    flash("Company-specific payroll run created in Draft status.", "success")
-    return redirect(url_for("payroll.detail", run_id=payroll_run.id))
+    return payroll_run
 
 
 def create_or_update_employee_from_import(row, client, payroll_run, row_index):

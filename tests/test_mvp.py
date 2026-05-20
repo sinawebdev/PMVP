@@ -7,6 +7,7 @@ os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
 from openpyxl import Workbook
 
+import app as app_module
 from app import create_app, format_ghana_cedis
 from app.pdf_service import generate_payslip_pdf
 from app.excel_utils import calculate_worker_stats, map_columns
@@ -234,10 +235,49 @@ class MvpTestCase(unittest.TestCase):
         stream.seek(0)
         return stream
 
+    def build_multiclient_workbook(self):
+        workbook = Workbook()
+        guide = workbook.active
+        guide.title = "README"
+        guide.append(["Guide sheet, not payroll"])
+
+        for sheet_name, staff_id, worker_name, gross, net in [
+            ("MSC_Ghana_Ltd", "MSC-MC-001", "Adwoa Frimpong", 1500, 1300),
+            ("Stellar_Logistics", "STL-MC-001", "Yaw Antwi", 1000, 900),
+        ]:
+            sheet = workbook.create_sheet(sheet_name)
+            sheet.append(["Client payroll export"])
+            sheet.append([])
+            sheet.append(["Staff ID", "Employee Name", "Status", "Gross Pay", "PAYE", "SSNIT", "Net Pay"])
+            sheet.append([staff_id, worker_name, "Active", gross, 100, 50, net])
+
+        unmatched = workbook.create_sheet("Unknown_Client_Payroll")
+        unmatched.append(["Staff ID", "Employee Name", "Gross Pay", "Net Pay"])
+        unmatched.append(["UNK-001", "Unmatched Worker", 800, 700])
+
+        stream = BytesIO()
+        workbook.save(stream)
+        stream.seek(0)
+        return stream
+
     def test_seeded_users_and_clients_exist(self):
         with self.app.app_context():
             self.assertIsNotNone(User.query.filter_by(email="admin@chrisnat.local").first())
             self.assertIsNotNone(ClientCompany.query.filter_by(name="MSC Ghana Ltd").first())
+
+    def test_database_url_normalizes_render_postgres_url(self):
+        previous_url = os.environ.get("DATABASE_URL")
+        os.environ["DATABASE_URL"] = "postgres://user:pass@example.com/dbname"
+        try:
+            self.assertEqual(
+                app_module.resolve_database_uri("/tmp/local.db"),
+                "postgresql://user:pass@example.com/dbname",
+            )
+        finally:
+            if previous_url is None:
+                os.environ.pop("DATABASE_URL", None)
+            else:
+                os.environ["DATABASE_URL"] = previous_url
 
     def test_column_mapping_handles_common_payroll_headers(self):
         mapping = map_columns(["Staff No", "Employee Name", "Basic Salary", "Take Home"])
@@ -367,6 +407,11 @@ class MvpTestCase(unittest.TestCase):
             self.assertEqual(batch.total_rows, 2)
             self.assertEqual(batch.total_workers, 1)
             self.assertEqual(batch.gross_total, 2400.0)
+            self.assertTrue(batch.payload_json)
+
+        import_id = response.headers["Location"].rstrip("/").split("/")[-1]
+        session_path = os.path.join(self.app.config["IMPORT_SESSION_FOLDER"], f"{import_id}.json")
+        self.assertFalse(os.path.exists(session_path))
 
     def test_upload_uses_matching_client_sheet_in_multisheet_workbook(self):
         self.login_admin()
@@ -434,6 +479,42 @@ class MvpTestCase(unittest.TestCase):
         self.assertIn(b"No valid payroll rows were found", response.data)
         with self.app.app_context():
             self.assertEqual(ImportBatch.query.count(), original_batches)
+
+    def test_multi_client_upload_previews_and_confirms_matched_client_runs(self):
+        self.login_admin()
+        from app.models import ImportBatch
+
+        response = self.client.post(
+            "/payroll/upload",
+            data={
+                "import_mode": "multi_client",
+                "month": "April",
+                "year": "2101",
+                "payroll_file": (self.build_multiclient_workbook(), "multi_client.xlsx"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        preview_response = self.client.get(response.headers["Location"])
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertIn(b"Confirm and Create Payroll Runs", preview_response.data)
+        self.assertIn(b"MSC_Ghana_Ltd", preview_response.data)
+        self.assertIn(b"Stellar_Logistics", preview_response.data)
+        self.assertIn(b"Unknown_Client_Payroll", preview_response.data)
+
+        import_id = response.headers["Location"].rstrip("/").split("/")[-1]
+        confirm_response = self.client.post(f"/payroll/confirm/{import_id}", follow_redirects=True)
+        self.assertEqual(confirm_response.status_code, 200)
+
+        with self.app.app_context():
+            batch = db.session.get(ImportBatch, int(import_id))
+            self.assertEqual(batch.status, "Imported")
+            msc = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            stellar = ClientCompany.query.filter_by(name="Stellar Logistics").first()
+            self.assertIsNotNone(PayrollRun.query.filter_by(client_company_id=msc.id, month="April", year=2101).first())
+            self.assertIsNotNone(PayrollRun.query.filter_by(client_company_id=stellar.id, month="April", year=2101).first())
 
     def test_duplicate_payroll_requires_replacement_confirmation(self):
         self.login_admin()

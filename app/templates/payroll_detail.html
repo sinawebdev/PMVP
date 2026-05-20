@@ -8,6 +8,8 @@
     <div class="stat-card"><i class="bi bi-table stat-icon"></i><span>Total Rows Imported</span><strong>{{ payroll_run.total_rows_imported }}</strong></div>
     <div class="stat-card"><i class="bi bi-person-check stat-icon"></i><span>Total Unique Workers</span><strong>{{ payroll_run.total_workers }}</strong></div>
     <div class="stat-card"><i class="bi bi-copy stat-icon"></i><span>Duplicate Workers Found</span><strong>{{ payroll_run.duplicate_workers_found }}</strong></div>
+    <div class="stat-card"><i class="bi bi-person-fill-check stat-icon"></i><span>Active Workers</span><strong>{{ payroll_run.active_workers or 0 }}</strong></div>
+    <div class="stat-card"><i class="bi bi-person-dash stat-icon"></i><span>Inactive / Terminated</span><strong>{{ (payroll_run.inactive_workers or 0) + (payroll_run.terminated_workers or 0) }}</strong></div>
     <div class="stat-card"><i class="bi bi-cash-coin stat-icon"></i><span>Total Net Pay</span><strong>{{ payroll_run.total_net_pay|cedis }}</strong></div>
 </section>
 <section class="panel mt-3">
@@ -18,6 +20,8 @@
         <div class="col-md-3"><strong>Total Gross Pay</strong><p>{{ payroll_run.total_gross_pay|cedis }}</p></div>
         <div class="col-md-3"><strong>PAYE Total</strong><p>{{ payroll_run.total_paye|cedis }}</p></div>
         <div class="col-md-3"><strong>SSNIT Total</strong><p>{{ payroll_run.total_ssnit|cedis }}</p></div>
+        <div class="col-md-3"><strong>Total Deductions</strong><p>{{ payroll_run.total_deductions|cedis }}</p></div>
+        <div class="col-md-3"><strong>On Leave / Unknown</strong><p>{{ payroll_run.on_leave_workers or 0 }} / {{ payroll_run.unknown_status_workers or 0 }}</p></div>
     </div>
     <div class="d-flex flex-wrap gap-2 mt-2">
         {% if payroll_run.status == "Draft" %}
@@ -39,6 +43,9 @@
 <section class="panel mt-3">
     <div class="panel-header"><h2><i class="bi bi-grid-3x3-gap"></i>Payroll Items Grid</h2><span>{{ payroll_run.items|length }} rows</span></div>
     <div class="mini-note mb-3"><i class="bi bi-table"></i> This section is styled as an Excel-like grid for scanning payroll rows, totals, warnings, and payslip actions.</div>
+    {% if not payroll_run.items %}
+        <p class="text-muted mb-0">No payroll items were imported for this payroll run.</p>
+    {% else %}
     <div class="excel-grid-wrap">
         <table class="table table-sm align-middle excel-grid">
             <thead><tr><th>Staff ID</th><th>Name</th><th>Gross</th><th>PAYE</th><th>SSNIT</th><th>Deductions</th><th>Net Pay</th><th>Status</th><th>Warnings</th><th>Payslip</th></tr></thead>
@@ -52,7 +59,7 @@
                     <td class="money-cell">{{ item.ssnit|cedis }}</td>
                     <td class="money-cell">{{ item.total_deductions|cedis }}</td>
                     <td class="money-cell">{{ item.net_pay|cedis }}</td>
-                    <td><span class="badge text-bg-{{ 'warning' if item.validation_status == 'Warning' else 'success' }}">{{ item.validation_status }}</span></td>
+                    <td>{{ item.status or "Unknown" }} <span class="badge text-bg-{{ 'warning' if item.validation_status == 'Warning' else 'success' }}">{{ item.validation_status }}</span></td>
                     <td>{{ item.warning_notes }}</td>
                     <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.payslip', item_id=item.id) }}"><i class="bi bi-file-earmark-pdf"></i>Payslip</a></td>
                 </tr>
@@ -60,5 +67,6 @@
             </tbody>
         </table>
     </div>
+    {% endif %}
 </section>
 {% endblock %}

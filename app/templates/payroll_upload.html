@@ -4,17 +4,16 @@
 {% block content %}
 <section class="panel form-panel">
     <form method="post" enctype="multipart/form-data" class="row g-3">
-        {% if available_sheets %}
-            <div class="col-12">
-                <div class="alert alert-warning mb-0">
-                    <strong>Sheet selection needed.</strong>
-                    The Smart Excel Import Engine found payroll-looking sheets, but none matched the selected client name automatically.
-                </div>
-            </div>
-        {% endif %}
+        <div class="col-md-4">
+            <label class="form-label">Import Mode</label>
+            <select class="form-select" name="import_mode">
+                <option value="single_client">Single Client Import</option>
+                <option value="multi_client">Multi-Client Workbook Import</option>
+            </select>
+        </div>
         <div class="col-md-6">
             <label class="form-label">Select Client Company</label>
-            <select class="form-select" name="client_company_id" required>
+            <select class="form-select" name="client_company_id">
                 <option value="">Choose client company</option>
                 {% for client in clients %}
                     <option value="{{ client.id }}" {% if selected_client_id and selected_client_id == client.id %}selected{% endif %}>{{ client.name }}</option>
@@ -23,25 +22,7 @@
         </div>
         <div class="col-md-3"><label class="form-label">Payroll Month</label><input class="form-control" name="month" value="{{ current_month }}" required></div>
         <div class="col-md-3"><label class="form-label">Payroll Year</label><input class="form-control" type="number" name="year" value="{{ current_year }}" required></div>
-        {% if available_sheets %}
-            <input type="hidden" name="existing_file_path" value="{{ pending_file_path }}">
-            <input type="hidden" name="source_filename" value="{{ pending_source_filename }}">
-            <div class="col-md-6">
-                <label class="form-label">Select Workbook Sheet</label>
-                <select class="form-select" name="selected_sheet_name" required>
-                    <option value="">Choose payroll sheet</option>
-                    {% for sheet in available_sheets %}
-                        <option value="{{ sheet.sheet_name }}">{{ sheet.sheet_name }} - header row {{ sheet.detected_header_row }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-6">
-                <label class="form-label">Saved Workbook</label>
-                <input class="form-control" value="{{ pending_source_filename }}" readonly>
-            </div>
-        {% else %}
-            <div class="col-12"><label class="form-label">Payroll File (.xlsx, .xls, .csv)</label><input class="form-control" type="file" name="payroll_file" accept=".xlsx,.xls,.csv" required></div>
-        {% endif %}
+        <div class="col-12"><label class="form-label">Payroll File (.xlsx, .xls, .csv)</label><input class="form-control" type="file" name="payroll_file" accept=".xlsx,.xls,.csv" required></div>
         <div class="col-12">
             <div class="mini-note mb-3"><i class="bi bi-lightbulb"></i> The MVP keeps Excel in the workflow: nothing is committed until you confirm the preview.</div>
             <button class="btn btn-primary"><i class="bi bi-file-earmark-arrow-up"></i>Upload and Preview</button>

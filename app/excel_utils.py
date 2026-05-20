@@ -6,7 +6,6 @@ from pathlib import Path
 import pandas as pd
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
-from werkzeug.utils import secure_filename
 
 
 COLUMN_ALIASES = {
@@ -17,19 +16,20 @@ COLUMN_ALIASES = {
     "momo_number": ["momo", "momo number", "mobile money", "mobile money number"],
     "bank_name": ["bank", "bank name"],
     "bank_account_number": ["account no", "account number", "bank account", "bank account number"],
-    "status": ["status", "worker status", "employment status"],
+    "status": ["status", "employee status", "worker status", "employment status"],
     "service_line": ["service line", "department", "unit"],
     "job_role": ["job role", "role", "position", "designation"],
     "payroll_month": ["payroll month", "month"],
     "basic_salary": ["basic", "basic salary", "base pay", "salary"],
     "transport_allowance": ["transport", "transport allowance", "transportation"],
     "housing_allowance": ["housing", "housing allowance", "rent allowance"],
-    "overtime_pay": ["overtime", "ot", "overtime pay"],
+    "overtime_hours": ["overtime hours", "ot hours"],
+    "overtime_pay": ["overtime", "ot pay", "overtime pay"],
     "other_allowances": ["other allowance", "other allowances", "allowances", "allowance"],
-    "gross_pay": ["gross", "gross pay", "gross salary"],
+    "gross_pay": ["gross", "gross pay", "gross salary", "total earnings"],
     "paye": ["paye", "tax", "income tax", "paye tax"],
     "ssnit": ["ssnit", "social security", "ssnit contribution", "ssnit employee"],
-    "tier_2_pension": ["tier 2", "tier 2 pension", "tier two pension"],
+    "tier_2_pension": ["tier 2", "tier 2 pension", "tier two pension", "pension"],
     "loan_deduction": ["loan deduction", "loan deductions", "loan"],
     "other_deductions": ["deduction", "deductions", "other deduction", "other deductions"],
     "total_deductions": ["total deductions", "total deduction"],
@@ -40,6 +40,7 @@ MONEY_FIELDS = {
     "basic_salary",
     "transport_allowance",
     "housing_allowance",
+    "overtime_hours",
     "overtime_pay",
     "other_allowances",
     "gross_pay",
@@ -68,25 +69,41 @@ PAYROLL_HEADER_KEYWORDS = {
     "staff id",
     "staff no",
     "employee id",
+    "emp id",
     "employee",
     "name",
     "employee name",
     "full name",
     "status",
+    "service line",
+    "job role",
     "basic salary",
     "basic",
+    "base pay",
     "gross pay",
     "gross salary",
     "paye",
     "ssnit",
+    "ssnit employee",
+    "tier 2 pension",
     "net pay",
     "net salary",
+    "take home",
     "bank",
+    "bank name",
+    "bank account",
     "momo",
     "ghana card",
+    "ghana card no",
+    "ssnit number",
     "payroll month",
+    "transport allowance",
+    "housing allowance",
+    "overtime",
+    "overtime pay",
     "allowance",
     "deduction",
+    "total deductions",
 }
 
 
@@ -98,6 +115,13 @@ def normalize_label(value):
 
 def normalize_worker(value):
     return normalize_label(value)
+
+
+def normalize_company_key(value, strip_suffix=True):
+    parts = normalize_label(value).split()
+    if strip_suffix:
+        parts = [part for part in parts if part not in {"ltd", "limited"}]
+    return "".join(parts)
 
 
 def slug_filename(value):
@@ -206,13 +230,13 @@ def payroll_sheet_candidates(file_path):
 
 
 def match_client_sheet(client_name, sheet_names):
-    normalized_client = normalize_label(client_name)
+    normalized_client = normalize_company_key(client_name)
     for sheet_name in sheet_names:
-        normalized_sheet = normalize_label(sheet_name)
+        normalized_sheet = normalize_company_key(sheet_name)
         if normalized_client == normalized_sheet:
             return sheet_name
     for sheet_name in sheet_names:
-        normalized_sheet = normalize_label(sheet_name)
+        normalized_sheet = normalize_company_key(sheet_name)
         if normalized_client in normalized_sheet or normalized_sheet in normalized_client:
             return sheet_name
     return None
@@ -297,6 +321,7 @@ def mapped_rows_from_dataframe(df, mapping):
     rows = []
     for _, source_row in df.iterrows():
         row = {}
+        original_presence = {}
         first_cell = scalar_cell_value(source_row.iloc[0]) if len(source_row.index) else ""
         if normalize_label(first_cell) in {"total", "grand total", "subtotal", "summary"}:
             continue
@@ -305,6 +330,7 @@ def mapped_rows_from_dataframe(df, mapping):
                 continue
             value = source_row.get(original_column, "")
             value = scalar_cell_value(value)
+            original_presence[field] = str(value or "").strip() not in {"", "nan", "None"}
             row[field] = to_number(value) if field in MONEY_FIELDS else str(value).strip()
 
         identity = " ".join(
@@ -334,6 +360,9 @@ def mapped_rows_from_dataframe(df, mapping):
         row.setdefault("service_line", "")
         row.setdefault("job_role", "")
         row.setdefault("payroll_month", "")
+        row["_missing_original_net_pay"] = not original_presence.get("net_pay", False)
+        row["_missing_original_gross_pay"] = not original_presence.get("gross_pay", False)
+        row["_missing_original_total_deductions"] = not original_presence.get("total_deductions", False)
 
         calculated_gross = (
             row["basic_salary"]
@@ -437,15 +466,6 @@ def extract_payroll_sheet(file_path, sheet_name=None):
         "totals": totals,
         "ignored_rows": max(len(df.index) - len(mapped_rows), 0),
     }
-
-
-def save_uploaded_file(file_storage, upload_folder):
-    filename = secure_filename(file_storage.filename)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-    stored_filename = f"{timestamp}_{filename}"
-    file_path = os.path.join(upload_folder, stored_filename)
-    file_storage.save(file_path)
-    return file_path, filename
 
 
 def create_workbook(report_title):

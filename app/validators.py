@@ -133,7 +133,10 @@ def validate_single_row(row):
     staff_id = str(row.get("staff_id") or "").strip()
     full_name = str(row.get("full_name") or "").strip()
     ssnit_number = str(row.get("ssnit_number") or "").strip()
+    ghana_card_number = str(row.get("ghana_card_number") or "").strip()
     bank_account_number = str(row.get("bank_account_number") or "").strip()
+    momo_number = str(row.get("momo_number") or "").strip()
+    status = normalize_label(row.get("status"))
     net_pay = row.get("net_pay")
 
     if not staff_id:
@@ -144,13 +147,15 @@ def validate_single_row(row):
         employee = Employee.query.filter_by(staff_id=staff_id).first() if staff_id else None
         if not employee or not employee.ssnit_number:
             warnings.append("Missing SSNIT number.")
-    if not bank_account_number:
-        warnings.append("Missing bank account.")
-    if net_pay in (None, ""):
-        warnings.append("Missing net pay.")
+    if not ghana_card_number:
+        warnings.append("Missing Ghana Card number.")
+    if not bank_account_number and not momo_number:
+        warnings.append("Missing bank and MoMo details.")
+    if net_pay in (None, "") or row.get("_missing_original_net_pay"):
+        warnings.append("Net pay missing; calculated by system.")
     if float(row.get("net_pay") or 0) < 0:
         warnings.append("Negative net pay.")
-    for field in ("basic_salary", "gross_pay", "paye", "ssnit", "other_deductions"):
+    for field in ("basic_salary", "gross_pay", "paye", "ssnit", "tier_2_pension", "loan_deduction", "other_deductions", "total_deductions", "net_pay"):
         if float(row.get(field) or 0) < 0:
             warnings.append("Negative salary or deduction value.")
             break
@@ -167,6 +172,8 @@ def validate_single_row(row):
     total_deductions = (
         float(row.get("paye") or 0)
         + float(row.get("ssnit") or 0)
+        + float(row.get("tier_2_pension") or 0)
+        + float(row.get("loan_deduction") or 0)
         + float(row.get("other_deductions") or 0)
     )
     expected_net_pay = gross_pay - total_deductions
@@ -178,8 +185,18 @@ def validate_single_row(row):
     if abs(float(row.get("net_pay") or 0) - expected_net_pay) > 1:
         warnings.append("Net pay calculation mismatch.")
     if not row.get("paye"):
-        warnings.append("PAYE is empty.")
+        warnings.append("Missing PAYE.")
     if not row.get("ssnit"):
-        warnings.append("SSNIT is empty.")
+        warnings.append("Missing SSNIT.")
+    if "inactive" in status:
+        warnings.append("Inactive worker appears in payroll.")
+    if "terminated" in status:
+        warnings.append("Terminated worker appears in payroll.")
+    if gross_pay >= 20000:
+        warnings.append("Very high salary.")
+    if gross_pay <= 0 and float(row.get("net_pay") or 0) <= 0:
+        warnings.append("Zero salary.")
+    if gross_pay and float(row.get("total_deductions") or 0) > gross_pay * 0.6:
+        warnings.append("Very high deductions.")
 
     return warnings

@@ -11,6 +11,15 @@ login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 
 
+def resolve_database_uri(local_sqlite_path):
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        if database_url.startswith("postgres://"):
+            database_url = database_url.replace("postgres://", "postgresql://", 1)
+        return database_url
+    return f"sqlite:///{local_sqlite_path}"
+
+
 def format_ghana_cedis(value):
     try:
         amount = float(value or 0)
@@ -36,9 +45,8 @@ def create_app():
     app = Flask(__name__, instance_relative_config=True)
     is_production = os.getenv("RENDER") == "true" or os.getenv("FLASK_ENV") == "production"
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
-        "DATABASE_URL",
-        f"sqlite:///{os.path.join(app.instance_path, 'chrisnat_payroll.db')}",
+    app.config["SQLALCHEMY_DATABASE_URI"] = resolve_database_uri(
+        os.path.join(app.instance_path, "chrisnat_payroll.db")
     )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -95,6 +103,19 @@ def create_app():
             .all()
         }
 
+    @app.cli.command("init-db")
+    def init_db_command():
+        """Create/upgrade tables and seed starter users/clients without wiping data."""
+        initialize_database(app)
+        print("Database initialized.")
+
+    if os.getenv("AUTO_INIT_DB", "true").lower() == "true":
+        initialize_database(app)
+
+    return app
+
+
+def initialize_database(app):
     with app.app_context():
         db.create_all()
         from app.schema import ensure_phase2_schema
@@ -103,8 +124,6 @@ def create_app():
         from app.seed import seed_default_data
 
         seed_default_data()
-
-    return app
 
 
 @login_manager.user_loader
