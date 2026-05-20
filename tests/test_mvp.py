@@ -129,6 +129,26 @@ class MvpTestCase(unittest.TestCase):
         self.assertEqual(rows[0]["gross_pay"], 1200.0)
         self.assertEqual(rows[0]["net_pay"], 1100.0)
 
+    def test_import_handles_duplicate_excel_headers_without_crashing(self):
+        import pandas as pd
+        from app.excel_utils import mapped_rows_from_dataframe
+
+        df = pd.DataFrame(
+            [["CN-900", "Duplicate Header Worker", 1200, 95, 1105]],
+            columns=["Staff ID", "Employee Name", "Gross Pay", "Gross Pay", "Net Pay"],
+        )
+        mapping = {
+            "Staff ID": "staff_id",
+            "Employee Name": "full_name",
+            "Gross Pay": "gross_pay",
+            "Net Pay": "net_pay",
+        }
+
+        rows = mapped_rows_from_dataframe(df, mapping)
+
+        self.assertEqual(rows[0]["gross_pay"], 1200.0)
+        self.assertEqual(rows[0]["net_pay"], 1105.0)
+
     def test_money_is_formatted_as_comma_separated_ghana_cedis(self):
         self.assertEqual(format_ghana_cedis(1234567.5), "GH₵ 1,234,567.50")
 

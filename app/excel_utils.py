@@ -142,6 +142,9 @@ def detect_company_name(file_path, known_company_names=None):
 
 
 def to_number(value):
+    if hasattr(value, "tolist"):
+        values = [item for item in value.tolist() if item not in (None, "")]
+        value = values[0] if values else ""
     if value in (None, ""):
         return 0.0
     try:
@@ -160,6 +163,13 @@ def to_number(value):
         return 0.0
 
 
+def scalar_cell_value(value):
+    if hasattr(value, "tolist"):
+        values = [item for item in value.tolist() if item not in (None, "")]
+        return values[0] if values else ""
+    return value
+
+
 def mapped_rows_from_dataframe(df, mapping):
     rows = []
     for _, source_row in df.iterrows():
@@ -168,6 +178,7 @@ def mapped_rows_from_dataframe(df, mapping):
             if field == "unmapped":
                 continue
             value = source_row.get(original_column, "")
+            value = scalar_cell_value(value)
             row[field] = to_number(value) if field in MONEY_FIELDS else str(value).strip()
 
         identity = " ".join(
