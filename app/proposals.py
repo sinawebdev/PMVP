@@ -9,7 +9,7 @@ proposals_bp = Blueprint("proposals", __name__, url_prefix="/proposals")
 
 
 @proposals_bp.route("", methods=["GET", "POST"])
-@role_required("admin", "md", "payroll_officer", "accounts_officer")
+@role_required("admin", "md", "accounts_officer")
 def proposals():
     clients = ClientCompany.query.filter_by(status="Active").order_by(ClientCompany.name).all()
     if request.method == "POST":

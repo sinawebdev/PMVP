@@ -8,6 +8,11 @@
     <div class="stat-card"><i class="bi bi-table stat-icon"></i><span>Total Rows Found</span><strong>{{ payload.worker_stats.total_rows }}</strong></div>
     <div class="stat-card"><i class="bi bi-person-check stat-icon"></i><span>Total Unique Workers</span><strong>{{ payload.worker_stats.total_unique_workers }}</strong></div>
     <div class="stat-card"><i class="bi bi-copy stat-icon"></i><span>Duplicate Entries Found</span><strong>{{ payload.worker_stats.duplicate_count }}</strong></div>
+    <div class="stat-card"><i class="bi bi-check-circle stat-icon"></i><span>Valid Rows</span><strong>{{ payload.import_summary.valid_rows }}</strong></div>
+    <div class="stat-card"><i class="bi bi-x-octagon stat-icon"></i><span>Invalid Rows</span><strong>{{ payload.import_summary.invalid_rows }}</strong></div>
+    <div class="stat-card"><i class="bi bi-cash-stack stat-icon"></i><span>Total Payroll Amount</span><strong>{{ payload.import_summary.net_total|cedis }}</strong></div>
+    <div class="stat-card"><i class="bi bi-receipt-cutoff stat-icon"></i><span>PAYE Total</span><strong>{{ payload.import_summary.paye_total|cedis }}</strong></div>
+    <div class="stat-card"><i class="bi bi-shield-check stat-icon"></i><span>SSNIT Total</span><strong>{{ payload.import_summary.ssnit_total|cedis }}</strong></div>
 </section>
 
 {% if payload.validation.summary_warnings %}
@@ -68,7 +73,14 @@
 </section>
 
 <form method="post" action="{{ url_for('payroll.confirm', import_id=import_id) }}" class="mt-3">
+    {% if payload.validation.summary_warnings %}
+        <label class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="replace_existing" value="1">
+            <span class="form-check-label">I confirm replacement if this client already has payroll for {{ payload.month }} {{ payload.year }}.</span>
+        </label>
+    {% endif %}
     <button class="btn btn-success btn-lg"><i class="bi bi-check2-circle"></i>Confirm and Create Payroll Run</button>
+    <a class="btn btn-outline-warning btn-lg" href="{{ url_for('payroll.error_report', import_id=import_id) }}"><i class="bi bi-file-earmark-spreadsheet"></i>Download Error Report</a>
     <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('payroll.upload') }}">Cancel</a>
 </form>
 {% endblock %}

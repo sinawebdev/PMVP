@@ -4,6 +4,7 @@ Flask-Login
 Werkzeug
 pandas
 openpyxl
+xlrd
 python-dotenv
 reportlab
 gunicorn

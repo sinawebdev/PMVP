@@ -9,19 +9,21 @@ from werkzeug.utils import secure_filename
 
 
 COLUMN_ALIASES = {
-    "staff_id": ["staff no", "staff id", "employee id", "emp id", "staff number"],
-    "full_name": ["name", "employee name", "full name", "worker name"],
-    "ssnit_number": ["ssnit no", "ssnit number", "ssnit id"],
+    "staff_id": ["staff no", "staff id", "employee id", "emp id", "staff number", "employee no", "worker id"],
+    "full_name": ["name", "employee name", "full name", "worker name", "employee"],
+    "ssnit_number": ["ssnit no", "ssnit number", "ssnit id", "ssnit contribution number"],
+    "bank_name": ["bank", "bank name"],
+    "bank_account_number": ["account no", "account number", "bank account", "bank account number"],
     "basic_salary": ["basic", "basic salary", "base pay", "salary"],
     "transport_allowance": ["transport", "transport allowance", "transportation"],
     "housing_allowance": ["housing", "housing allowance", "rent allowance"],
     "overtime_pay": ["overtime", "ot", "overtime pay"],
-    "other_allowances": ["other allowance", "other allowances", "allowances"],
+    "other_allowances": ["other allowance", "other allowances", "allowances", "allowance"],
     "gross_pay": ["gross", "gross pay", "gross salary"],
-    "paye": ["paye", "tax", "income tax"],
-    "ssnit": ["ssnit", "social security"],
+    "paye": ["paye", "tax", "income tax", "paye tax"],
+    "ssnit": ["ssnit", "social security", "ssnit contribution"],
     "other_deductions": ["deduction", "deductions", "other deductions"],
-    "net_pay": ["net", "net pay", "take home", "take home pay"],
+    "net_pay": ["net", "net pay", "net salary", "take home", "take home pay"],
 }
 
 MONEY_FIELDS = {
@@ -55,7 +57,7 @@ def slug_filename(value):
 
 
 def allowed_excel_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() == "xlsx"
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in {"xlsx", "xls", "csv"}
 
 
 def map_columns(columns):
@@ -72,28 +74,38 @@ def map_columns(columns):
 
 
 def find_header_row(file_path):
-    workbook = load_workbook(file_path, read_only=True, data_only=True)
-    sheet = workbook.active
     known_labels = set()
     for field, aliases in COLUMN_ALIASES.items():
         known_labels.add(normalize_label(field))
         known_labels.update(normalize_label(alias) for alias in aliases)
 
+    ext = file_path.rsplit(".", 1)[1].lower()
+    if ext == "csv":
+        sample = pd.read_csv(file_path, header=None, nrows=20, dtype=str)
+    else:
+        sample = pd.read_excel(file_path, header=None, nrows=20, dtype=str)
+    rows = sample.fillna("").values.tolist()
+
     best_row = 1
     best_score = 0
-    for row_index, row in enumerate(sheet.iter_rows(min_row=1, max_row=20, values_only=True), start=1):
+    for row_index, row in enumerate(rows, start=1):
         labels = [normalize_label(value) for value in row if value not in (None, "")]
         score = sum(1 for label in labels if label in known_labels)
         if score > best_score:
             best_score = score
             best_row = row_index
-    workbook.close()
     return max(best_row - 1, 0) if best_score >= 2 else 0
 
 
 def read_excel_file(file_path):
     header_row = find_header_row(file_path)
-    df = pd.read_excel(file_path, engine="openpyxl", header=header_row)
+    ext = file_path.rsplit(".", 1)[1].lower()
+    if ext == "csv":
+        df = pd.read_csv(file_path, header=header_row, dtype=str)
+    elif ext == "xlsx":
+        df = pd.read_excel(file_path, engine="openpyxl", header=header_row, dtype=str)
+    else:
+        df = pd.read_excel(file_path, header=header_row, dtype=str)
     df = df.dropna(how="all")
     df.columns = [str(column).strip() for column in df.columns]
     df = df.fillna("")
@@ -103,14 +115,18 @@ def read_excel_file(file_path):
 
 def detect_company_name(file_path, known_company_names=None):
     known_company_names = known_company_names or []
-    workbook = load_workbook(file_path, read_only=True, data_only=True)
-    sheet = workbook.active
     sampled_values = []
-    for row in sheet.iter_rows(min_row=1, max_row=20, values_only=True):
+    ext = file_path.rsplit(".", 1)[1].lower()
+    if ext == "csv":
+        sample = pd.read_csv(file_path, header=None, nrows=20, dtype=str)
+    elif ext == "xlsx":
+        sample = pd.read_excel(file_path, engine="openpyxl", header=None, nrows=20, dtype=str)
+    else:
+        sample = pd.read_excel(file_path, header=None, nrows=20, dtype=str)
+    for row in sample.fillna("").values.tolist():
         for value in row:
             if value not in (None, ""):
                 sampled_values.append(str(value).strip())
-    workbook.close()
 
     combined = " ".join(sampled_values)
     normalized_combined = normalize_label(combined)
@@ -137,6 +153,8 @@ def to_number(value):
             .replace("₵", "")
             .strip()
         )
+        cleaned = cleaned.replace("GHC", "").replace("GH₵", "").replace("₵", "")
+        cleaned = re.sub(r"[^0-9.\-]", "", cleaned)
         return float(cleaned or 0)
     except (TypeError, ValueError):
         return 0.0
@@ -152,11 +170,26 @@ def mapped_rows_from_dataframe(df, mapping):
             value = source_row.get(original_column, "")
             row[field] = to_number(value) if field in MONEY_FIELDS else str(value).strip()
 
+        identity = " ".join(
+            str(row.get(field) or "")
+            for field in ("staff_id", "full_name", "bank_name", "bank_account_number")
+        )
+        if not identity.strip() and not any(row.get(field, 0) for field in MONEY_FIELDS):
+            continue
+        if normalize_label(row.get("staff_id") or row.get("full_name")) in {
+            "total",
+            "grand total",
+            "subtotal",
+        }:
+            continue
+
         for field in MONEY_FIELDS:
             row.setdefault(field, 0.0)
         row.setdefault("staff_id", "")
         row.setdefault("full_name", "")
         row.setdefault("ssnit_number", "")
+        row.setdefault("bank_name", "")
+        row.setdefault("bank_account_number", "")
 
         calculated_gross = (
             row["basic_salary"]
@@ -167,9 +200,13 @@ def mapped_rows_from_dataframe(df, mapping):
         )
         if not row["gross_pay"] and calculated_gross:
             row["gross_pay"] = calculated_gross
-        row["total_deductions"] = (
-            row["paye"] + row["ssnit"] + row["other_deductions"]
-        )
+        statutory_deductions = row["paye"] + row["ssnit"]
+        if row["other_deductions"] >= statutory_deductions and statutory_deductions:
+            row["total_deductions"] = row["other_deductions"]
+        else:
+            row["total_deductions"] = statutory_deductions + row["other_deductions"]
+        if not row["net_pay"] and row["gross_pay"]:
+            row["net_pay"] = row["gross_pay"] - row["total_deductions"]
         rows.append(row)
     return rows
 
@@ -313,16 +350,32 @@ def export_payroll_run(payroll_run, export_folder):
 
 def export_payment_vouchers(vouchers, export_folder):
     workbook, sheet = create_workbook("Payment Vouchers")
-    headers = ["Voucher", "Client", "Month", "Workers", "Amount", "Status", "Prepared By"]
+    headers = [
+        "Voucher",
+        "Client",
+        "Month",
+        "Workers",
+        "Gross Payroll",
+        "Deductions",
+        "Net Payable",
+        "Status",
+        "Prepared By",
+        "Reviewed By",
+        "Approved By",
+    ]
     rows = [
         [
             voucher.voucher_number,
             voucher.payroll_run.client_company.name if voucher.payroll_run.client_company else "",
             f"{voucher.payroll_run.month} {voucher.payroll_run.year}",
             voucher.payroll_run.total_workers,
-            voucher.total_amount,
+            voucher.gross_payroll,
+            voucher.total_deductions,
+            voucher.net_amount_payable,
             voucher.status,
             voucher.preparer.name if voucher.preparer else "",
+            voucher.reviewer.name if voucher.reviewer else "",
+            voucher.approver.name if voucher.approver else "",
         ]
         for voucher in vouchers
     ]
@@ -368,3 +421,71 @@ def export_expenses(expenses, export_folder):
     sheet.cell(row=total_row, column=1, value="Total").font = Font(bold=True)
     sheet.cell(row=total_row, column=4, value=sum(expense.amount for expense in expenses))
     return save_workbook(workbook, export_folder, "Chrisnat_Expenses.xlsx")
+
+
+def export_monthly_payroll_summary(payroll_runs, export_folder, month, year):
+    workbook, sheet = create_workbook(f"Monthly payroll summary {month} {year}")
+    headers = [
+        "Client",
+        "Month",
+        "Workers",
+        "Gross Payroll",
+        "Deductions",
+        "PAYE",
+        "SSNIT",
+        "Net Payroll",
+        "Status",
+    ]
+    rows = [
+        [
+            run.client_company.name if run.client_company else "",
+            f"{run.month} {run.year}",
+            run.total_workers,
+            run.total_gross_pay,
+            run.total_deductions,
+            run.total_paye,
+            run.total_ssnit,
+            run.total_net_pay,
+            run.status,
+        ]
+        for run in payroll_runs
+    ]
+    write_table(sheet, 5, headers, rows)
+    total_row = len(rows) + 7
+    sheet.cell(row=total_row, column=1, value="Totals").font = Font(bold=True)
+    sheet.cell(row=total_row, column=3, value=sum(run.total_workers for run in payroll_runs))
+    sheet.cell(row=total_row, column=4, value=sum(run.total_gross_pay for run in payroll_runs))
+    sheet.cell(row=total_row, column=5, value=sum(run.total_deductions for run in payroll_runs))
+    sheet.cell(row=total_row, column=6, value=sum(run.total_paye for run in payroll_runs))
+    sheet.cell(row=total_row, column=7, value=sum(run.total_ssnit for run in payroll_runs))
+    sheet.cell(row=total_row, column=8, value=sum(run.total_net_pay for run in payroll_runs))
+    return save_workbook(
+        workbook,
+        export_folder,
+        f"Chrisnat_Monthly_Payroll_{slug_filename(month)}_{year}.xlsx",
+    )
+
+
+def export_import_error_report(payload, export_folder):
+    workbook, sheet = create_workbook("Payroll Import Error Report")
+    headers = ["Row", "Staff ID", "Name", "Bank Account", "Net Pay", "Warnings"]
+    rows = []
+    for row_number, warnings in payload.get("validation", {}).get("per_row_warnings", {}).items():
+        index = int(row_number) - 1
+        mapped_row = payload.get("mapped_rows", [])[index] if index < len(payload.get("mapped_rows", [])) else {}
+        rows.append(
+            [
+                row_number,
+                mapped_row.get("staff_id", ""),
+                mapped_row.get("full_name", ""),
+                mapped_row.get("bank_account_number", ""),
+                mapped_row.get("net_pay", 0),
+                "; ".join(warnings),
+            ]
+        )
+    write_table(sheet, 5, headers, rows)
+    return save_workbook(
+        workbook,
+        export_folder,
+        f"Import_Errors_{slug_filename(payload.get('source_filename', 'payroll'))}.xlsx",
+    )

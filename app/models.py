@@ -67,6 +67,7 @@ class PayrollRun(db.Model):
     year = db.Column(db.Integer, nullable=False)
     status = db.Column(db.String(40), nullable=False, default="Draft")
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+    reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"))
     approved_by = db.Column(db.Integer, db.ForeignKey("user.id"))
     client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"))
     total_workers = db.Column(db.Integer, default=0)
@@ -82,9 +83,13 @@ class PayrollRun(db.Model):
     total_ssnit = db.Column(db.Float, default=0)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=utc_now)
+    reviewed_at = db.Column(db.DateTime)
+    approved_at = db.Column(db.DateTime)
+    rejected_at = db.Column(db.DateTime)
 
     client_company = db.relationship("ClientCompany", back_populates="payroll_runs")
     creator = db.relationship("User", foreign_keys=[created_by])
+    reviewer = db.relationship("User", foreign_keys=[reviewed_by])
     approver = db.relationship("User", foreign_keys=[approved_by])
     items = db.relationship(
         "PayrollItem", back_populates="payroll_run", cascade="all, delete-orphan"
@@ -129,13 +134,20 @@ class PaymentVoucher(db.Model):
     payroll_run_id = db.Column(db.Integer, db.ForeignKey("payroll_run.id"))
     voucher_number = db.Column(db.String(80), unique=True, nullable=False)
     total_amount = db.Column(db.Float, default=0)
+    gross_payroll = db.Column(db.Float, default=0)
+    total_deductions = db.Column(db.Float, default=0)
+    net_amount_payable = db.Column(db.Float, default=0)
     prepared_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+    reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"))
     approved_by = db.Column(db.Integer, db.ForeignKey("user.id"))
-    status = db.Column(db.String(40), default="Prepared")
+    status = db.Column(db.String(40), default="Pending Payment")
     created_at = db.Column(db.DateTime, default=utc_now)
+    date_approved = db.Column(db.DateTime)
+    date_paid = db.Column(db.DateTime)
 
     payroll_run = db.relationship("PayrollRun", back_populates="voucher")
     preparer = db.relationship("User", foreign_keys=[prepared_by])
+    reviewer = db.relationship("User", foreign_keys=[reviewed_by])
     approver = db.relationship("User", foreign_keys=[approved_by])
 
 
@@ -146,6 +158,7 @@ class Remittance(db.Model):
     amount_due = db.Column(db.Float, default=0)
     due_date = db.Column(db.Date)
     status = db.Column(db.String(40), default="Pending")
+    date_paid = db.Column(db.Date)
     payment_reference = db.Column(db.String(120))
     notes = db.Column(db.Text)
 
@@ -160,10 +173,18 @@ class Expense(db.Model):
     amount = db.Column(db.Float, default=0)
     payment_method = db.Column(db.String(80))
     receipt_reference = db.Column(db.String(120))
+    receipt_attachment = db.Column(db.String(255))
+    paid_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+    approved_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+    client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"))
+    status = db.Column(db.String(40), default="Pending")
     recorded_by = db.Column(db.Integer, db.ForeignKey("user.id"))
     created_at = db.Column(db.DateTime, default=utc_now)
 
-    recorder = db.relationship("User")
+    recorder = db.relationship("User", foreign_keys=[recorded_by])
+    payer = db.relationship("User", foreign_keys=[paid_by])
+    expense_approver = db.relationship("User", foreign_keys=[approved_by])
+    client_company = db.relationship("ClientCompany")
 
 
 class Proposal(db.Model):
@@ -178,3 +199,41 @@ class Proposal(db.Model):
 
     client_company = db.relationship("ClientCompany", back_populates="proposals")
     drafter = db.relationship("User")
+
+
+class ImportBatch(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"), nullable=False)
+    payroll_month = db.Column(db.String(20), nullable=False)
+    payroll_year = db.Column(db.Integer, nullable=False)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+    uploaded_at = db.Column(db.DateTime, default=utc_now)
+    original_filename = db.Column(db.String(255))
+    status = db.Column(db.String(40), default="Previewed")
+    total_rows = db.Column(db.Integer, default=0)
+    valid_rows = db.Column(db.Integer, default=0)
+    invalid_rows = db.Column(db.Integer, default=0)
+    total_workers = db.Column(db.Integer, default=0)
+    gross_total = db.Column(db.Float, default=0)
+    net_total = db.Column(db.Float, default=0)
+    paye_total = db.Column(db.Float, default=0)
+    ssnit_total = db.Column(db.Float, default=0)
+    validation_summary = db.Column(db.Text)
+    payroll_run_id = db.Column(db.Integer, db.ForeignKey("payroll_run.id"))
+
+    client_company = db.relationship("ClientCompany")
+    uploader = db.relationship("User")
+    payroll_run = db.relationship("PayrollRun")
+
+
+class AuditTrail(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    user_role = db.Column(db.String(40))
+    action = db.Column(db.String(120), nullable=False)
+    related_record_type = db.Column(db.String(80))
+    related_record_id = db.Column(db.Integer)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+    user = db.relationship("User")

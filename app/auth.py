@@ -13,9 +13,10 @@ def role_required(*roles):
         @wraps(view)
         @login_required
         def wrapped(*args, **kwargs):
+            if str(current_user.role).lower() == "md":
+                return view(*args, **kwargs)
             has_direct_role = current_user.role in roles
-            md_has_admin_clearance = current_user.role == "md" and "admin" in roles
-            if not has_direct_role and not md_has_admin_clearance:
+            if not has_direct_role:
                 flash("You do not have permission to access that page.", "warning")
                 return redirect(url_for("main.dashboard"))
             return view(*args, **kwargs)

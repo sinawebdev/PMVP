@@ -1,24 +1,26 @@
 import json
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 from app import db
+from app.audit import record_audit
 from app.auth import role_required
 from app.excel_utils import (
     allowed_excel_file,
     calculate_worker_stats,
     detect_company_name,
     export_payroll_run,
+    export_import_error_report,
     mapped_rows_from_dataframe,
     read_excel_file,
     save_uploaded_file,
 )
 from app.finance import create_finance_records_for_payroll
-from app.models import ClientCompany, Employee, PayrollItem, PayrollRun
+from app.models import ClientCompany, Employee, ImportBatch, PayrollItem, PayrollRun
 from app.pdf_service import generate_payslip_pdf
 from app.validators import validate_payroll_rows
 
@@ -41,6 +43,30 @@ def load_import_session(import_id):
         return json.load(file)
 
 
+def summarize_import(mapped_rows, validation):
+    invalid_rows = len(validation["per_row_warnings"])
+    return {
+        "total_rows": len(mapped_rows),
+        "valid_rows": max(len(mapped_rows) - invalid_rows, 0),
+        "invalid_rows": invalid_rows,
+        "gross_total": sum(float(row.get("gross_pay") or 0) for row in mapped_rows),
+        "net_total": sum(float(row.get("net_pay") or 0) for row in mapped_rows),
+        "paye_total": sum(float(row.get("paye") or 0) for row in mapped_rows),
+        "ssnit_total": sum(float(row.get("ssnit") or 0) for row in mapped_rows),
+    }
+
+
+def has_duplicate_payroll(client_id, month, year):
+    return (
+        PayrollRun.query.filter_by(
+            client_company_id=client_id,
+            month=month,
+            year=int(year),
+        ).first()
+        is not None
+    )
+
+
 @payroll_bp.route("/runs")
 @login_required
 def runs():
@@ -52,7 +78,7 @@ def runs():
         selected_client = db.get_or_404(ClientCompany, client_id)
         query = query.filter(PayrollRun.client_company_id == selected_client.id)
     if status_filter == "needs_approval":
-        query = query.filter(PayrollRun.status.in_(["Draft", "Reviewed"]))
+        query = query.filter(PayrollRun.status.in_(["Draft", "Pending Review", "Pending MD Approval"]))
     elif status_filter:
         query = query.filter(PayrollRun.status == status_filter)
     payroll_runs = query.order_by(PayrollRun.created_at.desc()).all()
@@ -65,7 +91,7 @@ def runs():
 
 
 @payroll_bp.route("/upload", methods=["GET", "POST"])
-@role_required("admin", "payroll_officer")
+@role_required("admin")
 def upload():
     clients = ClientCompany.query.filter_by(status="Active").order_by(ClientCompany.name).all()
     now = datetime.now()
@@ -80,7 +106,7 @@ def upload():
             flash("Choose an Excel file to upload.", "warning")
             return redirect(url_for("payroll.upload"))
         if not allowed_excel_file(file_storage.filename):
-            flash("Only .xlsx files are supported for this MVP.", "warning")
+            flash("Only .xlsx, .xls, or .csv files are supported.", "warning")
             return redirect(url_for("payroll.upload"))
 
         client = db.get_or_404(ClientCompany, client_id)
@@ -97,8 +123,32 @@ def upload():
         validation = validate_payroll_rows(
             mapped_rows, client, month, year, detected_company_name
         )
+        import_summary = summarize_import(mapped_rows, validation)
+
+        batch = ImportBatch(
+            client_company_id=client.id,
+            payroll_month=month,
+            payroll_year=year,
+            uploaded_by=current_user.id,
+            original_filename=source_filename,
+            status="Previewed",
+            total_rows=import_summary["total_rows"],
+            valid_rows=import_summary["valid_rows"],
+            invalid_rows=import_summary["invalid_rows"],
+            total_workers=worker_stats["total_unique_workers"],
+            gross_total=import_summary["gross_total"],
+            net_total=import_summary["net_total"],
+            paye_total=import_summary["paye_total"],
+            ssnit_total=import_summary["ssnit_total"],
+            validation_summary="\n".join(validation["summary_warnings"]),
+        )
+        db.session.add(batch)
+        db.session.flush()
+        record_audit("Payroll upload", batch, f"Uploaded {source_filename} for preview.")
+        db.session.commit()
 
         payload = {
+            "import_batch_id": batch.id,
             "file_path": file_path,
             "source_filename": source_filename,
             "client_company_id": client.id,
@@ -109,6 +159,7 @@ def upload():
             "preview_rows": df.head(20).astype(str).to_dict(orient="records"),
             "mapped_rows": mapped_rows,
             "worker_stats": worker_stats,
+            "import_summary": import_summary,
             "detected_company_name": detected_company_name,
             "validation": validation,
         }
@@ -124,7 +175,7 @@ def upload():
 
 
 @payroll_bp.route("/preview/<import_id>")
-@role_required("admin", "payroll_officer")
+@role_required("admin")
 def preview(import_id):
     payload = load_import_session(import_id)
     client = db.get_or_404(ClientCompany, payload["client_company_id"])
@@ -136,8 +187,16 @@ def preview(import_id):
     )
 
 
+@payroll_bp.route("/preview/<import_id>/errors")
+@role_required("admin")
+def error_report(import_id):
+    payload = load_import_session(import_id)
+    file_path = export_import_error_report(payload, current_app.config["EXPORT_FOLDER"])
+    return send_file(file_path, as_attachment=True)
+
+
 @payroll_bp.route("/confirm/<import_id>", methods=["POST"])
-@role_required("admin", "payroll_officer")
+@role_required("admin")
 def confirm(import_id):
     payload = load_import_session(import_id)
     client = db.get_or_404(ClientCompany, payload["client_company_id"])
@@ -148,6 +207,10 @@ def confirm(import_id):
         payload["year"],
         payload.get("detected_company_name", ""),
     )
+    duplicate_exists = has_duplicate_payroll(client.id, payload["month"], payload["year"])
+    if duplicate_exists and request.form.get("replace_existing") != "1":
+        flash("Duplicate payroll found. Tick confirm replacement before importing this client/month again.", "warning")
+        return redirect(url_for("payroll.preview", import_id=import_id))
 
     payroll_run = PayrollRun(
         month=payload["month"],
@@ -215,6 +278,13 @@ def confirm(import_id):
     payroll_run.total_net_pay = totals["net"]
     payroll_run.total_paye = totals["paye"]
     payroll_run.total_ssnit = totals["ssnit"]
+    batch_id = payload.get("import_batch_id")
+    if batch_id:
+        batch = db.session.get(ImportBatch, batch_id)
+        if batch:
+            batch.status = "Imported"
+            batch.payroll_run_id = payroll_run.id
+    record_audit("Payroll import confirmed", payroll_run, f"Created payroll run from {payload['source_filename']}.")
     db.session.commit()
 
     flash("Company-specific payroll run created in Draft status.", "success")
@@ -245,6 +315,8 @@ def create_or_update_employee_from_import(row, client, payroll_run, row_index):
 
     employee.full_name = full_name
     employee.ssnit_number = row.get("ssnit_number") or employee.ssnit_number
+    employee.bank_name = row.get("bank_name") or employee.bank_name
+    employee.bank_account_number = row.get("bank_account_number") or employee.bank_account_number
     employee.basic_salary = float(row.get("basic_salary") or employee.basic_salary or 0)
     employee.assigned_client = client.name
     return employee
@@ -258,12 +330,32 @@ def detail(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/mark-reviewed", methods=["POST"])
-@role_required("admin", "payroll_officer")
+@role_required("admin")
 def mark_reviewed(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
-    payroll_run.status = "Reviewed"
+    payroll_run.status = "Pending Review"
+    record_audit("Payroll edit", payroll_run, "Payroll moved to Pending Review.")
     db.session.commit()
-    flash("Payroll marked as reviewed.", "success")
+    flash("Payroll submitted for accounts review.", "success")
+    return redirect(url_for("payroll.detail", run_id=run_id))
+
+
+@payroll_bp.route("/runs/<int:run_id>/submit-review", methods=["POST"])
+@role_required("admin")
+def submit_review(run_id):
+    return mark_reviewed(run_id)
+
+
+@payroll_bp.route("/runs/<int:run_id>/submit-md-approval", methods=["POST"])
+@role_required("admin", "accounts_officer")
+def submit_md_approval(run_id):
+    payroll_run = db.get_or_404(PayrollRun, run_id)
+    payroll_run.status = "Pending MD Approval"
+    payroll_run.reviewed_by = current_user.id
+    payroll_run.reviewed_at = datetime.now(timezone.utc)
+    record_audit("Payroll review", payroll_run, "Accounts submitted payroll for MD approval.")
+    db.session.commit()
+    flash("Payroll sent for MD approval.", "success")
     return redirect(url_for("payroll.detail", run_id=run_id))
 
 
@@ -273,9 +365,38 @@ def approve(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     payroll_run.status = "Approved"
     payroll_run.approved_by = current_user.id
+    payroll_run.approved_at = datetime.now(timezone.utc)
     create_finance_records_for_payroll(payroll_run, current_user.id)
+    record_audit("Payroll approval", payroll_run, "MD/Admin approved payroll.")
     db.session.commit()
     flash("Payroll approved. Voucher and statutory remittance records were prepared.", "success")
+    return redirect(url_for("payroll.detail", run_id=run_id))
+
+
+@payroll_bp.route("/runs/<int:run_id>/reject", methods=["POST"])
+@role_required("admin", "md")
+def reject(run_id):
+    payroll_run = db.get_or_404(PayrollRun, run_id)
+    payroll_run.status = "Rejected"
+    payroll_run.rejected_at = datetime.now(timezone.utc)
+    payroll_run.notes = request.form.get("notes") or payroll_run.notes
+    record_audit("Payroll rejection", payroll_run, payroll_run.notes or "Payroll rejected.")
+    db.session.commit()
+    flash("Payroll rejected.", "warning")
+    return redirect(url_for("payroll.detail", run_id=run_id))
+
+
+@payroll_bp.route("/runs/<int:run_id>/mark-paid", methods=["POST"])
+@role_required("admin", "accounts_officer")
+def mark_paid(run_id):
+    payroll_run = db.get_or_404(PayrollRun, run_id)
+    payroll_run.status = "Paid"
+    if payroll_run.voucher:
+        payroll_run.voucher.status = "Paid"
+        payroll_run.voucher.date_paid = datetime.now(timezone.utc)
+    record_audit("Payment marked as paid", payroll_run, "Accounts marked payroll voucher as paid.")
+    db.session.commit()
+    flash("Payroll marked as paid.", "success")
     return redirect(url_for("payroll.detail", run_id=run_id))
 
 

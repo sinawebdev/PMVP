@@ -40,7 +40,7 @@ def dashboard():
         month=selected_month,
         year=selected_year,
     ).all()
-    pending_statuses = ("Draft", "Reviewed")
+    pending_statuses = ("Draft", "Pending Review", "Pending MD Approval")
     client_costs = [
         {
             "client": client.name,
@@ -132,13 +132,13 @@ def clients():
 
 
 @main_bp.route("/clients/add", methods=["GET", "POST"])
-@role_required("admin", "payroll_officer")
+@role_required("admin")
 def add_client():
     return client_form()
 
 
 @main_bp.route("/clients/<int:client_id>/edit", methods=["GET", "POST"])
-@role_required("admin", "payroll_officer")
+@role_required("admin")
 def edit_client(client_id):
     client = db.get_or_404(ClientCompany, client_id)
     return client_form(client)
@@ -166,7 +166,39 @@ def client_form(client=None):
 @login_required
 def client_detail(client_id):
     client = db.get_or_404(ClientCompany, client_id)
-    return render_template("client_detail.html", client=client)
+    now = datetime.now()
+    current_month = now.strftime("%B")
+    current_year = now.year
+    previous_month_index = 12 if now.month == 1 else now.month - 1
+    previous_year = now.year - 1 if now.month == 1 else now.year
+    previous_month = month_name[previous_month_index]
+    current_runs = [
+        run
+        for run in client.payroll_runs
+        if run.month == current_month and run.year == current_year
+    ]
+    previous_runs = [
+        run
+        for run in client.payroll_runs
+        if run.month == previous_month and run.year == previous_year
+    ]
+    return render_template(
+        "client_detail.html",
+        client=client,
+        current_month=current_month,
+        current_year=current_year,
+        previous_month=previous_month,
+        previous_year=previous_year,
+        current_month_payroll=sum(run.total_net_pay for run in current_runs),
+        previous_month_payroll=sum(run.total_net_pay for run in previous_runs),
+        payroll_status=", ".join({run.status for run in current_runs}) if current_runs else "No run submitted",
+        paye_total=sum(run.total_paye for run in current_runs),
+        ssnit_total=sum(run.total_ssnit for run in current_runs),
+        pending_approvals=sum(
+            1 for run in client.payroll_runs if run.status in ("Draft", "Pending Review", "Pending MD Approval")
+        ),
+        validation_warnings=sum(run.warning_count for run in client.payroll_runs),
+    )
 
 
 @main_bp.route("/employees")
@@ -177,13 +209,13 @@ def employees():
 
 
 @main_bp.route("/employees/add", methods=["GET", "POST"])
-@role_required("admin", "payroll_officer")
+@role_required("admin")
 def add_employee():
     return employee_form()
 
 
 @main_bp.route("/employees/<int:employee_id>/edit", methods=["GET", "POST"])
-@role_required("admin", "payroll_officer")
+@role_required("admin")
 def edit_employee(employee_id):
     employee = db.get_or_404(Employee, employee_id)
     return employee_form(employee)

@@ -14,6 +14,16 @@
         </div>
     </div>
 </section>
+<section class="stats-grid mt-3">
+    <div class="stat-card"><i class="bi bi-people stat-icon"></i><span>Total Workers</span><strong>{{ client.employees|length }}</strong></div>
+    <div class="stat-card"><i class="bi bi-person-check stat-icon"></i><span>Active Workers</span><strong>{{ client.employees|selectattr("status", "equalto", "Active")|list|length }}</strong></div>
+    <div class="stat-card"><i class="bi bi-cash-coin stat-icon"></i><span>Current Month Payroll Cost</span><strong>{{ current_month_payroll|cedis }}</strong></div>
+    <div class="stat-card"><i class="bi bi-arrow-left-right stat-icon"></i><span>Previous Month Payroll Cost</span><strong>{{ previous_month_payroll|cedis }}</strong></div>
+    <div class="stat-card"><i class="bi bi-hourglass-split stat-icon"></i><span>Payroll Status</span><strong>{{ payroll_status }}</strong></div>
+    <div class="stat-card"><i class="bi bi-receipt-cutoff stat-icon"></i><span>PAYE Total</span><strong>{{ paye_total|cedis }}</strong></div>
+    <div class="stat-card"><i class="bi bi-shield-check stat-icon"></i><span>SSNIT Total</span><strong>{{ ssnit_total|cedis }}</strong></div>
+    <div class="stat-card"><i class="bi bi-exclamation-triangle stat-icon"></i><span>Validation Warnings</span><strong>{{ validation_warnings }}</strong></div>
+</section>
 <div class="row g-4 mt-1">
     <div class="col-lg-5">
         <section class="panel">

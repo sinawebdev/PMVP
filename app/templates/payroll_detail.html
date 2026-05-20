@@ -19,10 +19,17 @@
     </div>
     <div class="d-flex flex-wrap gap-2 mt-2">
         {% if payroll_run.status == "Draft" %}
-            <form method="post" action="{{ url_for('payroll.mark_reviewed', run_id=payroll_run.id) }}"><button class="btn btn-primary"><i class="bi bi-clipboard-check"></i>Mark as Reviewed</button></form>
+            <form method="post" action="{{ url_for('payroll.submit_review', run_id=payroll_run.id) }}"><button class="btn btn-primary"><i class="bi bi-clipboard-check"></i>Submit for Review</button></form>
         {% endif %}
-        {% if current_user.role in ["admin", "md"] and payroll_run.status in ["Draft", "Reviewed"] %}
+        {% if current_user.role in ["admin", "accounts_officer", "md"] and payroll_run.status in ["Pending Review", "Draft"] %}
+            <form method="post" action="{{ url_for('payroll.submit_md_approval', run_id=payroll_run.id) }}"><button class="btn btn-info"><i class="bi bi-send-check"></i>Send to MD Approval</button></form>
+        {% endif %}
+        {% if current_user.role in ["admin", "md"] and payroll_run.status in ["Draft", "Pending Review", "Pending MD Approval"] %}
             <form method="post" action="{{ url_for('payroll.approve', run_id=payroll_run.id) }}"><button class="btn btn-success"><i class="bi bi-patch-check"></i>Approve Payroll</button></form>
+            <form method="post" action="{{ url_for('payroll.reject', run_id=payroll_run.id) }}"><button class="btn btn-outline-danger"><i class="bi bi-x-octagon"></i>Reject Payroll</button></form>
+        {% endif %}
+        {% if current_user.role in ["admin", "accounts_officer", "md"] and payroll_run.status == "Approved" %}
+            <form method="post" action="{{ url_for('payroll.mark_paid', run_id=payroll_run.id) }}"><button class="btn btn-warning"><i class="bi bi-credit-card-2-front"></i>Mark as Paid</button></form>
         {% endif %}
         <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export', run_id=payroll_run.id) }}"><i class="bi bi-download"></i>Export Payroll</a>
     </div>

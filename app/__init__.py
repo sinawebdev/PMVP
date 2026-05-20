@@ -57,17 +57,21 @@ def create_app():
     login_manager.init_app(app)
     app.jinja_env.filters["cedis"] = format_ghana_cedis
 
+    from app.audit import audit_bp
     from app.auth import auth_bp
     from app.finance import finance_bp
     from app.payroll import payroll_bp
     from app.proposals import proposals_bp
+    from app.reports import reports_bp
     from app.routes import main_bp
 
+    app.register_blueprint(audit_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(payroll_bp)
     app.register_blueprint(finance_bp)
     app.register_blueprint(proposals_bp)
+    app.register_blueprint(reports_bp)
 
     @app.context_processor
     def inject_sidebar_clients():
@@ -81,6 +85,9 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        from app.schema import ensure_phase2_schema
+
+        ensure_phase2_schema()
         from app.seed import seed_default_data
 
         seed_default_data()

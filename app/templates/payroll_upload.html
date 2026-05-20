@@ -15,7 +15,7 @@
         </div>
         <div class="col-md-3"><label class="form-label">Payroll Month</label><input class="form-control" name="month" value="{{ current_month }}" required></div>
         <div class="col-md-3"><label class="form-label">Payroll Year</label><input class="form-control" type="number" name="year" value="{{ current_year }}" required></div>
-        <div class="col-12"><label class="form-label">Excel File (.xlsx)</label><input class="form-control" type="file" name="payroll_file" accept=".xlsx" required></div>
+        <div class="col-12"><label class="form-label">Payroll File (.xlsx, .xls, .csv)</label><input class="form-control" type="file" name="payroll_file" accept=".xlsx,.xls,.csv" required></div>
         <div class="col-12">
             <div class="mini-note mb-3"><i class="bi bi-lightbulb"></i> The MVP keeps Excel in the workflow: nothing is committed until you confirm the preview.</div>
             <button class="btn btn-primary"><i class="bi bi-file-earmark-arrow-up"></i>Upload and Preview</button>

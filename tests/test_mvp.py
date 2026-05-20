@@ -64,6 +64,36 @@ class MvpTestCase(unittest.TestCase):
         stream.seek(0)
         return stream
 
+    def build_offset_phase2_workbook(self):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["Chrisnat Limited", "Payroll schedule"])
+        sheet.append(["Client", "MSC Ghana Ltd"])
+        sheet.append([])
+        sheet.append(
+            [
+                "Employee No",
+                "Employee Name",
+                "Bank",
+                "Account Number",
+                "Basic Salary",
+                "Allowances",
+                "Gross Salary",
+                "PAYE Tax",
+                "SSNIT Contribution",
+                "Deductions",
+                "Net Salary",
+            ]
+        )
+        sheet.append(["P2-001", "Akua Boateng", "GCB Bank", "0012345678", "GHC 1,000.00", "200", "", "50", "30", "20", "1,100.00"])
+        sheet.append(["P2-001", "Akua Boateng", "GCB Bank", "0012345678", "GHC 1,000.00", "200", "", "50", "30", "20", "1,100.00"])
+        sheet.append(["", "", "", "", "", "", "", "", "", "", ""])
+        sheet.append(["TOTAL", "", "", "", "", "", "", "", "", "", ""])
+        stream = BytesIO()
+        workbook.save(stream)
+        stream.seek(0)
+        return stream
+
     def test_seeded_users_and_clients_exist(self):
         with self.app.app_context():
             self.assertIsNotNone(User.query.filter_by(email="admin@chrisnat.local").first())
@@ -76,6 +106,28 @@ class MvpTestCase(unittest.TestCase):
         self.assertEqual(mapping["Employee Name"], "full_name")
         self.assertEqual(mapping["Basic Salary"], "basic_salary")
         self.assertEqual(mapping["Take Home"], "net_pay")
+
+    def test_phase2_import_detects_offset_headers_and_cleans_payroll_values(self):
+        from app.excel_utils import mapped_rows_from_dataframe, read_excel_file
+
+        workbook = self.build_offset_phase2_workbook()
+        file_path = os.path.join(self.temp_dir.name, "offset_payroll.xlsx")
+        with open(file_path, "wb") as file:
+            file.write(workbook.read())
+
+        df, mapping = read_excel_file(file_path)
+        rows = mapped_rows_from_dataframe(df, mapping)
+
+        self.assertEqual(mapping["Employee No"], "staff_id")
+        self.assertEqual(mapping["Employee Name"], "full_name")
+        self.assertEqual(mapping["Gross Salary"], "gross_pay")
+        self.assertEqual(mapping["Net Salary"], "net_pay")
+        self.assertEqual(mapping["Account Number"], "bank_account_number")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["staff_id"], "P2-001")
+        self.assertEqual(rows[0]["bank_account_number"], "0012345678")
+        self.assertEqual(rows[0]["gross_pay"], 1200.0)
+        self.assertEqual(rows[0]["net_pay"], 1100.0)
 
     def test_money_is_formatted_as_comma_separated_ghana_cedis(self):
         self.assertEqual(format_ghana_cedis(1234567.5), "GH₵ 1,234,567.50")
@@ -100,6 +152,70 @@ class MvpTestCase(unittest.TestCase):
         self.assertEqual(stats["total_rows"], 4)
         self.assertEqual(stats["total_unique_workers"], 2)
         self.assertEqual(stats["duplicate_count"], 2)
+
+    def test_phase2_upload_creates_import_batch_preview_record(self):
+        self.login_admin()
+        from app.models import ImportBatch
+
+        with self.app.app_context():
+            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_id = client_company.id
+
+        response = self.client.post(
+            "/payroll/upload",
+            data={
+                "client_company_id": str(client_id),
+                "month": "February",
+                "year": "2101",
+                "payroll_file": (self.build_offset_phase2_workbook(), "phase2.xlsx"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            batch = ImportBatch.query.filter_by(original_filename="phase2.xlsx").first()
+            self.assertIsNotNone(batch)
+            self.assertEqual(batch.status, "Previewed")
+            self.assertEqual(batch.total_rows, 2)
+            self.assertEqual(batch.total_workers, 1)
+            self.assertEqual(batch.gross_total, 2400.0)
+
+    def test_duplicate_payroll_requires_replacement_confirmation(self):
+        self.login_admin()
+        with self.app.app_context():
+            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_id = client_company.id
+            original_count = PayrollRun.query.filter_by(
+                client_company_id=client_id,
+                month="May",
+                year=2026,
+            ).count()
+
+        upload_response = self.client.post(
+            "/payroll/upload",
+            data={
+                "client_company_id": str(client_id),
+                "month": "May",
+                "year": "2026",
+                "payroll_file": (self.build_import_workbook(), "duplicate.xlsx"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        import_id = upload_response.headers["Location"].rstrip("/").split("/")[-1]
+        response = self.client.post(f"/payroll/confirm/{import_id}", follow_redirects=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"confirm replacement", response.data.lower())
+        with self.app.app_context():
+            new_count = PayrollRun.query.filter_by(
+                client_company_id=client_id,
+                month="May",
+                year=2026,
+            ).count()
+            self.assertEqual(new_count, original_count)
 
     def test_main_pages_render_for_admin(self):
         response = self.login_admin()
@@ -164,6 +280,81 @@ class MvpTestCase(unittest.TestCase):
         self.assertEqual(self.client.get("/clients/add").status_code, 200)
         self.assertEqual(self.client.get("/employees/add").status_code, 200)
         self.assertEqual(self.client.get("/payroll/upload").status_code, 200)
+        self.assertEqual(self.client.get("/reports").status_code, 200)
+        self.assertEqual(self.client.get("/audit").status_code, 200)
+
+    def test_phase2_payroll_workflow_creates_audit_trail_and_voucher_fields(self):
+        self.login_admin()
+        from app.models import AuditTrail
+
+        with self.app.app_context():
+            payroll_run = PayrollRun(
+                month="March",
+                year=2101,
+                status="Draft",
+                created_by=User.query.filter_by(email="admin@chrisnat.local").first().id,
+                client_company_id=ClientCompany.query.filter_by(name="MSC Ghana Ltd").first().id,
+                total_workers=1,
+                total_gross_pay=1200,
+                total_deductions=100,
+                total_net_pay=1100,
+                total_paye=50,
+                total_ssnit=30,
+            )
+            db.session.add(payroll_run)
+            db.session.commit()
+            run_id = payroll_run.id
+
+        self.assertEqual(
+            self.client.post(f"/payroll/runs/{run_id}/submit-review", follow_redirects=True).status_code,
+            200,
+        )
+        self.client.get("/logout")
+        self.client.post(
+            "/login",
+            data={"email": "accounts@chrisnat.local", "password": "password123"},
+            follow_redirects=True,
+        )
+        self.assertEqual(
+            self.client.post(f"/payroll/runs/{run_id}/submit-md-approval", follow_redirects=True).status_code,
+            200,
+        )
+        self.client.get("/logout")
+        self.login_md()
+        self.assertEqual(
+            self.client.post(f"/payroll/runs/{run_id}/approve", follow_redirects=True).status_code,
+            200,
+        )
+
+        with self.app.app_context():
+            run = db.session.get(PayrollRun, run_id)
+            self.assertEqual(run.status, "Approved")
+            self.assertIsNotNone(run.voucher)
+            self.assertEqual(run.voucher.status, "Pending Payment")
+            self.assertEqual(run.voucher.gross_payroll, 1200)
+            self.assertEqual(run.voucher.net_amount_payable, 1100)
+            self.assertGreaterEqual(AuditTrail.query.filter_by(related_record_type="PayrollRun", related_record_id=run_id).count(), 3)
+
+    def test_accounts_can_mark_approved_payroll_paid(self):
+        self.login_admin()
+        with self.app.app_context():
+            payroll_run = PayrollRun.query.first()
+            run_id = payroll_run.id
+        self.client.post(f"/payroll/runs/{run_id}/approve", follow_redirects=True)
+        self.client.get("/logout")
+        self.client.post(
+            "/login",
+            data={"email": "accounts@chrisnat.local", "password": "password123"},
+            follow_redirects=True,
+        )
+
+        response = self.client.post(f"/payroll/runs/{run_id}/mark-paid", follow_redirects=True)
+
+        self.assertEqual(response.status_code, 200)
+        with self.app.app_context():
+            run = db.session.get(PayrollRun, run_id)
+            self.assertEqual(run.status, "Paid")
+            self.assertEqual(run.voucher.status, "Paid")
 
     def test_md_can_record_expenses(self):
         self.login_md()
@@ -305,6 +496,38 @@ class MvpTestCase(unittest.TestCase):
 
         with self.app.app_context():
             self.assertIsNotNone(Proposal.query.filter_by(title="Payroll Outsourcing Proposal").first())
+
+    def test_client_detail_shows_phase2_payroll_dashboard_metrics(self):
+        self.login_admin()
+        with self.app.app_context():
+            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_id = client_company.id
+
+        response = self.client.get(f"/clients/{client_id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Current Month Payroll Cost", response.data)
+        self.assertIn(b"Previous Month Payroll Cost", response.data)
+        self.assertIn(b"Validation Warnings", response.data)
+
+    def test_reports_page_supports_excel_export(self):
+        self.login_md()
+        response = self.client.get("/reports")
+        export_response = self.client.get("/reports/monthly-payroll.xlsx?month=May&year=2026")
+        pdf_response = self.client.get("/reports/monthly-payroll.pdf?month=May&year=2026")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Monthly payroll summary", response.data)
+        self.assertEqual(export_response.status_code, 200)
+        self.assertIn(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            export_response.headers["Content-Type"],
+        )
+        export_response.close()
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertEqual(pdf_response.headers["Content-Type"], "application/pdf")
+        self.assertTrue(pdf_response.data.startswith(b"%PDF"))
+        pdf_response.close()
 
 
 if __name__ == "__main__":

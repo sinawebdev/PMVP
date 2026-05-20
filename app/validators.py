@@ -94,6 +94,33 @@ def validate_payroll_rows(
             f"{len(duplicate_keys)} worker identifier(s) appear more than once in this upload."
         )
 
+    missing_bank_count = sum(
+        1 for row in mapped_rows if not str(row.get("bank_account_number") or "").strip()
+    )
+    non_blank_count = sum(1 for row in mapped_rows if build_worker_key(row))
+    if non_blank_count and missing_bank_count / non_blank_count >= 0.5:
+        warnings.append("Majority of workers are missing bank account details.")
+    if sum(float(row.get("paye") or 0) for row in mapped_rows) <= 0:
+        warnings.append("PAYE total is missing or zero.")
+    if sum(float(row.get("ssnit") or 0) for row in mapped_rows) <= 0:
+        warnings.append("SSNIT total is missing or zero.")
+
+    previous_run = (
+        PayrollRun.query.filter(
+            PayrollRun.client_company_id == client_company.id,
+            PayrollRun.status.in_(["Approved", "Paid", "Exported"]),
+        )
+        .order_by(PayrollRun.year.desc(), PayrollRun.created_at.desc())
+        .first()
+    )
+    current_net_total = sum(float(row.get("net_pay") or 0) for row in mapped_rows)
+    current_worker_count = len({build_worker_key(row) for row in mapped_rows if build_worker_key(row)})
+    if previous_run and previous_run.total_net_pay:
+        if current_net_total > previous_run.total_net_pay * 1.5:
+            warnings.append("Payroll total is unusually higher than a previous approved payroll.")
+        if previous_run.total_workers and abs(current_worker_count - previous_run.total_workers) > max(5, previous_run.total_workers * 0.25):
+            warnings.append("Worker count changed significantly from a previous approved payroll.")
+
     return {
         "summary_warnings": warnings,
         "per_row_warnings": per_row_warnings,
@@ -106,6 +133,7 @@ def validate_single_row(row):
     staff_id = str(row.get("staff_id") or "").strip()
     full_name = str(row.get("full_name") or "").strip()
     ssnit_number = str(row.get("ssnit_number") or "").strip()
+    bank_account_number = str(row.get("bank_account_number") or "").strip()
     net_pay = row.get("net_pay")
 
     if not staff_id:
@@ -116,10 +144,16 @@ def validate_single_row(row):
         employee = Employee.query.filter_by(staff_id=staff_id).first() if staff_id else None
         if not employee or not employee.ssnit_number:
             warnings.append("Missing SSNIT number.")
+    if not bank_account_number:
+        warnings.append("Missing bank account.")
     if net_pay in (None, ""):
         warnings.append("Missing net pay.")
     if float(row.get("net_pay") or 0) < 0:
         warnings.append("Negative net pay.")
+    for field in ("basic_salary", "gross_pay", "paye", "ssnit", "other_deductions"):
+        if float(row.get(field) or 0) < 0:
+            warnings.append("Negative salary or deduction value.")
+            break
 
     gross_pay = float(row.get("gross_pay") or 0)
     basic_salary = float(row.get("basic_salary") or 0)

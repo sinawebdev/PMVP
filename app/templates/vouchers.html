@@ -6,10 +6,27 @@
 <div class="toolbar"><a class="btn btn-outline-secondary" href="{{ url_for('finance.export_vouchers') }}"><i class="bi bi-download"></i>Export Vouchers</a></div>
 <section class="panel">
     <table class="table align-middle">
-        <thead><tr><th>Voucher Number</th><th>Client Company</th><th>Payroll Month</th><th>Total Workers</th><th>Total Net Pay</th><th>Prepared By</th><th>Approved By</th><th>Status</th></tr></thead>
+        <thead><tr><th>Voucher Number</th><th>Client Company</th><th>Payroll Month</th><th>Total Workers</th><th>Gross</th><th>Deductions</th><th>Net Payable</th><th>Prepared By</th><th>Reviewed By</th><th>Approved By</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
         {% for voucher in vouchers %}
-            <tr><td>{{ voucher.voucher_number }}</td><td>{{ voucher.payroll_run.client_company.name if voucher.payroll_run.client_company else "" }}</td><td>{{ voucher.payroll_run.month }} {{ voucher.payroll_run.year }}</td><td>{{ voucher.payroll_run.total_workers }}</td><td>{{ voucher.total_amount|cedis }}</td><td>{{ voucher.preparer.name if voucher.preparer else "" }}</td><td>{{ voucher.approver.name if voucher.approver else "" }}</td><td>{{ voucher.status }}</td></tr>
+            <tr>
+                <td>{{ voucher.voucher_number }}</td>
+                <td>{{ voucher.payroll_run.client_company.name if voucher.payroll_run.client_company else "" }}</td>
+                <td>{{ voucher.payroll_run.month }} {{ voucher.payroll_run.year }}</td>
+                <td>{{ voucher.payroll_run.total_workers }}</td>
+                <td>{{ voucher.gross_payroll|cedis }}</td>
+                <td>{{ voucher.total_deductions|cedis }}</td>
+                <td>{{ voucher.net_amount_payable|cedis }}</td>
+                <td>{{ voucher.preparer.name if voucher.preparer else "" }}</td>
+                <td>{{ voucher.reviewer.name if voucher.reviewer else "" }}</td>
+                <td>{{ voucher.approver.name if voucher.approver else "" }}</td>
+                <td><span class="badge text-bg-{{ 'success' if voucher.status == 'Paid' else 'warning' }}">{{ voucher.status }}</span></td>
+                <td>
+                    {% if voucher.status != "Paid" %}
+                        <form method="post" action="{{ url_for('finance.mark_voucher_paid', voucher_id=voucher.id) }}"><button class="btn btn-sm btn-outline-success">Mark Paid</button></form>
+                    {% endif %}
+                </td>
+            </tr>
         {% endfor %}
         </tbody>
     </table>

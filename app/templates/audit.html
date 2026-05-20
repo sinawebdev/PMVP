@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block page_title %}Audit Trail{% endblock %}
+{% block page_intro %}Trace payroll, finance, approval, and expense actions by user, role, record, date, and notes for operational accountability.{% endblock %}
+{% block content %}
+<section class="panel">
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Date</th><th>User</th><th>Role</th><th>Action</th><th>Record</th><th>Notes</th></tr></thead>
+            <tbody>
+            {% for entry in entries %}
+                <tr>
+                    <td>{{ entry.created_at.strftime("%Y-%m-%d %H:%M") if entry.created_at else "" }}</td>
+                    <td>{{ entry.user.name if entry.user else "System" }}</td>
+                    <td>{{ entry.user_role }}</td>
+                    <td>{{ entry.action }}</td>
+                    <td>{{ entry.related_record_type }} #{{ entry.related_record_id }}</td>
+                    <td>{{ entry.notes }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="6" class="text-muted">No audit entries yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

@@ -17,6 +17,7 @@ Phase 1 MVP for Chrisnat Limited Ghana. This is a Flask and SQLite web app that 
 - Tracks simple operating expenses.
 - Adds imported payroll workers to the employee records section.
 - Provides a proposal drafting section tied to client companies.
+- Adds Phase 2 payroll import batches, audit trail, approval workflow, reports, and richer finance tracking.
 
 ## Setup
 
@@ -71,6 +72,32 @@ Expected columns can use common names such as:
 - `ssnit`, `social security`
 - `deductions`, `other deductions`
 - `net`, `net pay`, `take home`
+- `employee no`, `worker id`
+- `gross salary`, `net salary`
+- `bank`, `bank name`, `account number`, `bank account`
+
+The importer scans the first 20 rows to find the payroll header, removes blank/footer rows, cleans currency strings such as `GHC 1,200.00`, counts unique workers, and previews warnings before anything is saved permanently.
+
+## Phase 2 Workflow
+
+Payroll statuses now move through:
+
+`Draft` -> `Pending Review` -> `Pending MD Approval` -> `Approved` -> `Paid`
+
+Payroll can also be `Rejected`.
+
+Role behavior:
+
+- Admin can prepare payroll, manage clients, manage employees, and submit payroll for review.
+- Accounts Officer can review payroll, manage remittances, mark vouchers/payroll paid, and manage expenses.
+- MD has full access to every module and every action.
+- Viewer can view reports.
+
+Duplicate payroll uploads for the same client/month are blocked until the user ticks the replacement confirmation on the preview page.
+
+## Reports and Audit
+
+The Reports page supports client/month filters and Excel export for the monthly payroll summary. The Audit Trail records important actions such as payroll upload, import confirmation, review, approval, rejection, voucher generation, payment, remittance payment, expense creation, and expense approval.
 
 Unknown columns are shown as `unmapped` on the preview page.
 
