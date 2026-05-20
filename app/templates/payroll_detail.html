@@ -13,6 +13,8 @@
 <section class="panel mt-3">
     <div class="row g-3">
         <div class="col-md-3"><strong>Source Excel File</strong><p>{{ payroll_run.source_filename }}</p></div>
+        <div class="col-md-3"><strong>Source Sheet</strong><p>{{ payroll_run.source_sheet_name or "Default sheet" }}</p></div>
+        <div class="col-md-3"><strong>Detected Header Row</strong><p>{{ payroll_run.detected_header_row or 1 }}</p></div>
         <div class="col-md-3"><strong>Total Gross Pay</strong><p>{{ payroll_run.total_gross_pay|cedis }}</p></div>
         <div class="col-md-3"><strong>PAYE Total</strong><p>{{ payroll_run.total_paye|cedis }}</p></div>
         <div class="col-md-3"><strong>SSNIT Total</strong><p>{{ payroll_run.total_ssnit|cedis }}</p></div>

@@ -1,6 +1,7 @@
 import os
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pandas as pd
 from openpyxl import Workbook, load_workbook
@@ -12,8 +13,14 @@ COLUMN_ALIASES = {
     "staff_id": ["staff no", "staff id", "employee id", "emp id", "staff number", "employee no", "worker id"],
     "full_name": ["name", "employee name", "full name", "worker name", "employee"],
     "ssnit_number": ["ssnit no", "ssnit number", "ssnit id", "ssnit contribution number"],
+    "ghana_card_number": ["ghana card", "ghana card no", "ghana card number"],
+    "momo_number": ["momo", "momo number", "mobile money", "mobile money number"],
     "bank_name": ["bank", "bank name"],
     "bank_account_number": ["account no", "account number", "bank account", "bank account number"],
+    "status": ["status", "worker status", "employment status"],
+    "service_line": ["service line", "department", "unit"],
+    "job_role": ["job role", "role", "position", "designation"],
+    "payroll_month": ["payroll month", "month"],
     "basic_salary": ["basic", "basic salary", "base pay", "salary"],
     "transport_allowance": ["transport", "transport allowance", "transportation"],
     "housing_allowance": ["housing", "housing allowance", "rent allowance"],
@@ -21,8 +28,11 @@ COLUMN_ALIASES = {
     "other_allowances": ["other allowance", "other allowances", "allowances", "allowance"],
     "gross_pay": ["gross", "gross pay", "gross salary"],
     "paye": ["paye", "tax", "income tax", "paye tax"],
-    "ssnit": ["ssnit", "social security", "ssnit contribution"],
-    "other_deductions": ["deduction", "deductions", "other deductions"],
+    "ssnit": ["ssnit", "social security", "ssnit contribution", "ssnit employee"],
+    "tier_2_pension": ["tier 2", "tier 2 pension", "tier two pension"],
+    "loan_deduction": ["loan deduction", "loan deductions", "loan"],
+    "other_deductions": ["deduction", "deductions", "other deduction", "other deductions"],
+    "total_deductions": ["total deductions", "total deduction"],
     "net_pay": ["net", "net pay", "net salary", "take home", "take home pay"],
 }
 
@@ -35,9 +45,48 @@ MONEY_FIELDS = {
     "gross_pay",
     "paye",
     "ssnit",
+    "tier_2_pension",
+    "loan_deduction",
     "other_deductions",
     "total_deductions",
     "net_pay",
+}
+
+META_SHEET_NAMES = {
+    "stress test guide",
+    "client companies",
+    "expected summary",
+    "expected validation",
+    "upload test cases",
+    "summary",
+    "guide",
+    "instructions",
+    "readme",
+}
+
+PAYROLL_HEADER_KEYWORDS = {
+    "staff id",
+    "staff no",
+    "employee id",
+    "employee",
+    "name",
+    "employee name",
+    "full name",
+    "status",
+    "basic salary",
+    "basic",
+    "gross pay",
+    "gross salary",
+    "paye",
+    "ssnit",
+    "net pay",
+    "net salary",
+    "bank",
+    "momo",
+    "ghana card",
+    "payroll month",
+    "allowance",
+    "deduction",
 }
 
 
@@ -69,43 +118,116 @@ def map_columns(columns):
 
     for column in columns:
         normalized = normalize_label(column)
-        mapping[column] = alias_lookup.get(normalized, "unmapped")
+        mapped_field = alias_lookup.get(normalized)
+        if mapped_field is None:
+            for alias, field in alias_lookup.items():
+                if alias and (alias in normalized or normalized in alias):
+                    mapped_field = field
+                    break
+        mapping[column] = mapped_field or "unmapped"
     return mapping
 
 
-def find_header_row(file_path):
+def workbook_sheet_names(file_path):
+    ext = file_path.rsplit(".", 1)[1].lower()
+    if ext == "csv":
+        return [Path(file_path).stem]
+    with pd.ExcelFile(file_path, engine="openpyxl" if ext == "xlsx" else None) as excel_file:
+        return excel_file.sheet_names
+
+
+def is_meta_sheet(sheet_name):
+    normalized = normalize_label(sheet_name)
+    return normalized in META_SHEET_NAMES
+
+
+def header_score(row):
     known_labels = set()
     for field, aliases in COLUMN_ALIASES.items():
         known_labels.add(normalize_label(field))
         known_labels.update(normalize_label(alias) for alias in aliases)
+    known_labels.update(PAYROLL_HEADER_KEYWORDS)
 
+    labels = [normalize_label(value) for value in row if value not in (None, "")]
+    score = 0
+    for label in labels:
+        if label in known_labels:
+            score += 2
+        elif any(keyword and keyword in label for keyword in PAYROLL_HEADER_KEYWORDS):
+            score += 1
+    return score
+
+
+def find_header_row(file_path, sheet_name=None):
     ext = file_path.rsplit(".", 1)[1].lower()
+    sheet_arg = sheet_name if sheet_name is not None else 0
     if ext == "csv":
         sample = pd.read_csv(file_path, header=None, nrows=20, dtype=str)
+    elif ext == "xlsx":
+        sample = pd.read_excel(file_path, sheet_name=sheet_arg, engine="openpyxl", header=None, nrows=20, dtype=str)
     else:
-        sample = pd.read_excel(file_path, header=None, nrows=20, dtype=str)
+        sample = pd.read_excel(file_path, sheet_name=sheet_arg, header=None, nrows=20, dtype=str)
     rows = sample.fillna("").values.tolist()
 
     best_row = 1
     best_score = 0
     for row_index, row in enumerate(rows, start=1):
-        labels = [normalize_label(value) for value in row if value not in (None, "")]
-        score = sum(1 for label in labels if label in known_labels)
+        score = header_score(row)
         if score > best_score:
             best_score = score
             best_row = row_index
-    return max(best_row - 1, 0) if best_score >= 2 else 0
+    return max(best_row - 1, 0) if best_score >= 3 else 0
 
 
-def read_excel_file(file_path):
-    header_row = find_header_row(file_path)
+def payroll_sheet_candidates(file_path):
+    candidates = []
     ext = file_path.rsplit(".", 1)[1].lower()
+    for sheet_name in workbook_sheet_names(file_path):
+        if is_meta_sheet(sheet_name):
+            continue
+        header_row = find_header_row(file_path, sheet_name if ext != "csv" else None)
+        if ext == "csv":
+            sample = pd.read_csv(file_path, header=None, nrows=20, dtype=str)
+        elif ext == "xlsx":
+            sample = pd.read_excel(file_path, sheet_name=sheet_name, engine="openpyxl", header=None, nrows=20, dtype=str)
+        else:
+            sample = pd.read_excel(file_path, sheet_name=sheet_name, header=None, nrows=20, dtype=str)
+        rows = sample.fillna("").values.tolist()
+        score = header_score(rows[header_row]) if header_row < len(rows) else 0
+        if score >= 3:
+            candidates.append(
+                {
+                    "sheet_name": sheet_name,
+                    "detected_header_row": header_row + 1,
+                    "score": score,
+                }
+            )
+    return candidates
+
+
+def match_client_sheet(client_name, sheet_names):
+    normalized_client = normalize_label(client_name)
+    for sheet_name in sheet_names:
+        normalized_sheet = normalize_label(sheet_name)
+        if normalized_client == normalized_sheet:
+            return sheet_name
+    for sheet_name in sheet_names:
+        normalized_sheet = normalize_label(sheet_name)
+        if normalized_client in normalized_sheet or normalized_sheet in normalized_client:
+            return sheet_name
+    return None
+
+
+def read_excel_file(file_path, sheet_name=None):
+    header_row = find_header_row(file_path, sheet_name)
+    ext = file_path.rsplit(".", 1)[1].lower()
+    sheet_arg = sheet_name if sheet_name is not None else 0
     if ext == "csv":
         df = pd.read_csv(file_path, header=header_row, dtype=str)
     elif ext == "xlsx":
-        df = pd.read_excel(file_path, engine="openpyxl", header=header_row, dtype=str)
+        df = pd.read_excel(file_path, sheet_name=sheet_arg, engine="openpyxl", header=header_row, dtype=str)
     else:
-        df = pd.read_excel(file_path, header=header_row, dtype=str)
+        df = pd.read_excel(file_path, sheet_name=sheet_arg, header=header_row, dtype=str)
     df = df.dropna(how="all")
     df.columns = [str(column).strip() for column in df.columns]
     df = df.fillna("")
@@ -113,16 +235,17 @@ def read_excel_file(file_path):
     return df, mapping
 
 
-def detect_company_name(file_path, known_company_names=None):
+def detect_company_name(file_path, known_company_names=None, sheet_name=None):
     known_company_names = known_company_names or []
     sampled_values = []
     ext = file_path.rsplit(".", 1)[1].lower()
+    sheet_arg = sheet_name if sheet_name is not None else 0
     if ext == "csv":
         sample = pd.read_csv(file_path, header=None, nrows=20, dtype=str)
     elif ext == "xlsx":
-        sample = pd.read_excel(file_path, engine="openpyxl", header=None, nrows=20, dtype=str)
+        sample = pd.read_excel(file_path, sheet_name=sheet_arg, engine="openpyxl", header=None, nrows=20, dtype=str)
     else:
-        sample = pd.read_excel(file_path, header=None, nrows=20, dtype=str)
+        sample = pd.read_excel(file_path, sheet_name=sheet_arg, header=None, nrows=20, dtype=str)
     for row in sample.fillna("").values.tolist():
         for value in row:
             if value not in (None, ""):
@@ -174,6 +297,9 @@ def mapped_rows_from_dataframe(df, mapping):
     rows = []
     for _, source_row in df.iterrows():
         row = {}
+        first_cell = scalar_cell_value(source_row.iloc[0]) if len(source_row.index) else ""
+        if normalize_label(first_cell) in {"total", "grand total", "subtotal", "summary"}:
+            continue
         for original_column, field in mapping.items():
             if field == "unmapped":
                 continue
@@ -183,7 +309,7 @@ def mapped_rows_from_dataframe(df, mapping):
 
         identity = " ".join(
             str(row.get(field) or "")
-            for field in ("staff_id", "full_name", "bank_name", "bank_account_number")
+            for field in ("staff_id", "full_name", "basic_salary", "gross_pay", "net_pay")
         )
         if not identity.strip() and not any(row.get(field, 0) for field in MONEY_FIELDS):
             continue
@@ -191,6 +317,7 @@ def mapped_rows_from_dataframe(df, mapping):
             "total",
             "grand total",
             "subtotal",
+            "summary",
         }:
             continue
 
@@ -199,8 +326,14 @@ def mapped_rows_from_dataframe(df, mapping):
         row.setdefault("staff_id", "")
         row.setdefault("full_name", "")
         row.setdefault("ssnit_number", "")
+        row.setdefault("ghana_card_number", "")
+        row.setdefault("momo_number", "")
         row.setdefault("bank_name", "")
         row.setdefault("bank_account_number", "")
+        row.setdefault("status", "")
+        row.setdefault("service_line", "")
+        row.setdefault("job_role", "")
+        row.setdefault("payroll_month", "")
 
         calculated_gross = (
             row["basic_salary"]
@@ -211,11 +344,14 @@ def mapped_rows_from_dataframe(df, mapping):
         )
         if not row["gross_pay"] and calculated_gross:
             row["gross_pay"] = calculated_gross
-        statutory_deductions = row["paye"] + row["ssnit"]
-        if row["other_deductions"] >= statutory_deductions and statutory_deductions:
+        statutory_deductions = row["paye"] + row["ssnit"] + row["tier_2_pension"]
+        itemized_other = row["loan_deduction"] + row["other_deductions"]
+        if row["total_deductions"]:
+            pass
+        elif row["other_deductions"] >= statutory_deductions and statutory_deductions:
             row["total_deductions"] = row["other_deductions"]
         else:
-            row["total_deductions"] = statutory_deductions + row["other_deductions"]
+            row["total_deductions"] = statutory_deductions + itemized_other
         if not row["net_pay"] and row["gross_pay"]:
             row["net_pay"] = row["gross_pay"] - row["total_deductions"]
         rows.append(row)
@@ -244,6 +380,62 @@ def calculate_worker_stats(mapped_rows):
         "total_rows": non_blank_rows,
         "total_unique_workers": len(seen),
         "duplicate_count": duplicate_count,
+    }
+
+
+def calculate_status_breakdown(mapped_rows):
+    breakdown = {
+        "active": 0,
+        "inactive": 0,
+        "terminated": 0,
+        "on_leave": 0,
+        "unknown": 0,
+    }
+    for row in mapped_rows:
+        status = normalize_label(row.get("status"))
+        if "terminated" in status:
+            breakdown["terminated"] += 1
+        elif "inactive" in status:
+            breakdown["inactive"] += 1
+        elif "leave" in status:
+            breakdown["on_leave"] += 1
+        elif "active" in status:
+            breakdown["active"] += 1
+        else:
+            breakdown["unknown"] += 1
+    return breakdown
+
+
+def summarize_mapped_rows(mapped_rows):
+    return {
+        "total_rows": len(mapped_rows),
+        "valid_rows": len(mapped_rows),
+        "invalid_rows": 0,
+        "gross_total": sum(float(row.get("gross_pay") or 0) for row in mapped_rows),
+        "net_total": sum(float(row.get("net_pay") or 0) for row in mapped_rows),
+        "paye_total": sum(float(row.get("paye") or 0) for row in mapped_rows),
+        "ssnit_total": sum(float(row.get("ssnit") or 0) for row in mapped_rows),
+        "deductions_total": sum(float(row.get("total_deductions") or 0) for row in mapped_rows),
+    }
+
+
+def extract_payroll_sheet(file_path, sheet_name=None):
+    header_row = find_header_row(file_path, sheet_name)
+    df, mapping = read_excel_file(file_path, sheet_name)
+    mapped_rows = mapped_rows_from_dataframe(df, mapping)
+    worker_stats = calculate_worker_stats(mapped_rows)
+    totals = summarize_mapped_rows(mapped_rows)
+    return {
+        "sheet_name": sheet_name or workbook_sheet_names(file_path)[0],
+        "detected_header_row": header_row + 1,
+        "columns": list(df.columns),
+        "mapping": mapping,
+        "preview_rows": df.head(20).astype(str).to_dict(orient="records"),
+        "mapped_rows": mapped_rows,
+        "worker_stats": worker_stats,
+        "status_breakdown": calculate_status_breakdown(mapped_rows),
+        "totals": totals,
+        "ignored_rows": max(len(df.index) - len(mapped_rows), 0),
     }
 
 

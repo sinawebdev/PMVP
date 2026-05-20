@@ -4,10 +4,14 @@
 {% block content %}
 <section class="stats-grid">
     <div class="stat-card"><i class="bi bi-building stat-icon"></i><span>Client Company</span><strong>{{ client.name }}</strong></div>
+    <div class="stat-card"><i class="bi bi-file-spreadsheet stat-icon"></i><span>Matched Sheet</span><strong>{{ payload.matched_sheet_name or "Default sheet" }}</strong></div>
+    <div class="stat-card"><i class="bi bi-list-ol stat-icon"></i><span>Detected Header Row</span><strong>{{ payload.detected_header_row or 1 }}</strong></div>
     <div class="stat-card"><i class="bi bi-search stat-icon"></i><span>Detected Company</span><strong>{{ payload.detected_company_name or "Not detected" }}</strong></div>
     <div class="stat-card"><i class="bi bi-table stat-icon"></i><span>Total Rows Found</span><strong>{{ payload.worker_stats.total_rows }}</strong></div>
     <div class="stat-card"><i class="bi bi-person-check stat-icon"></i><span>Total Unique Workers</span><strong>{{ payload.worker_stats.total_unique_workers }}</strong></div>
     <div class="stat-card"><i class="bi bi-copy stat-icon"></i><span>Duplicate Entries Found</span><strong>{{ payload.worker_stats.duplicate_count }}</strong></div>
+    <div class="stat-card"><i class="bi bi-person-fill-check stat-icon"></i><span>Active Workers</span><strong>{{ payload.status_breakdown.active if payload.status_breakdown else 0 }}</strong></div>
+    <div class="stat-card"><i class="bi bi-person-dash stat-icon"></i><span>Inactive / Terminated</span><strong>{{ (payload.status_breakdown.inactive if payload.status_breakdown else 0) + (payload.status_breakdown.terminated if payload.status_breakdown else 0) }}</strong></div>
     <div class="stat-card"><i class="bi bi-check-circle stat-icon"></i><span>Valid Rows</span><strong>{{ payload.import_summary.valid_rows }}</strong></div>
     <div class="stat-card"><i class="bi bi-x-octagon stat-icon"></i><span>Invalid Rows</span><strong>{{ payload.import_summary.invalid_rows }}</strong></div>
     <div class="stat-card"><i class="bi bi-cash-stack stat-icon"></i><span>Total Payroll Amount</span><strong>{{ payload.import_summary.net_total|cedis }}</strong></div>

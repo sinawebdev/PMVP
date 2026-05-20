@@ -9,6 +9,10 @@ SCHEMA_COLUMNS = {
         "reviewed_at": "DATETIME",
         "approved_at": "DATETIME",
         "rejected_at": "DATETIME",
+        "total_unique_workers": "INTEGER DEFAULT 0",
+        "source_sheet_name": "VARCHAR(160)",
+        "detected_header_row": "INTEGER DEFAULT 0",
+        "import_mode": "VARCHAR(40) DEFAULT 'single_client'",
     },
     "payment_voucher": {
         "gross_payroll": "FLOAT",

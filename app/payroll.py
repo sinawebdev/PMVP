@@ -11,13 +11,14 @@ from app.audit import record_audit
 from app.auth import role_required
 from app.excel_utils import (
     allowed_excel_file,
-    calculate_worker_stats,
     detect_company_name,
+    extract_payroll_sheet,
     export_payroll_run,
     export_import_error_report,
-    mapped_rows_from_dataframe,
-    read_excel_file,
+    match_client_sheet,
+    payroll_sheet_candidates,
     save_uploaded_file,
+    workbook_sheet_names,
 )
 from app.finance import create_finance_records_for_payroll
 from app.models import ClientCompany, Employee, ImportBatch, PayrollItem, PayrollRun
@@ -101,29 +102,100 @@ def upload():
             flash("Select a client company before uploading payroll.", "warning")
             return redirect(url_for("payroll.upload"))
 
-        file_storage = request.files.get("payroll_file")
-        if not file_storage or not file_storage.filename:
-            flash("Choose an Excel file to upload.", "warning")
-            return redirect(url_for("payroll.upload"))
-        if not allowed_excel_file(file_storage.filename):
-            flash("Only .xlsx, .xls, or .csv files are supported.", "warning")
-            return redirect(url_for("payroll.upload"))
-
         client = db.get_or_404(ClientCompany, client_id)
-        file_path, source_filename = save_uploaded_file(
-            file_storage, current_app.config["UPLOAD_FOLDER"]
-        )
-        df, mapping = read_excel_file(file_path)
-        mapped_rows = mapped_rows_from_dataframe(df, mapping)
         known_names = [company.name for company in ClientCompany.query.all()]
-        detected_company_name = detect_company_name(file_path, known_names)
         month = request.form.get("month") or now.strftime("%B")
         year = int(request.form.get("year") or now.year)
-        worker_stats = calculate_worker_stats(mapped_rows)
+        selected_sheet_name = request.form.get("selected_sheet_name")
+        existing_file_path = request.form.get("existing_file_path")
+        source_filename = request.form.get("source_filename")
+
+        if existing_file_path:
+            file_path = os.path.abspath(existing_file_path)
+            upload_root = os.path.abspath(current_app.config["UPLOAD_FOLDER"])
+            if not file_path.startswith(upload_root) or not os.path.exists(file_path):
+                flash("The saved workbook could not be found. Please upload it again.", "warning")
+                return redirect(url_for("payroll.upload"))
+            source_filename = source_filename or os.path.basename(file_path)
+        else:
+            file_storage = request.files.get("payroll_file")
+            if not file_storage or not file_storage.filename:
+                flash("Choose an Excel file to upload.", "warning")
+                return redirect(url_for("payroll.upload"))
+            if not allowed_excel_file(file_storage.filename):
+                flash("Only .xlsx, .xls, or .csv files are supported.", "warning")
+                return redirect(url_for("payroll.upload"))
+            file_path, source_filename = save_uploaded_file(
+                file_storage, current_app.config["UPLOAD_FOLDER"]
+            )
+
+        sheet_names = workbook_sheet_names(file_path)
+        candidates = payroll_sheet_candidates(file_path)
+        current_app.logger.info(
+            "Smart Excel Import Engine: workbook sheets=%s selected_client=%s candidates=%s",
+            sheet_names,
+            client.name,
+            candidates,
+        )
+        if not candidates:
+            flash(
+                "No valid payroll rows were found. Please check the selected sheet, header row, or Excel format.",
+                "danger",
+            )
+            return redirect(url_for("payroll.upload"))
+
+        matched_sheet_name = selected_sheet_name or match_client_sheet(
+            client.name, [candidate["sheet_name"] for candidate in candidates]
+        )
+        if not matched_sheet_name and len(candidates) == 1:
+            matched_sheet_name = candidates[0]["sheet_name"]
+        if not matched_sheet_name:
+            flash(
+                "No matching sheet was found for the selected client. Choose the correct payroll sheet below.",
+                "warning",
+            )
+            return render_template(
+                "payroll_upload.html",
+                clients=clients,
+                current_month=month,
+                current_year=year,
+                selected_client_id=int(client_id),
+                pending_file_path=file_path,
+                pending_source_filename=source_filename,
+                available_sheets=candidates,
+            )
+
+        extraction = extract_payroll_sheet(file_path, matched_sheet_name)
+        mapped_rows = extraction["mapped_rows"]
+        if not mapped_rows:
+            current_app.logger.warning(
+                "Smart Excel Import Engine extracted 0 rows from sheet=%s file=%s",
+                matched_sheet_name,
+                source_filename,
+            )
+            flash(
+                "No valid payroll rows were found. Please check the selected sheet, header row, or Excel format.",
+                "danger",
+            )
+            return redirect(url_for("payroll.upload"))
+
+        detected_company_name = detect_company_name(file_path, known_names, matched_sheet_name)
+        worker_stats = extraction["worker_stats"]
         validation = validate_payroll_rows(
             mapped_rows, client, month, year, detected_company_name
         )
         import_summary = summarize_import(mapped_rows, validation)
+
+        current_app.logger.info(
+            "Smart Excel Import Engine: matched_sheet=%s header_row=%s columns=%s mapping=%s rows=%s ignored=%s warnings=%s",
+            matched_sheet_name,
+            extraction["detected_header_row"],
+            extraction["columns"],
+            extraction["mapping"],
+            len(mapped_rows),
+            extraction["ignored_rows"],
+            len(validation["per_row_warnings"]) + len(validation["summary_warnings"]),
+        )
 
         batch = ImportBatch(
             client_company_id=client.id,
@@ -151,14 +223,17 @@ def upload():
             "import_batch_id": batch.id,
             "file_path": file_path,
             "source_filename": source_filename,
+            "matched_sheet_name": matched_sheet_name,
+            "detected_header_row": extraction["detected_header_row"],
             "client_company_id": client.id,
             "month": month,
             "year": year,
-            "columns": list(df.columns),
-            "mapping": mapping,
-            "preview_rows": df.head(20).astype(str).to_dict(orient="records"),
+            "columns": extraction["columns"],
+            "mapping": extraction["mapping"],
+            "preview_rows": extraction["preview_rows"],
             "mapped_rows": mapped_rows,
             "worker_stats": worker_stats,
+            "status_breakdown": extraction["status_breakdown"],
             "import_summary": import_summary,
             "detected_company_name": detected_company_name,
             "validation": validation,
@@ -199,6 +274,12 @@ def error_report(import_id):
 @role_required("admin")
 def confirm(import_id):
     payload = load_import_session(import_id)
+    if not payload.get("mapped_rows"):
+        flash(
+            "No valid payroll rows were found. Please check the selected sheet, header row, or Excel format.",
+            "danger",
+        )
+        return redirect(url_for("payroll.upload"))
     client = db.get_or_404(ClientCompany, payload["client_company_id"])
     validation = validate_payroll_rows(
         payload["mapped_rows"],
@@ -219,9 +300,13 @@ def confirm(import_id):
         created_by=current_user.id,
         client_company_id=client.id,
         total_workers=payload["worker_stats"]["total_unique_workers"],
+        total_unique_workers=payload["worker_stats"]["total_unique_workers"],
         total_rows_imported=payload["worker_stats"]["total_rows"],
         duplicate_workers_found=payload["worker_stats"]["duplicate_count"],
         source_filename=payload["source_filename"],
+        source_sheet_name=payload.get("matched_sheet_name"),
+        detected_header_row=payload.get("detected_header_row") or 0,
+        import_mode="single_client",
         import_type="Single Company Upload",
         detected_company_name=payload.get("detected_company_name"),
         notes="\n".join(validation["summary_warnings"]),
@@ -315,8 +400,12 @@ def create_or_update_employee_from_import(row, client, payroll_run, row_index):
 
     employee.full_name = full_name
     employee.ssnit_number = row.get("ssnit_number") or employee.ssnit_number
+    employee.ghana_card_number = row.get("ghana_card_number") or employee.ghana_card_number
     employee.bank_name = row.get("bank_name") or employee.bank_name
     employee.bank_account_number = row.get("bank_account_number") or employee.bank_account_number
+    employee.momo_number = row.get("momo_number") or employee.momo_number
+    employee.status = row.get("status") or employee.status
+    employee.service_line = row.get("service_line") or employee.service_line
     employee.basic_salary = float(row.get("basic_salary") or employee.basic_salary or 0)
     employee.assigned_client = client.name
     return employee

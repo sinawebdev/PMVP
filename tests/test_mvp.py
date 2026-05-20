@@ -94,6 +94,146 @@ class MvpTestCase(unittest.TestCase):
         stream.seek(0)
         return stream
 
+    def build_multisheet_stress_workbook(self):
+        workbook = Workbook()
+        guide = workbook.active
+        guide.title = "Stress_Test_Guide"
+        guide.append(["This workbook starts with a guide sheet and should not be imported."])
+        guide.append(["The importer must inspect the payroll sheets that follow."])
+
+        sheet = workbook.create_sheet("MSC_Ghana_Ltd")
+        sheet.append(["Chrisnat Limited", "Client payroll schedule"])
+        sheet.append(["Client Company", "MSC Ghana Ltd"])
+        sheet.append(["Prepared for stress testing"])
+        sheet.append(
+            [
+                "Row ID",
+                "Staff ID",
+                "Employee Name",
+                "Status",
+                "Service Line",
+                "Job Role",
+                "Payroll Month",
+                "Basic Salary",
+                "Transport Allowance",
+                "Housing Allowance",
+                "Overtime Pay",
+                "Other Allowances",
+                "Gross Pay",
+                "PAYE",
+                "SSNIT Employee",
+                "Tier 2 Pension",
+                "Loan Deduction",
+                "Other Deduction",
+                "Total Deductions",
+                "Net Pay",
+                "Bank Name",
+                "Bank Account",
+                "MoMo Number",
+                "Ghana Card No",
+                "SSNIT Number",
+            ]
+        )
+        sheet.append(
+            [
+                1,
+                "MSC-001",
+                "Abena Owusu",
+                "Active",
+                "Port Services",
+                "Clerk",
+                "May 2026",
+                "GHC 1,200.00",
+                "150",
+                "100",
+                "50",
+                "25",
+                "1,525.00",
+                "120",
+                "80",
+                "40",
+                "0",
+                "10",
+                "250",
+                "1,275.00",
+                "GCB Bank",
+                "0012345678",
+                "0244000001",
+                "GHA-111",
+                "SSNIT-111",
+            ]
+        )
+        sheet.append(
+            [
+                2,
+                "MSC-001",
+                "Abena Owusu",
+                "Inactive",
+                "Port Services",
+                "Clerk",
+                "May 2026",
+                "GHC 1,200.00",
+                "150",
+                "100",
+                "50",
+                "25",
+                "1,525.00",
+                "120",
+                "80",
+                "40",
+                "0",
+                "10",
+                "250",
+                "1,275.00",
+                "GCB Bank",
+                "0012345678",
+                "0244000001",
+                "GHA-111",
+                "SSNIT-111",
+            ]
+        )
+        sheet.append(
+            [
+                3,
+                "",
+                "Kojo Mensah",
+                "Terminated",
+                "Terminal",
+                "Operator",
+                "May 2026",
+                "900",
+                "100",
+                "",
+                "",
+                "",
+                "",
+                "0",
+                "0",
+                "",
+                "",
+                "",
+                "0",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
+        sheet.append(["TOTAL", "", "", "", "", "", "", "", "", "", "", "", "3,950.00", "", "", "", "", "", "", ""])
+
+        stellar = workbook.create_sheet("Stellar_Logistics")
+        stellar.append(["Metadata"])
+        stellar.append([])
+        stellar.append(["Staff ID", "Employee Name", "Gross Pay", "Net Pay"])
+        stellar.append(["STL-001", "Afia Darko", 1000, 900])
+
+        stream = BytesIO()
+        workbook.save(stream)
+        stream.seek(0)
+        return stream
+
     def test_seeded_users_and_clients_exist(self):
         with self.app.app_context():
             self.assertIsNotNone(User.query.filter_by(email="admin@chrisnat.local").first())
@@ -149,6 +289,32 @@ class MvpTestCase(unittest.TestCase):
         self.assertEqual(rows[0]["gross_pay"], 1200.0)
         self.assertEqual(rows[0]["net_pay"], 1105.0)
 
+    def test_multisheet_import_matches_selected_client_sheet_and_offset_header(self):
+        from app.excel_utils import extract_payroll_sheet, match_client_sheet, payroll_sheet_candidates
+
+        workbook = self.build_multisheet_stress_workbook()
+        file_path = os.path.join(self.temp_dir.name, "stress_test.xlsx")
+        with open(file_path, "wb") as file:
+            file.write(workbook.read())
+
+        candidates = payroll_sheet_candidates(file_path)
+        matched_sheet = match_client_sheet("MSC Ghana Ltd", [candidate["sheet_name"] for candidate in candidates])
+        extraction = extract_payroll_sheet(file_path, matched_sheet)
+
+        self.assertEqual(matched_sheet, "MSC_Ghana_Ltd")
+        self.assertEqual(extraction["detected_header_row"], 4)
+        self.assertEqual(extraction["worker_stats"]["total_rows"], 3)
+        self.assertEqual(extraction["worker_stats"]["total_unique_workers"], 2)
+        self.assertEqual(extraction["worker_stats"]["duplicate_count"], 1)
+        self.assertEqual(extraction["status_breakdown"]["active"], 1)
+        self.assertEqual(extraction["status_breakdown"]["inactive"], 1)
+        self.assertEqual(extraction["status_breakdown"]["terminated"], 1)
+        self.assertEqual(extraction["totals"]["gross_total"], 4050.0)
+        self.assertEqual(extraction["totals"]["paye_total"], 240.0)
+        self.assertEqual(extraction["totals"]["ssnit_total"], 160.0)
+        self.assertEqual(extraction["mapping"]["SSNIT Employee"], "ssnit")
+        self.assertEqual(extraction["mapping"]["Bank Account"], "bank_account_number")
+
     def test_money_is_formatted_as_comma_separated_ghana_cedis(self):
         self.assertEqual(format_ghana_cedis(1234567.5), "GH₵ 1,234,567.50")
 
@@ -201,6 +367,73 @@ class MvpTestCase(unittest.TestCase):
             self.assertEqual(batch.total_rows, 2)
             self.assertEqual(batch.total_workers, 1)
             self.assertEqual(batch.gross_total, 2400.0)
+
+    def test_upload_uses_matching_client_sheet_in_multisheet_workbook(self):
+        self.login_admin()
+        from app.models import ImportBatch
+
+        with self.app.app_context():
+            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_id = client_company.id
+
+        response = self.client.post(
+            "/payroll/upload",
+            data={
+                "client_company_id": str(client_id),
+                "month": "May",
+                "year": "2101",
+                "payroll_file": (self.build_multisheet_stress_workbook(), "stress_test.xlsx"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            batch = ImportBatch.query.filter_by(original_filename="stress_test.xlsx").first()
+            self.assertIsNotNone(batch)
+            self.assertEqual(batch.total_rows, 3)
+            self.assertEqual(batch.total_workers, 2)
+            self.assertEqual(batch.gross_total, 4050.0)
+
+        preview_response = self.client.get(response.headers["Location"])
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertIn(b"MSC_Ghana_Ltd", preview_response.data)
+        self.assertIn(b"Detected Header Row", preview_response.data)
+
+    def test_upload_rejects_workbook_with_no_valid_payroll_rows(self):
+        self.login_admin()
+        from app.models import ImportBatch
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Stress_Test_Guide"
+        sheet.append(["Guide only"])
+        stream = BytesIO()
+        workbook.save(stream)
+        stream.seek(0)
+
+        with self.app.app_context():
+            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_id = client_company.id
+            original_batches = ImportBatch.query.count()
+
+        response = self.client.post(
+            "/payroll/upload",
+            data={
+                "client_company_id": str(client_id),
+                "month": "June",
+                "year": "2101",
+                "payroll_file": (stream, "empty_stress.xlsx"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"No valid payroll rows were found", response.data)
+        with self.app.app_context():
+            self.assertEqual(ImportBatch.query.count(), original_batches)
 
     def test_duplicate_payroll_requires_replacement_confirmation(self):
         self.login_admin()
