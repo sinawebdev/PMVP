@@ -261,6 +261,31 @@ class MvpTestCase(unittest.TestCase):
         stream.seek(0)
         return stream
 
+    def build_consolidated_workbook(self):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Consolidated_Mixed_Clients"
+        sheet.append(["Chrisnat Limited", "Mixed client payroll"])
+        sheet.append([])
+        sheet.append(["Client Company", "Staff ID", "Worker", "Gross Amount", "Tax Deducted", "SSNIT Emp", "Net Amount"])
+        sheet.append(["MSC Ghana Ltd", "MSC-C-001", "Efua Mensah", "GHC 1,200.00", "100", "50", "1,050.00"])
+        sheet.append(["Stellar Logistics", "STL-C-001", "Kofi Adu", "900", "80", "40", "780"])
+        stream = BytesIO()
+        workbook.save(stream)
+        stream.seek(0)
+        return stream
+
+    def build_minimal_payroll_named_workbook(self):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "May Staff Wages"
+        sheet.append(["s/n", "officer", "monthly salary", "gross earnings", "income tax", "ssnit (employee)", "amount payable"])
+        sheet.append(["001", "Minimal Worker", "1000", "1200", "90", "55", "1055"])
+        stream = BytesIO()
+        workbook.save(stream)
+        stream.seek(0)
+        return stream
+
     def test_seeded_users_and_clients_exist(self):
         with self.app.app_context():
             self.assertIsNotNone(User.query.filter_by(email="admin@chrisnat.local").first())
@@ -380,6 +405,35 @@ class MvpTestCase(unittest.TestCase):
         self.assertEqual(extraction["mapping"]["SSNIT Employee"], "ssnit")
         self.assertEqual(extraction["mapping"]["Bank Account"], "bank_account_number")
 
+    def test_minimal_payroll_sheet_name_and_aliases_extract_rows(self):
+        from app.excel_utils import extract_payroll_sheet, payroll_sheet_candidates
+
+        workbook = self.build_minimal_payroll_named_workbook()
+        file_path = os.path.join(self.temp_dir.name, "minimal_aliases.xlsx")
+        with open(file_path, "wb") as file:
+            file.write(workbook.read())
+
+        candidates = payroll_sheet_candidates(file_path)
+        extraction = extract_payroll_sheet(file_path, "May Staff Wages")
+
+        self.assertIn("May Staff Wages", [candidate["sheet_name"] for candidate in candidates])
+        self.assertEqual(extraction["mapping"]["s/n"], "staff_id")
+        self.assertEqual(extraction["mapping"]["officer"], "full_name")
+        self.assertEqual(extraction["mapping"]["monthly salary"], "basic_salary")
+        self.assertEqual(extraction["mapping"]["gross earnings"], "gross_pay")
+        self.assertEqual(extraction["mapping"]["income tax"], "paye")
+        self.assertEqual(extraction["mapping"]["ssnit (employee)"], "ssnit")
+        self.assertEqual(extraction["mapping"]["amount payable"], "net_pay")
+        self.assertEqual(len(extraction["mapped_rows"]), 1)
+
+    def test_client_sheet_matching_uses_token_overlap(self):
+        from app.excel_utils import match_client_sheet
+
+        self.assertEqual(
+            match_client_sheet("ACS/GMT Shipping", ["ACS-GMT Staff Wages"]),
+            "ACS-GMT Staff Wages",
+        )
+
     def test_money_is_formatted_as_comma_separated_ghana_cedis(self):
         self.assertEqual(format_ghana_cedis(1234567.5), "GH₵ 1,234,567.50")
 
@@ -398,6 +452,17 @@ class MvpTestCase(unittest.TestCase):
         self.assertIn(b"DATABASE_URL Detected", response.data)
         self.assertIn(b"Payroll Runs", response.data)
         self.assertNotIn(b"password", response.data.lower())
+
+    def test_db_health_json_reports_connection_without_secret(self):
+        self.login_admin()
+        response = self.client.get("/db-health")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["connection_status"], "ok")
+        self.assertIn(data["database_type"], {"SQLite", "PostgreSQL", "Other"})
+        self.assertTrue(data["uri_prefix"].endswith("://"))
+        self.assertNotIn("password", response.data.decode().lower())
 
     def test_worker_stats_use_unique_worker_identity(self):
         rows = [
@@ -550,6 +615,42 @@ class MvpTestCase(unittest.TestCase):
             stellar = ClientCompany.query.filter_by(name="Stellar Logistics").first()
             self.assertIsNotNone(PayrollRun.query.filter_by(client_company_id=msc.id, month="April", year=2101).first())
             self.assertIsNotNone(PayrollRun.query.filter_by(client_company_id=stellar.id, month="April", year=2101).first())
+
+    def test_multi_client_upload_splits_consolidated_sheet_by_client_column(self):
+        self.login_admin()
+
+        response = self.client.post(
+            "/payroll/upload",
+            data={
+                "import_mode": "multi_client",
+                "month": "July",
+                "year": "2101",
+                "payroll_file": (self.build_consolidated_workbook(), "consolidated.xlsx"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        preview_response = self.client.get(response.headers["Location"])
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertIn(b"Consolidated_Mixed_Clients", preview_response.data)
+        self.assertIn(b"MSC Ghana Ltd", preview_response.data)
+        self.assertIn(b"Stellar Logistics", preview_response.data)
+
+        import_id = response.headers["Location"].rstrip("/").split("/")[-1]
+        confirm_response = self.client.post(f"/payroll/confirm/{import_id}", follow_redirects=True)
+        self.assertEqual(confirm_response.status_code, 200)
+
+        with self.app.app_context():
+            msc = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            stellar = ClientCompany.query.filter_by(name="Stellar Logistics").first()
+            msc_run = PayrollRun.query.filter_by(client_company_id=msc.id, month="July", year=2101).first()
+            stellar_run = PayrollRun.query.filter_by(client_company_id=stellar.id, month="July", year=2101).first()
+            self.assertIsNotNone(msc_run)
+            self.assertIsNotNone(stellar_run)
+            self.assertEqual(PayrollItem.query.filter_by(payroll_run_id=msc_run.id).count(), 1)
+            self.assertEqual(PayrollItem.query.filter_by(payroll_run_id=stellar_run.id).count(), 1)
 
     def test_duplicate_payroll_requires_replacement_confirmation(self):
         self.login_admin()

@@ -4,7 +4,7 @@ import os
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, url_for
 from flask_login import login_required
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from app import db
 from app.auth import role_required
@@ -32,6 +32,25 @@ def index():
 @main_bp.route("/health")
 def health():
     return {"status": "ok", "service": "chrisnat-payroll-mvp"}
+
+
+@main_bp.route("/db-health")
+@role_required("admin")
+def db_health_json():
+    uri = current_app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    database_type = current_app.config.get("DATABASE_TYPE_LABEL") or db.engine.name.title()
+    connection_status = "ok"
+    try:
+        db.session.execute(text("SELECT 1"))
+    except Exception as exc:
+        db.session.rollback()
+        connection_status = f"error: {exc.__class__.__name__}"
+
+    return {
+        "database_type": database_type,
+        "connection_status": connection_status,
+        "uri_prefix": uri.split(":", 1)[0] + "://" if ":" in uri else "unknown",
+    }
 
 
 @main_bp.route("/admin/db-health")

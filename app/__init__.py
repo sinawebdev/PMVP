@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import timedelta
 
 from dotenv import load_dotenv
@@ -134,7 +135,20 @@ def create_app():
 
 def initialize_database(app):
     with app.app_context():
-        db.create_all()
+        for attempt in range(1, 6):
+            try:
+                db.create_all()
+                break
+            except Exception as exc:
+                if attempt == 5:
+                    app.logger.exception("Database initialization failed after 5 attempts.")
+                    raise
+                app.logger.warning(
+                    "Database not ready yet during startup attempt %s/5: %s",
+                    attempt,
+                    exc,
+                )
+                time.sleep(2)
         from app.schema import ensure_phase2_schema
 
         ensure_phase2_schema()

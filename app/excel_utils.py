@@ -1,5 +1,6 @@
 import os
 import re
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -8,9 +9,13 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
 
+logger = logging.getLogger(__name__)
+
+
 COLUMN_ALIASES = {
-    "staff_id": ["staff no", "staff id", "employee id", "emp id", "staff number", "employee no", "worker id"],
-    "full_name": ["name", "employee name", "full name", "worker name", "employee"],
+    "staff_id": ["staff no", "staff no.", "staff id", "employee id", "emp id", "staff number", "employee no", "worker id", "s/n", "sn", "no", "serial"],
+    "full_name": ["name", "employee name", "full name", "worker name", "employee", "worker", "officer", "personnel"],
+    "client_company": ["client", "client company", "company", "company name"],
     "ssnit_number": ["ssnit no", "ssnit number", "ssnit id", "ssnit contribution number"],
     "ghana_card_number": ["ghana card", "ghana card no", "ghana card number"],
     "momo_number": ["momo", "momo number", "mobile money", "mobile money number"],
@@ -20,20 +25,20 @@ COLUMN_ALIASES = {
     "service_line": ["service line", "department", "unit"],
     "job_role": ["job role", "role", "position", "designation"],
     "payroll_month": ["payroll month", "month"],
-    "basic_salary": ["basic", "basic salary", "base pay", "salary"],
+    "basic_salary": ["basic", "basic salary", "base pay", "basic pay", "base salary", "monthly salary", "salary"],
     "transport_allowance": ["transport", "transport allowance", "transportation"],
     "housing_allowance": ["housing", "housing allowance", "rent allowance"],
     "overtime_hours": ["overtime hours", "ot hours"],
     "overtime_pay": ["overtime", "ot pay", "overtime pay"],
     "other_allowances": ["other allowance", "other allowances", "allowances", "allowance"],
-    "gross_pay": ["gross", "gross pay", "gross salary", "total earnings"],
-    "paye": ["paye", "tax", "income tax", "paye tax"],
-    "ssnit": ["ssnit", "social security", "ssnit contribution", "ssnit employee"],
+    "gross_pay": ["gross", "gross pay", "gross salary", "total earnings", "gross earnings", "gross amount"],
+    "paye": ["paye", "tax", "income tax", "paye tax", "tax deducted"],
+    "ssnit": ["ssnit", "social security", "ssnit contribution", "ssnit employee", "ssnit emp", "ssnit (employee)"],
     "tier_2_pension": ["tier 2", "tier 2 pension", "tier two pension", "pension"],
     "loan_deduction": ["loan deduction", "loan deductions", "loan"],
     "other_deductions": ["deduction", "deductions", "other deduction", "other deductions"],
     "total_deductions": ["total deductions", "total deduction"],
-    "net_pay": ["net", "net pay", "net salary", "take home", "take home pay"],
+    "net_pay": ["net", "net pay", "net salary", "take home", "take home pay", "net amount", "amount payable", "net earnings"],
 }
 
 MONEY_FIELDS = {
@@ -68,26 +73,47 @@ META_SHEET_NAMES = {
 PAYROLL_HEADER_KEYWORDS = {
     "staff id",
     "staff no",
+    "staff no.",
     "employee id",
     "emp id",
+    "worker id",
+    "s/n",
+    "sn",
+    "serial",
     "employee",
     "name",
     "employee name",
     "full name",
+    "worker",
+    "officer",
+    "personnel",
     "status",
     "service line",
     "job role",
     "basic salary",
     "basic",
     "base pay",
+    "basic pay",
+    "base salary",
+    "monthly salary",
     "gross pay",
     "gross salary",
+    "total earnings",
+    "gross earnings",
+    "gross amount",
     "paye",
+    "income tax",
+    "tax deducted",
     "ssnit",
     "ssnit employee",
+    "ssnit emp",
+    "social security",
     "tier 2 pension",
     "net pay",
     "net salary",
+    "net amount",
+    "amount payable",
+    "net earnings",
     "take home",
     "bank",
     "bank name",
@@ -106,6 +132,15 @@ PAYROLL_HEADER_KEYWORDS = {
     "total deductions",
 }
 
+PAYROLL_SHEET_NAME_KEYWORDS = {
+    "payroll",
+    "salary",
+    "wages",
+    "staff",
+    "workers",
+    "personnel",
+}
+
 
 def normalize_label(value):
     value = str(value or "").strip().lower()
@@ -122,6 +157,14 @@ def normalize_company_key(value, strip_suffix=True):
     if strip_suffix:
         parts = [part for part in parts if part not in {"ltd", "limited"}]
     return "".join(parts)
+
+
+def company_tokens(value):
+    return {
+        part
+        for part in normalize_label(value).split()
+        if part and part not in {"ltd", "limited", "company", "co"}
+    }
 
 
 def slug_filename(value):
@@ -165,6 +208,11 @@ def is_meta_sheet(sheet_name):
     return normalized in META_SHEET_NAMES
 
 
+def sheet_name_suggests_payroll(sheet_name):
+    normalized = normalize_label(sheet_name)
+    return any(keyword in normalized for keyword in PAYROLL_SHEET_NAME_KEYWORDS)
+
+
 def header_score(row):
     known_labels = set()
     for field, aliases in COLUMN_ALIASES.items():
@@ -200,7 +248,7 @@ def find_header_row(file_path, sheet_name=None):
         if score > best_score:
             best_score = score
             best_row = row_index
-    return max(best_row - 1, 0) if best_score >= 3 else 0
+    return max(best_row - 1, 0) if best_score >= 2 else 0
 
 
 def payroll_sheet_candidates(file_path):
@@ -218,7 +266,7 @@ def payroll_sheet_candidates(file_path):
             sample = pd.read_excel(file_path, sheet_name=sheet_name, header=None, nrows=20, dtype=str)
         rows = sample.fillna("").values.tolist()
         score = header_score(rows[header_row]) if header_row < len(rows) else 0
-        if score >= 3:
+        if score >= 2 or sheet_name_suggests_payroll(sheet_name):
             candidates.append(
                 {
                     "sheet_name": sheet_name,
@@ -238,6 +286,10 @@ def match_client_sheet(client_name, sheet_names):
     for sheet_name in sheet_names:
         normalized_sheet = normalize_company_key(sheet_name)
         if normalized_client in normalized_sheet or normalized_sheet in normalized_client:
+            return sheet_name
+    client_tokens = company_tokens(client_name)
+    for sheet_name in sheet_names:
+        if len(client_tokens.intersection(company_tokens(sheet_name))) >= 2:
             return sheet_name
     return None
 
@@ -319,6 +371,8 @@ def scalar_cell_value(value):
 
 def mapped_rows_from_dataframe(df, mapping):
     rows = []
+    mapped_fields = {field for field in mapping.values() if field != "unmapped"}
+    all_unmapped_skips = 0
     for _, source_row in df.iterrows():
         row = {}
         original_presence = {}
@@ -332,6 +386,10 @@ def mapped_rows_from_dataframe(df, mapping):
             value = scalar_cell_value(value)
             original_presence[field] = str(value or "").strip() not in {"", "nan", "None"}
             row[field] = to_number(value) if field in MONEY_FIELDS else str(value).strip()
+
+        if not mapped_fields:
+            all_unmapped_skips += 1
+            continue
 
         identity = " ".join(
             str(row.get(field) or "")
@@ -384,6 +442,7 @@ def mapped_rows_from_dataframe(df, mapping):
         if not row["net_pay"] and row["gross_pay"]:
             row["net_pay"] = row["gross_pay"] - row["total_deductions"]
         rows.append(row)
+    logger.debug("Smart Excel Import Engine: rows skipped due to all-unmapped columns=%s", all_unmapped_skips)
     return rows
 
 
@@ -451,6 +510,15 @@ def summarize_mapped_rows(mapped_rows):
 def extract_payroll_sheet(file_path, sheet_name=None):
     header_row = find_header_row(file_path, sheet_name)
     df, mapping = read_excel_file(file_path, sheet_name)
+    unmapped_columns = [column for column, field in mapping.items() if field == "unmapped"]
+    logger.debug(
+        "Smart Excel Import Engine: sheet=%s detected_header_row=%s columns=%s mapped_columns=%s unmapped_columns=%s",
+        sheet_name or workbook_sheet_names(file_path)[0],
+        header_row + 1,
+        list(df.columns),
+        {column: field for column, field in mapping.items() if field != "unmapped"},
+        unmapped_columns,
+    )
     mapped_rows = mapped_rows_from_dataframe(df, mapping)
     worker_stats = calculate_worker_stats(mapped_rows)
     totals = summarize_mapped_rows(mapped_rows)

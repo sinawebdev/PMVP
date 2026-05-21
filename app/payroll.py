@@ -11,6 +11,8 @@ from app.audit import record_audit
 from app.auth import role_required
 from app.excel_utils import (
     allowed_excel_file,
+    calculate_status_breakdown,
+    calculate_worker_stats,
     detect_company_name,
     extract_payroll_sheet,
     export_payroll_run,
@@ -75,12 +77,55 @@ def save_temporary_upload(file_storage):
 
 
 def match_client_for_sheet(sheet_name, clients):
-    sheet_key = normalize_company_key(sheet_name)
     for client in clients:
-        client_key = normalize_company_key(client.name)
-        if client_key == sheet_key or client_key in sheet_key or sheet_key in client_key:
+        if match_client_sheet(client.name, [sheet_name]):
             return client
     return None
+
+
+def is_consolidated_sheet(sheet_name):
+    normalized = normalize_company_key(sheet_name, strip_suffix=False)
+    return normalized.startswith("consolidated") or normalized.startswith("mixed")
+
+
+def build_run_payload_from_extraction(
+    extraction,
+    mapped_rows,
+    file_path,
+    source_filename,
+    client,
+    month,
+    year,
+    known_names,
+    detected_company_name=None,
+):
+    detected_company_name = detected_company_name or detect_company_name(
+        file_path, known_names, extraction["sheet_name"]
+    )
+    validation = validate_payroll_rows(mapped_rows, client, month, year, detected_company_name)
+    import_summary = summarize_import(mapped_rows, validation)
+    worker_stats = calculate_worker_stats(mapped_rows)
+    status_breakdown = calculate_status_breakdown(mapped_rows)
+    return {
+        "mode": "single_client",
+        "source_filename": os.path.basename(source_filename),
+        "matched_sheet_name": extraction["sheet_name"],
+        "detected_header_row": extraction["detected_header_row"],
+        "client_company_id": client.id,
+        "client_company_name": client.name,
+        "month": month,
+        "year": year,
+        "columns": extraction["columns"],
+        "mapping": extraction["mapping"],
+        "unmapped_columns": [column for column, field in extraction["mapping"].items() if field == "unmapped"],
+        "preview_rows": extraction["preview_rows"],
+        "mapped_rows": mapped_rows,
+        "worker_stats": worker_stats,
+        "status_breakdown": status_breakdown,
+        "import_summary": import_summary,
+        "detected_company_name": detected_company_name,
+        "validation": validation,
+    }
 
 
 def build_single_payload(file_path, source_filename, client, month, year, selected_sheet_name=None):
@@ -113,7 +158,7 @@ def build_single_payload(file_path, source_filename, client, month, year, select
             matched_sheet_name,
             source_filename,
         )
-        return None, "No valid payroll rows were found. Please check the selected sheet, header row, or Excel format."
+        return None, f"No valid worker rows extracted from sheet '{matched_sheet_name}'. Check that the header row contains recognizable payroll column names."
 
     detected_company_name = detect_company_name(file_path, known_names, matched_sheet_name)
     validation = validate_payroll_rows(mapped_rows, client, month, year, detected_company_name)
@@ -166,39 +211,69 @@ def build_multi_client_payload(file_path, source_filename, month, year):
     unmatched_sheets = []
     known_names = [company.name for company in ClientCompany.query.all()]
     for candidate in candidates:
+        if is_consolidated_sheet(candidate["sheet_name"]):
+            extraction = extract_payroll_sheet(file_path, candidate["sheet_name"])
+            if not extraction["mapped_rows"]:
+                return None, f"No valid worker rows extracted from sheet '{candidate['sheet_name']}'. Check that the header row contains recognizable payroll column names."
+
+            grouped_rows = {}
+            for row in extraction["mapped_rows"]:
+                group_name = str(row.get("client_company") or "").strip()
+                if group_name:
+                    grouped_rows.setdefault(group_name, []).append(row)
+
+            if not grouped_rows:
+                unmatched_sheets.append(
+                    {
+                        "sheet_name": candidate["sheet_name"],
+                        "reason": "Consolidated sheet has no Client or Company column.",
+                    }
+                )
+                continue
+
+            for group_name, group_rows in grouped_rows.items():
+                client = match_client_for_sheet(group_name, clients)
+                if not client:
+                    unmatched_sheets.append(
+                        {
+                            "sheet_name": f"{candidate['sheet_name']} - {group_name}",
+                            "reason": "Client group could not be matched.",
+                        }
+                    )
+                    continue
+                runs.append(
+                    build_run_payload_from_extraction(
+                        extraction,
+                        group_rows,
+                        file_path,
+                        source_filename,
+                        client,
+                        month,
+                        year,
+                        known_names,
+                        detected_company_name=group_name,
+                    )
+                )
+            continue
+
         client = match_client_for_sheet(candidate["sheet_name"], clients)
         if not client:
             unmatched_sheets.append(candidate)
             continue
         extraction = extract_payroll_sheet(file_path, candidate["sheet_name"])
         if not extraction["mapped_rows"]:
-            continue
-        detected_company_name = detect_company_name(file_path, known_names, candidate["sheet_name"])
-        validation = validate_payroll_rows(
-            extraction["mapped_rows"], client, month, year, detected_company_name
-        )
-        import_summary = summarize_import(extraction["mapped_rows"], validation)
+            return None, f"No valid worker rows extracted from sheet '{candidate['sheet_name']}'. Check that the header row contains recognizable payroll column names."
         runs.append(
-            {
-                "mode": "single_client",
-                "source_filename": source_filename,
-                "matched_sheet_name": candidate["sheet_name"],
-                "detected_header_row": extraction["detected_header_row"],
-                "client_company_id": client.id,
-                "client_company_name": client.name,
-                "month": month,
-                "year": year,
-                "columns": extraction["columns"],
-                "mapping": extraction["mapping"],
-                "unmapped_columns": [column for column, field in extraction["mapping"].items() if field == "unmapped"],
-                "preview_rows": extraction["preview_rows"],
-                "mapped_rows": extraction["mapped_rows"],
-                "worker_stats": extraction["worker_stats"],
-                "status_breakdown": extraction["status_breakdown"],
-                "import_summary": import_summary,
-                "detected_company_name": detected_company_name,
-                "validation": validation,
-            }
+            build_run_payload_from_extraction(
+                extraction,
+                extraction["mapped_rows"],
+                file_path,
+                source_filename,
+                client,
+                month,
+                year,
+                known_names,
+            )
         )
 
     if not runs:
