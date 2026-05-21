@@ -1,5 +1,6 @@
 from calendar import month_name
 from datetime import datetime
+import os
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, url_for
 from flask_login import login_required
@@ -8,7 +9,17 @@ from sqlalchemy import func
 from app import db
 from app.auth import role_required
 from app.excel_utils import export_employees
-from app.models import ClientCompany, Employee, Expense, PayrollItem, PayrollRun
+from app.models import (
+    AuditTrail,
+    ClientCompany,
+    Employee,
+    Expense,
+    PaymentVoucher,
+    PayrollItem,
+    PayrollRun,
+    Remittance,
+    User,
+)
 
 main_bp = Blueprint("main", __name__)
 
@@ -21,6 +32,32 @@ def index():
 @main_bp.route("/health")
 def health():
     return {"status": "ok", "service": "chrisnat-payroll-mvp"}
+
+
+@main_bp.route("/admin/db-health")
+@role_required("admin")
+def db_health():
+    database_type = current_app.config.get("DATABASE_TYPE_LABEL") or db.engine.name.title()
+    sqlite_on_render_warning = (
+        db.engine.name == "sqlite" and bool(os.getenv("RENDER"))
+    )
+    return render_template(
+        "db_health.html",
+        database_type=database_type,
+        database_url_detected=bool(os.getenv("DATABASE_URL")),
+        sqlite_on_render_warning=sqlite_on_render_warning,
+        counts={
+            "users": User.query.count(),
+            "clients": ClientCompany.query.count(),
+            "employees": Employee.query.count(),
+            "payroll_runs": PayrollRun.query.count(),
+            "payroll_items": PayrollItem.query.count(),
+            "vouchers": PaymentVoucher.query.count(),
+            "remittances": Remittance.query.count(),
+            "expenses": Expense.query.count(),
+            "audit_logs": AuditTrail.query.count(),
+        },
+    )
 
 
 @main_bp.route("/dashboard")

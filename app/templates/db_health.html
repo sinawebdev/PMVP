@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block page_title %}Database Health{% endblock %}
+{% block page_intro %}Confirm the deployed app is using persistent database storage and that core records are being saved to SQL tables.{% endblock %}
+{% block content %}
+<section class="stats-grid">
+    <div class="stat-card"><i class="bi bi-database-check stat-icon"></i><span>Database Type</span><strong>{{ database_type }}</strong></div>
+    <div class="stat-card"><i class="bi bi-link-45deg stat-icon"></i><span>DATABASE_URL Detected</span><strong>{{ "Yes" if database_url_detected else "No" }}</strong></div>
+    <div class="stat-card"><i class="bi bi-people stat-icon"></i><span>Users</span><strong>{{ counts.users }}</strong></div>
+    <div class="stat-card"><i class="bi bi-buildings stat-icon"></i><span>Client Companies</span><strong>{{ counts.clients }}</strong></div>
+    <div class="stat-card"><i class="bi bi-person-vcard stat-icon"></i><span>Employees</span><strong>{{ counts.employees }}</strong></div>
+    <div class="stat-card"><i class="bi bi-cash-stack stat-icon"></i><span>Payroll Runs</span><strong>{{ counts.payroll_runs }}</strong></div>
+    <div class="stat-card"><i class="bi bi-grid-3x3-gap stat-icon"></i><span>Payroll Items</span><strong>{{ counts.payroll_items }}</strong></div>
+    <div class="stat-card"><i class="bi bi-receipt stat-icon"></i><span>Vouchers</span><strong>{{ counts.vouchers }}</strong></div>
+    <div class="stat-card"><i class="bi bi-shield-check stat-icon"></i><span>Remittances</span><strong>{{ counts.remittances }}</strong></div>
+    <div class="stat-card"><i class="bi bi-wallet2 stat-icon"></i><span>Expenses</span><strong>{{ counts.expenses }}</strong></div>
+    <div class="stat-card"><i class="bi bi-activity stat-icon"></i><span>Audit Logs</span><strong>{{ counts.audit_logs }}</strong></div>
+</section>
+
+{% if sqlite_on_render_warning %}
+<section class="alert alert-danger mt-3">
+    <strong>Warning:</strong> This Render deployment is using SQLite. Add a Render PostgreSQL `DATABASE_URL` environment variable and redeploy before storing live payroll data.
+</section>
+{% endif %}
+
+<section class="panel mt-3">
+    <div class="panel-header"><h2><i class="bi bi-info-circle"></i>Persistence Check</h2></div>
+    <p class="mb-0">On Render, this page should show <strong>Database Type: PostgreSQL</strong> and <strong>DATABASE_URL Detected: Yes</strong>. The connection string is intentionally not displayed.</p>
+</section>
+{% endblock %}

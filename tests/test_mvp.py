@@ -4,6 +4,7 @@ import unittest
 from io import BytesIO
 
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["SEED_DEMO_DATA"] = "true"
 
 from openpyxl import Workbook
 
@@ -279,6 +280,30 @@ class MvpTestCase(unittest.TestCase):
             else:
                 os.environ["DATABASE_URL"] = previous_url
 
+    def test_default_seed_does_not_create_demo_payroll_without_flag(self):
+        previous_url = os.environ.get("DATABASE_URL")
+        previous_seed = os.environ.get("SEED_DEMO_DATA")
+        sqlite_path = os.path.join(self.temp_dir.name, "starter_only.db")
+        os.environ["DATABASE_URL"] = f"sqlite:///{sqlite_path}"
+        os.environ["SEED_DEMO_DATA"] = "false"
+        try:
+            starter_app = create_app()
+            with starter_app.app_context():
+                self.assertGreater(User.query.count(), 0)
+                self.assertGreater(ClientCompany.query.count(), 0)
+                self.assertEqual(PayrollRun.query.count(), 0)
+                db.session.remove()
+                db.engine.dispose()
+        finally:
+            if previous_url is None:
+                os.environ.pop("DATABASE_URL", None)
+            else:
+                os.environ["DATABASE_URL"] = previous_url
+            if previous_seed is None:
+                os.environ.pop("SEED_DEMO_DATA", None)
+            else:
+                os.environ["SEED_DEMO_DATA"] = previous_seed
+
     def test_column_mapping_handles_common_payroll_headers(self):
         mapping = map_columns(["Staff No", "Employee Name", "Basic Salary", "Take Home"])
 
@@ -363,6 +388,16 @@ class MvpTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn("/login", response.headers["Location"])
+
+    def test_admin_db_health_page_reports_database_counts(self):
+        self.login_admin()
+        response = self.client.get("/admin/db-health")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Database Type", response.data)
+        self.assertIn(b"DATABASE_URL Detected", response.data)
+        self.assertIn(b"Payroll Runs", response.data)
+        self.assertNotIn(b"password", response.data.lower())
 
     def test_worker_stats_use_unique_worker_identity(self):
         rows = [

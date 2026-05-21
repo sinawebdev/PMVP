@@ -1,3 +1,4 @@
+import os
 from datetime import date, datetime
 
 from app import db
@@ -8,9 +9,10 @@ from app.models import ClientCompany, Employee, Expense, PayrollItem, PayrollRun
 def seed_default_data():
     seed_users()
     seed_clients()
-    seed_employees()
-    seed_payroll()
-    seed_expenses()
+    if os.getenv("SEED_DEMO_DATA", "false").lower() == "true":
+        seed_employees()
+        seed_payroll()
+        seed_expenses()
     db.session.commit()
 
 

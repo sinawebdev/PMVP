@@ -20,6 +20,14 @@ def resolve_database_uri(local_sqlite_path):
     return f"sqlite:///{local_sqlite_path}"
 
 
+def database_type_label(database_uri):
+    if str(database_uri or "").startswith("postgresql://"):
+        return "PostgreSQL"
+    if str(database_uri or "").startswith("sqlite"):
+        return "SQLite"
+    return "Other"
+
+
 def format_ghana_cedis(value):
     try:
         amount = float(value or 0)
@@ -48,6 +56,15 @@ def create_app():
     app.config["SQLALCHEMY_DATABASE_URI"] = resolve_database_uri(
         os.path.join(app.instance_path, "chrisnat_payroll.db")
     )
+    database_type = database_type_label(app.config["SQLALCHEMY_DATABASE_URI"])
+    app.config["DATABASE_TYPE_LABEL"] = database_type
+    startup_message = (
+        "Using PostgreSQL database"
+        if database_type == "PostgreSQL"
+        else "Using local SQLite database"
+    )
+    print(startup_message)
+    app.logger.info(startup_message)
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
