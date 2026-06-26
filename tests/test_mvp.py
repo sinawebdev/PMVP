@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from datetime import date, datetime
 from io import BytesIO
 
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
@@ -13,7 +14,7 @@ from app import create_app, format_ghana_cedis
 from app.pdf_service import generate_payslip_pdf
 from app.excel_utils import calculate_worker_stats, map_columns
 from app import db
-from app.models import ClientCompany, Employee, PayrollItem, PayrollRun, User
+from app.models import AuditTrail, ClientCompany, Employee, Expense, PayrollItem, PayrollRun, User
 
 
 class MvpTestCase(unittest.TestCase):
@@ -38,6 +39,20 @@ class MvpTestCase(unittest.TestCase):
         return self.client.post(
             "/login",
             data={"email": "md@chrisnat.local", "password": "password123"},
+            follow_redirects=True,
+        )
+
+    def login_operations(self):
+        return self.client.post(
+            "/login",
+            data={"email": "operations@chrisnat.local", "password": "password123"},
+            follow_redirects=True,
+        )
+
+    def login_client(self, email="msc.client@chrisnat.local"):
+        return self.client.post(
+            "/login",
+            data={"email": email, "password": "password123"},
             follow_redirects=True,
         )
 
@@ -305,6 +320,37 @@ class MvpTestCase(unittest.TestCase):
             else:
                 os.environ["DATABASE_URL"] = previous_url
 
+    def test_production_requires_persistent_database_url(self):
+        previous_url = os.environ.get("DATABASE_URL")
+        previous_render = os.environ.get("RENDER")
+        previous_flask_env = os.environ.get("FLASK_ENV")
+        previous_skip_dotenv = os.environ.get("SKIP_DOTENV")
+        os.environ.pop("DATABASE_URL", None)
+        os.environ["RENDER"] = "true"
+        os.environ["SKIP_DOTENV"] = "true"
+        os.environ.pop("FLASK_ENV", None)
+        try:
+            with self.assertRaises(RuntimeError) as context:
+                create_app()
+            self.assertIn("DATABASE_URL", str(context.exception))
+        finally:
+            if previous_url is None:
+                os.environ.pop("DATABASE_URL", None)
+            else:
+                os.environ["DATABASE_URL"] = previous_url
+            if previous_render is None:
+                os.environ.pop("RENDER", None)
+            else:
+                os.environ["RENDER"] = previous_render
+            if previous_flask_env is None:
+                os.environ.pop("FLASK_ENV", None)
+            else:
+                os.environ["FLASK_ENV"] = previous_flask_env
+            if previous_skip_dotenv is None:
+                os.environ.pop("SKIP_DOTENV", None)
+            else:
+                os.environ["SKIP_DOTENV"] = previous_skip_dotenv
+
     def test_default_seed_does_not_create_demo_payroll_without_flag(self):
         previous_url = os.environ.get("DATABASE_URL")
         previous_seed = os.environ.get("SEED_DEMO_DATA")
@@ -328,6 +374,59 @@ class MvpTestCase(unittest.TestCase):
                 os.environ.pop("SEED_DEMO_DATA", None)
             else:
                 os.environ["SEED_DEMO_DATA"] = previous_seed
+
+    def test_payroll_records_persist_across_app_restart_with_same_database(self):
+        previous_url = os.environ.get("DATABASE_URL")
+        previous_seed = os.environ.get("SEED_DEMO_DATA")
+        previous_persistence = os.environ.get("PERSISTENCE_REQUIRED")
+        sqlite_path = os.path.join(self.temp_dir.name, "persistent_payroll.db")
+        os.environ["DATABASE_URL"] = f"sqlite:///{sqlite_path}"
+        os.environ["SEED_DEMO_DATA"] = "false"
+        os.environ["PERSISTENCE_REQUIRED"] = "false"
+        try:
+            first_app = create_app()
+            with first_app.app_context():
+                admin = User.query.filter_by(email="admin@chrisnat.local").first()
+                client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+                payroll_run = PayrollRun(
+                    month="December",
+                    year=2099,
+                    status="Draft",
+                    created_by=admin.id,
+                    client_company_id=client_company.id,
+                    total_workers=1,
+                    total_net_pay=1234.56,
+                    source_filename="restart-proof.xlsx",
+                )
+                db.session.add(payroll_run)
+                db.session.commit()
+                db.session.remove()
+                db.engine.dispose()
+
+            second_app = create_app()
+            with second_app.app_context():
+                persisted_run = PayrollRun.query.filter_by(
+                    month="December",
+                    year=2099,
+                    source_filename="restart-proof.xlsx",
+                ).first()
+                self.assertIsNotNone(persisted_run)
+                self.assertEqual(persisted_run.total_net_pay, 1234.56)
+                db.session.remove()
+                db.engine.dispose()
+        finally:
+            if previous_url is None:
+                os.environ.pop("DATABASE_URL", None)
+            else:
+                os.environ["DATABASE_URL"] = previous_url
+            if previous_seed is None:
+                os.environ.pop("SEED_DEMO_DATA", None)
+            else:
+                os.environ["SEED_DEMO_DATA"] = previous_seed
+            if previous_persistence is None:
+                os.environ.pop("PERSISTENCE_REQUIRED", None)
+            else:
+                os.environ["PERSISTENCE_REQUIRED"] = previous_persistence
 
     def test_column_mapping_handles_common_payroll_headers(self):
         mapping = map_columns(["Staff No", "Employee Name", "Basic Salary", "Take Home"])
@@ -459,10 +558,322 @@ class MvpTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
-        self.assertEqual(data["connection_status"], "ok")
+        self.assertEqual(data["status"], "connected")
         self.assertIn(data["database_type"], {"SQLite", "PostgreSQL", "Other"})
-        self.assertTrue(data["uri_prefix"].endswith("://"))
+        self.assertEqual(
+            data["uri_prefix"],
+            self.app.config["SQLALCHEMY_DATABASE_URI"].split(":", 1)[0] + "://",
+        )
         self.assertNotIn("password", response.data.decode().lower())
+
+    def test_setup_local_db_creates_database_when_missing(self):
+        from setup_local_db import ensure_database_exists
+
+        executed = []
+
+        class FakeCursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            def execute(self, statement, params=None):
+                executed.append((statement, params))
+
+            def fetchone(self):
+                return None
+
+        class FakeConnection:
+            def __init__(self):
+                self.autocommit = False
+
+            def cursor(self):
+                return FakeCursor()
+
+            def close(self):
+                executed.append(("closed", None))
+
+        def connect(**kwargs):
+            executed.append(("connect", kwargs))
+            return FakeConnection()
+
+        ensure_database_exists(connect, db_name="chrisnat_payroll")
+
+        self.assertIn(("connect", {"dbname": "postgres"}), executed)
+        self.assertIn(
+            ("CREATE DATABASE chrisnat_payroll", None),
+            executed,
+        )
+
+    def test_employee_database_section_is_removed(self):
+        self.login_admin()
+
+        for path in [
+            "/employee-database",
+            "/employee-database/employees/new",
+            "/employees",
+            "/employees/export",
+        ]:
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 404)
+
+    def test_phase2_and_phase3_routes_are_archived_from_active_mvp(self):
+        self.login_admin()
+
+        for path in [
+            "/operations-dashboard",
+            "/assignments",
+            "/attendance",
+            "/cleaning-jobs",
+            "/client-portal",
+            "/invoices",
+            "/goods-orders",
+            "/products",
+            "/proposals",
+        ]:
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 404)
+
+    def test_operations_supervisor_seed_user_exists(self):
+        with self.app.app_context():
+            user = User.query.filter_by(email="operations@chrisnat.local").first()
+
+        self.assertIsNotNone(user)
+        self.assertEqual(user.role, "operations_supervisor")
+        self.assertTrue(user.check_password("password123"))
+
+    @unittest.skip("Archived Phase 2 operations feature; not part of active Phase 1 MVP.")
+    def test_assignment_warning_detects_duplicate_active_assignment(self):
+        from app.models import WorkerAssignment
+        from app.operations_services import assignment_warnings
+
+        with self.app.app_context():
+            employee = Employee.query.first()
+            first_client = ClientCompany.query.first()
+            second_client = ClientCompany.query.offset(1).first()
+            db.session.add(
+                WorkerAssignment(
+                    employee_id=employee.id,
+                    client_company_id=first_client.id,
+                    role="Cleaner",
+                    status="Active",
+                    assignment_start_date=datetime.now().date(),
+                    created_by=1,
+                )
+            )
+            db.session.commit()
+
+            assignment = WorkerAssignment(
+                employee_id=employee.id,
+                client_company_id=second_client.id,
+                role="Cleaner",
+                status="Active",
+                assignment_start_date=datetime.now().date(),
+            )
+            warnings = assignment_warnings(assignment)
+
+        self.assertTrue(any("active assignment" in warning for warning in warnings))
+
+    @unittest.skip("Archived Phase 2 operations feature; not part of active Phase 1 MVP.")
+    def test_attendance_hours_and_overtime_are_calculated(self):
+        from datetime import time
+
+        from app.models import AttendanceRecord
+        from app.operations_services import apply_attendance_calculations
+
+        record = AttendanceRecord(
+            attendance_status="Present",
+            clock_in=time(8, 0),
+            clock_out=time(18, 30),
+        )
+        warnings = apply_attendance_calculations(record)
+
+        self.assertEqual(record.hours_worked, 10.5)
+        self.assertEqual(record.overtime_hours, 2.5)
+        self.assertEqual(warnings, [])
+
+    @unittest.skip("Archived Phase 2 operations feature; not part of active Phase 1 MVP.")
+    def test_operations_dashboard_is_available_to_operations_supervisor(self):
+        self.login_operations()
+        response = self.client.get("/operations-dashboard")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Worker Availability Summary", response.data)
+        self.assertIn(b"Cleaning Jobs Today", response.data)
+
+    @unittest.skip("Archived Phase 2 operations feature; not part of active Phase 1 MVP.")
+    def test_cleaning_job_completion_report_marks_job_completed(self):
+        from app.models import CleaningJob
+
+        self.login_operations()
+        with self.app.app_context():
+            client = ClientCompany.query.first()
+            job = CleaningJob(
+                client_company_id=client.id,
+                job_title="Office Cleaning Test",
+                job_type="Office Cleaning",
+                location="Tema",
+                scheduled_date=datetime.now().date(),
+                status="Scheduled",
+                created_by=1,
+            )
+            db.session.add(job)
+            db.session.commit()
+            job_id = job.id
+
+        response = self.client.post(
+            f"/cleaning-jobs/{job_id}/completion-report",
+            data={
+                "completion_status": "Completed Successfully",
+                "workers_present": "2",
+                "workers_absent": "0",
+                "checklist_completed": "on",
+                "issues_found": "",
+                "client_feedback": "Good",
+                "supervisor_comments": "Done",
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        with self.app.app_context():
+            job = db.session.get(CleaningJob, job_id)
+            self.assertEqual(job.status, "Completed")
+
+    @unittest.skip("Archived Phase 3 client portal feature; not part of active Phase 1 MVP.")
+    def test_client_user_seed_is_limited_to_client_portal(self):
+        self.login_client()
+
+        portal_response = self.client.get("/client-portal")
+        dashboard_response = self.client.get("/dashboard", follow_redirects=False)
+
+        self.assertEqual(portal_response.status_code, 200)
+        self.assertIn(b"Client Portal", portal_response.data)
+        self.assertEqual(dashboard_response.status_code, 302)
+        self.assertIn("/client-portal", dashboard_response.headers["Location"])
+
+    @unittest.skip("Archived Phase 3 invoicing feature; not part of active Phase 1 MVP.")
+    def test_client_user_cannot_view_another_clients_invoice(self):
+        from app.models import Invoice
+
+        self.login_client("msc.client@chrisnat.local")
+        with self.app.app_context():
+            stellar = ClientCompany.query.filter_by(name="Stellar Logistics").first()
+            invoice = Invoice.query.filter_by(client_company_id=stellar.id).first()
+            invoice_id = invoice.id
+
+        response = self.client.get(f"/client-portal/invoices/{invoice_id}", follow_redirects=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"Stellar Logistics", response.data)
+        self.assertIn(b"access", response.data.lower())
+
+    @unittest.skip("Archived Phase 3 client portal feature; not part of active Phase 1 MVP.")
+    def test_client_can_submit_service_request_for_own_company(self):
+        from app.models import ClientServiceRequest
+
+        self.login_client()
+        response = self.client.post(
+            "/client-portal/requests/new",
+            data={
+                "request_type": "Cleaning Request",
+                "title": "Extra office cleaning",
+                "description": "Please schedule extra cleaning.",
+                "requested_date": date.today().isoformat(),
+                "location": "Tema office",
+                "number_of_workers_requested": "2",
+                "priority": "High",
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        with self.app.app_context():
+            request_row = ClientServiceRequest.query.filter_by(title="Extra office cleaning").first()
+            self.assertIsNotNone(request_row)
+            self.assertEqual(request_row.client_company.name, "MSC Ghana Ltd")
+
+    @unittest.skip("Archived Phase 3 invoicing feature; not part of active Phase 1 MVP.")
+    def test_invoice_payment_updates_balance_and_status(self):
+        from app.models import Invoice
+
+        self.login_admin()
+        with self.app.app_context():
+            invoice = Invoice.query.filter(Invoice.total_amount > 0).first()
+            invoice_id = invoice.id
+            total = invoice.total_amount
+
+        self.client.post(
+            f"/invoices/{invoice_id}/record-payment",
+            data={
+                "payment_date": date.today().isoformat(),
+                "amount_paid": str(total / 2),
+                "payment_method": "Bank Transfer",
+                "reference_number": "PART-001",
+            },
+        )
+        with self.app.app_context():
+            invoice = db.session.get(Invoice, invoice_id)
+            self.assertEqual(invoice.status, "Partially Paid")
+            self.assertGreater(invoice.balance_due, 0)
+
+        self.client.post(
+            f"/invoices/{invoice_id}/record-payment",
+            data={
+                "payment_date": date.today().isoformat(),
+                "amount_paid": str(total),
+                "payment_method": "Bank Transfer",
+                "reference_number": "FULL-001",
+            },
+        )
+        with self.app.app_context():
+            invoice = db.session.get(Invoice, invoice_id)
+            self.assertEqual(invoice.status, "Paid")
+            self.assertEqual(invoice.balance_due, 0)
+
+    @unittest.skip("Archived Phase 3 goods feature; not part of active Phase 1 MVP.")
+    def test_goods_delivery_reduces_stock_and_logs_movement(self):
+        from app.models import GoodsSupplyOrder, InventoryMovement, Product
+
+        self.login_admin()
+        with self.app.app_context():
+            order = GoodsSupplyOrder.query.filter(GoodsSupplyOrder.items.any()).first()
+            item = order.items[0]
+            product_id = item.product_id
+            starting_stock = item.product.current_stock
+            order_id = order.id
+            quantity = item.quantity
+
+        response = self.client.post(f"/goods-orders/{order_id}/deliver", follow_redirects=True)
+
+        self.assertEqual(response.status_code, 200)
+        with self.app.app_context():
+            product = db.session.get(Product, product_id)
+            self.assertEqual(product.current_stock, starting_stock - quantity)
+            self.assertIsNotNone(
+                InventoryMovement.query.filter_by(
+                    reference_type="GoodsSupplyOrder",
+                    reference_id=order_id,
+                ).first()
+            )
+
+    @unittest.skip("Archived Phase 3 invoicing feature; not part of active Phase 1 MVP.")
+    def test_invoice_exports_are_generated_from_database(self):
+        from app.models import Invoice
+
+        self.login_admin()
+        with self.app.app_context():
+            invoice_id = Invoice.query.first().id
+
+        pdf_response = self.client.get(f"/invoices/{invoice_id}/export-pdf")
+        excel_response = self.client.get(f"/invoices/{invoice_id}/export-excel")
+
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertEqual(pdf_response.headers["Content-Type"], "application/pdf")
+        self.assertTrue(pdf_response.data.startswith(b"%PDF"))
+        self.assertEqual(excel_response.status_code, 200)
+        self.assertIn("spreadsheet", excel_response.headers["Content-Type"])
 
     def test_worker_stats_use_unique_worker_identity(self):
         rows = [
@@ -488,7 +899,7 @@ class MvpTestCase(unittest.TestCase):
             client_id = client_company.id
 
         response = self.client.post(
-            "/payroll/upload",
+            "/payroll/runs",
             data={
                 "client_company_id": str(client_id),
                 "month": "February",
@@ -522,7 +933,7 @@ class MvpTestCase(unittest.TestCase):
             client_id = client_company.id
 
         response = self.client.post(
-            "/payroll/upload",
+            "/payroll/runs",
             data={
                 "client_company_id": str(client_id),
                 "month": "May",
@@ -564,7 +975,7 @@ class MvpTestCase(unittest.TestCase):
             original_batches = ImportBatch.query.count()
 
         response = self.client.post(
-            "/payroll/upload",
+            "/payroll/runs",
             data={
                 "client_company_id": str(client_id),
                 "month": "June",
@@ -585,7 +996,7 @@ class MvpTestCase(unittest.TestCase):
         from app.models import ImportBatch
 
         response = self.client.post(
-            "/payroll/upload",
+            "/payroll/runs",
             data={
                 "import_mode": "multi_client",
                 "month": "April",
@@ -620,7 +1031,7 @@ class MvpTestCase(unittest.TestCase):
         self.login_admin()
 
         response = self.client.post(
-            "/payroll/upload",
+            "/payroll/runs",
             data={
                 "import_mode": "multi_client",
                 "month": "July",
@@ -657,6 +1068,13 @@ class MvpTestCase(unittest.TestCase):
         with self.app.app_context():
             client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
             client_id = client_company.id
+            # Seed a colliding run so the duplicate guard is exercised regardless of
+            # the real-world date. The demo seed only creates a run for the *current*
+            # month, so without this the test only passed when run in May 2026.
+            db.session.add(
+                PayrollRun(client_company_id=client_id, month="May", year=2026, status="Draft")
+            )
+            db.session.commit()
             original_count = PayrollRun.query.filter_by(
                 client_company_id=client_id,
                 month="May",
@@ -664,7 +1082,7 @@ class MvpTestCase(unittest.TestCase):
             ).count()
 
         upload_response = self.client.post(
-            "/payroll/upload",
+            "/payroll/runs",
             data={
                 "client_company_id": str(client_id),
                 "month": "May",
@@ -694,58 +1112,42 @@ class MvpTestCase(unittest.TestCase):
         for path in [
             "/dashboard",
             "/clients",
-            "/employees",
             "/payroll/runs",
-            "/accounts/",
-            "/accounts/vouchers",
-            "/accounts/remittances",
-            "/proposals",
+            "/payslip",
+            "/audit",
         ]:
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 200)
 
-    def test_accounts_dashboard_is_finance_control_center(self):
+    def test_removed_finance_report_and_upload_routes_are_inactive(self):
         self.login_admin()
-        with self.app.app_context():
-            admin = User.query.filter_by(email="admin@chrisnat.local").first()
-            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
-            missing_voucher_run = PayrollRun(
-                month="May",
-                year=2026,
-                status="Approved",
-                created_by=admin.id,
-                client_company_id=client_company.id,
-                total_workers=2,
-                total_gross_pay=3000,
-                total_deductions=500,
-                total_net_pay=2500,
-                total_paye=300,
-                total_ssnit=200,
-            )
-            db.session.add(missing_voucher_run)
-            db.session.commit()
 
-        response = self.client.get("/accounts/")
+        for path in [
+            "/payroll/upload",
+            "/accounts/",
+            "/accounts/vouchers",
+            "/accounts/remittances",
+            "/accounts/expenses",
+            "/reports",
+        ]:
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 404)
+
+    def test_navigation_is_clean_payroll_mvp(self):
+        response = self.login_admin()
 
         self.assertEqual(response.status_code, 200)
-        for text in [
-            b"Approved Payrolls Awaiting Payment",
-            b"Total Net Pay This Month",
-            b"PAYE Due",
-            b"SSNIT Due",
-            b"Expenses This Month",
-            b"Overdue Remittances",
-            b"Action Required",
-            b"Approved payrolls without payment vouchers",
-            b"Client Payroll Cost Breakdown",
-            b"Recent Payment Vouchers",
-            b"Recent Expenses",
-            b"Recorded By",
-            b"Remittances",
-        ]:
+        for text in [b"Dashboard", b"Client Companies", b"Payroll Runs", b"Payslip", b"Audit"]:
             self.assertIn(text, response.data)
-        self.assertIn(b"compact-topbar", response.data)
-        self.assertNotIn(b"Admin User | Admin", response.data)
+        for text in [
+            b"Employee Database",
+            b"Upload Payroll Excel",
+            b"Accounts Dashboard",
+            b"Payment Vouchers",
+            b"Remittances",
+            b"Reports",
+        ]:
+            self.assertNotIn(text, response.data)
 
     def test_dashboard_has_month_filter_sparkbars_and_action_queue(self):
         self.login_admin()
@@ -753,7 +1155,9 @@ class MvpTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"dashboard-controls", response.data)
-        self.assertIn(b"sparkbar", response.data)
+        # Cost Signal column renders a sparkbar when there is cost data, or a
+        # "no data" placeholder otherwise — assert the column itself is present.
+        self.assertIn(b"Cost Signal", response.data)
         self.assertIn(b"Approval Queue", response.data)
         self.assertIn(b"No run submitted", response.data)
 
@@ -771,7 +1175,7 @@ class MvpTestCase(unittest.TestCase):
         self.assertIn(b"Approval queue", response.data)
         self.assertNotIn(b"Approved</span>", response.data)
 
-    def test_approval_creates_voucher_and_remittances(self):
+    def test_approval_updates_status_and_logs_audit_without_finance_records(self):
         self.login_admin()
         with self.app.app_context():
             payroll_run = PayrollRun.query.first()
@@ -783,22 +1187,27 @@ class MvpTestCase(unittest.TestCase):
         with self.app.app_context():
             payroll_run = db.session.get(PayrollRun, run_id)
             self.assertEqual(payroll_run.status, "Approved")
-            self.assertIsNotNone(payroll_run.voucher)
-            self.assertEqual({item.remittance_type for item in payroll_run.remittances}, {"PAYE", "SSNIT"})
+            self.assertIsNone(payroll_run.voucher)
+            self.assertEqual(len(payroll_run.remittances), 0)
+            self.assertIsNotNone(
+                AuditTrail.query.filter_by(
+                    action="Payroll approval",
+                    related_record_type="PayrollRun",
+                    related_record_id=run_id,
+                ).first()
+            )
 
     def test_md_has_admin_clearance_for_admin_pages(self):
         response = self.login_md()
         self.assertEqual(response.status_code, 200)
 
         self.assertEqual(self.client.get("/clients/add").status_code, 200)
-        self.assertEqual(self.client.get("/employees/add").status_code, 200)
-        self.assertEqual(self.client.get("/payroll/upload").status_code, 200)
-        self.assertEqual(self.client.get("/reports").status_code, 200)
+        self.assertEqual(self.client.get("/payroll/runs").status_code, 200)
+        self.assertEqual(self.client.get("/payslip").status_code, 200)
         self.assertEqual(self.client.get("/audit").status_code, 200)
 
-    def test_phase2_payroll_workflow_creates_audit_trail_and_voucher_fields(self):
+    def test_payroll_workflow_uses_pending_approval_and_audit(self):
         self.login_admin()
-        from app.models import AuditTrail
 
         with self.app.app_context():
             payroll_run = PayrollRun(
@@ -842,13 +1251,10 @@ class MvpTestCase(unittest.TestCase):
         with self.app.app_context():
             run = db.session.get(PayrollRun, run_id)
             self.assertEqual(run.status, "Approved")
-            self.assertIsNotNone(run.voucher)
-            self.assertEqual(run.voucher.status, "Pending Payment")
-            self.assertEqual(run.voucher.gross_payroll, 1200)
-            self.assertEqual(run.voucher.net_amount_payable, 1100)
+            self.assertIsNone(run.voucher)
             self.assertGreaterEqual(AuditTrail.query.filter_by(related_record_type="PayrollRun", related_record_id=run_id).count(), 3)
 
-    def test_accounts_can_mark_approved_payroll_paid(self):
+    def test_accounts_can_mark_approved_payroll_processed(self):
         self.login_admin()
         with self.app.app_context():
             payroll_run = PayrollRun.query.first()
@@ -866,26 +1272,40 @@ class MvpTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         with self.app.app_context():
             run = db.session.get(PayrollRun, run_id)
-            self.assertEqual(run.status, "Paid")
-            self.assertEqual(run.voucher.status, "Paid")
+            self.assertEqual(run.status, "Processed")
 
-    def test_md_can_record_expenses(self):
+    def test_audit_page_records_expenses(self):
         self.login_md()
+        with self.app.app_context():
+            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            payroll_run = PayrollRun.query.filter_by(client_company_id=client_company.id).first()
+            client_id = client_company.id
+            run_id = payroll_run.id
+
         response = self.client.post(
-            "/accounts/expenses",
+            "/audit/expenses",
             data={
+                "title": "Client visit transport",
                 "expense_date": "2026-05-19",
                 "category": "Transport",
                 "description": "MD approved client visit transport",
                 "amount": "125.50",
-                "payment_method": "Mobile Money",
-                "receipt_reference": "MD-EXP-001",
+                "client_company_id": str(client_id),
+                "payroll_run_id": str(run_id),
+                "recorded_by": "Managing Director",
             },
             follow_redirects=True,
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Expense recorded.", response.data)
+        self.assertIn(b"Client visit transport", response.data)
+        self.assertIn(b"Tuesday", response.data)
+        with self.app.app_context():
+            expense = Expense.query.filter_by(title="Client visit transport").first()
+            self.assertIsNotNone(expense)
+            self.assertEqual(expense.payroll_run_id, run_id)
+            self.assertIsNotNone(AuditTrail.query.filter_by(action="Expense recorded").first())
 
     def test_payslip_pdf_service_creates_pdf_file(self):
         with self.app.app_context():
@@ -940,7 +1360,7 @@ class MvpTestCase(unittest.TestCase):
             client_id = client_company.id
 
         upload_response = self.client.post(
-            "/payroll/upload",
+            "/payroll/runs",
             data={
                 "client_company_id": str(client_id),
                 "month": "January",
@@ -985,6 +1405,43 @@ class MvpTestCase(unittest.TestCase):
         self.assertIn(b"MSC Ghana Ltd", response.data)
         self.assertNotIn(b"stellar.xlsx", response.data)
 
+    def test_payroll_runs_page_contains_embedded_upload_form(self):
+        self.login_admin()
+        response = self.client.get("/payroll/runs")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Create Payroll Run", response.data)
+        self.assertIn(b'name="payroll_file"', response.data)
+        self.assertIn(b'name="client_company_id"', response.data)
+        self.assertIn(b"excel-grid", response.data)
+        self.assertNotIn(b'href="/payroll/upload"', response.data)
+
+    def test_payslip_module_selects_client_run_and_generates_view(self):
+        self.login_admin()
+        with self.app.app_context():
+            payroll_run = PayrollRun.query.first()
+            run_id = payroll_run.id
+            client_id = payroll_run.client_company_id
+            item_ids = [item.id for item in payroll_run.items[:2]]
+
+        index_response = self.client.get(f"/payslip?client_id={client_id}&run_id={run_id}")
+        self.assertEqual(index_response.status_code, 200)
+        self.assertIn(b"Payslip", index_response.data)
+        self.assertIn(b"excel-grid", index_response.data)
+
+        generate_response = self.client.post(
+            "/payslip/generate",
+            data={"payroll_item_ids": [str(item_id) for item_id in item_ids]},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(generate_response.status_code, 200)
+        self.assertIn(b"Generated Payslips", generate_response.data)
+        self.assertIn(b"Payroll run reference", generate_response.data)
+        with self.app.app_context():
+            self.assertGreaterEqual(AuditTrail.query.filter_by(action="Payslip generated").count(), len(item_ids))
+
+    @unittest.skip("Proposal drafting is archived while the active MVP is reverted to payroll Phase 1.")
     def test_admin_can_create_proposal_draft_for_client(self):
         self.login_admin()
         with self.app.app_context():
@@ -1023,24 +1480,16 @@ class MvpTestCase(unittest.TestCase):
         self.assertIn(b"Previous Month Payroll Cost", response.data)
         self.assertIn(b"Validation Warnings", response.data)
 
-    def test_reports_page_supports_excel_export(self):
+    def test_audit_page_uses_excel_grid_and_audit_name(self):
         self.login_md()
-        response = self.client.get("/reports")
-        export_response = self.client.get("/reports/monthly-payroll.xlsx?month=May&year=2026")
-        pdf_response = self.client.get("/reports/monthly-payroll.pdf?month=May&year=2026")
+        response = self.client.get("/audit")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Monthly payroll summary", response.data)
-        self.assertEqual(export_response.status_code, 200)
-        self.assertIn(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            export_response.headers["Content-Type"],
-        )
-        export_response.close()
-        self.assertEqual(pdf_response.status_code, 200)
-        self.assertEqual(pdf_response.headers["Content-Type"], "application/pdf")
-        self.assertTrue(pdf_response.data.startswith(b"%PDF"))
-        pdf_response.close()
+        # Page is now "Expenses & Audit" and leads with the read-only audit trail.
+        self.assertIn(b"Expenses &amp; Audit", response.data)
+        self.assertIn(b"Audit Trail", response.data)
+        self.assertIn(b"excel-grid", response.data)
+        self.assertIn(b"Day", response.data)
 
 
 if __name__ == "__main__":

@@ -1,15 +1,19 @@
 {% extends "base.html" %}
+{% block title %}Client Companies · Chrisnat Payroll{% endblock %}
 {% block page_title %}Client Companies{% endblock %}
 {% block page_intro %}Maintain the client companies Chrisnat serves, then attach employees and payroll imports to the right business before review or approval begins.{% endblock %}
-{% block header_visual %}<img src="{{ url_for('static', filename='img/people-ops.svg') }}" alt="Client company illustration">{% endblock %}
 {% block content %}
 <div class="toolbar">
     <a class="btn btn-primary" href="{{ url_for('main.add_client') }}"><i class="bi bi-building-add"></i>Add Client Company</a>
 </div>
 <section class="panel">
-    <div class="table-responsive">
-        <table class="table align-middle">
-            <thead><tr><th>Name</th><th>Contact</th><th>Location</th><th>Service Type</th><th>Status</th><th></th></tr></thead>
+    <div class="toolbar">
+        <label class="visually-hidden" for="clients-filter">Filter client companies</label>
+        <input id="clients-filter" class="form-control" type="search" placeholder="Filter clients by name, contact, or location…" data-table-filter="clients-table">
+    </div>
+    <div class="excel-grid-wrap">
+        <table id="clients-table" class="table table-sm align-middle excel-grid">
+            <thead><tr><th scope="col">Name</th><th scope="col">Contact</th><th scope="col">Location</th><th scope="col">Service Type</th><th scope="col">Status</th><th scope="col"></th></tr></thead>
             <tbody>
             {% for client in clients %}
                 <tr>

@@ -1,6 +1,6 @@
 :root {
     --ink: #132034;
-    --muted: #64748b;
+    --muted: #556070;
     --line: #dce8e4;
     --surface: #ffffff;
     --shell: #f2f7f5;
@@ -103,6 +103,24 @@ body {
     transform: translateX(4px);
 }
 
+/* Logout is a low-stakes action, not a danger one — keep it subtle and set apart */
+.sidebar .nav-link.logout-link {
+    color: rgba(255, 255, 255, 0.55);
+    margin-top: 6px;
+}
+
+.sidebar .nav-link.logout-link i {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.sidebar .nav-link.logout-link:hover {
+    color: #fff;
+}
+
+.sidebar .nav-link.logout-link:hover i {
+    color: #fff;
+}
+
 .client-tabs {
     border-top: 1px solid rgba(255, 255, 255, 0.12);
     margin-top: 18px;
@@ -139,12 +157,65 @@ body {
     transform: translateX(4px);
 }
 
+/* Expanded client tab: name row + Overview/Employees sub-links (server-side only) */
+.client-tab-group {
+    margin-bottom: 8px;
+}
+
+.client-tab-group .client-tab {
+    margin-bottom: 0;
+}
+
+.client-tab--active {
+    background: rgba(250, 204, 21, 0.18);
+    border-color: rgba(250, 204, 21, 0.45);
+    color: #fff;
+    font-weight: 700;
+}
+
+.client-tab-sub {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 4px 0 2px;
+    padding-left: 18px;
+}
+
+.client-subtab {
+    border-radius: 6px;
+    color: #d1fae5;
+    font-size: 12px;
+    opacity: 0.75;
+    padding: 4px 10px;
+    text-decoration: none;
+    transition: opacity 150ms ease, background 150ms ease;
+}
+
+.client-subtab:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    opacity: 1;
+}
+
+.client-subtab--active {
+    color: var(--gold);
+    font-weight: 700;
+    opacity: 1;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 .main-content {
     padding: 30px;
+    /* Grid items default to min-width:auto, which lets a wide .excel-grid
+       (min-width:1120px) inflate this column past the viewport and scroll the
+       whole page. min-width:0 lets it shrink so .excel-grid-wrap's overflow:auto
+       scrolls the table inside its own panel instead. */
+    min-width: 0;
 }
 
 .topbar {
-    align-items: stretch;
+    align-items: center;
     background:
         linear-gradient(120deg, rgba(15, 118, 110, 0.96), rgba(17, 94, 89, 0.92)),
         #0f766e;
@@ -152,12 +223,17 @@ body {
     box-shadow: var(--shadow);
     color: #fff;
     display: grid;
-    gap: 22px;
-    grid-template-columns: minmax(0, 1fr) 300px;
-    margin-bottom: 24px;
+    gap: 18px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin-bottom: 20px;
     overflow: hidden;
-    padding: 26px;
+    padding: 18px 22px;
     position: relative;
+}
+
+/* Collapse the visual column entirely when a page provides no illustration */
+.topbar-visual:empty {
+    display: none;
 }
 
 .compact-topbar {
@@ -212,23 +288,24 @@ body {
 }
 
 .topbar h1 {
-    font-size: clamp(28px, 4vw, 42px);
-    font-weight: 850;
-    line-height: 1.08;
-    margin: 0 0 10px;
+    font-size: clamp(22px, 2.6vw, 30px);
+    font-weight: 800;
+    line-height: 1.1;
+    margin: 0 0 5px;
 }
 
 .page-intro {
     color: #d1fae5;
-    font-size: 16px;
-    line-height: 1.65;
-    margin: 0 0 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0 0 6px;
     max-width: 760px;
 }
 
 .signed-in {
-    color: #fef9c3;
+    color: #fffbe6;
     font-size: 13px;
+    font-weight: 600;
 }
 
 .topbar-actions {
@@ -626,6 +703,145 @@ body {
     padding: 12px 14px;
 }
 
+/* Guidance shown where a list/table would be once data exists */
+.empty-state {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 28px 16px;
+    text-align: center;
+}
+
+.empty-state > i {
+    color: var(--brand, #0f766e);
+    font-size: 30px;
+    margin-bottom: 4px;
+    opacity: 0.7;
+}
+
+/* --- Accessibility: skip link, visible keyboard focus, active nav --- */
+.skip-link {
+    background: var(--brand);
+    border-radius: 10px;
+    color: #fff;
+    font-weight: 700;
+    left: 12px;
+    padding: 10px 16px;
+    position: absolute;
+    top: -56px;
+    transition: top 160ms ease;
+    z-index: 1000;
+}
+
+.skip-link:focus {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    top: 12px;
+}
+
+:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+.sidebar a:focus-visible,
+.client-tab:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
+
+.sidebar .nav-link[aria-current="page"] {
+    background: rgba(250, 204, 21, 0.16);
+    border-color: rgba(250, 204, 21, 0.38);
+    color: #fff;
+}
+
+.sidebar .nav-link[aria-current="page"] i {
+    color: var(--gold);
+}
+
+/* Touch-friendly target sizes (keep dense table btn-sm compact) */
+.sidebar .nav-link,
+.client-tab,
+.btn:not(.btn-sm) {
+    min-height: 44px;
+}
+
+.client-tab {
+    align-items: center;
+    display: flex;
+}
+
+.btn:not(.btn-sm) {
+    align-items: center;
+    display: inline-flex;
+    justify-content: center;
+}
+
+/* Mobile nav drawer toggle + backdrop (revealed in the media query below) */
+.nav-toggle {
+    align-items: center;
+    background: var(--brand);
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+    color: #fff;
+    display: none;
+    font-size: 20px;
+    height: 44px;
+    justify-content: center;
+    width: 44px;
+}
+
+.nav-backdrop {
+    background: rgba(2, 6, 23, 0.5);
+    display: none;
+    inset: 0;
+    position: fixed;
+    z-index: 1080;
+}
+
+.nav-backdrop.show {
+    display: block;
+}
+
+/* Sidebar global search */
+.sidebar-search {
+    margin-bottom: 16px;
+}
+
+.sidebar-search .form-control {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.22);
+    color: #fff;
+}
+
+.sidebar-search .form-control::placeholder {
+    color: #cbd5e1;
+}
+
+/* Collapsible client tabs (details/summary) */
+.client-tabs summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.client-tabs summary::-webkit-details-marker {
+    display: none;
+}
+
+.client-tabs-caret {
+    color: var(--gold);
+    margin-left: auto;
+    transition: transform 180ms ease;
+}
+
+.client-tabs[open] .client-tabs-caret {
+    transform: rotate(180deg);
+}
+
 @keyframes cnPulse {
     0%, 100% {
         transform: translateY(0) scale(1);
@@ -691,18 +907,31 @@ body {
         grid-template-columns: 1fr;
     }
 
-    .sidebar {
-        height: auto;
-        position: static;
+    .nav-toggle {
+        display: inline-flex;
+        left: 12px;
+        position: fixed;
+        top: 12px;
+        z-index: 1100;
     }
 
-    .sidebar .nav {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    .sidebar {
+        height: 100vh;
+        left: 0;
+        position: fixed;
+        top: 0;
+        transform: translateX(-100%);
+        transition: transform 220ms ease;
+        width: 280px;
+        z-index: 1090;
+    }
+
+    .sidebar.open {
+        transform: none;
     }
 
     .main-content {
-        padding: 18px;
+        padding: 64px 16px 18px;
     }
 
     .topbar {
@@ -713,3 +942,81 @@ body {
         display: none;
     }
 }
+
+@media (max-width: 540px) {
+    .main-content {
+        padding: 60px 12px 14px;
+    }
+
+    .topbar {
+        border-radius: 14px;
+        padding: 18px;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* --- Raw / Standard upload tabs (payroll detail) --- */
+.upload-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid rgba(0, 0, 0, .08);
+    margin-bottom: 16px;
+}
+.upload-tab {
+    border: none;
+    background: transparent;
+    padding: 10px 18px;
+    font-weight: 600;
+    color: #6b7280;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+}
+.upload-tab:hover { color: #111827; }
+.upload-tab.active {
+    color: var(--brand, #0f766e);
+    border-bottom-color: var(--gold);
+}
+.raw-badge {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: #fef3c7;
+    color: #92400e;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    vertical-align: middle;
+}
+.raw-dropzone {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border: 2px dashed rgba(201, 162, 75, .55);
+    border-radius: 12px;
+    padding: 18px 20px;
+    background: rgba(250, 204, 21, .05);
+}
+.raw-dropzone i { font-size: 1.8rem; color: var(--gold); }
+.raw-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 12px 16px;
+    border: 1px solid rgba(201, 162, 75, .5);
+    border-left: 4px solid var(--gold);
+    border-radius: 8px;
+    background: rgba(250, 204, 21, .08);
+    color: #7c5e16;
+    font-size: .9rem;
+}
+.raw-notice i { color: var(--gold); margin-top: 2px; }
+.raw-summary { display: flex; flex-wrap: wrap; gap: 6px; }
+.raw-success { color: #166534; font-weight: 600; }
+.raw-error { color: #b91c1c; font-weight: 600; }

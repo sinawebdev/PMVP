@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Bulk Import Employees · {{ client.name }}{% endblock %}
+{% block page_title %}Bulk Import Employees — {{ client.name }}{% endblock %}
+{% block page_intro %}Upload a spreadsheet of employees for {{ client.name }}. You'll preview the changes before anything is saved.{% endblock %}
+{% block content %}
+<section class="panel form-panel">
+    <div class="mini-note mb-3">
+        <i class="bi bi-info-circle"></i>
+        Upload an Excel file with one row per employee.
+        <strong>Required columns:</strong> Employee ID, Full Name.
+        <strong>Optional columns:</strong> Email, Phone, Department, Bank Account.
+        Column names are flexible — common variations are accepted. Existing employees
+        (matched by Employee ID) will be updated; new employees are created with
+        <strong>Active</strong> status.
+    </div>
+    <form method="post" enctype="multipart/form-data" class="row g-3">
+        <div class="col-12">
+            <label class="form-label" for="file">Excel file (.xlsx)</label>
+            <input class="form-control" id="file" name="file" type="file" accept=".xlsx,.xls" required>
+        </div>
+        <div class="col-12 d-flex gap-2 align-items-center">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-eye"></i>Preview Import</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('employees.roster', client_id=client.id) }}">Cancel</a>
+            <a class="ms-auto" href="{{ url_for('employees.roster_template', client_id=client.id) }}"><i class="bi bi-download"></i> Download Excel template</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

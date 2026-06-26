@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Search · Chrisnat Payroll{% endblock %}
+{% block page_title %}Search{% endblock %}
+{% block page_intro %}Find client companies and individual worker payslips across every payroll run.{% endblock %}
+{% block content %}
+<section class="panel form-panel mb-3">
+    <form method="get" action="{{ url_for('main.search') }}" role="search" class="d-flex gap-2">
+        <label class="visually-hidden" for="q">Search</label>
+        <input id="q" name="q" class="form-control" type="search" value="{{ q }}" placeholder="Worker name, staff ID, or client company" autofocus>
+        <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i>Search</button>
+    </form>
+</section>
+{% if q %}
+<section class="panel mb-3">
+    <div class="panel-header"><h2><i class="bi bi-buildings"></i>Client Companies</h2><span>{{ clients|length }} found</span></div>
+    {% if clients %}
+    <div class="excel-grid-wrap">
+        <table class="table table-sm align-middle excel-grid">
+            <thead><tr><th scope="col">Name</th><th scope="col">Status</th><th scope="col"></th></tr></thead>
+            <tbody>
+            {% for client in clients %}
+                <tr>
+                    <td>{{ client.name }}</td>
+                    <td><span class="badge text-bg-{{ 'success' if client.status == 'Active' else 'danger' }}">{{ client.status }}</span></td>
+                    <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.client_detail', client_id=client.id) }}">Open</a></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}<p class="text-muted mb-0">No matching client companies.</p>{% endif %}
+</section>
+<section class="panel">
+    <div class="panel-header"><h2><i class="bi bi-file-earmark-person"></i>Worker Payslips</h2><span>{{ items|length }} found</span></div>
+    {% if items %}
+    <div class="excel-grid-wrap">
+        <table class="table table-sm align-middle excel-grid">
+            <thead><tr><th scope="col">Staff ID</th><th scope="col">Name</th><th scope="col">Client</th><th scope="col">Period</th><th scope="col">Net Pay</th><th scope="col">Payslip</th></tr></thead>
+            <tbody>
+            {% for item in items %}
+                <tr>
+                    <td>{{ item.staff_id }}</td>
+                    <td>{{ item.full_name }}</td>
+                    <td>{{ item.payroll_run.client_company.name if item.payroll_run and item.payroll_run.client_company else "" }}</td>
+                    <td>{% if item.payroll_run %}{{ item.payroll_run.month }} {{ item.payroll_run.year }}{% endif %}</td>
+                    <td class="money-cell">{{ item.net_pay|cedis }}</td>
+                    <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.payslip', item_id=item.id) }}"><i class="bi bi-file-earmark-pdf"></i>Payslip</a></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}<p class="text-muted mb-0">No matching worker payslips.</p>{% endif %}
+</section>
+{% else %}
+<section class="panel"><p class="text-muted mb-0">Type a search term above to find client companies and worker payslips.</p></section>
+{% endif %}
+{% endblock %}

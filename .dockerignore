@@ -1,0 +1,12 @@
+.git
+.venv
+.render-cli
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+.env
+instance/*.db
+uploads/*
+exports/*
+*.log

@@ -13,6 +13,14 @@ services:
         fromDatabase:
           name: chrisnat-payroll-db
           property: connectionString
+      - key: AUTO_INIT_DB
+        value: "true"
+      - key: PERSISTENCE_REQUIRED
+        value: "true"
+      - key: SEED_DEMO_DATA
+        value: "false"
+      - key: SEED_ARCHIVED_FEATURES
+        value: "false"
 
 databases:
   - name: chrisnat-payroll-db

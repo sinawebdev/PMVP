@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block page_title %}Attendance Summary{% endblock %}
+{% block content %}<section class="stats-grid">{% for status, count in summary.items() %}<div class="stat-card"><i class="bi bi-calendar-check stat-icon"></i><span>{{ status }}</span><strong>{{ count }}</strong></div>{% endfor %}</section>{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block page_title %}Assignment Detail{% endblock %}
+{% block page_actions %}<a class="btn btn-outline-primary" href="{{ url_for('operations.edit_assignment', assignment_id=assignment.id) }}">Edit</a><a class="btn btn-outline-warning" href="{{ url_for('operations.end_assignment', assignment_id=assignment.id) }}">End</a><a class="btn btn-outline-info" href="{{ url_for('operations.transfer_assignment', assignment_id=assignment.id) }}">Transfer</a>{% endblock %}
+{% block content %}
+<section class="panel">
+    {% for warning in warnings %}<div class="alert alert-warning">{{ warning }}</div>{% endfor %}
+    <div class="row g-3">
+        <div class="col-md-3"><strong>Worker</strong><p>{{ assignment.employee.full_name }}</p></div><div class="col-md-3"><strong>Client</strong><p>{{ assignment.client_company.name }}</p></div><div class="col-md-3"><strong>Role</strong><p>{{ assignment.role }}</p></div><div class="col-md-3"><strong>Status</strong><p>{{ assignment.status }}</p></div>
+        <div class="col-md-3"><strong>Site</strong><p>{{ assignment.site_location }}</p></div><div class="col-md-3"><strong>Start</strong><p>{{ assignment.assignment_start_date }}</p></div><div class="col-md-3"><strong>End</strong><p>{{ assignment.assignment_end_date or "Open" }}</p></div><div class="col-md-3"><strong>Shift</strong><p>{{ assignment.shift_type }}</p></div>
+    </div>
+</section>
+{% endblock %}

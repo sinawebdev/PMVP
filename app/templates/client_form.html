@@ -1,7 +1,7 @@
 {% extends "base.html" %}
+{% block title %}{{ "Edit" if client else "Add" }} Client · Chrisnat Payroll{% endblock %}
 {% block page_title %}{{ "Edit" if client else "Add" }} Client Company{% endblock %}
 {% block page_intro %}Capture the contact, location, and service details needed to keep payroll imports separated by client company.{% endblock %}
-{% block header_visual %}<img src="{{ url_for('static', filename='img/people-ops.svg') }}" alt="Client setup illustration">{% endblock %}
 {% block content %}
 <section class="panel form-panel">
     <form method="post" class="row g-3">

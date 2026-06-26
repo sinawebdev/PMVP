@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Add Employee · {{ client.name }}{% endblock %}
+{% block page_title %}Add Employee — {{ client.name }}{% endblock %}
+{% block page_intro %}Create a roster record. The Employee ID is the join key between payroll uploads and this employee — it cannot be changed later.{% endblock %}
+{% block content %}
+<section class="panel form-panel">
+    <form method="post" class="row g-3">
+        <div class="col-md-4">
+            <label class="form-label" for="staff_id">Employee ID *</label>
+            <input class="form-control" id="staff_id" name="staff_id" required>
+        </div>
+        <div class="col-md-8">
+            <label class="form-label" for="full_name">Full Name *</label>
+            <input class="form-control" id="full_name" name="full_name" required>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="email">Email</label>
+            <input class="form-control" id="email" name="email" type="email">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="phone">Phone</label>
+            <input class="form-control" id="phone" name="phone" placeholder="+233244000000">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="department">Department</label>
+            <input class="form-control" id="department" name="department">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="bank_account">Bank Account</label>
+            <input class="form-control" id="bank_account" name="bank_account">
+        </div>
+        <div class="col-12 d-flex gap-2">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-person-plus"></i>Add Employee</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('employees.roster', client_id=client.id) }}">Cancel</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

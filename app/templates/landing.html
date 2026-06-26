@@ -1,0 +1,789 @@
+{% extends "base.html" %}
+{% block title %}Chrisnat Payroll + Distribution — Calculated. Delivered. Proven.{% endblock %}
+{% block public_content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+  .lp-root{
+    --abyss:#052420;
+    --deep:#073b34;
+    --teal:#0d7a6e;
+    --teal-bright:#19b89f;
+    --teal-glow:rgba(25,184,159,.55);
+    --gold:#c9a24b;
+    --gold-bright:#e6c673;
+    --cream:#edf4f1;
+    --muted:#86aaa2;
+    --line:rgba(201,162,75,.28);
+    --card:rgba(255,255,255,.045);
+    --card-brd:rgba(255,255,255,.09);
+    --maxw:1180px;
+  }
+  .lp-root *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  .lp-root{
+    background:var(--abyss);
+    color:var(--cream);
+    font-family:'Montserrat',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+    line-height:1.5;
+    min-height:100vh;
+  }
+  .lp-root ::selection{background:var(--gold);color:var(--abyss)}
+
+  /* ---------- ambient animated background ---------- */
+  .lp-root .aurora{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+  .lp-root .aurora span{position:absolute;border-radius:50%;filter:blur(90px);opacity:.55;mix-blend-mode:screen}
+  .lp-root .aurora .a1{width:60vw;height:60vw;left:-12vw;top:-18vw;background:radial-gradient(circle,#0f8f7f,transparent 65%);animation:lp-drift1 22s ease-in-out infinite}
+  .lp-root .aurora .a2{width:48vw;height:48vw;right:-10vw;top:8vh;background:radial-gradient(circle,#0c5e54,transparent 60%);animation:lp-drift2 28s ease-in-out infinite}
+  .lp-root .aurora .a3{width:42vw;height:42vw;left:25vw;bottom:-20vw;background:radial-gradient(circle,rgba(201,162,75,.5),transparent 62%);animation:lp-drift3 26s ease-in-out infinite}
+  @keyframes lp-drift1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(8vw,6vh) scale(1.12)}}
+  @keyframes lp-drift2{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-7vw,5vh) scale(1.08)}}
+  @keyframes lp-drift3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(5vw,-6vh) scale(1.15)}}
+  .lp-root .grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.05;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+  .lp-root .vignette{position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:radial-gradient(120% 90% at 50% 0%,transparent 55%,rgba(0,0,0,.45) 100%)}
+
+  /* ---------- fixed chrome ---------- */
+  .lp-root .topbar{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:center;justify-content:space-between;
+    flex-wrap:wrap;gap:10px;padding:18px 34px;backdrop-filter:blur(6px);background:linear-gradient(180deg,rgba(5,36,32,.7),transparent)}
+  .lp-root .login-link{position:relative;z-index:31}
+  .lp-root .brand{display:flex;align-items:center;gap:12px}
+  .lp-root .cn{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,var(--gold),#9c842a);
+    display:grid;place-items:center;font-family:'Montserrat';font-weight:700;font-size:17px;color:#1a1305;
+    box-shadow:0 6px 20px rgba(201,162,75,.35)}
+  .lp-root .brand b{font-family:'Montserrat';font-weight:600;letter-spacing:.5px;font-size:16px}
+  .lp-root .brand small{display:block;color:var(--muted);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;margin-top:1px}
+  .lp-root .topbar-right{display:flex;align-items:center;gap:14px}
+  .lp-root .tag{font-family:'Montserrat';font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);
+    border:1px solid var(--line);padding:7px 13px;border-radius:30px}
+  .lp-root .login-link{font-family:'Montserrat';font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;
+    display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border-radius:30px;
+    background:linear-gradient(135deg,var(--gold-bright),var(--gold));color:#1a1305;text-decoration:none;
+    box-shadow:0 6px 18px rgba(201,162,75,.3);transition:transform .3s,box-shadow .3s}
+  .lp-root .login-link:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(201,162,75,.45);color:#1a1305}
+  .lp-root .progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:40;
+    background:linear-gradient(90deg,var(--gold),var(--teal-bright));box-shadow:0 0 12px var(--teal-glow)}
+
+  /* ---------- dot nav ---------- */
+  .lp-root .dots{position:fixed;right:26px;top:50%;transform:translateY(-50%);z-index:30;display:flex;flex-direction:column;gap:14px}
+  .lp-root .dots button{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--muted);background:transparent;cursor:pointer;
+    padding:0;transition:all .35s;position:relative}
+  .lp-root .dots button:hover{border-color:var(--gold)}
+  .lp-root .dots button.on{background:var(--gold);border-color:var(--gold);box-shadow:0 0 10px var(--gold);transform:scale(1.25)}
+  .lp-root .dots button .lbl{position:absolute;right:20px;top:50%;transform:translateY(-50%);white-space:nowrap;
+    font-family:'Montserrat';font-size:11px;letter-spacing:.05em;color:var(--cream);opacity:0;pointer-events:none;transition:opacity .25s;
+    background:rgba(5,36,32,.85);padding:3px 9px;border-radius:6px;border:1px solid var(--card-brd)}
+  .lp-root .dots button:hover .lbl{opacity:1}
+
+  /* ---------- sections ---------- */
+  .lp-root .deck{position:relative;z-index:5}
+  .lp-root .sec{min-height:100vh;display:flex;flex-direction:column;justify-content:center;
+    padding:118px 34px 80px;max-width:var(--maxw);margin:0 auto;position:relative}
+  .lp-root .eyebrow{font-family:'Montserrat';font-size:12px;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);
+    display:flex;align-items:center;gap:13px;margin-bottom:22px}
+  .lp-root .eyebrow::before{content:"";width:34px;height:1px;background:var(--gold);display:inline-block}
+  .lp-root h1,.lp-root h2{font-family:'Montserrat',serif;font-weight:600;line-height:1.02;letter-spacing:-.02em}
+  .lp-root h2{font-size:clamp(2rem,5vw,3.4rem);margin-bottom:18px}
+  .lp-root .lead{font-size:clamp(1rem,1.6vw,1.18rem);color:var(--muted);max-width:620px;line-height:1.6}
+
+  /* ---------- reveal animation ---------- */
+  .lp-root .rv{opacity:0;transform:translateY(34px);transition:opacity .8s cubic-bezier(.2,.7,.2,1),transform .8s cubic-bezier(.2,.7,.2,1);
+    transition-delay:var(--d,0ms)}
+  .lp-root .rv.in{opacity:1;transform:none}
+
+  /* ================= HERO ================= */
+  .lp-root #hero{justify-content:center}
+  .lp-root .hero-eyebrow{font-family:'Montserrat';font-size:13px;letter-spacing:.34em;text-transform:uppercase;color:var(--gold);margin-bottom:30px}
+  .lp-root .hero-title{font-family:'Montserrat',serif;font-weight:600;font-size:clamp(3.2rem,11vw,8.2rem);line-height:.94;letter-spacing:-.03em}
+  .lp-root .hero-title .w{display:inline-block;opacity:0;transform:translateY(40px) rotate(3deg);
+    animation:lp-wordIn .9s cubic-bezier(.2,.8,.2,1) forwards}
+  .lp-root .hero-title .w:nth-child(1){animation-delay:.25s}
+  .lp-root .hero-title .w:nth-child(2){animation-delay:.5s}
+  .lp-root .hero-title .w:nth-child(3){animation-delay:.75s;color:var(--gold);font-style:italic;font-weight:500}
+  @keyframes lp-wordIn{to{opacity:1;transform:none}}
+  .lp-root .hero-sub{font-size:clamp(1.05rem,2vw,1.4rem);color:var(--cream);max-width:680px;margin-top:34px;line-height:1.55;
+    opacity:0;animation:lp-fadeUp 1s ease 1.1s forwards}
+  .lp-root .hero-sub b{color:var(--teal-bright);font-weight:600}
+  .lp-root .hero-chips{display:flex;gap:12px;flex-wrap:wrap;margin-top:34px;opacity:0;animation:lp-fadeUp 1s ease 1.35s forwards}
+  .lp-root .chip{font-family:'Montserrat';font-size:13px;letter-spacing:.04em;padding:10px 18px;border-radius:40px;
+    border:1px solid var(--card-brd);background:var(--card);display:flex;align-items:center;gap:9px}
+  .lp-root .chip i{color:var(--teal-bright)}
+  .lp-root .chip.g i{color:var(--gold)}
+  @keyframes lp-fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+  .lp-root .hero-cta{display:flex;gap:14px;flex-wrap:wrap;margin-top:32px;opacity:0;animation:lp-fadeUp 1s ease 1.5s forwards}
+  .lp-root .hbtn{font-family:'Montserrat';font-weight:600;font-size:.98rem;letter-spacing:.02em;padding:14px 28px;border-radius:40px;
+    display:inline-flex;align-items:center;gap:10px;text-decoration:none;transition:transform .3s,box-shadow .3s,border-color .3s}
+  .lp-root .hbtn.gold{background:linear-gradient(135deg,var(--gold-bright),var(--gold));color:#1a1305;box-shadow:0 10px 30px rgba(201,162,75,.35)}
+  .lp-root .hbtn.gold:hover{transform:translateY(-3px);box-shadow:0 16px 42px rgba(201,162,75,.5);color:#1a1305}
+  .lp-root .hbtn.ghost{border:1px solid var(--card-brd);background:var(--card);color:var(--cream)}
+  .lp-root .hbtn.ghost:hover{border-color:var(--gold);transform:translateY(-3px);color:var(--cream)}
+  .lp-root .scrollcue{position:absolute;bottom:34px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;
+    color:var(--muted);font-family:'Montserrat';font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+    opacity:0;animation:lp-fadeUp 1s ease 1.9s forwards}
+  .lp-root .scrollcue i{animation:lp-bob 1.6s ease-in-out infinite}
+  @keyframes lp-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}}
+  .lp-root .meta-foot{margin-top:42px;color:var(--muted);font-size:12.5px;letter-spacing:.03em;
+    opacity:0;animation:lp-fadeUp 1s ease 1.7s forwards}
+
+  /* ================= PROBLEM ================= */
+  .lp-root .cards3{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:46px}
+  .lp-root .pcard{background:var(--card);border:1px solid var(--card-brd);border-radius:20px;padding:32px 28px;
+    position:relative;overflow:hidden;transition:transform .4s,border-color .4s,box-shadow .4s}
+  .lp-root .pcard:hover{transform:translateY(-6px);border-color:var(--line);box-shadow:0 20px 50px rgba(0,0,0,.35)}
+  .lp-root .pcard::after{content:"";position:absolute;width:160px;height:160px;border-radius:50%;right:-50px;top:-50px;
+    background:radial-gradient(circle,rgba(25,184,159,.12),transparent 70%)}
+  .lp-root .pico{width:60px;height:60px;border-radius:16px;display:grid;place-items:center;font-size:24px;margin-bottom:22px;position:relative}
+  .lp-root .pico.t{background:linear-gradient(135deg,var(--teal),#0a5e54);color:#fff}
+  .lp-root .pico.g{background:linear-gradient(135deg,var(--gold),#9c842a);color:#1a1305}
+  .lp-root .pico.d{background:linear-gradient(135deg,#0a4d45,#073b34);color:var(--teal-bright)}
+  .lp-root .pcard h3{font-family:'Montserrat';font-weight:600;font-size:1.32rem;margin-bottom:12px;line-height:1.15}
+  .lp-root .pcard p{color:var(--muted);font-size:.97rem;line-height:1.55}
+
+  /* ================= PIPELINE (signature) ================= */
+  .lp-root #pipeline .pipe-wrap{margin-top:54px;position:relative}
+  .lp-root .pipe{display:grid;grid-template-columns:repeat(4,1fr);gap:0;position:relative;align-items:start}
+  .lp-root .pipe-track{position:absolute;top:46px;left:7%;right:7%;height:3px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden}
+  .lp-root .pipe-track .fill{position:absolute;inset:0;width:0;background:linear-gradient(90deg,var(--teal-bright),var(--gold));
+    box-shadow:0 0 14px var(--teal-glow)}
+  .lp-root .pipe.in .pipe-track .fill{animation:lp-drawLine 2.4s cubic-bezier(.4,0,.2,1) .3s forwards}
+  @keyframes lp-drawLine{to{width:100%}}
+  .lp-root .pulse{position:absolute;top:50%;transform:translateY(-50%);width:14px;height:14px;border-radius:50%;
+    background:var(--gold-bright);box-shadow:0 0 18px var(--gold-bright);opacity:0;left:0}
+  .lp-root .pipe.in .pulse{animation:lp-travel 2.4s cubic-bezier(.4,0,.2,1) .3s forwards}
+  @keyframes lp-travel{0%{left:0;opacity:1}90%{opacity:1}100%{left:100%;opacity:0}}
+  .lp-root .node{display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 12px;position:relative;z-index:2}
+  .lp-root .node .ring{width:94px;height:94px;border-radius:50%;display:grid;place-items:center;font-size:32px;
+    background:var(--deep);border:2px solid var(--card-brd);position:relative;transition:all .5s;
+    opacity:0;transform:scale(.6)}
+  .lp-root .pipe.in .node .ring{animation:lp-popNode .6s cubic-bezier(.3,1.4,.5,1) forwards}
+  .lp-root .pipe.in .node:nth-child(1) .ring{animation-delay:.3s}
+  .lp-root .pipe.in .node:nth-child(2) .ring{animation-delay:.85s}
+  .lp-root .pipe.in .node:nth-child(3) .ring{animation-delay:1.4s}
+  .lp-root .pipe.in .node:nth-child(4) .ring{animation-delay:1.95s}
+  @keyframes lp-popNode{to{opacity:1;transform:scale(1)}}
+  .lp-root .node:nth-child(1) .ring{color:var(--teal-bright)}
+  .lp-root .node:nth-child(2) .ring{color:var(--teal-bright)}
+  .lp-root .node:nth-child(3) .ring{color:#5fd6a0}
+  .lp-root .node:nth-child(4) .ring{color:var(--gold-bright);border-color:var(--gold)}
+  .lp-root .node .ring .num{position:absolute;top:-8px;right:-8px;width:28px;height:28px;border-radius:50%;
+    background:var(--gold);color:#1a1305;font-family:'Montserrat';font-weight:700;font-size:13px;display:grid;place-items:center;
+    box-shadow:0 4px 12px rgba(0,0,0,.3)}
+  .lp-root .node h4{font-family:'Montserrat';font-weight:600;font-size:1.18rem;margin:20px 0 8px}
+  .lp-root .node p{color:var(--muted);font-size:.88rem;line-height:1.45;max-width:200px}
+  .lp-root .pipe.in .node .txt{opacity:0;animation:lp-fadeUp .6s ease forwards}
+  .lp-root .pipe.in .node:nth-child(1) .txt{animation-delay:.5s}
+  .lp-root .pipe.in .node:nth-child(2) .txt{animation-delay:1.05s}
+  .lp-root .pipe.in .node:nth-child(3) .txt{animation-delay:1.6s}
+  .lp-root .pipe.in .node:nth-child(4) .txt{animation-delay:2.15s}
+  .lp-root .channels{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:50px;opacity:0;transform:translateY(20px)}
+  .lp-root .pipe.in ~ .channels{animation:lp-fadeUp .8s ease 2.5s forwards}
+  .lp-root .chan{display:flex;align-items:center;gap:11px;padding:13px 22px;border-radius:14px;
+    border:1px solid var(--card-brd);background:var(--card);font-family:'Montserrat';font-size:.92rem}
+  .lp-root .chan i{font-size:1.2rem}
+  .lp-root .chan .ico-mail{color:var(--teal-bright)}
+  .lp-root .chan .ico-wa{color:#4fd87a}
+  .lp-root .chan .ico-sms{color:var(--gold-bright)}
+  .lp-root .chan small{color:var(--muted);display:block;font-size:.74rem;letter-spacing:.02em}
+
+  /* ================= PROOF / STATS ================= */
+  .lp-root .proof-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:34px;margin-top:46px;align-items:start}
+  .lp-root .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:30px}
+  .lp-root .stat{background:var(--card);border:1px solid var(--card-brd);border-radius:16px;padding:24px}
+  .lp-root .stat .n{font-family:'Montserrat';font-weight:700;font-size:2.9rem;line-height:1;color:var(--gold-bright)}
+  .lp-root .stat .n .suf{font-size:1.6rem;color:var(--teal-bright)}
+  .lp-root .stat .l{color:var(--muted);font-size:.86rem;margin-top:8px;letter-spacing:.02em}
+  .lp-root .modgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .lp-root .mod{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--card-brd);
+    border-radius:13px;padding:15px 16px}
+  .lp-root .mod i{color:var(--teal-bright);font-size:1.05rem;margin-top:2px}
+  .lp-root .mod b{font-family:'Montserrat';font-weight:600;font-size:.92rem;display:block}
+  .lp-root .mod span{color:var(--muted);font-size:.78rem;line-height:1.35}
+  .lp-root .clientbox{background:linear-gradient(160deg,rgba(13,122,110,.22),rgba(7,59,52,.4));
+    border:1px solid var(--line);border-radius:22px;padding:28px}
+  .lp-root .clientbox h3{font-family:'Montserrat';font-weight:600;font-size:1.3rem;margin-bottom:6px}
+  .lp-root .clientbox .sub{color:var(--muted);font-size:.84rem;margin-bottom:20px}
+  .lp-root .clients{display:flex;flex-wrap:wrap;gap:9px}
+  .lp-root .clients span{font-family:'Montserrat';font-size:.82rem;padding:8px 14px;border-radius:30px;
+    background:rgba(255,255,255,.05);border:1px solid var(--card-brd);transition:all .3s}
+  .lp-root .clients span:hover{border-color:var(--gold);color:var(--gold-bright)}
+  .lp-root .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#4fd87a;margin-right:7px;
+    box-shadow:0 0 0 0 rgba(79,216,122,.6);animation:lp-livePulse 1.8s infinite}
+  @keyframes lp-livePulse{0%{box-shadow:0 0 0 0 rgba(79,216,122,.55)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+  /* ================= DISTRIBUTION ================= */
+  .lp-root .dist-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:46px}
+  .lp-root .dcard{border-radius:22px;padding:32px 26px;position:relative;overflow:hidden;border:1px solid var(--card-brd);
+    transition:transform .4s,box-shadow .4s}
+  .lp-root .dcard:hover{transform:translateY(-8px);box-shadow:0 24px 60px rgba(0,0,0,.4)}
+  .lp-root .dcard.mail{background:linear-gradient(165deg,rgba(13,122,110,.4),rgba(7,59,52,.55))}
+  .lp-root .dcard.wa{background:linear-gradient(165deg,rgba(20,120,60,.42),rgba(7,50,30,.55))}
+  .lp-root .dcard.sms{background:linear-gradient(165deg,rgba(120,90,30,.42),rgba(50,38,10,.55))}
+  .lp-root .dcard::after{content:"";position:absolute;width:170px;height:170px;border-radius:50%;right:-55px;top:-55px;
+    background:radial-gradient(circle,rgba(255,255,255,.09),transparent 70%)}
+  .lp-root .dico{font-size:38px;margin-bottom:20px}
+  .lp-root .dcard.mail .dico{color:var(--teal-bright)}
+  .lp-root .dcard.wa .dico{color:#5fe08a}
+  .lp-root .dcard.sms .dico{color:var(--gold-bright)}
+  .lp-root .dcard h3{font-family:'Montserrat';font-weight:600;font-size:1.7rem;margin-bottom:4px}
+  .lp-root .dcard .role{font-style:italic;color:var(--cream);opacity:.85;font-size:.92rem;margin-bottom:16px}
+  .lp-root .dcard p{color:rgba(237,244,241,.8);font-size:.93rem;line-height:1.55;margin-bottom:20px}
+  .lp-root .dcard .badge{font-family:'Montserrat';font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;
+    padding:7px 14px;border-radius:30px;border:1px solid var(--line);color:var(--gold-bright);display:inline-block}
+  .lp-root .auditbar{margin-top:24px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;
+    background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 22px;font-family:'Montserrat';font-size:.88rem}
+  .lp-root .auditbar .flow{display:flex;align-items:center;gap:9px;color:var(--muted)}
+  .lp-root .auditbar .flow b{color:var(--teal-bright)}
+  .lp-root .auditbar .flow i{font-size:.7rem;color:var(--gold)}
+
+  /* ================= PARTNER ================= */
+  .lp-root .partner-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:38px;margin-top:42px;align-items:center}
+  .lp-root .partner-head{display:flex;align-items:center;gap:18px;margin-bottom:26px}
+  .lp-root .cn-lg{width:74px;height:74px;border-radius:18px;background:linear-gradient(135deg,var(--gold),#9c842a);
+    display:grid;place-items:center;font-family:'Montserrat';font-weight:700;font-size:28px;color:#1a1305;
+    box-shadow:0 10px 30px rgba(201,162,75,.35)}
+  .lp-root .partner-head h3{font-family:'Montserrat';font-weight:600;font-size:1.9rem}
+  .lp-root .partner-head .sub{color:var(--muted);font-style:italic;font-size:.95rem}
+  .lp-root .plist{list-style:none;display:flex;flex-direction:column;gap:14px}
+  .lp-root .plist li{display:flex;gap:13px;align-items:flex-start;font-size:1rem;color:var(--cream)}
+  .lp-root .plist li i{color:var(--teal-bright);margin-top:4px;font-size:1.05rem}
+  .lp-root .why{background:linear-gradient(160deg,rgba(13,122,110,.25),rgba(7,59,52,.45));
+    border:1px solid var(--line);border-radius:22px;padding:30px}
+  .lp-root .why h4{font-family:'Montserrat';font-weight:600;font-size:1.25rem;color:var(--gold-bright);margin-bottom:20px;line-height:1.2}
+  .lp-root .why ul{list-style:none;display:flex;flex-direction:column;gap:15px}
+  .lp-root .why li{display:flex;gap:12px;align-items:center;font-size:.97rem}
+  .lp-root .why li i{color:var(--gold);font-size:1rem}
+
+  /* ================= TEAM ================= */
+  .lp-root .team-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:46px}
+  .lp-root .tcard{background:var(--card);border:1px solid var(--card-brd);border-radius:22px;padding:32px 26px;text-align:center;
+    transition:transform .4s,border-color .4s}
+  .lp-root .tcard:hover{transform:translateY(-6px);border-color:var(--line)}
+  .lp-root .avatar{width:96px;height:96px;border-radius:50%;margin:0 auto 20px;display:grid;place-items:center;font-size:36px;color:#fff}
+  .lp-root .avatar.a1{background:linear-gradient(135deg,#0a5e54,#073b34)}
+  .lp-root .avatar.a2{background:linear-gradient(135deg,var(--teal),#0a5e54)}
+  .lp-root .avatar.a3{background:linear-gradient(135deg,var(--gold),#9c842a);color:#1a1305}
+  .lp-root .tcard h3{font-family:'Montserrat';font-weight:600;font-size:1.5rem}
+  .lp-root .tcard .trole{color:var(--teal-bright);font-style:italic;font-size:.9rem;margin:4px 0 18px}
+  .lp-root .tcard ul{list-style:none;display:flex;flex-direction:column;gap:9px;text-align:left}
+  .lp-root .tcard li{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:.88rem}
+  .lp-root .tcard li i{color:var(--gold);font-size:.7rem}
+
+  /* ================= COMPETITIVE ================= */
+  .lp-root .ctable{margin-top:42px;border:1px solid var(--card-brd);border-radius:18px;overflow:hidden}
+  .lp-root .crow{display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr 1.5fr;align-items:center}
+  .lp-root .crow > div{padding:15px 18px;font-size:.92rem}
+  .lp-root .crow.head > div{font-family:'Montserrat';font-weight:600;letter-spacing:.04em;background:rgba(255,255,255,.04)}
+  .lp-root .crow.head .us{background:linear-gradient(135deg,var(--teal),#0a5e54);color:#fff}
+  .lp-root .crow:not(.head){border-top:1px solid var(--card-brd);opacity:0;transform:translateX(-18px)}
+  .lp-root .crow:not(.head).in{opacity:1;transform:none;transition:opacity .6s,transform .6s;transition-delay:var(--d)}
+  .lp-root .crow .feat{color:var(--cream);font-family:'Montserrat';font-weight:500}
+  .lp-root .crow .us{background:rgba(13,122,110,.16);font-weight:600}
+  .lp-root .yes{color:#4fd87a}.lp-root .no{color:#e87a7a;opacity:.7}.lp-root .part{color:var(--muted)}
+  .lp-root .crow .us .yes{color:#6fe6a0}
+
+  /* ================= PRICING ================= */
+  .lp-root .price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:46px;align-items:stretch}
+  .lp-root .ptier{border-radius:22px;padding:34px 28px;position:relative;overflow:hidden;display:flex;flex-direction:column;
+    border:1px solid var(--card-brd);transition:transform .4s,box-shadow .4s}
+  .lp-root .ptier:hover{transform:translateY(-8px);box-shadow:0 24px 60px rgba(0,0,0,.4)}
+  .lp-root .ptier.starter{background:linear-gradient(165deg,rgba(13,122,110,.3),rgba(7,59,52,.45))}
+  .lp-root .ptier.growth{background:linear-gradient(165deg,rgba(10,77,69,.55),rgba(5,40,36,.7));border-color:var(--teal-bright)}
+  .lp-root .ptier.biz{background:linear-gradient(165deg,rgba(120,90,30,.4),rgba(50,38,10,.55));border:2px solid var(--gold)}
+  .lp-root .ptier::after{content:"";position:absolute;width:180px;height:180px;border-radius:50%;right:-60px;top:-60px;
+    background:radial-gradient(circle,rgba(255,255,255,.08),transparent 70%)}
+  .lp-root .popular{position:absolute;top:18px;right:18px;font-family:'Montserrat';font-size:.68rem;letter-spacing:.1em;
+    text-transform:uppercase;background:var(--teal-bright);color:#062420;padding:6px 12px;border-radius:30px;font-weight:600}
+  .lp-root .ptier h3{font-family:'Montserrat';font-weight:600;font-size:1.7rem;margin-bottom:6px}
+  .lp-root .ptier.biz h3{color:var(--gold-bright)}
+  .lp-root .ptier .amt{font-family:'Montserrat';font-weight:700;font-size:2.6rem;line-height:1;margin:8px 0 4px}
+  .lp-root .ptier .amt small{font-size:1rem;color:var(--muted);font-weight:400}
+  .lp-root .ptier .cur{font-family:'Montserrat';font-size:1.1rem;color:var(--teal-bright);vertical-align:super}
+  .lp-root .ptier hr{border:none;border-top:1px solid rgba(255,255,255,.12);margin:22px 0}
+  .lp-root .ptier ul{list-style:none;display:flex;flex-direction:column;gap:13px;flex:1}
+  .lp-root .ptier li{display:flex;gap:11px;align-items:flex-start;font-size:.95rem;color:rgba(237,244,241,.9)}
+  .lp-root .ptier li i{color:var(--gold);font-size:.85rem;margin-top:4px}
+  .lp-root .pfoot{text-align:center;color:var(--muted);font-size:.85rem;margin-top:26px;letter-spacing:.02em}
+
+  /* ================= CLOSE ================= */
+  .lp-root #close{text-align:center;align-items:center}
+  .lp-root #close .inner{max-width:860px;margin:0 auto}
+  .lp-root .close-cn{width:84px;height:84px;border-radius:20px;background:linear-gradient(135deg,var(--gold),#9c842a);
+    display:grid;place-items:center;font-family:'Montserrat';font-weight:700;font-size:32px;color:#1a1305;margin:0 auto 30px;
+    box-shadow:0 12px 36px rgba(201,162,75,.4)}
+  .lp-root #close h2{font-size:clamp(2.4rem,6vw,4.4rem)}
+  .lp-root #close .lead{margin:18px auto 0}
+  .lp-root .asks{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:46px;text-align:left}
+  .lp-root .ask{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px;transition:transform .4s,border-color .4s}
+  .lp-root .ask:hover{transform:translateY(-6px);border-color:var(--gold)}
+  .lp-root .ask .ai{font-size:24px;color:var(--gold-bright);margin-bottom:14px}
+  .lp-root .ask h4{font-family:'Montserrat';font-weight:600;font-size:1.3rem;margin-bottom:8px}
+  .lp-root .ask p{color:var(--muted);font-size:.92rem;line-height:1.5}
+  .lp-root .close-cta{margin-top:46px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .lp-root .close-foot{margin-top:30px;color:var(--muted);font-size:13px;letter-spacing:.03em}
+
+  /* ================= responsive ================= */
+  @media(max-width:920px){
+    .lp-root .cards3,.lp-root .dist-grid,.lp-root .team-grid,.lp-root .price-grid,.lp-root .asks{grid-template-columns:1fr}
+    .lp-root .proof-grid,.lp-root .partner-grid{grid-template-columns:1fr}
+    .lp-root .pipe{grid-template-columns:1fr;gap:34px}
+    .lp-root .pipe-track,.lp-root .pulse{display:none}
+    .lp-root .node{flex-direction:row;text-align:left;gap:20px;justify-content:flex-start}
+    .lp-root .node h4{margin-top:0}
+    .lp-root .node p{max-width:none}
+    .lp-root .crow{grid-template-columns:1.6fr 1fr 1.4fr}
+    .lp-root .crow .c-wp,.lp-root .crow .c-ot{display:none}
+    .lp-root .dots{display:none}
+    .lp-root .stats{grid-template-columns:repeat(2,1fr)}
+  }
+  @media(max-width:560px){
+    .lp-root .sec{padding:100px 20px 70px}
+    .lp-root .topbar{padding:14px 20px}
+    .lp-root .tag{display:none}
+    .lp-root .modgrid,.lp-root .stats{grid-template-columns:1fr}
+    .lp-root .crow{grid-template-columns:1.4fr .8fr 1.2fr;font-size:.8rem}
+  }
+  @media(prefers-reduced-motion:reduce){
+    .lp-root *{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
+    .lp-root .rv{opacity:1;transform:none}
+    .lp-root .pipe .node .ring{opacity:1;transform:none}
+    .lp-root .pipe-track .fill{width:100%}
+    .lp-root .hero-sub,.lp-root .hero-chips,.lp-root .hero-cta,.lp-root .meta-foot,.lp-root .scrollcue{opacity:1;animation:none}
+    .lp-root .hero-title .w{opacity:1;transform:none;animation:none}
+  }
+</style>
+
+<div class="lp-root">
+<div class="aurora"><span class="a1"></span><span class="a2"></span><span class="a3"></span></div>
+<div class="grain"></div>
+<div class="vignette"></div>
+
+<div class="progress" id="lp-prog"></div>
+<header class="topbar">
+  <div class="brand">
+    <div class="cn">CN</div>
+    <div><b>Chrisnat</b><small>Payroll + Distribution</small></div>
+  </div>
+  <div class="topbar-right">
+    <a class="login-link" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-right-to-bracket"></i> Staff Login</a>
+  </div>
+</header>
+
+<nav class="dots" id="lp-dots"></nav>
+
+<main class="deck">
+
+  <!-- HERO -->
+  <section class="sec" id="hero" data-label="Intro">
+    <div class="hero-eyebrow">Chrisnat Payroll &amp; Distribution</div>
+    <h1 class="hero-title"><span class="w">Calculated.</span> <span class="w">Delivered.</span> <span class="w">Proven.</span></h1>
+    <p class="hero-sub">A working payroll system for Ghanaian businesses — now delivering every payslip by <b>Email</b>, <b>WhatsApp</b> &amp; <b>SMS</b>, with proof it reached the worker.</p>
+    <div class="hero-chips">
+      <span class="chip"><i class="fa-solid fa-bolt"></i> Live MVP in production</span>
+      <span class="chip g"><i class="fa-solid fa-handshake"></i> Backed by Chrisnat Limited</span>
+      <span class="chip"><i class="fa-solid fa-location-dot"></i> Built for Ghana</span>
+    </div>
+    <div class="hero-cta">
+      <a class="hbtn gold" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-right-to-bracket"></i> Staff Login</a>
+      <a class="hbtn ghost" href="#pipeline"><i class="fa-solid fa-play"></i> See how it works</a>
+    </div>
+    <div class="meta-foot">Sinaforte Labs &nbsp;·&nbsp; In partnership with Chrisnat Limited</div>
+    <div class="scrollcue"><span>Scroll</span><i class="fa-solid fa-chevron-down"></i></div>
+  </section>
+
+  <!-- PROBLEM -->
+  <section class="sec" id="problem" data-label="The Problem">
+    <div class="eyebrow rv">The Problem</div>
+    <h2 class="rv" style="--d:60ms">Workers are paid in the dark.</h2>
+    <p class="lead rv" style="--d:120ms">Across Ghana, payroll runs are calculated by hand and payslips never make it to the people they belong to. We've seen it from the inside.</p>
+    <div class="cards3">
+      <div class="pcard rv" style="--d:180ms">
+        <div class="pico t"><i class="fa-solid fa-user-tie"></i></div>
+        <h3>No visibility</h3>
+        <p>Employees receive a lump-sum bank credit with zero insight into PAYE, SSNIT, overtime, or deductions. They can't question what they can't see.</p>
+      </div>
+      <div class="pcard rv" style="--d:300ms">
+        <div class="pico g"><i class="fa-solid fa-mobile-screen-button"></i></div>
+        <h3>Delivery breaks down</h3>
+        <p>HR prints slips or sends them one-by-one over WhatsApp — slow, inconsistent, impossible to audit, and unworkable past twenty staff.</p>
+      </div>
+      <div class="pcard rv" style="--d:420ms">
+        <div class="pico d"><i class="fa-solid fa-file-excel"></i></div>
+        <h3>Data lives in chaos</h3>
+        <p>Raw clock-in timestamps and salaries sit in fragile Excel files — no validation, no duplicate detection, no trail when numbers go wrong.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PIPELINE -->
+  <section class="sec" id="pipeline" data-label="How It Works">
+    <div class="eyebrow rv">How It Works</div>
+    <h2 class="rv" style="--d:60ms">One pipeline, end to end.</h2>
+    <p class="lead rv" style="--d:120ms">Raw hours go in. A calculated, delivered, and tracked payslip comes out — for every employee, on every payday.</p>
+
+    <div class="pipe-wrap">
+      <div class="pipe" id="lp-pipe">
+        <div class="pipe-track"><div class="fill"></div></div>
+        <div class="pulse"></div>
+        <div class="node">
+          <div class="ring"><i class="fa-solid fa-database"></i><span class="num">1</span></div>
+          <div class="txt"><h4>Raw Data</h4><p>Client uploads clock-in timestamps &amp; salary data via Excel.</p></div>
+        </div>
+        <div class="node">
+          <div class="ring"><i class="fa-solid fa-gears"></i><span class="num">2</span></div>
+          <div class="txt"><h4>Organise &amp; Calculate</h4><p>System validates, groups workers, runs PAYE / SSNIT, builds a clean payroll.</p></div>
+        </div>
+        <div class="node">
+          <div class="ring"><i class="fa-solid fa-cloud-arrow-up"></i><span class="num">3</span></div>
+          <div class="txt"><h4>Payroll Committed</h4><p>Finalised payroll saved to the system with a full audit trail.</p></div>
+        </div>
+        <div class="node">
+          <div class="ring"><i class="fa-solid fa-tower-broadcast"></i><span class="num">4</span></div>
+          <div class="txt"><h4>Distribute Payslips</h4><p>Every employee notified across three channels — and tracked.</p></div>
+        </div>
+      </div>
+      <div class="channels">
+        <div class="chan"><i class="fa-solid fa-envelope ico-mail"></i><span>Email<small>Full payslip</small></span></div>
+        <div class="chan"><i class="fa-brands fa-whatsapp ico-wa"></i><span>WhatsApp<small>Full payslip</small></span></div>
+        <div class="chan"><i class="fa-solid fa-comment-sms ico-sms"></i><span>SMS<small>"Your payslip has arrived — check your email"</small></span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROOF -->
+  <section class="sec" id="proof" data-label="What We've Built">
+    <div class="eyebrow rv">What We've Built</div>
+    <h2 class="rv" style="--d:60ms">This isn't a concept. It's running.</h2>
+    <p class="lead rv" style="--d:120ms">The Chrisnat Payroll MVP is live and deployed today, managing real payroll for real Ghanaian companies. We're funding the layer on top — not building from zero.</p>
+
+    <div class="proof-grid">
+      <div class="rv" style="--d:160ms">
+        <div class="stats" id="lp-stats">
+          <div class="stat"><div class="n" data-to="6">0</div><div class="l">Client companies onboarded</div></div>
+          <div class="stat"><div class="n" data-to="10">0</div><div class="l">Employees in the system</div></div>
+          <div class="stat"><div class="n" data-to="3">0</div><div class="l">Channels for every payslip</div></div>
+          <div class="stat"><div class="n" data-to="100"><span></span></div><div class="l">Delivery status tracked, per channel</div></div>
+        </div>
+        <div class="modgrid">
+          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>MD Dashboard</b><span>Payroll cost, approvals, PAYE &amp; SSNIT at a glance</span></div></div>
+          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Client Companies</b><span>Every client managed in one place</span></div></div>
+          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Employees</b><span>Records linked to each company</span></div></div>
+          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Payroll Runs</b><span>Excel upload → validate → calculate</span></div></div>
+          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Payslips</b><span>Generated per employee, per run</span></div></div>
+          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Audit</b><span>Expense tracking &amp; full action trail</span></div></div>
+        </div>
+      </div>
+      <div class="clientbox rv" style="--d:280ms">
+        <h3><span class="live-dot"></span>Live in the system</h3>
+        <div class="sub">Companies already managed through the Chrisnat MVP</div>
+        <div class="clients">
+          <span>MSC Ghana Ltd</span><span>MEDLOG</span><span>ACS</span><span>MTG</span>
+          <span>Stellar Log</span><span>Stella Travels</span><span>Hull Blyth</span>
+          <span>Grimaldi Ghana</span><span>Portmarine Ltd</span><span>Multipurpose Terminal</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DISTRIBUTION -->
+  <section class="sec" id="dist" data-label="Distribution">
+    <div class="eyebrow rv">The New Layer</div>
+    <h2 class="rv" style="--d:60ms">The piece nobody else ships.</h2>
+    <p class="lead rv" style="--d:120ms">Payroll software calculates. We calculate <em>and</em> deliver <em>and</em> prove it arrived — the transparency layer between the business and the worker.</p>
+
+    <div class="dist-grid">
+      <div class="dcard mail rv" style="--d:180ms">
+        <div class="dico"><i class="fa-solid fa-envelope"></i></div>
+        <h3>Email</h3>
+        <div class="role">Full payslip delivery</div>
+        <p>The complete breakdown — gross, deductions, PAYE, SSNIT, net — formatted and readable, straight to the worker's inbox.</p>
+        <span class="badge">Primary channel</span>
+      </div>
+      <div class="dcard wa rv" style="--d:300ms">
+        <div class="dico"><i class="fa-brands fa-whatsapp"></i></div>
+        <h3>WhatsApp</h3>
+        <div class="role">Full payslip delivery</div>
+        <p>The same full payslip delivered to WhatsApp. No app to install, no new account — we meet workers exactly where they already are.</p>
+        <span class="badge">Ghana's #1 channel</span>
+      </div>
+      <div class="dcard sms rv" style="--d:420ms">
+        <div class="dico"><i class="fa-solid fa-comment-sms"></i></div>
+        <h3>SMS</h3>
+        <div class="role">Arrival notification</div>
+        <p>"Your payslip for June 2026 has arrived — check your email or WhatsApp." A lightweight nudge for workers with no data bundle.</p>
+        <span class="badge">No data needed</span>
+      </div>
+    </div>
+    <div class="auditbar rv" style="--d:480ms">
+      <span style="color:var(--gold-bright);font-weight:600">The differentiator:</span>
+      <span class="flow"><b>pending</b> <i class="fa-solid fa-arrow-right-long"></i> <b>sent</b> <i class="fa-solid fa-arrow-right-long"></i> <b>delivered</b> <i class="fa-solid fa-arrow-right-long"></i> <b>failed</b></span>
+      <span style="color:var(--muted)">— every payslip, every channel, fully logged.</span>
+    </div>
+  </section>
+
+  <!-- PARTNER -->
+  <section class="sec" id="partner" data-label="Partner">
+    <div class="eyebrow rv">Strategic Partner</div>
+    <h2 class="rv" style="--d:60ms">We built their system. Now they back ours.</h2>
+
+    <div class="partner-grid">
+      <div class="rv" style="--d:140ms">
+        <div class="partner-head">
+          <div class="cn-lg">CN</div>
+          <div>
+            <h3>Chrisnat Limited</h3>
+            <div class="sub">Payroll consultancy · Ghana</div>
+          </div>
+        </div>
+        <ul class="plist">
+          <li><i class="fa-solid fa-circle-check"></i> An established payroll consultancy managing payroll for multiple Ghanaian companies.</li>
+          <li><i class="fa-solid fa-circle-check"></i> We built their MVP — we understand their workflow from the inside out.</li>
+          <li><i class="fa-solid fa-circle-check"></i> Chrisnat validates every payroll the system produces before it goes out the door.</li>
+          <li><i class="fa-solid fa-circle-check"></i> A compliance backstop: if the system slips, Chrisnat catches it before a worker does.</li>
+          <li><i class="fa-solid fa-circle-check"></i> Their client base becomes our first market — warm introductions, not cold calls.</li>
+        </ul>
+      </div>
+      <div class="why rv" style="--d:280ms">
+        <h4>Why this partnership matters</h4>
+        <ul>
+          <li><i class="fa-solid fa-diamond"></i> Tech + domain expertise in one room</li>
+          <li><i class="fa-solid fa-diamond"></i> Built-in market access from day one</li>
+          <li><i class="fa-solid fa-diamond"></i> A human compliance backstop</li>
+          <li><i class="fa-solid fa-diamond"></i> Instant credibility with clients</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- TEAM -->
+  <section class="sec" id="team" data-label="Team">
+    <div class="eyebrow rv">The Team</div>
+    <h2 class="rv" style="--d:60ms">Builders who ship.</h2>
+    <div class="team-grid">
+      <div class="tcard rv" style="--d:160ms">
+        <div class="avatar a1"><i class="fa-solid fa-user-tie"></i></div>
+        <h3>Sina</h3>
+        <div class="trole">Founder &amp; Lead Engineer</div>
+        <ul>
+          <li><i class="fa-solid fa-diamond"></i> Python / Flask backend</li>
+          <li><i class="fa-solid fa-diamond"></i> React + Tailwind frontend</li>
+          <li><i class="fa-solid fa-diamond"></i> PostgreSQL &amp; API design</li>
+          <li><i class="fa-solid fa-diamond"></i> Railway / Cloudflare deploys</li>
+        </ul>
+      </div>
+      <div class="tcard rv" style="--d:280ms">
+        <div class="avatar a2"><i class="fa-solid fa-user-tie"></i></div>
+        <h3>Samuel</h3>
+        <div class="trole">Co-Founder</div>
+        <ul>
+          <li><i class="fa-solid fa-diamond"></i> Product strategy</li>
+          <li><i class="fa-solid fa-diamond"></i> Market positioning</li>
+          <li><i class="fa-solid fa-diamond"></i> Business development</li>
+          <li><i class="fa-solid fa-diamond"></i> Client relations</li>
+        </ul>
+      </div>
+      <div class="tcard rv" style="--d:400ms">
+        <div class="avatar a3"><i class="fa-solid fa-user-tie"></i></div>
+        <h3>Jason</h3>
+        <div class="trole">Co-Founder</div>
+        <ul>
+          <li><i class="fa-solid fa-diamond"></i> Operations &amp; workflow</li>
+          <li><i class="fa-solid fa-diamond"></i> Partner coordination</li>
+          <li><i class="fa-solid fa-diamond"></i> QA &amp; user testing</li>
+          <li><i class="fa-solid fa-diamond"></i> Growth strategy</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMPETITIVE -->
+  <section class="sec" id="compete" data-label="Competition">
+    <div class="eyebrow rv">Competitive Landscape</div>
+    <h2 class="rv" style="--d:60ms">What we do that they don't.</h2>
+    <p class="lead rv" style="--d:120ms">Incumbents calculate payroll. None of them deliver across channels, prove receipt, and carry a human backstop. We're the only column that does all four.</p>
+
+    <div class="ctable" id="lp-ctable">
+      <div class="crow head">
+        <div class="feat">Feature</div>
+        <div>Akatua+</div>
+        <div class="c-wp">Workpay</div>
+        <div class="c-ot">Others</div>
+        <div class="us">Chrisnat + Dist.</div>
+      </div>
+      <div class="crow"><div class="feat">Payroll calculation</div><div class="yes">✓</div><div class="c-wp yes">✓</div><div class="c-ot yes">✓</div><div class="us"><span class="yes">✓</span></div></div>
+      <div class="crow"><div class="feat">Excel ingestion</div><div class="yes">✓</div><div class="c-wp part">Partial</div><div class="c-ot yes">✓</div><div class="us"><span class="yes">✓ Validated</span></div></div>
+      <div class="crow"><div class="feat">Payslip via Email</div><div class="yes">✓</div><div class="c-wp yes">✓</div><div class="c-ot part">Limited</div><div class="us"><span class="yes">✓</span></div></div>
+      <div class="crow"><div class="feat">Payslip via WhatsApp</div><div class="no">✕</div><div class="c-wp no">✕</div><div class="c-ot no">✕</div><div class="us"><span class="yes">✓</span></div></div>
+      <div class="crow"><div class="feat">SMS notification</div><div class="no">✕</div><div class="c-wp part">Partial</div><div class="c-ot no">✕</div><div class="us"><span class="yes">✓</span></div></div>
+      <div class="crow"><div class="feat">Per-channel delivery audit</div><div class="no">✕</div><div class="c-wp no">✕</div><div class="c-ot no">✕</div><div class="us"><span class="yes">✓</span></div></div>
+      <div class="crow"><div class="feat">Ghana PAYE / SSNIT built-in</div><div class="yes">✓</div><div class="c-wp yes">✓</div><div class="c-ot part">Varies</div><div class="us"><span class="yes">✓</span></div></div>
+      <div class="crow"><div class="feat">Human consultancy backup</div><div class="no">✕</div><div class="c-wp no">✕</div><div class="c-ot no">✕</div><div class="us"><span class="yes">✓ Chrisnat</span></div></div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="sec" id="pricing" data-label="Pricing">
+    <div class="eyebrow rv">Business Model</div>
+    <h2 class="rv" style="--d:60ms">Priced for Ghanaian businesses.</h2>
+    <p class="lead rv" style="--d:120ms">Simple monthly subscriptions that scale with headcount. SMS costs pass through to the client; everything else is included.</p>
+
+    <div class="price-grid">
+      <div class="ptier starter rv" style="--d:180ms">
+        <h3>Starter</h3>
+        <div class="amt"><span class="cur">GHS</span> 1,000 <small>/ mo</small></div>
+        <hr>
+        <ul>
+          <li><i class="fa-solid fa-check"></i> Up to 30 employees</li>
+          <li><i class="fa-solid fa-check"></i> Email + SMS delivery</li>
+          <li><i class="fa-solid fa-check"></i> Core payroll &amp; payslips</li>
+          <li><i class="fa-solid fa-check"></i> Basic reports</li>
+        </ul>
+      </div>
+      <div class="ptier growth rv" style="--d:300ms">
+        <span class="popular">Most popular</span>
+        <h3>Growth</h3>
+        <div class="amt"><span class="cur">GHS</span> 2,500 <small>/ mo</small></div>
+        <hr>
+        <ul>
+          <li><i class="fa-solid fa-check"></i> Up to 150 employees</li>
+          <li><i class="fa-solid fa-check"></i> Email + WhatsApp + SMS</li>
+          <li><i class="fa-solid fa-check"></i> Per-channel delivery audit</li>
+          <li><i class="fa-solid fa-check"></i> Priority support</li>
+        </ul>
+      </div>
+      <div class="ptier biz rv" style="--d:420ms">
+        <h3>Business</h3>
+        <div class="amt"><span class="cur">GHS</span> 4,000 <small>/ mo</small></div>
+        <hr>
+        <ul>
+          <li><i class="fa-solid fa-check"></i> Unlimited employees</li>
+          <li><i class="fa-solid fa-check"></i> All channels + API access</li>
+          <li><i class="fa-solid fa-check"></i> Chrisnat compliance review</li>
+          <li><i class="fa-solid fa-check"></i> Dedicated onboarding</li>
+        </ul>
+      </div>
+    </div>
+    <div class="pfoot rv" style="--d:480ms">+ Per-SMS fees passed through &nbsp;·&nbsp; Annual plans at 20% off &nbsp;·&nbsp; Chrisnat partner pricing available</div>
+  </section>
+
+  <!-- CLOSE -->
+  <section class="sec" id="close" data-label="Let's Talk">
+    <div class="inner">
+      <div class="close-cn rv">CN</div>
+      <h2 class="rv" style="--d:80ms">Let's build this together.</h2>
+      <p class="lead rv" style="--d:160ms">A working system, a real partnership, and a clear gap in the market. We're looking for the right investors to take it to every SME in Ghana.</p>
+      <div class="asks">
+        <div class="ask rv" style="--d:240ms">
+          <div class="ai"><i class="fa-solid fa-seedling"></i></div>
+          <h4>Seed investment</h4>
+          <p>Complete the distribution build and integrate the SMS &amp; WhatsApp APIs.</p>
+        </div>
+        <div class="ask rv" style="--d:340ms">
+          <div class="ai"><i class="fa-solid fa-flask"></i></div>
+          <h4>Beta clients</h4>
+          <p>Three to five SMEs ready to pilot the distribution feature in Q1.</p>
+        </div>
+        <div class="ask rv" style="--d:440ms">
+          <div class="ai"><i class="fa-solid fa-network-wired"></i></div>
+          <h4>Network</h4>
+          <p>Introductions to HR firms and payroll consultancies across Ghana.</p>
+        </div>
+      </div>
+      <div class="close-cta rv" style="--d:520ms">
+        <a class="hbtn gold" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-right-to-bracket"></i> Staff Login</a>
+      </div>
+      <div class="close-foot rv" style="--d:560ms">Sinaforte Labs &nbsp;·&nbsp; In partnership with Chrisnat Limited</div>
+    </div>
+  </section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  const root=document.querySelector('.lp-root');
+  if(!root) return;
+  const sections = [...root.querySelectorAll('.sec')];
+  const prog = document.getElementById('lp-prog');
+  const dotsWrap = document.getElementById('lp-dots');
+
+  // build dot nav
+  sections.forEach((s,i)=>{
+    const b=document.createElement('button');
+    b.innerHTML='<span class="lbl">'+(s.dataset.label||('0'+(i+1)))+'</span>';
+    b.addEventListener('click',()=>s.scrollIntoView({behavior:'smooth'}));
+    dotsWrap.appendChild(b);
+  });
+  const dots=[...dotsWrap.children];
+
+  // scroll progress
+  function onScroll(){
+    const h=document.documentElement;
+    const max=h.scrollHeight-h.clientHeight;
+    prog.style.width=(max>0?(h.scrollTop/max*100):0)+'%';
+  }
+  window.addEventListener('scroll',onScroll,{passive:true});
+  onScroll();
+
+  // active section + reveal
+  const io=new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        const idx=sections.indexOf(e.target);
+        dots.forEach((d,i)=>d.classList.toggle('on',i===idx));
+        // reveal children
+        e.target.querySelectorAll('.rv').forEach(el=>el.classList.add('in'));
+        // pipeline
+        if(e.target.id==='pipeline'){document.getElementById('lp-pipe').classList.add('in');}
+        // competitive rows
+        if(e.target.id==='compete'){
+          [...root.querySelectorAll('#lp-ctable .crow:not(.head)')].forEach((r,i)=>{
+            r.style.setProperty('--d',(i*80)+'ms');r.classList.add('in');
+          });
+        }
+        // counters
+        if(e.target.id==='proof'){runCounters();}
+      }
+    });
+  },{threshold:0.35});
+  sections.forEach(s=>io.observe(s));
+
+  // counters
+  let counted=false;
+  function runCounters(){
+    if(counted)return;counted=true;
+    root.querySelectorAll('#lp-stats .n').forEach(el=>{
+      const to=+el.dataset.to;const isPct=to===100;
+      const dur=1400;const t0=performance.now();
+      const suffix=isPct?'<span class="suf">%</span>':'';
+      function tick(now){
+        const p=Math.min((now-t0)/dur,1);
+        const eased=1-Math.pow(1-p,3);
+        const val=Math.round(eased*to);
+        el.innerHTML=val+suffix;
+        if(p<1)requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    });
+  }
+
+  // keyboard nav
+  function currentIndex(){
+    const mid=window.scrollY+window.innerHeight/2;
+    let idx=0;
+    sections.forEach((s,i)=>{if(s.offsetTop<=mid)idx=i;});
+    return idx;
+  }
+  window.addEventListener('keydown',e=>{
+    if(['ArrowDown','PageDown'].includes(e.key)){e.preventDefault();
+      const n=Math.min(currentIndex()+1,sections.length-1);sections[n].scrollIntoView({behavior:'smooth'});}
+    if(['ArrowUp','PageUp'].includes(e.key)){e.preventDefault();
+      const n=Math.max(currentIndex()-1,0);sections[n].scrollIntoView({behavior:'smooth'});}
+  });
+})();
+</script>
+{% endblock %}

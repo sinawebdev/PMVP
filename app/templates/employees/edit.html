@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ emp.full_name }} · {{ client.name }}{% endblock %}
+{% block page_title %}Edit Employee — {{ client.name }}{% endblock %}
+{% block page_intro %}Update contact and roster details. These are the details used when distributing payslips.{% endblock %}
+{% block content %}
+<section class="panel form-panel">
+    <form method="post" class="row g-3">
+        <div class="col-md-4">
+            <label class="form-label">Employee ID</label>
+            <p class="form-control-plaintext"><strong>{{ emp.staff_id }}</strong></p>
+            <small class="text-muted">Employee ID cannot be changed after creation</small>
+        </div>
+        <div class="col-md-8">
+            <label class="form-label" for="full_name">Full Name *</label>
+            <input class="form-control" id="full_name" name="full_name" value="{{ emp.full_name }}" required>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="email">Email</label>
+            <input class="form-control" id="email" name="email" type="email" value="{{ emp.email or '' }}">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="phone">Phone</label>
+            <input class="form-control" id="phone" name="phone" placeholder="+233244000000" value="{{ emp.phone or '' }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="department">Department</label>
+            <input class="form-control" id="department" name="department" value="{{ emp.department or '' }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="bank_account">Bank Account</label>
+            <input class="form-control" id="bank_account" name="bank_account" value="{{ emp.bank_account_number or '' }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="status">Status</label>
+            <select class="form-select" id="status" name="status">
+                <option value="Active" {% if emp.status == 'Active' %}selected{% endif %}>Active</option>
+                <option value="Inactive" {% if emp.status != 'Active' %}selected{% endif %}>Inactive</option>
+            </select>
+        </div>
+        <div class="col-12 d-flex gap-2">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle"></i>Save Changes</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('employees.roster', client_id=client.id) }}">Cancel</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

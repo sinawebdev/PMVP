@@ -1,8 +1,9 @@
 {% extends "base.html" %}
+{% block title %}Dashboard · Chrisnat Payroll{% endblock %}
 {% block page_title %}MD Dashboard{% endblock %}
 {% block page_intro %}A management view of client company payroll costs, pending approvals, statutory totals, expense exposure, and warning signals for {{ selected_month }} {{ selected_year }}.{% endblock %}
 {% block page_actions %}
-<a class="btn btn-light btn-sm" href="{{ url_for('payroll.upload') }}"><i class="bi bi-file-earmark-arrow-up"></i>Upload Excel</a>
+<a class="btn btn-light btn-sm" href="{{ url_for('payroll.runs') }}"><i class="bi bi-file-earmark-arrow-up"></i>Create Payroll Run</a>
 <a class="btn btn-outline-light btn-sm" href="{{ url_for('payroll.runs', status='needs_approval') }}"><i class="bi bi-check2-square"></i>Review Approvals</a>
 {% endblock %}
 {% block header_visual %}
@@ -38,7 +39,6 @@
         </div>
     </form>
 </section>
-
 <section class="stats-grid">
     <div class="stat-card"><i class="bi bi-people stat-icon"></i><span>Total Employees</span><strong>{{ total_employees }}</strong></div>
     <div class="stat-card"><i class="bi bi-person-check stat-icon"></i><span>Active Employees</span><strong>{{ active_employees }}</strong></div>
@@ -48,6 +48,7 @@
     <div class="stat-card"><i class="bi bi-receipt-cutoff stat-icon"></i><span>PAYE Total</span><strong>{{ paye_total|cedis }}</strong></div>
     <div class="stat-card"><i class="bi bi-shield-check stat-icon"></i><span>SSNIT Total</span><strong>{{ ssnit_total|cedis }}</strong></div>
     <div class="stat-card"><i class="bi bi-exclamation-triangle stat-icon"></i><span>Validation Warnings</span><strong>{{ warning_count }}</strong></div>
+    <div class="stat-card" title="{{ payslips_delivered }} of {{ payslips_total }} payslips pushed to workers"><i class="bi bi-send-check stat-icon"></i><span>Payslips Delivered</span><strong>{{ delivery_rate }}%</strong></div>
 </section>
 
 <div class="row g-4 mt-1">
@@ -69,9 +70,13 @@
                             <td>{{ item.workers }}</td>
                             <td>{{ item.payroll_cost|cedis }}</td>
                             <td>
+                                {% if item.payroll_cost and item.bar_percent %}
                                 <div class="sparkbar" title="{{ item.payroll_cost|cedis }}">
                                     <span style="width: {{ item.bar_percent }}%"></span>
                                 </div>
+                                {% else %}
+                                <span class="text-muted" title="No payroll cost recorded yet">—</span>
+                                {% endif %}
                             </td>
                             <td><span class="badge {{ item.submission_class }}">{{ item.submission_status }}</span></td>
                             <td>

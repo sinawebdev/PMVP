@@ -1,9 +1,21 @@
 import json
 import os
 import tempfile
+import uuid
 from datetime import datetime, timezone
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, url_for
+from flask import (
+    Blueprint,
+    current_app,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
+)
 from flask_login import current_user, login_required
 
 from app import db
@@ -22,12 +34,53 @@ from app.excel_utils import (
     payroll_sheet_candidates,
     workbook_sheet_names,
 )
-from app.finance import create_finance_records_for_payroll
-from app.models import ClientCompany, Employee, ImportBatch, PayrollItem, PayrollRun
+from app.models import (
+    ClientCompany,
+    Employee,
+    ImportBatch,
+    PayrollItem,
+    PayrollRun,
+    RawPayEntry,
+)
 from app.pdf_service import generate_payslip_pdf
+from app.raw_import import normalise_emp_id
 from app.validators import validate_payroll_rows
 
 payroll_bp = Blueprint("payroll", __name__, url_prefix="/payroll")
+
+
+def crossref_employee_records(client_id, mapped_rows):
+    """Compare a payroll file's staff IDs against the client's active employee roster.
+
+    Returns ``(unregistered, no_contact)`` — both non-blocking warnings:
+      * unregistered: normalised staff IDs in the file with no roster record yet.
+        They import fine but cannot receive payslips until their record is created.
+      * no_contact: active roster employees present in the file that have neither
+        email nor phone, so distribution is unavailable for them.
+    Contact details for distribution always come from the roster, never the upload.
+    """
+    file_ids = {
+        normalise_emp_id(row.get("staff_id"))
+        for row in mapped_rows
+        if row.get("staff_id")
+    }
+    file_ids.discard("")
+    db_employees = {
+        e.staff_id: e
+        for e in Employee.query.filter_by(
+            client_company_id=client_id, status="Active"
+        ).all()
+    }
+    unregistered = sorted(file_ids - set(db_employees.keys()))
+    no_contact = sorted(
+        (
+            {"staff_id": e.staff_id, "name": e.full_name}
+            for e in db_employees.values()
+            if e.staff_id in file_ids and not e.email and not e.phone
+        ),
+        key=lambda r: r["name"] or r["staff_id"],
+    )
+    return unregistered, no_contact
 
 
 def save_import_session(payload):
@@ -289,9 +342,90 @@ def build_multi_client_payload(file_path, source_filename, month, year):
     }, None
 
 
-@payroll_bp.route("/runs")
+def handle_payroll_upload(now):
+    import_mode = request.form.get("import_mode") or "single_client"
+    client_id = request.form.get("client_company_id")
+    if import_mode == "single_client" and not client_id:
+        flash("Select a client company before uploading payroll.", "warning")
+        return redirect(url_for("payroll.runs"))
+
+    month = request.form.get("month") or now.strftime("%B")
+    year = int(request.form.get("year") or now.year)
+    file_storage = request.files.get("payroll_file")
+    if not file_storage or not file_storage.filename:
+        flash("Choose an Excel file to upload.", "warning")
+        return redirect(url_for("payroll.runs"))
+    if not allowed_excel_file(file_storage.filename):
+        flash("Only .xlsx, .xls, or .csv files are supported.", "warning")
+        return redirect(url_for("payroll.runs"))
+
+    source_filename = file_storage.filename
+    file_path = save_temporary_upload(file_storage)
+    try:
+        if import_mode == "multi_client":
+            payload, error = build_multi_client_payload(file_path, source_filename, month, year)
+            client_for_batch = None
+        else:
+            client = db.get_or_404(ClientCompany, client_id)
+            payload, error = build_single_payload(file_path, source_filename, client, month, year)
+            client_for_batch = client
+    finally:
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
+
+    if error:
+        flash(error, "danger")
+        return redirect(url_for("payroll.runs"))
+
+    batch_client_id = (
+        client_for_batch.id
+        if client_for_batch
+        else payload["runs"][0]["client_company_id"]
+    )
+
+    batch = ImportBatch(
+        client_company_id=batch_client_id,
+        payroll_month=month,
+        payroll_year=year,
+        uploaded_by=current_user.id,
+        original_filename=source_filename,
+        import_mode=payload["mode"],
+        source_sheet_name=payload.get("matched_sheet_name"),
+        status="Previewed",
+        total_rows=(payload["import_summary"]["total_rows"] if payload["mode"] == "single_client" else sum(run["import_summary"]["total_rows"] for run in payload["runs"])),
+        valid_rows=(payload["import_summary"]["valid_rows"] if payload["mode"] == "single_client" else sum(run["import_summary"]["valid_rows"] for run in payload["runs"])),
+        invalid_rows=(payload["import_summary"]["invalid_rows"] if payload["mode"] == "single_client" else sum(run["import_summary"]["invalid_rows"] for run in payload["runs"])),
+        total_workers=(payload["worker_stats"]["total_unique_workers"] if payload["mode"] == "single_client" else sum(run["worker_stats"]["total_unique_workers"] for run in payload["runs"])),
+        gross_total=(payload["import_summary"]["gross_total"] if payload["mode"] == "single_client" else sum(run["import_summary"]["gross_total"] for run in payload["runs"])),
+        net_total=(payload["import_summary"]["net_total"] if payload["mode"] == "single_client" else sum(run["import_summary"]["net_total"] for run in payload["runs"])),
+        paye_total=(payload["import_summary"]["paye_total"] if payload["mode"] == "single_client" else sum(run["import_summary"]["paye_total"] for run in payload["runs"])),
+        ssnit_total=(payload["import_summary"]["ssnit_total"] if payload["mode"] == "single_client" else sum(run["import_summary"]["ssnit_total"] for run in payload["runs"])),
+        validation_summary=(
+            "\n".join(payload["validation"]["summary_warnings"])
+            if payload["mode"] == "single_client"
+            else "\n".join(warning for run in payload["runs"] for warning in run["validation"]["summary_warnings"])
+        ),
+    )
+    db.session.add(batch)
+    db.session.flush()
+    record_audit("Payroll upload", batch, f"Uploaded {source_filename} for preview.")
+    payload["import_batch_id"] = batch.id
+    import_id = save_import_session(payload)
+    return redirect(url_for("payroll.preview", import_id=import_id))
+
+
+@payroll_bp.route("/runs", methods=["GET", "POST"])
 @login_required
 def runs():
+    now = datetime.now()
+    if request.method == "POST":
+        if current_user.role != "admin":
+            flash("Only admins can create payroll runs.", "danger")
+            return redirect(url_for("payroll.runs"))
+        return handle_payroll_upload(now)
+
     selected_client = None
     query = PayrollRun.query
     client_id = request.args.get("client_id")
@@ -300,98 +434,16 @@ def runs():
         selected_client = db.get_or_404(ClientCompany, client_id)
         query = query.filter(PayrollRun.client_company_id == selected_client.id)
     if status_filter == "needs_approval":
-        query = query.filter(PayrollRun.status.in_(["Draft", "Pending Review", "Pending MD Approval"]))
+        query = query.filter(PayrollRun.status.in_(["Draft", "Pending Approval"]))
     elif status_filter:
         query = query.filter(PayrollRun.status == status_filter)
     payroll_runs = query.order_by(PayrollRun.created_at.desc()).all()
+    clients = ClientCompany.query.filter_by(status="Active").order_by(ClientCompany.name).all()
     return render_template(
         "payroll_runs.html",
         payroll_runs=payroll_runs,
         selected_client=selected_client,
         status_filter=status_filter,
-    )
-
-
-@payroll_bp.route("/upload", methods=["GET", "POST"])
-@role_required("admin")
-def upload():
-    clients = ClientCompany.query.filter_by(status="Active").order_by(ClientCompany.name).all()
-    now = datetime.now()
-    if request.method == "POST":
-        import_mode = request.form.get("import_mode") or "single_client"
-        client_id = request.form.get("client_company_id")
-        if import_mode == "single_client" and not client_id:
-            flash("Select a client company before uploading payroll.", "warning")
-            return redirect(url_for("payroll.upload"))
-
-        month = request.form.get("month") or now.strftime("%B")
-        year = int(request.form.get("year") or now.year)
-        file_storage = request.files.get("payroll_file")
-        if not file_storage or not file_storage.filename:
-            flash("Choose an Excel file to upload.", "warning")
-            return redirect(url_for("payroll.upload"))
-        if not allowed_excel_file(file_storage.filename):
-            flash("Only .xlsx, .xls, or .csv files are supported.", "warning")
-            return redirect(url_for("payroll.upload"))
-
-        source_filename = file_storage.filename
-        file_path = save_temporary_upload(file_storage)
-        try:
-            if import_mode == "multi_client":
-                payload, error = build_multi_client_payload(file_path, source_filename, month, year)
-                client_for_batch = None
-            else:
-                client = db.get_or_404(ClientCompany, client_id)
-                payload, error = build_single_payload(file_path, source_filename, client, month, year)
-                client_for_batch = client
-        finally:
-            try:
-                os.remove(file_path)
-            except OSError:
-                pass
-
-        if error:
-            flash(error, "danger")
-            return redirect(url_for("payroll.upload"))
-
-        batch_client_id = (
-            client_for_batch.id
-            if client_for_batch
-            else payload["runs"][0]["client_company_id"]
-        )
-
-        batch = ImportBatch(
-            client_company_id=batch_client_id,
-            payroll_month=month,
-            payroll_year=year,
-            uploaded_by=current_user.id,
-            original_filename=source_filename,
-            import_mode=payload["mode"],
-            source_sheet_name=payload.get("matched_sheet_name"),
-            status="Previewed",
-            total_rows=(payload["import_summary"]["total_rows"] if payload["mode"] == "single_client" else sum(run["import_summary"]["total_rows"] for run in payload["runs"])),
-            valid_rows=(payload["import_summary"]["valid_rows"] if payload["mode"] == "single_client" else sum(run["import_summary"]["valid_rows"] for run in payload["runs"])),
-            invalid_rows=(payload["import_summary"]["invalid_rows"] if payload["mode"] == "single_client" else sum(run["import_summary"]["invalid_rows"] for run in payload["runs"])),
-            total_workers=(payload["worker_stats"]["total_unique_workers"] if payload["mode"] == "single_client" else sum(run["worker_stats"]["total_unique_workers"] for run in payload["runs"])),
-            gross_total=(payload["import_summary"]["gross_total"] if payload["mode"] == "single_client" else sum(run["import_summary"]["gross_total"] for run in payload["runs"])),
-            net_total=(payload["import_summary"]["net_total"] if payload["mode"] == "single_client" else sum(run["import_summary"]["net_total"] for run in payload["runs"])),
-            paye_total=(payload["import_summary"]["paye_total"] if payload["mode"] == "single_client" else sum(run["import_summary"]["paye_total"] for run in payload["runs"])),
-            ssnit_total=(payload["import_summary"]["ssnit_total"] if payload["mode"] == "single_client" else sum(run["import_summary"]["ssnit_total"] for run in payload["runs"])),
-            validation_summary=(
-                "\n".join(payload["validation"]["summary_warnings"])
-                if payload["mode"] == "single_client"
-                else "\n".join(warning for run in payload["runs"] for warning in run["validation"]["summary_warnings"])
-            ),
-        )
-        db.session.add(batch)
-        db.session.flush()
-        record_audit("Payroll upload", batch, f"Uploaded {source_filename} for preview.")
-        payload["import_batch_id"] = batch.id
-        import_id = save_import_session(payload)
-        return redirect(url_for("payroll.preview", import_id=import_id))
-
-    return render_template(
-        "payroll_upload.html",
         clients=clients,
         current_month=now.strftime("%B"),
         current_year=now.year,
@@ -403,13 +455,19 @@ def upload():
 def preview(import_id):
     payload = load_import_session(import_id)
     client = None
+    unregistered, no_contact = [], []
     if payload.get("mode") != "multi_client":
         client = db.get_or_404(ClientCompany, payload["client_company_id"])
+        unregistered, no_contact = crossref_employee_records(
+            client.id, payload.get("mapped_rows", [])
+        )
     return render_template(
         "payroll_preview.html",
         import_id=import_id,
         payload=payload,
         client=client,
+        unregistered=unregistered,
+        no_contact=no_contact,
     )
 
 
@@ -432,7 +490,7 @@ def confirm(import_id):
             "No valid payroll rows were found. Please check the selected sheet, header row, or Excel format.",
             "danger",
         )
-        return redirect(url_for("payroll.upload"))
+        return redirect(url_for("payroll.runs"))
     client = db.get_or_404(ClientCompany, payload["client_company_id"])
     validation = validate_payroll_rows(
         payload["mapped_rows"],
@@ -467,7 +525,7 @@ def confirm_multi_client_import(import_id, payload):
             "No valid payroll rows were found. Please check the selected sheet, header row, or Excel format.",
             "danger",
         )
-        return redirect(url_for("payroll.upload"))
+        return redirect(url_for("payroll.runs"))
 
     duplicates = []
     for run_payload in runs:
@@ -562,6 +620,7 @@ def create_payroll_run_from_payload(payload, client, validation, import_mode):
             bank_name=row.get("bank_name"),
             bank_account_number=row.get("bank_account_number"),
             momo_number=row.get("momo_number"),
+            email=row.get("email"),
             basic_salary=float(row.get("basic_salary") or 0),
             transport_allowance=float(row.get("transport_allowance") or 0),
             housing_allowance=float(row.get("housing_allowance") or 0),
@@ -622,6 +681,7 @@ def create_or_update_employee_from_import(row, client, payroll_run, row_index):
     employee.bank_name = row.get("bank_name") or employee.bank_name
     employee.bank_account_number = row.get("bank_account_number") or employee.bank_account_number
     employee.momo_number = row.get("momo_number") or employee.momo_number
+    employee.email = row.get("email") or employee.email
     employee.status = row.get("status") or employee.status
     employee.service_line = row.get("service_line") or employee.service_line
     employee.basic_salary = float(row.get("basic_salary") or employee.basic_salary or 0)
@@ -633,17 +693,290 @@ def create_or_update_employee_from_import(row, client, payroll_run, row_index):
 @login_required
 def detail(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
-    return render_template("payroll_detail.html", payroll_run=payroll_run)
+
+    return render_template(
+        "payroll_detail.html",
+        payroll_run=payroll_run,
+    )
+
+
+def _raw_import_session_path(run_id):
+    """Parsed raw-hours preview is staged on disk (not the cookie session) keyed
+    by run, mirroring the standard import's IMPORT_SESSION_FOLDER pattern, so a
+    large workbook never overflows the session cookie."""
+    folder = current_app.config["IMPORT_SESSION_FOLDER"]
+    return os.path.join(folder, f"raw_import_{run_id}.json")
+
+
+@payroll_bp.route("/runs/<int:run_id>/raw-upload", methods=["POST"])
+@login_required
+def raw_upload(run_id):
+    """Accept a raw-data Excel file, parse it, cross-validate, and return a JSON
+    preview for user confirmation. Does NOT write any payroll data to the DB."""
+    from app.raw_import import (
+        build_import_preview,
+        cross_validate,
+        detect_sheet_layout,
+        normalise_emp_id,
+        parse_master_tab,
+        parse_qtarpay,
+    )
+
+    run = db.get_or_404(PayrollRun, run_id)
+
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"error": "No file provided"}), 400
+
+    try:
+        xl = pd.ExcelFile(file)
+    except Exception:
+        return jsonify({"error": "Could not read the uploaded file as an Excel workbook."}), 422
+
+    layout = detect_sheet_layout(xl)
+    if "qtarpay" not in layout:
+        return jsonify({
+            "error": "Could not find a pay-code sheet (qtarpay format) in this file. "
+                     "Expected a sheet with Column1/Column2/Column3/Column4 headers."
+        }), 422
+
+    df_qtarpay = xl.parse(layout["qtarpay"], header=None)
+    employees, warnings = parse_qtarpay(df_qtarpay)
+
+    discrepancies = []
+    if "master" in layout:
+        df_master = xl.parse(layout["master"], header=None)
+        master_data = parse_master_tab(df_master)
+        discrepancies = cross_validate(employees, master_data)
+
+    db_emps_raw = Employee.query.filter_by(
+        client_company_id=run.client_company_id
+    ).all()
+    db_employees = {
+        normalise_emp_id(e.staff_id): {"name": e.full_name, "id": e.id}
+        for e in db_emps_raw
+    }
+
+    preview = build_import_preview(employees, db_employees)
+
+    # Stage parsed hours on disk and keep only the run id in the cookie session.
+    with open(_raw_import_session_path(run_id), "w", encoding="utf-8") as handle:
+        json.dump(employees, handle)
+    session["raw_import_run_id"] = run_id
+
+    record_audit("Raw payroll upload", run, "Raw hours uploaded for preview (billable add-on).")
+
+    return jsonify({
+        "status": "preview",
+        "preview": preview,
+        "warnings": warnings,
+        "discrepancies": discrepancies,
+        "employee_count": len(employees),
+    })
+
+
+@payroll_bp.route("/runs/<int:run_id>/raw-confirm", methods=["POST"])
+@login_required
+def raw_confirm(run_id):
+    """User confirmed the preview. Commit raw hours and mark the run
+    upload_type='raw'. Does NOT calculate pay — that is a later operator step."""
+    if session.get("raw_import_run_id") != run_id:
+        return jsonify({"error": "Session mismatch — please re-upload the file."}), 400
+
+    session_path = _raw_import_session_path(run_id)
+    employees = {}
+    if os.path.exists(session_path):
+        with open(session_path, "r", encoding="utf-8") as handle:
+            employees = json.load(handle)
+    if not employees:
+        return jsonify({"error": "No import data in session."}), 400
+
+    run = db.get_or_404(PayrollRun, run_id)
+
+    for emp_id, pay_codes in employees.items():
+        for pay_code, hours in pay_codes.items():
+            db.session.add(
+                RawPayEntry(
+                    payroll_run_id=run_id,
+                    employee_id_str=emp_id,
+                    pay_code=pay_code,
+                    hours=hours,
+                )
+            )
+
+    run.upload_type = "raw"
+    record_audit("Raw payroll confirm", run, "Raw hours committed; awaiting pay calculation.")
+    db.session.commit()
+
+    session.pop("raw_import_run_id", None)
+    try:
+        os.remove(session_path)
+    except OSError:
+        pass
+
+    return jsonify({
+        "status": "committed",
+        "run_id": run_id,
+        "imported": sum(len(v) for v in employees.values()),
+    })
+
+
+def _raw_new_path(token):
+    """Disk staging for an upload-page raw import keyed by a one-time token, so a
+    large workbook never rides in the cookie session."""
+    return os.path.join(current_app.config["IMPORT_SESSION_FOLDER"], f"raw_new_{token}.json")
+
+
+@payroll_bp.route("/runs/raw-upload", methods=["POST"])
+@login_required
+def raw_upload_new():
+    """Upload-page raw-data flow: parse a raw-hours workbook for the chosen client
+    and return a JSON preview. Creates NO payroll run yet — that happens on confirm,
+    so abandoning the preview leaves no orphan Draft run behind."""
+    from app.raw_import import (
+        build_import_preview,
+        cross_validate,
+        detect_sheet_layout,
+        normalise_emp_id,
+        parse_master_tab,
+        parse_qtarpay,
+    )
+
+    client_id = request.form.get("client_company_id")
+    if not client_id:
+        return jsonify({"error": "Select a client company first."}), 400
+    client = db.session.get(ClientCompany, int(client_id))
+    if not client:
+        return jsonify({"error": "Unknown client company."}), 404
+    month = request.form.get("month")
+    year = request.form.get("year")
+    if not month or not year:
+        return jsonify({"error": "Choose a month and year."}), 400
+
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"error": "No file provided"}), 400
+    try:
+        xl = pd.ExcelFile(file)
+    except Exception:
+        return jsonify({"error": "Could not read the uploaded file as an Excel workbook."}), 422
+
+    layout = detect_sheet_layout(xl)
+    if "qtarpay" not in layout:
+        return jsonify({
+            "error": "Could not find a pay-code sheet (qtarpay format) in this file. "
+                     "Expected a sheet with Column1/Column2/Column3/Column4 headers."
+        }), 422
+
+    employees, warnings = parse_qtarpay(xl.parse(layout["qtarpay"], header=None))
+    discrepancies = []
+    if "master" in layout:
+        master_data = parse_master_tab(xl.parse(layout["master"], header=None))
+        discrepancies = cross_validate(employees, master_data)
+
+    db_employees = {
+        normalise_emp_id(e.staff_id): {"name": e.full_name, "id": e.id}
+        for e in Employee.query.filter_by(client_company_id=client.id).all()
+    }
+    preview = build_import_preview(employees, db_employees)
+
+    token = uuid.uuid4().hex
+    with open(_raw_new_path(token), "w", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "client_company_id": client.id,
+                "month": month,
+                "year": int(year),
+                "source_filename": file.filename,
+                "employees": employees,
+            },
+            handle,
+        )
+    session["raw_new_token"] = token
+
+    return jsonify({
+        "status": "preview",
+        "token": token,
+        "preview": preview,
+        "warnings": warnings,
+        "discrepancies": discrepancies,
+        "employee_count": len(employees),
+        "client_name": client.name,
+        "period": f"{month} {year}",
+    })
+
+
+@payroll_bp.route("/runs/raw-confirm", methods=["POST"])
+@login_required
+def raw_confirm_new():
+    """Commit a previewed upload-page raw import: create a Draft payroll run marked
+    upload_type='raw', store the raw hours, and hand back the run detail URL. Pay is
+    calculated later by a Chrisnat operator — this stores hours only."""
+    token = request.form.get("token")
+    if not token or session.get("raw_new_token") != token:
+        return jsonify({"error": "Session mismatch — please re-upload the file."}), 400
+
+    path = _raw_new_path(token)
+    staged = {}
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as handle:
+            staged = json.load(handle)
+    employees = staged.get("employees", {})
+    if not employees:
+        return jsonify({"error": "No import data in session."}), 400
+
+    run = PayrollRun(
+        client_company_id=staged["client_company_id"],
+        month=staged["month"],
+        year=int(staged["year"]),
+        status="Draft",
+        upload_type="raw",
+        created_by=current_user.id,
+        source_filename=staged.get("source_filename"),
+        import_type="Raw Data Upload",
+        total_rows_imported=sum(len(v) for v in employees.values()),
+        total_workers=len(employees),
+        total_unique_workers=len(employees),
+    )
+    db.session.add(run)
+    db.session.flush()  # assign run.id before writing child rows
+
+    for emp_id, pay_codes in employees.items():
+        for pay_code, hours in pay_codes.items():
+            db.session.add(
+                RawPayEntry(
+                    payroll_run_id=run.id,
+                    employee_id_str=emp_id,
+                    pay_code=pay_code,
+                    hours=hours,
+                )
+            )
+
+    record_audit("Raw payroll upload", run, "Raw hours imported (billable add-on); awaiting pay calculation.")
+    db.session.commit()
+
+    session.pop("raw_new_token", None)
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+    return jsonify({
+        "status": "committed",
+        "run_id": run.id,
+        "imported": sum(len(v) for v in employees.values()),
+        "redirect": url_for("payroll.detail", run_id=run.id),
+    })
 
 
 @payroll_bp.route("/runs/<int:run_id>/mark-reviewed", methods=["POST"])
 @role_required("admin")
 def mark_reviewed(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
-    payroll_run.status = "Pending Review"
-    record_audit("Payroll edit", payroll_run, "Payroll moved to Pending Review.")
+    payroll_run.status = "Pending Approval"
+    record_audit("Payroll edit", payroll_run, "Payroll moved to Pending Approval.")
     db.session.commit()
-    flash("Payroll submitted for accounts review.", "success")
+    flash("Payroll submitted for approval.", "success")
     return redirect(url_for("payroll.detail", run_id=run_id))
 
 
@@ -657,12 +990,12 @@ def submit_review(run_id):
 @role_required("admin", "accounts_officer")
 def submit_md_approval(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
-    payroll_run.status = "Pending MD Approval"
+    payroll_run.status = "Pending Approval"
     payroll_run.reviewed_by = current_user.id
     payroll_run.reviewed_at = datetime.now(timezone.utc)
-    record_audit("Payroll review", payroll_run, "Accounts submitted payroll for MD approval.")
+    record_audit("Payroll review", payroll_run, "Payroll submitted for approval.")
     db.session.commit()
-    flash("Payroll sent for MD approval.", "success")
+    flash("Payroll sent for approval.", "success")
     return redirect(url_for("payroll.detail", run_id=run_id))
 
 
@@ -673,10 +1006,9 @@ def approve(run_id):
     payroll_run.status = "Approved"
     payroll_run.approved_by = current_user.id
     payroll_run.approved_at = datetime.now(timezone.utc)
-    create_finance_records_for_payroll(payroll_run, current_user.id)
     record_audit("Payroll approval", payroll_run, "MD/Admin approved payroll.")
     db.session.commit()
-    flash("Payroll approved. Voucher and statutory remittance records were prepared.", "success")
+    flash("Payroll approved.", "success")
     return redirect(url_for("payroll.detail", run_id=run_id))
 
 
@@ -697,13 +1029,10 @@ def reject(run_id):
 @role_required("admin", "accounts_officer")
 def mark_paid(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
-    payroll_run.status = "Paid"
-    if payroll_run.voucher:
-        payroll_run.voucher.status = "Paid"
-        payroll_run.voucher.date_paid = datetime.now(timezone.utc)
-    record_audit("Payment marked as paid", payroll_run, "Accounts marked payroll voucher as paid.")
+    payroll_run.status = "Processed"
+    record_audit("Payroll processed", payroll_run, "Payroll marked as processed.")
     db.session.commit()
-    flash("Payroll marked as paid.", "success")
+    flash("Payroll marked as processed.", "success")
     return redirect(url_for("payroll.detail", run_id=run_id))
 
 
@@ -712,7 +1041,8 @@ def mark_paid(run_id):
 def export(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     file_path = export_payroll_run(payroll_run, current_app.config["EXPORT_FOLDER"])
-    payroll_run.status = "Exported"
+    payroll_run.status = "Processed"
+    record_audit("Payroll export", payroll_run, "Payroll exported and marked as processed.")
     db.session.commit()
     return send_file(file_path, as_attachment=True)
 

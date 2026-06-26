@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Generated Payslips · Chrisnat Payroll{% endblock %}
+{% block page_title %}Generated Payslips{% endblock %}
+{% block page_intro %}Printable payslip preview generated from saved payroll run records. Individual PDF downloads are available per employee.{% endblock %}
+{% block content %}
+<div class="toolbar">
+    <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer"></i>Print</button>
+    <a class="btn btn-outline-secondary" href="{{ url_for('payslip.index') }}"><i class="bi bi-arrow-left"></i>Back to Payslip</a>
+</div>
+{% for item in items %}
+    {% set run = item.payroll_run %}
+    <section class="panel mb-3 payslip-sheet">
+        <div class="panel-header">
+            <h2>{{ item.full_name }}</h2>
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.payslip', item_id=item.id) }}"><i class="bi bi-file-earmark-pdf"></i>PDF</a>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-4"><strong>Employee ID</strong><p>{{ item.staff_id }}</p></div>
+            <div class="col-md-4"><strong>Client company</strong><p>{{ run.client_company.name if run and run.client_company else "" }}</p></div>
+            <div class="col-md-4"><strong>Payroll period</strong><p>{{ run.month }} {{ run.year }}</p></div>
+            <div class="col-md-4"><strong>Basic salary</strong><p>{{ item.basic_salary|cedis }}</p></div>
+            <div class="col-md-4"><strong>Allowances</strong><p>{{ (item.transport_allowance + item.housing_allowance + item.overtime_pay + item.other_allowances)|cedis }}</p></div>
+            <div class="col-md-4"><strong>Deductions</strong><p>{{ item.total_deductions|cedis }}</p></div>
+            <div class="col-md-4"><strong>Gross salary</strong><p>{{ item.gross_pay|cedis }}</p></div>
+            <div class="col-md-4"><strong>Net salary</strong><p>{{ item.net_pay|cedis }}</p></div>
+            <div class="col-md-4"><strong>Payroll run reference</strong><p>#{{ run.id if run else "" }}</p></div>
+        </div>
+    </section>
+{% else %}
+    <section class="panel"><p class="text-muted mb-0">No payslips were generated.</p></section>
+{% endfor %}
+{% endblock %}

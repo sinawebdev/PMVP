@@ -4,6 +4,9 @@ from app import db
 
 
 SCHEMA_COLUMNS = {
+    "user": {
+        "client_company_id": "INTEGER",
+    },
     "payroll_run": {
         "reviewed_by": "INTEGER",
         "reviewed_at": "timestamp",
@@ -18,6 +21,7 @@ SCHEMA_COLUMNS = {
         "terminated_workers": "INTEGER DEFAULT 0",
         "on_leave_workers": "INTEGER DEFAULT 0",
         "unknown_status_workers": "INTEGER DEFAULT 0",
+        "upload_type": "VARCHAR(20)",
     },
     "payroll_item": {
         "status": "VARCHAR(40)",
@@ -28,9 +32,16 @@ SCHEMA_COLUMNS = {
         "bank_name": "VARCHAR(120)",
         "bank_account_number": "VARCHAR(80)",
         "momo_number": "VARCHAR(40)",
+        "email": "VARCHAR(160)",
         "overtime_hours": "FLOAT DEFAULT 0",
         "tier_2_pension": "FLOAT DEFAULT 0",
         "loan_deduction": "FLOAT DEFAULT 0",
+    },
+    "employee": {
+        "email": "VARCHAR(160)",
+        "preferred_channel": "VARCHAR(16)",
+        "department": "VARCHAR(80)",
+        "updated_at": "timestamp",
     },
     "payment_voucher": {
         "gross_payroll": "FLOAT",
@@ -44,10 +55,12 @@ SCHEMA_COLUMNS = {
         "date_paid": "DATE",
     },
     "expense": {
+        "title": "VARCHAR(180)",
         "receipt_attachment": "VARCHAR(255)",
         "paid_by": "INTEGER",
         "approved_by": "INTEGER",
         "client_company_id": "INTEGER",
+        "payroll_run_id": "INTEGER",
         "status": "VARCHAR(40)",
     },
     "import_batch": {
@@ -62,6 +75,7 @@ def ensure_phase2_schema():
     inspector = inspect(db.engine)
     existing_tables = set(inspector.get_table_names())
     dialect_name = db.engine.dialect.name
+    preparer = db.engine.dialect.identifier_preparer
     with db.engine.begin() as connection:
         for table_name, columns in SCHEMA_COLUMNS.items():
             if table_name not in existing_tables:
@@ -76,5 +90,8 @@ def ensure_phase2_schema():
                     elif dialect_name != "sqlite" and column_type == "DATETIME":
                         column_type = "TIMESTAMP"
                     connection.execute(
-                        text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+                        text(
+                            f"ALTER TABLE {preparer.quote(table_name)} "
+                            f"ADD COLUMN {preparer.quote(column_name)} {column_type}"
+                        )
                     )

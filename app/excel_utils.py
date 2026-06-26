@@ -1,11 +1,11 @@
 import os
 import re
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
-from openpyxl import Workbook, load_workbook
+from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 
 
@@ -18,7 +18,8 @@ COLUMN_ALIASES = {
     "client_company": ["client", "client company", "company", "company name"],
     "ssnit_number": ["ssnit no", "ssnit number", "ssnit id", "ssnit contribution number"],
     "ghana_card_number": ["ghana card", "ghana card no", "ghana card number"],
-    "momo_number": ["momo", "momo number", "mobile money", "mobile money number"],
+    "momo_number": ["momo", "momo number", "momo no", "mobile money", "mobile money number", "phone", "phone number", "phone no", "telephone", "tel", "mobile", "mobile number", "mobile no", "cell", "cellphone", "contact number", "contact no"],
+    "email": ["email", "e-mail", "e mail", "email address", "email id", "mail"],
     "bank_name": ["bank", "bank name"],
     "bank_account_number": ["account no", "account number", "bank account", "bank account number"],
     "status": ["status", "employee status", "worker status", "employment status"],

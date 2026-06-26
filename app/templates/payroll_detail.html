@@ -1,6 +1,7 @@
 {% extends "base.html" %}
+{% block title %}Payroll Detail · Chrisnat Payroll{% endblock %}
 {% block page_title %}Payroll Detail{% endblock %}
-{% block page_intro %}Review totals, imported worker counts, duplicates, statutory figures, and row-level warnings before exporting or approving payroll for accounts.{% endblock %}
+{% block page_intro %}Review totals, imported worker counts, duplicates, statutory figures, and row-level warnings before exporting or approving payroll.{% endblock %}
 {% block content %}
 <section class="stats-grid">
     <div class="stat-card"><i class="bi bi-building stat-icon"></i><span>Client Company</span><strong>{{ payroll_run.client_company.name if payroll_run.client_company else "" }}</strong></div>
@@ -12,6 +13,7 @@
     <div class="stat-card"><i class="bi bi-person-dash stat-icon"></i><span>Inactive / Terminated</span><strong>{{ (payroll_run.inactive_workers or 0) + (payroll_run.terminated_workers or 0) }}</strong></div>
     <div class="stat-card"><i class="bi bi-cash-coin stat-icon"></i><span>Total Net Pay</span><strong>{{ payroll_run.total_net_pay|cedis }}</strong></div>
 </section>
+
 <section class="panel mt-3">
     <div class="row g-3">
         <div class="col-md-3"><strong>Source Excel File</strong><p>{{ payroll_run.source_filename }}</p></div>
@@ -27,19 +29,34 @@
         {% if payroll_run.status == "Draft" %}
             <form method="post" action="{{ url_for('payroll.submit_review', run_id=payroll_run.id) }}"><button class="btn btn-primary"><i class="bi bi-clipboard-check"></i>Submit for Review</button></form>
         {% endif %}
-        {% if current_user.role in ["admin", "accounts_officer", "md"] and payroll_run.status in ["Pending Review", "Draft"] %}
+        {% if current_user.role in ["admin", "accounts_officer", "md"] and payroll_run.status in ["Pending Approval", "Draft"] %}
             <form method="post" action="{{ url_for('payroll.submit_md_approval', run_id=payroll_run.id) }}"><button class="btn btn-info"><i class="bi bi-send-check"></i>Send to MD Approval</button></form>
         {% endif %}
-        {% if current_user.role in ["admin", "md"] and payroll_run.status in ["Draft", "Pending Review", "Pending MD Approval"] %}
+        {% if current_user.role in ["admin", "md"] and payroll_run.status in ["Draft", "Pending Approval"] %}
             <form method="post" action="{{ url_for('payroll.approve', run_id=payroll_run.id) }}"><button class="btn btn-success"><i class="bi bi-patch-check"></i>Approve Payroll</button></form>
             <form method="post" action="{{ url_for('payroll.reject', run_id=payroll_run.id) }}"><button class="btn btn-outline-danger"><i class="bi bi-x-octagon"></i>Reject Payroll</button></form>
         {% endif %}
         {% if current_user.role in ["admin", "accounts_officer", "md"] and payroll_run.status == "Approved" %}
-            <form method="post" action="{{ url_for('payroll.mark_paid', run_id=payroll_run.id) }}"><button class="btn btn-warning"><i class="bi bi-credit-card-2-front"></i>Mark as Paid</button></form>
+            <form method="post" action="{{ url_for('payroll.mark_paid', run_id=payroll_run.id) }}"><button class="btn btn-warning"><i class="bi bi-check2-circle"></i>Mark Processed</button></form>
+        {% endif %}
+        {% if current_user.role in ["admin", "md", "payroll_officer", "accounts_officer"] and payroll_run.status in ["Approved", "Paid"] %}
+            <a class="btn btn-primary" href="{{ url_for('distribution.run_status', run_id=payroll_run.id) }}"><i class="bi bi-send-check"></i>Distribute Payslips</a>
         {% endif %}
         <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export', run_id=payroll_run.id) }}"><i class="bi bi-download"></i>Export Payroll</a>
     </div>
 </section>
+
+{% if payroll_run.upload_type == 'raw' %}
+<section class="panel mt-3">
+    <div class="raw-notice">
+        <i class="bi bi-clock-history"></i>
+        <span>This run was created from a <strong>raw hours upload</strong> (billable add-on) with
+        {{ payroll_run.raw_entries|length }} imported line items. Gross pay has <strong>not</strong> been
+        calculated yet — a Chrisnat operator will process the hours into payroll items.</span>
+    </div>
+</section>
+{% endif %}
+
 <section class="panel mt-3">
     <div class="panel-header"><h2><i class="bi bi-grid-3x3-gap"></i>Payroll Items Grid</h2><span>{{ payroll_run.items|length }} rows</span></div>
     <div class="mini-note mb-3"><i class="bi bi-table"></i> This section is styled as an Excel-like grid for scanning payroll rows, totals, warnings, and payslip actions.</div>
@@ -48,7 +65,7 @@
     {% else %}
     <div class="excel-grid-wrap">
         <table class="table table-sm align-middle excel-grid">
-            <thead><tr><th>Staff ID</th><th>Name</th><th>Gross</th><th>PAYE</th><th>SSNIT</th><th>Deductions</th><th>Net Pay</th><th>Status</th><th>Warnings</th><th>Payslip</th></tr></thead>
+            <thead><tr><th scope="col">Staff ID</th><th scope="col">Name</th><th scope="col">Gross</th><th scope="col">PAYE</th><th scope="col">SSNIT</th><th scope="col">Deductions</th><th scope="col">Net Pay</th><th scope="col">Status</th><th scope="col">Warnings</th><th scope="col">Payslip</th></tr></thead>
             <tbody>
             {% for item in payroll_run.items %}
                 <tr>

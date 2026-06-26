@@ -1,0 +1,49 @@
+services:
+
+  db:
+    image: postgres:16-alpine
+    container_name: chrisnat_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       chrisnat
+      POSTGRES_USER:     chrisnat
+      POSTGRES_PASSWORD: chrisnat_dev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No host port publish by default — the web service reaches the DB internally
+    # on db:5432. The host already runs Postgres on 5432. To inspect the DB from
+    # the host, add e.g.  ports: ["5433:5432"]  (pick any free host port).
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chrisnat -d chrisnat"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    container_name: chrisnat_web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      FLASK_APP:        "app:create_app"
+      FLASK_ENV:        development
+      FLASK_DEBUG:      "1"
+      # Inside the compose network the database is reached via the service
+      # name `db`, never localhost.
+      DATABASE_URL:     "postgresql://chrisnat:chrisnat_dev@db:5432/chrisnat"
+      SECRET_KEY:       "change-this-in-production"
+      # The app's load_dotenv() must not pull the local-dev .env (which leaves
+      # DATABASE_URL unset for SQLite) into the container.
+      SKIP_DOTENV:      "true"
+      PERSISTENCE_REQUIRED: "true"
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app          # live-reload: code changes apply without rebuild
+    command: flask run --host=0.0.0.0 --port=5000
+
+volumes:
+  pgdata:
+    driver: local       # data survives container restarts and rebuilds

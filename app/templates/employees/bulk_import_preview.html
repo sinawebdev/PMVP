@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Preview Import · {{ client.name }}{% endblock %}
+{% block page_title %}Preview Import — {{ client.name }}{% endblock %}
+{% block page_intro %}Review the changes below. Nothing is saved until you confirm.{% endblock %}
+{% block content %}
+{% set has_valid = to_create or to_update %}
+
+<section class="panel mb-3">
+    <div class="panel-header"><h2><i class="bi bi-plus-circle text-success"></i>To be created</h2><span>{{ to_create|length }} new employees</span></div>
+    {% if to_create %}
+    <div class="excel-grid-wrap">
+        <table class="table table-sm align-middle excel-grid">
+            <thead><tr><th>Employee ID</th><th>Full Name</th><th>Email</th><th>Phone</th><th>Department</th></tr></thead>
+            <tbody>
+            {% for r in to_create %}
+                <tr><td>{{ r.staff_id }}</td><td>{{ r.full_name }}</td><td>{{ r.email or "—" }}</td><td>{{ r.phone or "—" }}</td><td>{{ r.department or "—" }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+        <p class="text-muted mb-0">No new employees in this file.</p>
+    {% endif %}
+</section>
+
+<section class="panel mb-3">
+    <div class="panel-header"><h2><i class="bi bi-pencil-square text-warning"></i>To be updated</h2><span>{{ to_update|length }} existing employees will be updated</span></div>
+    {% if to_update %}
+    <div class="excel-grid-wrap">
+        <table class="table table-sm align-middle excel-grid">
+            <thead><tr><th>Employee ID</th><th>Full Name</th><th>Email</th><th>Phone</th><th>Department</th></tr></thead>
+            <tbody>
+            {% for r in to_update %}
+                <tr><td>{{ r.staff_id }}</td><td>{{ r.full_name }}</td><td>{{ r.email or "—" }}</td><td>{{ r.phone or "—" }}</td><td>{{ r.department or "—" }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+        <p class="text-muted mb-0">No existing employees matched in this file.</p>
+    {% endif %}
+</section>
+
+{% if errors %}
+<section class="panel mb-3">
+    <div class="panel-header"><h2><i class="bi bi-x-octagon text-danger"></i>Errors</h2><span>{{ errors|length }} rows skipped</span></div>
+    <div class="excel-grid-wrap">
+        <table class="table table-sm align-middle excel-grid">
+            <thead><tr><th>Row #</th><th>Employee ID</th><th>Issue</th></tr></thead>
+            <tbody>
+            {% for e in errors %}
+                <tr><td>{{ e.row }}</td><td>{{ e.staff_id }}</td><td>{{ e.issue }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+<section class="panel">
+    {% if not has_valid %}
+        <p class="text-muted mb-3">No valid employees found in the file. Please fix the errors and re-upload.</p>
+        <a class="btn btn-outline-secondary" href="{{ url_for('employees.bulk_import', client_id=client.id) }}">Back</a>
+    {% else %}
+        <div class="d-flex gap-2">
+            <form method="post" action="{{ url_for('employees.bulk_import_confirm', client_id=client.id) }}">
+                <input type="hidden" name="token" value="{{ token }}">
+                <button class="btn btn-success" type="submit"><i class="bi bi-check2-circle"></i>Confirm Import</button>
+            </form>
+            <a class="btn btn-outline-secondary" href="{{ url_for('employees.roster', client_id=client.id) }}">Cancel</a>
+        </div>
+    {% endif %}
+</section>
+{% endblock %}

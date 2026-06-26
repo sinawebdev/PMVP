@@ -1,15 +1,38 @@
 {% extends "base.html" %}
+{% block title %}Payroll Preview · Chrisnat Payroll{% endblock %}
 {% block page_title %}Payroll Preview{% endblock %}
 {% block page_intro %}Check the selected client, detected company name, smart field mapping, unique worker count, duplicates, and row warnings before saving this payroll run.{% endblock %}
 {% block content %}
+{% if client and unregistered %}
+<div class="alert alert-warning d-flex gap-2" role="alert">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    <div>
+        <strong>{{ unregistered|length }} employee ID{{ "" if unregistered|length == 1 else "s" }} in this file have no record in the system:</strong>
+        {{ unregistered|join(", ") }}.
+        These employees will be imported but cannot receive payslips until their records are created.
+        <a href="{{ url_for('employees.roster', client_id=client.id) }}">Go to Employee Roster →</a>
+    </div>
+</div>
+{% endif %}
+{% if client and no_contact %}
+<div class="alert alert-warning d-flex gap-2" role="alert">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    <div>
+        <strong>{{ no_contact|length }} registered employee{{ "" if no_contact|length == 1 else "s" }} have no email or phone on record:</strong>
+        {{ no_contact|map(attribute="name")|join(", ") }}.
+        Payslips cannot be distributed to these employees until contact info is added.
+        <a href="{{ url_for('employees.roster', client_id=client.id) }}">Go to Employee Roster →</a>
+    </div>
+</div>
+{% endif %}
 {% if payload.mode == "multi_client" %}
 <section class="panel">
     <div class="panel-header">
         <h2><i class="bi bi-buildings"></i>Multi-Client Workbook Preview</h2>
         <span>{{ payload.runs|length }} matched client sheets</span>
     </div>
-    <div class="table-responsive">
-        <table class="table">
+    <div class="excel-grid-wrap">
+        <table class="table table-sm excel-grid">
             <thead>
                 <tr>
                     <th>Client Company</th><th>Sheet Name</th><th>Header Row</th><th>Rows</th><th>Unique Workers</th><th>Duplicates</th><th>Gross Pay</th><th>PAYE</th><th>SSNIT</th><th>Net Pay</th><th>Warnings</th>
@@ -49,7 +72,7 @@
         <span class="form-check-label">I confirm replacement if any matched client already has payroll for {{ payload.month }} {{ payload.year }}.</span>
     </label>
     <button class="btn btn-success btn-lg"><i class="bi bi-check2-circle"></i>Confirm and Create Payroll Runs</button>
-    <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('payroll.upload') }}">Cancel</a>
+    <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('payroll.runs') }}">Cancel</a>
 </form>
 {% else %}
 <section class="stats-grid">
@@ -82,8 +105,8 @@
 
 <section class="panel mt-3">
     <div class="panel-header"><h2><i class="bi bi-diagram-3"></i>Suggested Column Mappings</h2></div>
-    <div class="table-responsive">
-        <table class="table">
+    <div class="excel-grid-wrap">
+        <table class="table table-sm excel-grid">
             <thead><tr><th>Original Column</th><th>Mapped Field</th></tr></thead>
             <tbody>
             {% for original, mapped in payload.mapping.items() %}
@@ -97,8 +120,8 @@
 <section class="panel mt-3">
     <div class="panel-header"><h2><i class="bi bi-exclamation-triangle"></i>Validation Warnings</h2></div>
     {% if payload.validation.per_row_warnings %}
-        <div class="table-responsive">
-            <table class="table">
+        <div class="excel-grid-wrap">
+            <table class="table table-sm excel-grid">
                 <thead><tr><th>Row</th><th>Warnings</th></tr></thead>
                 <tbody>
                 {% for row_number, warnings in payload.validation.per_row_warnings.items() %}
@@ -114,8 +137,8 @@
 
 <section class="panel mt-3">
     <div class="panel-header"><h2><i class="bi bi-table"></i>First 20 Rows</h2></div>
-    <div class="table-responsive">
-        <table class="table table-sm">
+    <div class="excel-grid-wrap">
+        <table class="table table-sm excel-grid">
             <thead><tr>{% for column in payload.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
             <tbody>
             {% for row in payload.preview_rows %}
@@ -135,7 +158,7 @@
     {% endif %}
     <button class="btn btn-success btn-lg"><i class="bi bi-check2-circle"></i>Confirm and Create Payroll Run</button>
     <a class="btn btn-outline-warning btn-lg" href="{{ url_for('payroll.error_report', import_id=import_id) }}"><i class="bi bi-file-earmark-spreadsheet"></i>Download Error Report</a>
-    <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('payroll.upload') }}">Cancel</a>
+    <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('payroll.runs') }}">Cancel</a>
 </form>
 {% endif %}
 {% endblock %}

@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block page_title %}End Assignment{% endblock %}
+{% block content %}<section class="panel"><form method="post" class="row g-3"><div class="col-md-4"><label class="form-label">End Date</label><input class="form-control" type="date" name="assignment_end_date" required></div><div class="col-12"><label class="form-label">Notes</label><textarea class="form-control" name="notes"></textarea></div><div class="col-12"><button class="btn btn-warning">End Assignment</button></div></form></section>{% endblock %}

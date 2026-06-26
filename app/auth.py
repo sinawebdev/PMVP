@@ -13,6 +13,9 @@ def role_required(*roles):
         @wraps(view)
         @login_required
         def wrapped(*args, **kwargs):
+            if current_user.role == "client_user" and "client_user" not in roles:
+                flash("Client portal access is archived while the payroll MVP is stabilized.", "warning")
+                return redirect(url_for("main.dashboard"))
             if str(current_user.role).lower() == "md":
                 return view(*args, **kwargs)
             has_direct_role = current_user.role in roles
@@ -50,3 +53,8 @@ def logout():
     logout_user()
     flash("You have been logged out.", "info")
     return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/forgot-password")
+def forgot_password():
+    return render_template("forgot_password.html")

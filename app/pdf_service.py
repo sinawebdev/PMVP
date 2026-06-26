@@ -1,9 +1,18 @@
+"""Employee payslip PDF generation.
+
+One generator, shared by the MVP's per-employee download button (app/payroll.py)
+and the distribution feature's public link (app/distribution). Updated to the new
+pay-advice layout: a clean header, an Employee Details block, an EARNINGS table and a
+DEDUCTIONS table (each with a bold total row), and a prominent NET PAY band — matching
+the distribution payslip design so both surfaces produce the same modern format.
+"""
 import os
 from datetime import datetime
+from html import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
     Paragraph,
@@ -14,6 +23,16 @@ from reportlab.platypus import (
 )
 
 from app.excel_utils import slug_filename
+
+# Shared palette (matches the distribution payslip in app/channels/pdf.py).
+_INK = colors.HexColor("#1f3a5f")
+_HAIRLINE = colors.HexColor("#dddddd")
+_RULE = colors.HexColor("#888888")
+_MUTED = colors.HexColor("#666666")
+
+# Two-column geometry: A4 content width (~174mm) split label / amount.
+_LABEL_W = 118 * mm
+_AMOUNT_W = 56 * mm
 
 
 def money(value):
@@ -29,6 +48,63 @@ def payslip_filename(payroll_item):
     )
 
 
+def _info_table(rows):
+    """Borderless label/value block for the employee header details."""
+    table = Table(rows, colWidths=[40 * mm, 134 * mm])
+    table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("TEXTCOLOR", (0, 0), (0, -1), _MUTED),
+        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 1.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    return table
+
+
+def _amount_section(heading, rows, total_label, total_value):
+    """[Item | AMOUNT] table with a coloured header band and a bold total row."""
+    data = [[heading, "AMOUNT"]]
+    data += [[label, money(value)] for label, value in rows]
+    data.append([total_label, money(total_value)])
+
+    table = Table(data, colWidths=[_LABEL_W, _AMOUNT_W])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), _INK),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+        ("ALIGN", (0, 0), (0, -1), "LEFT"),
+        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("LINEBELOW", (0, 1), (-1, -2), 0.25, _HAIRLINE),
+        ("LINEABOVE", (0, -1), (-1, -1), 0.75, _RULE),
+        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+    ]))
+    return table
+
+
+def _net_band(value):
+    table = Table([["NET PAY", money(value)]], colWidths=[_LABEL_W, _AMOUNT_W])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), _INK),
+        ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 11),
+        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    return table
+
+
 def generate_payslip_pdf(payroll_item, export_folder):
     run = payroll_item.payroll_run
     employee = payroll_item.employee
@@ -42,45 +118,28 @@ def generate_payslip_pdf(payroll_item, export_folder):
         pagesize=A4,
         rightMargin=18 * mm,
         leftMargin=18 * mm,
-        topMargin=16 * mm,
-        bottomMargin=16 * mm,
+        topMargin=18 * mm,
+        bottomMargin=18 * mm,
         title="Chrisnat Payslip",
+        author="Chrisnat Limited",
     )
     styles = getSampleStyleSheet()
-    story = []
-
-    header = Table(
-        [
-            [
-                Paragraph("<b>CN</b>", styles["Title"]),
-                Paragraph(
-                    "<b>Chrisnat Limited</b><br/>Individual Employee Payslip<br/>"
-                    f"{run.month} {run.year}",
-                    styles["Normal"],
-                ),
-            ]
-        ],
-        colWidths=[32 * mm, 128 * mm],
+    title_style = ParagraphStyle(
+        "cn_title", parent=styles["Title"], fontSize=17, alignment=0,
+        spaceAfter=2, textColor=_INK,
     )
-    header.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (0, 0), colors.HexColor("#FACC15")),
-                ("TEXTCOLOR", (0, 0), (0, 0), colors.HexColor("#132034")),
-                ("BACKGROUND", (1, 0), (1, 0), colors.HexColor("#ECFDF5")),
-                ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#0F766E")),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 12),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 12),
-                ("TOPPADDING", (0, 0), (-1, -1), 12),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
-            ]
-        )
+    sub_style = ParagraphStyle("cn_sub", parent=styles["Normal"], fontSize=10, textColor=_MUTED)
+    note_style = ParagraphStyle(
+        "cn_note", parent=styles["Normal"], fontSize=8, textColor=_MUTED, spaceBefore=10
     )
-    story.append(header)
-    story.append(Spacer(1, 10 * mm))
 
-    employee_data = [
+    story = [
+        Paragraph(escape("Chrisnat Limited"), title_style),
+        Paragraph(escape(f"Individual Employee Payslip — {run.month} {run.year}"), sub_style),
+        Spacer(1, 10),
+    ]
+
+    info_rows = [
         ["Employee Name", payroll_item.full_name or ""],
         ["Staff ID", payroll_item.staff_id or ""],
         ["Client Company", client_name],
@@ -89,64 +148,37 @@ def generate_payslip_pdf(payroll_item, export_folder):
         ["Bank Account", employee.bank_account_number if employee else ""],
         ["Payslip Generated", datetime.now().strftime("%Y-%m-%d %H:%M")],
     ]
-    story.append(section_table("Employee Details", employee_data))
-    story.append(Spacer(1, 7 * mm))
+    story.append(_info_table(info_rows))
+    story.append(Spacer(1, 12))
 
     earnings = [
-        ["Basic Salary", money(payroll_item.basic_salary)],
-        ["Transport Allowance", money(payroll_item.transport_allowance)],
-        ["Housing Allowance", money(payroll_item.housing_allowance)],
-        ["Overtime Pay", money(payroll_item.overtime_pay)],
-        ["Other Allowances", money(payroll_item.other_allowances)],
-        ["Gross Pay", money(payroll_item.gross_pay)],
+        ("Basic Salary", payroll_item.basic_salary),
+        ("Transport Allowance", payroll_item.transport_allowance),
+        ("Housing Allowance", payroll_item.housing_allowance),
+        ("Overtime Pay", payroll_item.overtime_pay),
+        ("Other Allowances", payroll_item.other_allowances),
     ]
     deductions = [
-        ["PAYE", money(payroll_item.paye)],
-        ["SSNIT", money(payroll_item.ssnit)],
-        ["Other Deductions", money(payroll_item.other_deductions)],
-        ["Total Deductions", money(payroll_item.total_deductions)],
-        ["Net Pay", money(payroll_item.net_pay)],
+        ("PAYE", payroll_item.paye),
+        ("SSNIT", payroll_item.ssnit),
+        ("Other Deductions", payroll_item.other_deductions),
     ]
 
-    story.append(section_table("Earnings", earnings))
-    story.append(Spacer(1, 7 * mm))
-    story.append(section_table("Deductions and Net Pay", deductions, highlight_last=True))
-    story.append(Spacer(1, 8 * mm))
+    story.append(_amount_section("EARNINGS", earnings, "Total Earnings", payroll_item.gross_pay))
+    story.append(Spacer(1, 8))
+    story.append(
+        _amount_section("DEDUCTIONS", deductions, "Total Deductions", payroll_item.total_deductions)
+    )
+    story.append(Spacer(1, 4))
+    story.append(_net_band(payroll_item.net_pay))
+
     story.append(
         Paragraph(
-            "This payslip is generated from the approved payroll records in the Chrisnat Payroll MVP. "
-            "PAYE and SSNIT values are based on uploaded payroll data for Phase 1.",
-            styles["Italic"],
+            "This payslip is generated from the approved payroll records in the Chrisnat "
+            "system. PAYE and SSNIT values are based on the uploaded payroll data.",
+            note_style,
         )
     )
 
     document.build(story)
     return file_path
-
-
-def section_table(title, rows, highlight_last=False):
-    data = [[title, ""]] + rows
-    table = Table(data, colWidths=[72 * mm, 88 * mm])
-    style = [
-        ("SPAN", (0, 0), (1, 0)),
-        ("BACKGROUND", (0, 0), (1, 0), colors.HexColor("#0F766E")),
-        ("TEXTCOLOR", (0, 0), (1, 0), colors.white),
-        ("FONTNAME", (0, 0), (1, 0), "Helvetica-Bold"),
-        ("BACKGROUND", (0, 1), (-1, -1), colors.white),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#DCE8E4")),
-        ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 9),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 9),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-    ]
-    if highlight_last:
-        style.extend(
-            [
-                ("BACKGROUND", (0, -1), (1, -1), colors.HexColor("#FEF3C7")),
-                ("FONTNAME", (0, -1), (1, -1), "Helvetica-Bold"),
-            ]
-        )
-    table.setStyle(TableStyle(style))
-    return table

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Payslip Delivery · Chrisnat Payroll{% endblock %}
+{% block page_title %}Payslip Delivery{% endblock %}
+{% block page_intro %}Send each worker their salary breakdown by SMS, WhatsApp, or email and track delivery per worker.{% endblock %}
+{% block page_actions %}
+    {% if sendable %}
+    <form method="post" class="d-flex flex-wrap gap-2 align-items-end">
+        <input type="hidden" name="nonce" value="{{ nonce }}">
+        <div>
+            <label class="form-label mb-1">Channel</label>
+            <select class="form-select form-select-sm" name="channel">
+                <option value="auto" selected>Auto (per worker)</option>
+                <option value="sms">SMS</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="email">Email</option>
+            </select>
+        </div>
+        <button class="btn btn-success" formaction="{{ url_for('distribution.send', run_id=run.id) }}"><i class="bi bi-send-check"></i>Send payslips</button>
+        <button class="btn btn-outline-warning" formaction="{{ url_for('distribution.resend_failed', run_id=run.id) }}"><i class="bi bi-arrow-repeat"></i>Resend failed</button>
+    </form>
+    {% endif %}
+{% endblock %}
+{% block content %}
+<section class="panel mb-3">
+    <div class="panel-header">
+        <h2><i class="bi bi-building"></i>{{ run.client_company.name if run.client_company else "Client" }} — {{ run.month }} {{ run.year }}</h2>
+        <span class="badge text-bg-{{ 'success' if run.status in ['Approved', 'Paid'] else 'secondary' }}">{{ run.status }}</span>
+    </div>
+    <div class="row g-3">
+        <div class="col-md-3"><strong>Workers</strong><p class="mb-0">{{ rows|length }}</p></div>
+        <div class="col-md-3"><strong>Sent</strong><p class="mb-0 text-success">{{ sent_count }}</p></div>
+        <div class="col-md-3"><strong>Failed</strong><p class="mb-0 text-danger">{{ failed_count }}</p></div>
+        <div class="col-md-3"><strong>Net total</strong><p class="mb-0">{{ run.total_net_pay|cedis }}</p></div>
+    </div>
+    {% if not sendable %}
+    <div class="mini-note mt-3"><i class="bi bi-info-circle"></i> Payslips can be distributed once this payroll run is <strong>Approved</strong>.</div>
+    {% endif %}
+</section>
+
+<section class="panel">
+    <div class="panel-header">
+        <h2><i class="bi bi-send-check"></i>Delivery Status</h2>
+        <span>{{ rows|length }} workers</span>
+    </div>
+    <div class="excel-grid-wrap">
+        <table class="table table-sm align-middle excel-grid">
+            <thead><tr><th>Staff ID</th><th>Worker</th><th>Preferred</th><th>Channel</th><th>Recipient</th><th>Status</th><th>Attempts</th><th>Net</th></tr></thead>
+            <tbody>
+            {% for row in rows %}
+                {% set item = row.item %}
+                {% set d = row.delivery %}
+                <tr>
+                    <td>{{ item.staff_id }}</td>
+                    <td>{{ item.full_name }}</td>
+                    <td>
+                        <form method="post" action="{{ url_for('distribution.set_preferred_channel', item_id=item.id) }}">
+                            <select class="form-select form-select-sm" name="preferred_channel" onchange="this.form.submit()" {% if not item.employee_id %}disabled title="No linked employee record"{% endif %}>
+                                {% set pref = item.employee.preferred_channel if item.employee else None %}
+                                <option value="" {% if not pref %}selected{% endif %}>Auto ({{ row.suggested }})</option>
+                                {% for ch in channels %}
+                                    <option value="{{ ch }}" {% if pref == ch %}selected{% endif %}>{{ ch }}</option>
+                                {% endfor %}
+                            </select>
+                        </form>
+                    </td>
+                    <td>{% if d %}<span class="badge text-bg-light">{{ d.channel }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                    <td>{{ d.recipient if d else "—" }}</td>
+                    <td>
+                        {% if d and d.status == "sent" %}<span class="badge text-bg-success">sent</span>
+                        {% elif d and d.status == "failed" %}<span class="badge text-bg-danger" title="{{ d.error }}">failed</span>
+                        {% elif d %}<span class="badge text-bg-warning">{{ d.status }}</span>
+                        {% else %}<span class="badge text-bg-light">not sent</span>{% endif %}
+                    </td>
+                    <td>{{ d.attempts if d else 0 }}</td>
+                    <td class="money-cell">{{ item.net_pay|cedis }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

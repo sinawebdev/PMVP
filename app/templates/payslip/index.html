@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Payslips · Chrisnat Payroll{% endblock %}
+{% block page_title %}Payslip{% endblock %}
+{% block page_intro %}Generate printable employee payslips from existing client payroll runs without changing payroll run data.{% endblock %}
+{% block content %}
+<section class="panel mb-3">
+    <div class="mini-note mb-3"><i class="bi bi-info-circle"></i> Select a client company and one of its payroll runs, then choose <strong>Load</strong> to list employees and generate printable payslips. This never changes payroll run data.</div>
+    <form method="get" class="row g-3 align-items-end">
+        <div class="col-md-5">
+            <label class="form-label">Client company</label>
+            <select class="form-select" name="client_id" onchange="this.form.submit()">
+                <option value="">Select client company</option>
+                {% for client in clients %}
+                    <option value="{{ client.id }}" {% if selected_client and selected_client.id == client.id %}selected{% endif %}>{{ client.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-5">
+            <label class="form-label">Payroll run</label>
+            <select class="form-select" name="run_id">
+                <option value="">Select payroll run</option>
+                {% for run in runs %}
+                    <option value="{{ run.id }}" {% if selected_run and selected_run.id == run.id %}selected{% endif %}>{{ run.month }} {{ run.year }} - {{ run.status }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-primary w-100"><i class="bi bi-search"></i>Load</button>
+        </div>
+    </form>
+</section>
+
+<section class="panel">
+    <div class="panel-header">
+        <h2><i class="bi bi-file-earmark-person"></i>Payroll Records</h2>
+        <span>{{ items|length }} rows</span>
+    </div>
+    {% if not selected_client %}
+        <div class="empty-state">
+            <i class="bi bi-file-earmark-person"></i>
+            <p class="mb-1"><strong>No payroll run loaded yet</strong></p>
+            <p class="text-muted mb-0">Pick a client company above to see its available payroll runs, then load one to generate payslips.</p>
+        </div>
+    {% elif not selected_run %}
+        <div class="empty-state">
+            <i class="bi bi-calendar2-week"></i>
+            <p class="mb-1"><strong>Choose a payroll run for {{ selected_client.name }}</strong></p>
+            <p class="text-muted mb-0">Select a payroll run from the dropdown above and choose Load to list employees.</p>
+        </div>
+    {% elif not items %}
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <p class="text-muted mb-0">No payroll records found for this run.</p>
+        </div>
+    {% else %}
+    <form method="post" action="{{ url_for('payslip.generate') }}">
+        <div class="excel-grid-wrap">
+            <table class="table table-sm align-middle excel-grid">
+                <thead><tr><th>Select</th><th>Staff ID</th><th>Employee</th><th>Client</th><th>Period</th><th>Basic</th><th>Allowances</th><th>Deductions</th><th>Gross</th><th>Net</th><th>PDF</th></tr></thead>
+                <tbody>
+                {% for item in items %}
+                    {% set run = item.payroll_run %}
+                    <tr>
+                        <td><input class="form-check-input" type="checkbox" name="payroll_item_ids" value="{{ item.id }}"></td>
+                        <td>{{ item.staff_id }}</td>
+                        <td>{{ item.full_name }}</td>
+                        <td>{{ run.client_company.name if run and run.client_company else "" }}</td>
+                        <td>{{ run.month }} {{ run.year }}</td>
+                        <td class="money-cell">{{ item.basic_salary|cedis }}</td>
+                        <td class="money-cell">{{ (item.transport_allowance + item.housing_allowance + item.overtime_pay + item.other_allowances)|cedis }}</td>
+                        <td class="money-cell">{{ item.total_deductions|cedis }}</td>
+                        <td class="money-cell">{{ item.gross_pay|cedis }}</td>
+                        <td class="money-cell">{{ item.net_pay|cedis }}</td>
+                        <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.payslip', item_id=item.id) }}"><i class="bi bi-file-earmark-pdf"></i>PDF</a></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="toolbar mt-3 mb-0 d-flex gap-2">
+            <button class="btn btn-success"><i class="bi bi-file-earmark-check"></i>Generate Selected Payslips</button>
+            <a class="btn btn-outline-primary" href="{{ url_for('distribution.run_status', run_id=selected_run.id) }}"><i class="bi bi-send-check"></i>Distribute Payslips</a>
+        </div>
+    </form>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,7 +1,10 @@
 {% extends "base.html" %}
+{% block title %}{{ client.name }} · Chrisnat Payroll{% endblock %}
 {% block page_title %}{{ client.name }}{% endblock %}
 {% block page_intro %}Review the workers and payroll history connected to this client before importing, approving, or preparing finance summaries.{% endblock %}
-{% block header_visual %}<img src="{{ url_for('static', filename='img/people-ops.svg') }}" alt="Client detail illustration">{% endblock %}
+{% block page_actions %}
+<a class="btn btn-light btn-sm" href="{{ url_for('employees.roster', client_id=client.id) }}"><i class="bi bi-people"></i>Manage Employees</a>
+{% endblock %}
 {% block content %}
 <section class="panel">
     <div class="row g-3">
@@ -27,10 +30,18 @@
 <div class="row g-4 mt-1">
     <div class="col-lg-5">
         <section class="panel">
-            <div class="panel-header"><h2><i class="bi bi-person-lines-fill"></i>Workers</h2><span>{{ client.employees|length }}</span></div>
+            <div class="panel-header"><h2><i class="bi bi-person-lines-fill"></i>Workers</h2><a class="btn btn-sm btn-outline-primary" href="{{ url_for('employees.roster', client_id=client.id) }}">Manage</a></div>
             <ul class="list-group list-group-flush">
                 {% for employee in client.employees %}
                     <li class="list-group-item">{{ employee.staff_id }} · {{ employee.full_name }}</li>
+                {% else %}
+                    <li class="list-group-item">
+                        <div class="empty-state">
+                            <i class="bi bi-people"></i>
+                            <p class="mb-2 text-muted">No employees on record for this client yet. Maintain the roster so payslips can reach them.</p>
+                            <a class="btn btn-sm btn-primary" href="{{ url_for('employees.roster', client_id=client.id) }}"><i class="bi bi-people"></i>Manage Employees</a>
+                        </div>
+                    </li>
                 {% endfor %}
             </ul>
         </section>
@@ -48,6 +59,8 @@
                         <td>{{ run.total_net_pay|cedis }}</td>
                         <td>{{ run.status }}</td>
                     </tr>
+                {% else %}
+                    <tr><td colspan="4" class="text-muted">No payroll runs yet.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>

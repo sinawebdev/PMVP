@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block page_title %}Worker Assignments{% endblock %}
+{% block page_intro %}Assign workers to client companies, track shifts and locations, and end or transfer assignments when deployments change.{% endblock %}
+{% block page_actions %}<a class="btn btn-primary" href="{{ url_for('operations.new_assignment') }}"><i class="bi bi-person-plus"></i>New Assignment</a>{% endblock %}
+{% block content %}
+<section class="panel">
+    <form class="row g-2 mb-3">
+        <div class="col-md-3"><select class="form-select" name="client_id"><option value="">All clients</option>{% for client in clients %}<option value="{{ client.id }}">{{ client.name }}</option>{% endfor %}</select></div>
+        <div class="col-md-3"><select class="form-select" name="employee_id"><option value="">All workers</option>{% for employee in employees %}<option value="{{ employee.id }}">{{ employee.full_name }}</option>{% endfor %}</select></div>
+        <div class="col-md-3"><select class="form-select" name="status"><option value="">All statuses</option>{% for status in statuses %}<option>{{ status }}</option>{% endfor %}</select></div>
+        <div class="col-md-3"><button class="btn btn-outline-primary w-100">Filter</button></div>
+    </form>
+    <div class="table-responsive"><table class="table align-middle">
+        <thead><tr><th>Worker</th><th>Client Company</th><th>Role</th><th>Site Location</th><th>Start Date</th><th>End Date</th><th>Shift</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>{% for assignment in assignments %}<tr>
+            <td>{{ assignment.employee.full_name }}</td><td>{{ assignment.client_company.name }}</td><td>{{ assignment.role }}</td><td>{{ assignment.site_location }}</td><td>{{ assignment.assignment_start_date }}</td><td>{{ assignment.assignment_end_date or "Open" }}</td><td>{{ assignment.shift_type }}</td>
+            <td><span class="badge text-bg-{{ 'success' if assignment.status == 'Active' else 'warning' if assignment.status == 'Pending' else 'primary' if assignment.status == 'Completed' else 'danger' }}">{{ assignment.status }}</span></td>
+            <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('operations.assignment_detail', assignment_id=assignment.id) }}">View</a></td>
+        </tr>{% else %}<tr><td colspan="9" class="text-muted">No assignments found.</td></tr>{% endfor %}</tbody>
+    </table></div>
+</section>
+{% endblock %}

@@ -1,26 +1,65 @@
 {% extends "base.html" %}
-{% block page_title %}Audit Trail{% endblock %}
-{% block page_intro %}Trace payroll, finance, approval, and expense actions by user, role, record, date, and notes for operational accountability.{% endblock %}
+{% block title %}Expenses & Audit · Chrisnat Payroll{% endblock %}
+{% block page_title %}Expenses &amp; Audit{% endblock %}
+{% block page_intro %}Review the audit trail of payroll approvals, expense records, payslip generation, and system activity — and record new expenses below.{% endblock %}
 {% block content %}
-<section class="panel">
-    <div class="table-responsive">
-        <table class="table align-middle">
-            <thead><tr><th>Date</th><th>User</th><th>Role</th><th>Action</th><th>Record</th><th>Notes</th></tr></thead>
+<section class="panel mb-3">
+    <div class="panel-header"><h2><i class="bi bi-table"></i>Audit Trail</h2><span>{{ rows|length }} records</span></div>
+    <div class="excel-grid-wrap">
+        <table class="table table-sm align-middle excel-grid">
+            <thead><tr><th scope="col">Date</th><th scope="col">Time</th><th scope="col">Day</th><th scope="col">Action Type</th><th scope="col">Description</th><th scope="col">User</th><th scope="col">Module</th><th scope="col">Related Record</th><th scope="col">Amount</th><th scope="col">Category</th></tr></thead>
             <tbody>
-            {% for entry in entries %}
+            {% for row in rows %}
                 <tr>
-                    <td>{{ entry.created_at.strftime("%Y-%m-%d %H:%M") if entry.created_at else "" }}</td>
-                    <td>{{ entry.user.name if entry.user else "System" }}</td>
-                    <td>{{ entry.user_role }}</td>
-                    <td>{{ entry.action }}</td>
-                    <td>{{ entry.related_record_type }} #{{ entry.related_record_id }}</td>
-                    <td>{{ entry.notes }}</td>
+                    <td>{{ row.date }}</td>
+                    <td>{{ row.time }}</td>
+                    <td>{{ row.day }}</td>
+                    <td>{{ row.action }}</td>
+                    <td>{{ row.description }}</td>
+                    <td>{{ row.user }}</td>
+                    <td>{{ row.module }}</td>
+                    <td>{{ row.related }}</td>
+                    <td class="money-cell">{% if row.amount is not none %}{{ row.amount|cedis }}{% endif %}</td>
+                    <td>{{ row.category }}</td>
                 </tr>
             {% else %}
-                <tr><td colspan="6" class="text-muted">No audit entries yet.</td></tr>
+                <tr><td colspan="10" class="text-muted">No audit records yet.</td></tr>
             {% endfor %}
             </tbody>
         </table>
     </div>
+</section>
+<section class="panel form-panel">
+    <div class="panel-header">
+        <h2><i class="bi bi-wallet2"></i>Add Expense</h2>
+        <span>Recorded in the audit trail above</span>
+    </div>
+    <form method="post" action="{{ url_for('audit.add_expense') }}" class="row g-3">
+        <div class="col-md-4"><label class="form-label">Expense title</label><input class="form-control" name="title" required></div>
+        <div class="col-md-2"><label class="form-label">Amount</label><input class="form-control" type="number" step="0.01" name="amount" required></div>
+        <div class="col-md-3"><label class="form-label">Category</label><input class="form-control" name="category" value="Transport" required></div>
+        <div class="col-md-3"><label class="form-label">Date</label><input class="form-control" type="date" name="expense_date" value="{{ today }}" required></div>
+        <div class="col-md-6"><label class="form-label">Description</label><input class="form-control" name="description" required></div>
+        <div class="col-md-3">
+            <label class="form-label">Client company</label>
+            <select class="form-select" name="client_company_id">
+                <option value="">Optional</option>
+                {% for client in clients %}
+                    <option value="{{ client.id }}">{{ client.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Payroll run</label>
+            <select class="form-select" name="payroll_run_id">
+                <option value="">Optional</option>
+                {% for run in payroll_runs %}
+                    <option value="{{ run.id }}">{{ run.client_company.name if run.client_company else "Client" }} - {{ run.month }} {{ run.year }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4"><label class="form-label">Recorded by</label><input class="form-control" value="{{ current_user.name }}" disabled></div>
+        <div class="col-md-4 d-flex align-items-end"><button class="btn btn-primary w-100"><i class="bi bi-plus-circle"></i>Save Expense</button></div>
+    </form>
 </section>
 {% endblock %}

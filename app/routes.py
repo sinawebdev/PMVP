@@ -2,21 +2,22 @@ from calendar import month_name
 from datetime import datetime
 import os
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, url_for
-from flask_login import login_required
-from sqlalchemy import func, text
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask_login import current_user, login_required
+from sqlalchemy import or_, text
 
 from app import db
 from app.auth import role_required
-from app.excel_utils import export_employees
 from app.models import (
     AuditTrail,
     ClientCompany,
+    DELIVERY_SENT,
     Employee,
     Expense,
     PaymentVoucher,
     PayrollItem,
     PayrollRun,
+    PayslipDelivery,
     Remittance,
     User,
 )
@@ -26,7 +27,11 @@ main_bp = Blueprint("main", __name__)
 
 @main_bp.route("/")
 def index():
-    return redirect(url_for("main.dashboard"))
+    # Signed-in staff go straight to the dashboard; everyone else sees the public
+    # marketing landing that positions push-distribution vs portal-only competitors.
+    if current_user.is_authenticated:
+        return redirect(url_for("main.dashboard"))
+    return render_template("landing.html")
 
 
 @main_bp.route("/health")
@@ -39,16 +44,16 @@ def health():
 def db_health_json():
     uri = current_app.config.get("SQLALCHEMY_DATABASE_URI", "")
     database_type = current_app.config.get("DATABASE_TYPE_LABEL") or db.engine.name.title()
-    connection_status = "ok"
+    status = "connected"
     try:
         db.session.execute(text("SELECT 1"))
     except Exception as exc:
         db.session.rollback()
-        connection_status = f"error: {exc.__class__.__name__}"
+        status = f"error: {exc.__class__.__name__}"
 
     return {
         "database_type": database_type,
-        "connection_status": connection_status,
+        "status": status,
         "uri_prefix": uri.split(":", 1)[0] + "://" if ":" in uri else "unknown",
     }
 
@@ -155,6 +160,24 @@ def dashboard():
     pending_approvals = PayrollRun.query.filter(PayrollRun.status.in_(pending_statuses)).count()
     warning_count = PayrollItem.query.filter_by(validation_status="Warning").count()
 
+    # Payslip delivery rate for the selected period: distinct workers whose payslip was
+    # actually pushed (SMS/WhatsApp/email) over the total payslips in those runs. This is
+    # our differentiator — competitors stop at "payslip available in a portal".
+    period_run_ids = [run.id for run in current_runs]
+    payslips_total = sum(len(run.items) for run in current_runs)
+    payslips_delivered = (
+        db.session.query(PayslipDelivery.payroll_item_id)
+        .filter(
+            PayslipDelivery.payroll_run_id.in_(period_run_ids),
+            PayslipDelivery.status == DELIVERY_SENT,
+        )
+        .distinct()
+        .count()
+        if period_run_ids
+        else 0
+    )
+    delivery_rate = round(payslips_delivered / payslips_total * 100) if payslips_total else 0
+
     return render_template(
         "dashboard.html",
         total_employees=Employee.query.count(),
@@ -170,6 +193,9 @@ def dashboard():
         .limit(8)
         .all(),
         warning_count=warning_count,
+        delivery_rate=delivery_rate,
+        payslips_delivered=payslips_delivered,
+        payslips_total=payslips_total,
         client_costs=client_costs,
         highest_client=highest_client,
         selected_month=selected_month,
@@ -257,64 +283,29 @@ def client_detail(client_id):
     )
 
 
-@main_bp.route("/employees")
+@main_bp.route("/search")
 @login_required
-def employees():
-    employees = Employee.query.order_by(Employee.full_name).all()
-    return render_template("employees.html", employees=employees)
-
-
-@main_bp.route("/employees/add", methods=["GET", "POST"])
-@role_required("admin")
-def add_employee():
-    return employee_form()
-
-
-@main_bp.route("/employees/<int:employee_id>/edit", methods=["GET", "POST"])
-@role_required("admin")
-def edit_employee(employee_id):
-    employee = db.get_or_404(Employee, employee_id)
-    return employee_form(employee)
-
-
-def employee_form(employee=None):
-    clients = ClientCompany.query.order_by(ClientCompany.name).all()
-    if request.method == "POST":
-        if employee is None:
-            employee = Employee()
-            db.session.add(employee)
-        employee.staff_id = request.form["staff_id"]
-        employee.full_name = request.form["full_name"]
-        employee.phone = request.form.get("phone")
-        employee.ghana_card_number = request.form.get("ghana_card_number")
-        employee.ssnit_number = request.form.get("ssnit_number")
-        employee.bank_name = request.form.get("bank_name")
-        employee.bank_account_number = request.form.get("bank_account_number")
-        employee.momo_number = request.form.get("momo_number")
-        employee.employment_type = request.form.get("employment_type")
-        employee.service_line = request.form.get("service_line")
-        employee.assigned_client = request.form.get("assigned_client")
-        employee.client_company_id = request.form.get("client_company_id") or None
-        employee.status = request.form.get("status", "Active")
-        employee.basic_salary = float(request.form.get("basic_salary") or 0)
-        db.session.commit()
-        flash("Employee saved.", "success")
-        return redirect(url_for("main.employees"))
-    return render_template("employee_form.html", employee=employee, clients=clients)
-
-
-@main_bp.route("/employees/<int:employee_id>")
-@login_required
-def employee_detail(employee_id):
-    employee = db.get_or_404(Employee, employee_id)
-    return render_template("employee_detail.html", employee=employee)
-
-
-@main_bp.route("/employees/export")
-@login_required
-def export_employee_list():
-    file_path = export_employees(
-        Employee.query.order_by(Employee.full_name).all(),
-        current_app.config["EXPORT_FOLDER"],
-    )
-    return send_file(file_path, as_attachment=True)
+def search():
+    q = request.args.get("q", "").strip()
+    clients = []
+    items = []
+    if q:
+        like = f"%{q}%"
+        clients = (
+            ClientCompany.query.filter(ClientCompany.name.ilike(like))
+            .order_by(ClientCompany.name)
+            .limit(25)
+            .all()
+        )
+        items = (
+            PayrollItem.query.filter(
+                or_(
+                    PayrollItem.full_name.ilike(like),
+                    PayrollItem.staff_id.ilike(like),
+                )
+            )
+            .order_by(PayrollItem.id.desc())
+            .limit(50)
+            .all()
+        )
+    return render_template("search_results.html", q=q, clients=clients, items=items)
