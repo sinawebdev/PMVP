@@ -65,6 +65,12 @@ class Employee(db.Model):
     # Roster-maintained department (free text). Sourced from the employee record, never payroll.
     department = db.Column(db.String(80))
     basic_salary = db.Column(db.Float, default=0)
+    # GRA tax relief (marriage/dependents/disability/age) as a flat monthly
+    # amount subtracted from ordinary taxable income before the PAYE bands.
+    # Standing employee data, not a monthly input. The amount per relief
+    # category is legally set — enter it from the current GRA circular; the
+    # code deliberately hardcodes no category figures.
+    tax_relief_monthly = db.Column(db.Float, default=0)
     created_at = db.Column(db.DateTime, default=utc_now)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
@@ -85,9 +91,6 @@ class Employee(db.Model):
         back_populates="employee",
         cascade="all, delete-orphan",
     )
-    assignments = db.relationship("WorkerAssignment", back_populates="employee")
-    attendance_records = db.relationship("AttendanceRecord", back_populates="employee")
-    cleaning_jobs = db.relationship("CleaningJobWorker", back_populates="employee")
 
 
 class EmployeeDeployment(db.Model):
@@ -179,6 +182,9 @@ class PayrollItem(db.Model):
     basic_salary = db.Column(db.Float, default=0)
     transport_allowance = db.Column(db.Float, default=0)
     housing_allowance = db.Column(db.Float, default=0)
+    # Dedicated earnings columns for the ACS/VBA payslip shape.
+    medical_allowance = db.Column(db.Float, default=0)
+    productivity_bonus = db.Column(db.Float, default=0)
     overtime_hours = db.Column(db.Float, default=0)
     overtime_pay = db.Column(db.Float, default=0)
     other_allowances = db.Column(db.Float, default=0)
@@ -186,6 +192,9 @@ class PayrollItem(db.Model):
     paye = db.Column(db.Float, default=0)
     ssnit = db.Column(db.Float, default=0)
     tier_2_pension = db.Column(db.Float, default=0)
+    # "PF FUND / EMPLOYEE" (ACS RAW DATA column AA): a pre-tax deduction —
+    # it reduces taxable income before PAYE as well as net pay.
+    pf_fund_employee = db.Column(db.Float, default=0)
     loan_deduction = db.Column(db.Float, default=0)
     other_deductions = db.Column(db.Float, default=0)
     total_deductions = db.Column(db.Float, default=0)
@@ -313,261 +322,6 @@ class AuditTrail(db.Model):
     user = db.relationship("User")
 
 
-class WorkerAssignment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False, index=True)
-    client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"), nullable=False, index=True)
-    role = db.Column(db.String(120), nullable=False)
-    site_location = db.Column(db.String(160))
-    assignment_start_date = db.Column(db.Date, nullable=False)
-    assignment_end_date = db.Column(db.Date)
-    status = db.Column(db.String(40), nullable=False, default="Pending")
-    shift_type = db.Column(db.String(40), default="Full Day")
-    notes = db.Column(db.Text)
-    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
-    created_at = db.Column(db.DateTime, default=utc_now)
-    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
-
-    employee = db.relationship("Employee", back_populates="assignments")
-    client_company = db.relationship("ClientCompany")
-    creator = db.relationship("User")
-    attendance_records = db.relationship("AttendanceRecord", back_populates="assignment")
-
-
-class AttendanceRecord(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False, index=True)
-    client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"), nullable=False, index=True)
-    assignment_id = db.Column(db.Integer, db.ForeignKey("worker_assignment.id"))
-    work_date = db.Column(db.Date, nullable=False, index=True)
-    clock_in = db.Column(db.Time)
-    clock_out = db.Column(db.Time)
-    hours_worked = db.Column(db.Float)
-    overtime_hours = db.Column(db.Float, default=0)
-    attendance_status = db.Column(db.String(40), nullable=False, default="Unknown")
-    remarks = db.Column(db.Text)
-    recorded_by = db.Column(db.Integer, db.ForeignKey("user.id"))
-    created_at = db.Column(db.DateTime, default=utc_now)
-    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
-
-    employee = db.relationship("Employee", back_populates="attendance_records")
-    client_company = db.relationship("ClientCompany")
-    assignment = db.relationship("WorkerAssignment", back_populates="attendance_records")
-    recorder = db.relationship("User")
-
-
-class CleaningJob(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"), nullable=False, index=True)
-    job_title = db.Column(db.String(180), nullable=False)
-    job_type = db.Column(db.String(80), nullable=False, default="Regular Cleaning")
-    location = db.Column(db.String(180))
-    scheduled_date = db.Column(db.Date, nullable=False, index=True)
-    start_time = db.Column(db.Time)
-    end_time = db.Column(db.Time)
-    supervisor_id = db.Column(db.Integer, db.ForeignKey("user.id"))
-    status = db.Column(db.String(40), nullable=False, default="Scheduled")
-    checklist = db.Column(db.Text)
-    notes = db.Column(db.Text)
-    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
-    created_at = db.Column(db.DateTime, default=utc_now)
-    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
-
-    client_company = db.relationship("ClientCompany")
-    supervisor = db.relationship("User", foreign_keys=[supervisor_id])
-    creator = db.relationship("User", foreign_keys=[created_by])
-    workers = db.relationship("CleaningJobWorker", back_populates="cleaning_job", cascade="all, delete-orphan")
-    completion_report = db.relationship("JobCompletionReport", back_populates="cleaning_job", uselist=False)
-
-
-class CleaningJobWorker(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    cleaning_job_id = db.Column(db.Integer, db.ForeignKey("cleaning_job.id"), nullable=False, index=True)
-    employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False, index=True)
-    role = db.Column(db.String(60), nullable=False, default="Cleaner")
-    attendance_status = db.Column(db.String(40), default="Unknown")
-    notes = db.Column(db.Text)
-
-    cleaning_job = db.relationship("CleaningJob", back_populates="workers")
-    employee = db.relationship("Employee", back_populates="cleaning_jobs")
-
-
-class JobCompletionReport(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    cleaning_job_id = db.Column(db.Integer, db.ForeignKey("cleaning_job.id"), nullable=False, unique=True)
-    completed_by = db.Column(db.Integer, db.ForeignKey("user.id"))
-    completion_status = db.Column(db.String(80), nullable=False)
-    workers_present = db.Column(db.Integer, default=0)
-    workers_absent = db.Column(db.Integer, default=0)
-    checklist_completed = db.Column(db.Boolean, default=False)
-    issues_found = db.Column(db.Text)
-    client_feedback = db.Column(db.Text)
-    supervisor_comments = db.Column(db.Text)
-    completed_at = db.Column(db.DateTime, default=utc_now)
-    created_at = db.Column(db.DateTime, default=utc_now)
-
-    cleaning_job = db.relationship("CleaningJob", back_populates="completion_report")
-    completer = db.relationship("User")
-
-
-class ClientServiceRequest(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"), nullable=False, index=True)
-    submitted_by = db.Column(db.Integer, db.ForeignKey("user.id"))
-    request_type = db.Column(db.String(80), nullable=False)
-    title = db.Column(db.String(180), nullable=False)
-    description = db.Column(db.Text)
-    requested_date = db.Column(db.Date)
-    preferred_start_time = db.Column(db.Time)
-    preferred_end_time = db.Column(db.Time)
-    location = db.Column(db.String(180))
-    number_of_workers_requested = db.Column(db.Integer, default=0)
-    priority = db.Column(db.String(40), default="Normal")
-    status = db.Column(db.String(40), default="Submitted")
-    internal_notes = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=utc_now)
-    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
-
-    client_company = db.relationship("ClientCompany")
-    submitter = db.relationship("User")
-
-
-class Invoice(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"), nullable=False, index=True)
-    invoice_number = db.Column(db.String(80), unique=True, nullable=False)
-    invoice_date = db.Column(db.Date, nullable=False)
-    due_date = db.Column(db.Date)
-    billing_period_start = db.Column(db.Date)
-    billing_period_end = db.Column(db.Date)
-    invoice_type = db.Column(db.String(80), nullable=False)
-    subtotal = db.Column(db.Float, default=0)
-    tax_amount = db.Column(db.Float, default=0)
-    discount_amount = db.Column(db.Float, default=0)
-    total_amount = db.Column(db.Float, default=0)
-    amount_paid = db.Column(db.Float, default=0)
-    balance_due = db.Column(db.Float, default=0)
-    status = db.Column(db.String(40), default="Draft")
-    notes = db.Column(db.Text)
-    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
-    created_at = db.Column(db.DateTime, default=utc_now)
-    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
-
-    client_company = db.relationship("ClientCompany")
-    creator = db.relationship("User")
-    items = db.relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
-    payments = db.relationship("InvoicePayment", back_populates="invoice", cascade="all, delete-orphan")
-
-
-class InvoiceItem(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    invoice_id = db.Column(db.Integer, db.ForeignKey("invoice.id"), nullable=False, index=True)
-    description = db.Column(db.String(255), nullable=False)
-    quantity = db.Column(db.Float, default=1)
-    unit_price = db.Column(db.Float, default=0)
-    line_total = db.Column(db.Float, default=0)
-    source_type = db.Column(db.String(80), default="Manual")
-    source_id = db.Column(db.Integer)
-
-    invoice = db.relationship("Invoice", back_populates="items")
-
-
-class InvoicePayment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    invoice_id = db.Column(db.Integer, db.ForeignKey("invoice.id"), nullable=False, index=True)
-    payment_date = db.Column(db.Date, nullable=False)
-    amount_paid = db.Column(db.Float, default=0)
-    payment_method = db.Column(db.String(40), default="Bank Transfer")
-    reference_number = db.Column(db.String(120))
-    received_by = db.Column(db.Integer, db.ForeignKey("user.id"))
-    notes = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=utc_now)
-
-    invoice = db.relationship("Invoice", back_populates="payments")
-    receiver = db.relationship("User")
-
-
-class Supplier(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(160), nullable=False)
-    contact_person = db.Column(db.String(120))
-    phone = db.Column(db.String(40))
-    email = db.Column(db.String(160))
-    address = db.Column(db.Text)
-    status = db.Column(db.String(40), default="Active")
-    created_at = db.Column(db.DateTime, default=utc_now)
-
-    products = db.relationship("Product", back_populates="supplier")
-
-
-class Product(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    product_name = db.Column(db.String(180), nullable=False)
-    sku = db.Column(db.String(80), unique=True, nullable=False)
-    category = db.Column(db.String(80), default="General Goods")
-    unit = db.Column(db.String(40), default="Each")
-    default_unit_price = db.Column(db.Float, default=0)
-    current_stock = db.Column(db.Float, default=0)
-    reorder_level = db.Column(db.Float, default=0)
-    supplier_id = db.Column(db.Integer, db.ForeignKey("supplier.id"))
-    status = db.Column(db.String(40), default="Active")
-    created_at = db.Column(db.DateTime, default=utc_now)
-
-    supplier = db.relationship("Supplier", back_populates="products")
-    movements = db.relationship("InventoryMovement", back_populates="product")
-
-
-class GoodsSupplyOrder(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"), nullable=False, index=True)
-    order_number = db.Column(db.String(80), unique=True, nullable=False)
-    order_date = db.Column(db.Date, nullable=False)
-    requested_delivery_date = db.Column(db.Date)
-    delivery_location = db.Column(db.String(180))
-    status = db.Column(db.String(40), default="Draft")
-    subtotal = db.Column(db.Float, default=0)
-    tax_amount = db.Column(db.Float, default=0)
-    total_amount = db.Column(db.Float, default=0)
-    notes = db.Column(db.Text)
-    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
-    related_service_request_id = db.Column(db.Integer, db.ForeignKey("client_service_request.id"))
-    created_at = db.Column(db.DateTime, default=utc_now)
-    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
-
-    client_company = db.relationship("ClientCompany")
-    creator = db.relationship("User")
-    service_request = db.relationship("ClientServiceRequest")
-    items = db.relationship("GoodsSupplyOrderItem", back_populates="goods_supply_order", cascade="all, delete-orphan")
-
-
-class GoodsSupplyOrderItem(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    goods_supply_order_id = db.Column(db.Integer, db.ForeignKey("goods_supply_order.id"), nullable=False, index=True)
-    product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False)
-    description = db.Column(db.String(255))
-    quantity = db.Column(db.Float, default=1)
-    unit_price = db.Column(db.Float, default=0)
-    line_total = db.Column(db.Float, default=0)
-
-    goods_supply_order = db.relationship("GoodsSupplyOrder", back_populates="items")
-    product = db.relationship("Product")
-
-
-class InventoryMovement(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False, index=True)
-    movement_type = db.Column(db.String(40), nullable=False)
-    quantity = db.Column(db.Float, default=0)
-    reference_type = db.Column(db.String(80))
-    reference_id = db.Column(db.Integer)
-    notes = db.Column(db.Text)
-    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
-    created_at = db.Column(db.DateTime, default=utc_now)
-
-    product = db.relationship("Product", back_populates="movements")
-    creator = db.relationship("User")
-
-
 # ---------------------------------------------------------------------------
 # Payslip distribution (multi-channel delivery of payslip breakdowns).
 # A PayrollItem IS the payslip; PayslipDelivery records one send attempt of it
@@ -617,6 +371,178 @@ class IdempotencyKey(db.Model):
     key = db.Column(db.String(255), nullable=False, unique=True, index=True)
     response_json = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=utc_now)
+
+
+class StatutoryRate(db.Model):
+    """One effective-dated version of Ghana's statutory payroll rates.
+
+    A calculation always uses the version active as of the payroll run's
+    period — never "whatever's current" — so past runs stay reproducible
+    when rates change. Rates live here, never as Python constants (the
+    source Excel hardcoded the tax formula into a cell; don't repeat that).
+
+    ``paye_bands_json`` is an ordered list (highest threshold first) of
+    ``{"over": t, "rate": r, "base": b}`` entries meaning: if monthly
+    taxable income >= t, tax = (taxable - t) * r + b. Income below the
+    lowest threshold is untaxed.
+    """
+
+    __tablename__ = "statutory_rates"
+
+    id = db.Column(db.Integer, primary_key=True)
+    effective_from = db.Column(db.Date, nullable=False, unique=True, index=True)
+    ssf_employee_rate = db.Column(db.Float, nullable=False)  # e.g. 0.055
+    ssf_employer_rate = db.Column(db.Float, nullable=False)  # e.g. 0.13
+    paye_bands_json = db.Column(db.Text, nullable=False)
+    # Concessionary flat-rate treatment under Ghana PAYE — overtime and bonus
+    # are taxed separately from the marginal bands, not blended into them.
+    overtime_rate_low = db.Column(db.Float, nullable=False, default=0.05)
+    overtime_rate_high = db.Column(db.Float, nullable=False, default=0.10)
+    # Overtime up to this fraction of basic MONTHLY salary taxes at the low rate.
+    overtime_basic_threshold = db.Column(db.Float, nullable=False, default=0.50)
+    bonus_rate = db.Column(db.Float, nullable=False, default=0.05)
+    # Bonus up to this fraction of ANNUAL basic salary taxes at bonus_rate;
+    # the excess joins ordinary taxable income.
+    bonus_annual_basic_threshold = db.Column(db.Float, nullable=False, default=0.15)
+    notes = db.Column(db.Text)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+    creator = db.relationship("User")
+
+    @property
+    def paye_bands(self):
+        import json
+
+        return json.loads(self.paye_bands_json or "[]")
+
+    @classmethod
+    def active_for(cls, on_date):
+        """The rate version in force on ``on_date`` (latest effective_from <= date)."""
+        return (
+            cls.query.filter(cls.effective_from <= on_date)
+            .order_by(cls.effective_from.desc())
+            .first()
+        )
+
+    def compute_paye(self, taxable_income):
+        """Monthly PAYE for ``taxable_income`` using this version's bands.
+        Decimal arithmetic with ROUND_HALF_UP — a marginal result landing
+        exactly on a half-pesewa (e.g. 56.125) rounds up, never to-even."""
+        from app.money import D, money
+
+        taxable_income = D(taxable_income)
+        for band in self.paye_bands:
+            over = D(band["over"])
+            if taxable_income >= over:
+                return money(
+                    (taxable_income - over) * D(band["rate"]) + D(band["base"])
+                )
+        return 0.0
+
+    def compute_overtime_tax(self, overtime_pay, basic_salary):
+        """Concessionary overtime tax: the portion up to
+        ``overtime_basic_threshold`` of basic MONTHLY salary at the low rate,
+        the excess at the high rate. Never enters the marginal bands.
+        Full precision inside, rounded once at the end, matching the source
+        workbook formulas (per-component rounding disagrees by a pesewa on
+        real rows)."""
+        from app.money import D, money
+
+        overtime_pay = D(overtime_pay)
+        if overtime_pay <= 0:
+            return 0.0
+        cap = D(basic_salary) * D(self.overtime_basic_threshold)
+        low_portion = min(overtime_pay, cap)
+        high_portion = max(overtime_pay - cap, D(0))
+        return money(
+            low_portion * D(self.overtime_rate_low)
+            + high_portion * D(self.overtime_rate_high)
+        )
+
+    def split_bonus(self, bonus, basic_salary):
+        """(concessionary tax, excess) for a one-off bonus: the portion up to
+        ``bonus_annual_basic_threshold`` of ANNUAL basic salary is taxed flat
+        at ``bonus_rate``; the excess joins ordinary taxable income."""
+        from app.money import D, money
+
+        bonus = D(bonus)
+        if bonus <= 0:
+            return 0.0, 0.0
+        cap = D(basic_salary) * D(12) * D(self.bonus_annual_basic_threshold)
+        concession = min(bonus, cap)
+        excess = max(bonus - cap, D(0))
+        return money(concession * D(self.bonus_rate)), money(excess)
+
+
+class WageRateProfile(db.Model):
+    """Hourly rate for one pay-code category, per client (employee row = override).
+
+    Rates are the client's own pay structure (e.g. the DZ workbook's O.T./rate
+    columns) — client-specific numbers entered as data, never hardcoded.
+    ``employee_id`` NULL means the client-wide default for that pay code; a row
+    with an employee_id overrides the default for that worker only.
+
+    ``category`` drives the statutory treatment of amounts earned under the
+    pay code: 'basic' (normal hours — attracts SSF and ordinary PAYE),
+    'overtime' (concessionary flat-rate tax), 'bonus' (concessionary up to the
+    annual-basic cap), 'allowance' (shift allowances etc. — ordinary taxable
+    income, no SSF).
+    """
+
+    CATEGORY_BASIC = "basic"
+    CATEGORY_OVERTIME = "overtime"
+    CATEGORY_BONUS = "bonus"
+    CATEGORY_ALLOWANCE = "allowance"
+    CATEGORIES = (CATEGORY_BASIC, CATEGORY_OVERTIME, CATEGORY_BONUS, CATEGORY_ALLOWANCE)
+
+    __tablename__ = "wage_rate_profiles"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "client_company_id", "employee_id", "pay_code",
+            name="uq_wage_rate_scope_code",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_company_id = db.Column(
+        db.Integer, db.ForeignKey("client_company.id"), nullable=False, index=True
+    )
+    employee_id = db.Column(
+        db.Integer, db.ForeignKey("employee.id"), nullable=True, index=True
+    )
+    pay_code = db.Column(db.String(20), nullable=False)  # matches RawPayEntry.pay_code
+    hourly_rate = db.Column(db.Float, nullable=False)
+    category = db.Column(db.String(20), nullable=False, default=CATEGORY_BASIC)
+    description = db.Column(db.String(120))  # e.g. "Normal hours", "Saturday OT"
+    created_at = db.Column(db.DateTime, default=utc_now)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
+
+    client_company = db.relationship("ClientCompany")
+    employee = db.relationship("Employee")
+
+    @classmethod
+    def profile_for(cls, client_company_id, employee_id, pay_code):
+        """Employee-specific profile if one exists, else the client default; None if neither."""
+        if employee_id is not None:
+            override = cls.query.filter_by(
+                client_company_id=client_company_id,
+                employee_id=employee_id,
+                pay_code=pay_code,
+            ).first()
+            if override:
+                return override
+        return cls.query.filter_by(
+            client_company_id=client_company_id,
+            employee_id=None,
+            pay_code=pay_code,
+        ).first()
+
+    @classmethod
+    def rate_for(cls, client_company_id, employee_id, pay_code):
+        """Hourly rate resolved via :meth:`profile_for`; None if unconfigured."""
+        profile = cls.profile_for(client_company_id, employee_id, pay_code)
+        return profile.hourly_rate if profile else None
 
 
 class RawPayEntry(db.Model):

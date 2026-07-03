@@ -28,6 +28,7 @@ from app.models import (
     PayrollRun,
     PayslipDelivery,
 )
+from app.payroll_status import SENDABLE_STATUSES
 from app.pdf_service import generate_payslip_pdf
 
 from .idempotency import replay_or_run
@@ -37,7 +38,6 @@ from .tokens import verify_payslip_token
 distribution_bp = Blueprint("distribution", __name__, url_prefix="/distribution")
 
 PAYROLL_ROLES = ("admin", "md", "payroll_officer", "accounts_officer")
-SENDABLE_STATUSES = {"Approved", "Paid"}
 VALID_SEND_CHANNELS = set(DELIVERY_CHANNELS) | {CHANNEL_AUTO}
 
 

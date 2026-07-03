@@ -29,6 +29,8 @@ COLUMN_ALIASES = {
     "basic_salary": ["basic", "basic salary", "base pay", "basic pay", "base salary", "monthly salary", "salary"],
     "transport_allowance": ["transport", "transport allowance", "transportation"],
     "housing_allowance": ["housing", "housing allowance", "rent allowance"],
+    "medical_allowance": ["medical", "medical allowance", "med allowance", "med. allowance"],
+    "productivity_bonus": ["productivity bonus", "productivity", "prod bonus", "prod. bonus", "bonus"],
     "overtime_hours": ["overtime hours", "ot hours"],
     "overtime_pay": ["overtime", "ot pay", "overtime pay"],
     "other_allowances": ["other allowance", "other allowances", "allowances", "allowance"],
@@ -36,6 +38,7 @@ COLUMN_ALIASES = {
     "paye": ["paye", "tax", "income tax", "paye tax", "tax deducted"],
     "ssnit": ["ssnit", "social security", "ssnit contribution", "ssnit employee", "ssnit emp", "ssnit (employee)"],
     "tier_2_pension": ["tier 2", "tier 2 pension", "tier two pension", "pension"],
+    "pf_fund_employee": ["pf fund / employee", "pf fund employee", "pf fund", "pf employee", "provident fund", "provident fund employee"],
     "loan_deduction": ["loan deduction", "loan deductions", "loan"],
     "other_deductions": ["deduction", "deductions", "other deduction", "other deductions"],
     "total_deductions": ["total deductions", "total deduction"],
@@ -46,6 +49,9 @@ MONEY_FIELDS = {
     "basic_salary",
     "transport_allowance",
     "housing_allowance",
+    "medical_allowance",
+    "productivity_bonus",
+    "pf_fund_employee",
     "overtime_hours",
     "overtime_pay",
     "other_allowances",
@@ -354,9 +360,11 @@ def to_number(value):
             .replace("GHS", "")
             .replace("GH₵", "")
             .replace("₵", "")
+            .replace("GH¢", "")
+            .replace("¢", "")
             .strip()
         )
-        cleaned = cleaned.replace("GHC", "").replace("GH₵", "").replace("₵", "")
+        cleaned = cleaned.replace("GHC", "")
         cleaned = re.sub(r"[^0-9.\-]", "", cleaned)
         return float(cleaned or 0)
     except (TypeError, ValueError):
@@ -781,3 +789,129 @@ def export_import_error_report(payload, export_folder):
         export_folder,
         f"Import_Errors_{slug_filename(payload.get('source_filename', 'payroll'))}.xlsx",
     )
+
+
+def export_bank_listing(payroll_run, export_folder):
+    """Bank transfer batch listing: employees grouped by bank, each row showing
+    account number and net pay, with a subtotal per bank. Derived entirely from
+    the run's items — replaces the per-bank tables maintained by hand in the
+    source workbooks."""
+    client_name = payroll_run.client_company.name if payroll_run.client_company else "Client"
+    title = f"{client_name} Bank Listing {payroll_run.month} {payroll_run.year}"
+    workbook, sheet = create_workbook(title)
+
+    groups = {}
+    for item in payroll_run.items:
+        bank = (item.bank_name or "").strip() or "NO BANK ON RECORD"
+        groups.setdefault(bank, []).append(item)
+
+    header_fill = PatternFill("solid", fgColor="D9EAF7")
+    band_fill = PatternFill("solid", fgColor="052420")
+    row_index = 5
+    for bank in sorted(groups):
+        items = sorted(groups[bank], key=lambda i: (i.full_name or "").upper())
+        band = sheet.cell(row=row_index, column=1, value=bank)
+        band.font = Font(bold=True, color="FFFFFF")
+        band.fill = band_fill
+        for col in range(2, 5):
+            sheet.cell(row=row_index, column=col).fill = band_fill
+        row_index += 1
+        for col_index, header in enumerate(
+            ["Staff ID", "Employee Name", "Account Number", "Net Pay (GH¢)"], start=1
+        ):
+            cell = sheet.cell(row=row_index, column=col_index, value=header)
+            cell.font = Font(bold=True)
+            cell.fill = header_fill
+        row_index += 1
+        subtotal = 0.0
+        for item in items:
+            sheet.cell(row=row_index, column=1, value=item.staff_id)
+            sheet.cell(row=row_index, column=2, value=item.full_name)
+            sheet.cell(row=row_index, column=3, value=item.bank_account_number)
+            sheet.cell(row=row_index, column=4, value=round(item.net_pay or 0, 2))
+            subtotal += item.net_pay or 0
+            row_index += 1
+        total_cell = sheet.cell(row=row_index, column=2, value=f"{bank} Total ({len(items)} workers)")
+        total_cell.font = Font(bold=True)
+        amount_cell = sheet.cell(row=row_index, column=4, value=round(subtotal, 2))
+        amount_cell.font = Font(bold=True)
+        row_index += 2
+
+    grand = sheet.cell(row=row_index, column=2, value="GRAND TOTAL")
+    grand.font = Font(bold=True, size=12)
+    grand_amount = sheet.cell(
+        row=row_index, column=4,
+        value=round(sum(i.net_pay or 0 for i in payroll_run.items), 2),
+    )
+    grand_amount.font = Font(bold=True, size=12)
+    for column_cells in sheet.columns:
+        max_length = max(len(str(cell.value or "")) for cell in column_cells)
+        sheet.column_dimensions[column_cells[0].column_letter].width = min(max_length + 3, 40)
+    filename = (
+        f"{slug_filename(client_name)}_Bank_Listing_"
+        f"{slug_filename(payroll_run.month)}_{payroll_run.year}.xlsx"
+    )
+    return save_workbook(workbook, export_folder, filename)
+
+
+def export_gra_paye_schedule(payroll_run, export_folder, employer_tin="", tax_office=""):
+    """Employer's Monthly Tax Deductions Schedule (P.A.Y.E.) — the statutory
+    GRA layout from the source workbook's GRA PAYE sheet: employer TIN, tax
+    office and month up top, then one row per employee with the PAYE deducted."""
+    client_name = payroll_run.client_company.name if payroll_run.client_company else "Client"
+    workbook, sheet = create_workbook(
+        f"GRA PAYE {payroll_run.month} {payroll_run.year}"
+    )
+    sheet["A2"] = "EMPLOYER'S MONTHLY TAX DEDUCTIONS SCHEDULE (P.A.Y.E.)"
+    sheet["A2"].font = Font(bold=True)
+    sheet["A4"] = f"Employer TIN: {employer_tin or ''}"
+    sheet["A5"] = f"Tax Office: {tax_office or ''}"
+    sheet["A6"] = f"Client / Employer: {client_name}"
+    sheet["A7"] = f"Month: {payroll_run.month} {payroll_run.year}"
+
+    headers = [
+        "No.",
+        "Employee Name",
+        "Staff ID",
+        "TIN / Ghana Card",
+        "SSNIT No.",
+        "Basic Salary",
+        "Total Cash Emoluments (Gross)",
+        "Employee SSF",
+        "Taxable Income",
+        "Tax Deducted (PAYE)",
+    ]
+    rows = []
+    for index, item in enumerate(
+        sorted(payroll_run.items, key=lambda i: (i.full_name or "").upper()), start=1
+    ):
+        taxable = round(
+            (item.gross_pay or 0) - (item.ssnit or 0) - (item.pf_fund_employee or 0), 2
+        )
+        rows.append([
+            index,
+            item.full_name,
+            item.staff_id,
+            item.ghana_card_number,
+            item.ssnit_number,
+            round(item.basic_salary or 0, 2),
+            round(item.gross_pay or 0, 2),
+            round(item.ssnit or 0, 2),
+            taxable,
+            round(item.paye or 0, 2),
+        ])
+    write_table(sheet, 9, headers, rows)
+    total_row = 9 + len(rows) + 1
+    sheet.cell(row=total_row, column=2, value="TOTALS").font = Font(bold=True)
+    for column, value in [
+        (7, payroll_run.total_gross_pay),
+        (8, payroll_run.total_ssnit),
+        (10, payroll_run.total_paye),
+    ]:
+        cell = sheet.cell(row=total_row, column=column, value=round(value or 0, 2))
+        cell.font = Font(bold=True)
+    filename = (
+        f"{slug_filename(client_name)}_GRA_PAYE_Schedule_"
+        f"{slug_filename(payroll_run.month)}_{payroll_run.year}.xlsx"
+    )
+    return save_workbook(workbook, export_folder, filename)

@@ -1,5 +1,6 @@
 from app.excel_utils import normalize_label, normalize_worker
 from app.models import Employee, PayrollItem, PayrollRun
+from app.payroll_status import CLOSED_STATUSES
 
 
 def client_name_matches(selected_name, detected_name):
@@ -108,7 +109,7 @@ def validate_payroll_rows(
     previous_run = (
         PayrollRun.query.filter(
             PayrollRun.client_company_id == client_company.id,
-            PayrollRun.status.in_(["Approved", "Paid", "Exported"]),
+            PayrollRun.status.in_(CLOSED_STATUSES),
         )
         .order_by(PayrollRun.year.desc(), PayrollRun.created_at.desc())
         .first()

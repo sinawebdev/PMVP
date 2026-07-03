@@ -643,238 +643,6 @@ class MvpTestCase(unittest.TestCase):
         self.assertEqual(user.role, "operations_supervisor")
         self.assertTrue(user.check_password("password123"))
 
-    @unittest.skip("Archived Phase 2 operations feature; not part of active Phase 1 MVP.")
-    def test_assignment_warning_detects_duplicate_active_assignment(self):
-        from app.models import WorkerAssignment
-        from app.operations_services import assignment_warnings
-
-        with self.app.app_context():
-            employee = Employee.query.first()
-            first_client = ClientCompany.query.first()
-            second_client = ClientCompany.query.offset(1).first()
-            db.session.add(
-                WorkerAssignment(
-                    employee_id=employee.id,
-                    client_company_id=first_client.id,
-                    role="Cleaner",
-                    status="Active",
-                    assignment_start_date=datetime.now().date(),
-                    created_by=1,
-                )
-            )
-            db.session.commit()
-
-            assignment = WorkerAssignment(
-                employee_id=employee.id,
-                client_company_id=second_client.id,
-                role="Cleaner",
-                status="Active",
-                assignment_start_date=datetime.now().date(),
-            )
-            warnings = assignment_warnings(assignment)
-
-        self.assertTrue(any("active assignment" in warning for warning in warnings))
-
-    @unittest.skip("Archived Phase 2 operations feature; not part of active Phase 1 MVP.")
-    def test_attendance_hours_and_overtime_are_calculated(self):
-        from datetime import time
-
-        from app.models import AttendanceRecord
-        from app.operations_services import apply_attendance_calculations
-
-        record = AttendanceRecord(
-            attendance_status="Present",
-            clock_in=time(8, 0),
-            clock_out=time(18, 30),
-        )
-        warnings = apply_attendance_calculations(record)
-
-        self.assertEqual(record.hours_worked, 10.5)
-        self.assertEqual(record.overtime_hours, 2.5)
-        self.assertEqual(warnings, [])
-
-    @unittest.skip("Archived Phase 2 operations feature; not part of active Phase 1 MVP.")
-    def test_operations_dashboard_is_available_to_operations_supervisor(self):
-        self.login_operations()
-        response = self.client.get("/operations-dashboard")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Worker Availability Summary", response.data)
-        self.assertIn(b"Cleaning Jobs Today", response.data)
-
-    @unittest.skip("Archived Phase 2 operations feature; not part of active Phase 1 MVP.")
-    def test_cleaning_job_completion_report_marks_job_completed(self):
-        from app.models import CleaningJob
-
-        self.login_operations()
-        with self.app.app_context():
-            client = ClientCompany.query.first()
-            job = CleaningJob(
-                client_company_id=client.id,
-                job_title="Office Cleaning Test",
-                job_type="Office Cleaning",
-                location="Tema",
-                scheduled_date=datetime.now().date(),
-                status="Scheduled",
-                created_by=1,
-            )
-            db.session.add(job)
-            db.session.commit()
-            job_id = job.id
-
-        response = self.client.post(
-            f"/cleaning-jobs/{job_id}/completion-report",
-            data={
-                "completion_status": "Completed Successfully",
-                "workers_present": "2",
-                "workers_absent": "0",
-                "checklist_completed": "on",
-                "issues_found": "",
-                "client_feedback": "Good",
-                "supervisor_comments": "Done",
-            },
-            follow_redirects=True,
-        )
-
-        self.assertEqual(response.status_code, 200)
-        with self.app.app_context():
-            job = db.session.get(CleaningJob, job_id)
-            self.assertEqual(job.status, "Completed")
-
-    @unittest.skip("Archived Phase 3 client portal feature; not part of active Phase 1 MVP.")
-    def test_client_user_seed_is_limited_to_client_portal(self):
-        self.login_client()
-
-        portal_response = self.client.get("/client-portal")
-        dashboard_response = self.client.get("/dashboard", follow_redirects=False)
-
-        self.assertEqual(portal_response.status_code, 200)
-        self.assertIn(b"Client Portal", portal_response.data)
-        self.assertEqual(dashboard_response.status_code, 302)
-        self.assertIn("/client-portal", dashboard_response.headers["Location"])
-
-    @unittest.skip("Archived Phase 3 invoicing feature; not part of active Phase 1 MVP.")
-    def test_client_user_cannot_view_another_clients_invoice(self):
-        from app.models import Invoice
-
-        self.login_client("msc.client@chrisnat.local")
-        with self.app.app_context():
-            stellar = ClientCompany.query.filter_by(name="Stellar Logistics").first()
-            invoice = Invoice.query.filter_by(client_company_id=stellar.id).first()
-            invoice_id = invoice.id
-
-        response = self.client.get(f"/client-portal/invoices/{invoice_id}", follow_redirects=True)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn(b"Stellar Logistics", response.data)
-        self.assertIn(b"access", response.data.lower())
-
-    @unittest.skip("Archived Phase 3 client portal feature; not part of active Phase 1 MVP.")
-    def test_client_can_submit_service_request_for_own_company(self):
-        from app.models import ClientServiceRequest
-
-        self.login_client()
-        response = self.client.post(
-            "/client-portal/requests/new",
-            data={
-                "request_type": "Cleaning Request",
-                "title": "Extra office cleaning",
-                "description": "Please schedule extra cleaning.",
-                "requested_date": date.today().isoformat(),
-                "location": "Tema office",
-                "number_of_workers_requested": "2",
-                "priority": "High",
-            },
-            follow_redirects=True,
-        )
-
-        self.assertEqual(response.status_code, 200)
-        with self.app.app_context():
-            request_row = ClientServiceRequest.query.filter_by(title="Extra office cleaning").first()
-            self.assertIsNotNone(request_row)
-            self.assertEqual(request_row.client_company.name, "MSC Ghana Ltd")
-
-    @unittest.skip("Archived Phase 3 invoicing feature; not part of active Phase 1 MVP.")
-    def test_invoice_payment_updates_balance_and_status(self):
-        from app.models import Invoice
-
-        self.login_admin()
-        with self.app.app_context():
-            invoice = Invoice.query.filter(Invoice.total_amount > 0).first()
-            invoice_id = invoice.id
-            total = invoice.total_amount
-
-        self.client.post(
-            f"/invoices/{invoice_id}/record-payment",
-            data={
-                "payment_date": date.today().isoformat(),
-                "amount_paid": str(total / 2),
-                "payment_method": "Bank Transfer",
-                "reference_number": "PART-001",
-            },
-        )
-        with self.app.app_context():
-            invoice = db.session.get(Invoice, invoice_id)
-            self.assertEqual(invoice.status, "Partially Paid")
-            self.assertGreater(invoice.balance_due, 0)
-
-        self.client.post(
-            f"/invoices/{invoice_id}/record-payment",
-            data={
-                "payment_date": date.today().isoformat(),
-                "amount_paid": str(total),
-                "payment_method": "Bank Transfer",
-                "reference_number": "FULL-001",
-            },
-        )
-        with self.app.app_context():
-            invoice = db.session.get(Invoice, invoice_id)
-            self.assertEqual(invoice.status, "Paid")
-            self.assertEqual(invoice.balance_due, 0)
-
-    @unittest.skip("Archived Phase 3 goods feature; not part of active Phase 1 MVP.")
-    def test_goods_delivery_reduces_stock_and_logs_movement(self):
-        from app.models import GoodsSupplyOrder, InventoryMovement, Product
-
-        self.login_admin()
-        with self.app.app_context():
-            order = GoodsSupplyOrder.query.filter(GoodsSupplyOrder.items.any()).first()
-            item = order.items[0]
-            product_id = item.product_id
-            starting_stock = item.product.current_stock
-            order_id = order.id
-            quantity = item.quantity
-
-        response = self.client.post(f"/goods-orders/{order_id}/deliver", follow_redirects=True)
-
-        self.assertEqual(response.status_code, 200)
-        with self.app.app_context():
-            product = db.session.get(Product, product_id)
-            self.assertEqual(product.current_stock, starting_stock - quantity)
-            self.assertIsNotNone(
-                InventoryMovement.query.filter_by(
-                    reference_type="GoodsSupplyOrder",
-                    reference_id=order_id,
-                ).first()
-            )
-
-    @unittest.skip("Archived Phase 3 invoicing feature; not part of active Phase 1 MVP.")
-    def test_invoice_exports_are_generated_from_database(self):
-        from app.models import Invoice
-
-        self.login_admin()
-        with self.app.app_context():
-            invoice_id = Invoice.query.first().id
-
-        pdf_response = self.client.get(f"/invoices/{invoice_id}/export-pdf")
-        excel_response = self.client.get(f"/invoices/{invoice_id}/export-excel")
-
-        self.assertEqual(pdf_response.status_code, 200)
-        self.assertEqual(pdf_response.headers["Content-Type"], "application/pdf")
-        self.assertTrue(pdf_response.data.startswith(b"%PDF"))
-        self.assertEqual(excel_response.status_code, 200)
-        self.assertIn("spreadsheet", excel_response.headers["Content-Type"])
-
     def test_worker_stats_use_unique_worker_identity(self):
         rows = [
             {"staff_id": "CN-001", "full_name": "Kwame Mensah"},
@@ -1228,21 +996,14 @@ class MvpTestCase(unittest.TestCase):
             run_id = payroll_run.id
 
         self.assertEqual(
-            self.client.post(f"/payroll/runs/{run_id}/submit-review", follow_redirects=True).status_code,
+            self.client.post(f"/payroll/runs/{run_id}/submit-for-approval", follow_redirects=True).status_code,
             200,
         )
-        self.client.get("/logout")
-        self.client.post(
-            "/login",
-            data={"email": "accounts@chrisnat.local", "password": "password123"},
-            follow_redirects=True,
-        )
-        self.assertEqual(
-            self.client.post(f"/payroll/runs/{run_id}/submit-md-approval", follow_redirects=True).status_code,
-            200,
-        )
-        self.client.get("/logout")
-        self.login_md()
+        with self.app.app_context():
+            run = db.session.get(PayrollRun, run_id)
+            self.assertEqual(run.status, "Pending Approval")
+            self.assertIsNone(run.reviewed_by)
+            self.assertIsNone(run.reviewed_at)
         self.assertEqual(
             self.client.post(f"/payroll/runs/{run_id}/approve", follow_redirects=True).status_code,
             200,
@@ -1252,7 +1013,7 @@ class MvpTestCase(unittest.TestCase):
             run = db.session.get(PayrollRun, run_id)
             self.assertEqual(run.status, "Approved")
             self.assertIsNone(run.voucher)
-            self.assertGreaterEqual(AuditTrail.query.filter_by(related_record_type="PayrollRun", related_record_id=run_id).count(), 3)
+            self.assertGreaterEqual(AuditTrail.query.filter_by(related_record_type="PayrollRun", related_record_id=run_id).count(), 2)
 
     def test_accounts_can_mark_approved_payroll_processed(self):
         self.login_admin()

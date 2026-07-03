@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Add Statutory Rate Version · Chrisnat Payroll{% endblock %}
+{% block page_title %}Add Statutory Rate Version{% endblock %}
+{% block page_intro %}Record a new effective-dated SSNIT/PAYE version from the GRA circular. Existing versions are never edited — runs before the new effective date keep using the old rates.{% endblock %}
+{% block content %}
+<section class="panel form-panel">
+    <form method="post" class="row g-3">
+        <div class="col-md-4">
+            <label class="form-label" for="effective_from">Effective From</label>
+            <input class="form-control" type="date" id="effective_from" name="effective_from" required>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="ssf_employee_rate">SSF Employee Rate (fraction)</label>
+            <input class="form-control" type="number" step="0.0001" min="0" max="1" id="ssf_employee_rate" name="ssf_employee_rate" value="{{ prefill.ssf_employee_rate }}" required>
+            <div class="form-text">e.g. 0.055 for 5.5%</div>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="ssf_employer_rate">SSF Employer Rate (fraction)</label>
+            <input class="form-control" type="number" step="0.0001" min="0" max="1" id="ssf_employer_rate" name="ssf_employer_rate" value="{{ prefill.ssf_employer_rate }}" required>
+            <div class="form-text">e.g. 0.13 for 13%</div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="overtime_rate_low">Overtime Rate (within threshold)</label>
+            <input class="form-control" type="number" step="0.0001" min="0" max="1" id="overtime_rate_low" name="overtime_rate_low" value="{{ prefill.overtime_rate_low }}" required>
+            <div class="form-text">e.g. 0.05 for 5%</div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="overtime_rate_high">Overtime Rate (excess)</label>
+            <input class="form-control" type="number" step="0.0001" min="0" max="1" id="overtime_rate_high" name="overtime_rate_high" value="{{ prefill.overtime_rate_high }}" required>
+            <div class="form-text">e.g. 0.10 for 10%</div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="overtime_basic_threshold">Overtime Threshold (of monthly basic)</label>
+            <input class="form-control" type="number" step="0.01" min="0" max="5" id="overtime_basic_threshold" name="overtime_basic_threshold" value="{{ prefill.overtime_basic_threshold }}" required>
+            <div class="form-text">e.g. 0.50 = OT up to 50% of basic taxes at the low rate</div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="bonus_rate">Bonus Concession Rate</label>
+            <input class="form-control" type="number" step="0.0001" min="0" max="1" id="bonus_rate" name="bonus_rate" value="{{ prefill.bonus_rate }}" required>
+            <div class="form-text">e.g. 0.05 for 5%</div>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="bonus_annual_basic_threshold">Bonus Threshold (of annual basic)</label>
+            <input class="form-control" type="number" step="0.01" min="0" max="5" id="bonus_annual_basic_threshold" name="bonus_annual_basic_threshold" value="{{ prefill.bonus_annual_basic_threshold }}" required>
+            <div class="form-text">e.g. 0.15 = bonus up to 15% of annual basic taxes flat; excess joins ordinary taxable income</div>
+        </div>
+        <div class="col-12">
+            <label class="form-label" for="paye_bands_json">PAYE Bands (JSON)</label>
+            <textarea class="form-control font-monospace" rows="12" id="paye_bands_json" name="paye_bands_json" required>{{ prefill.paye_bands_json }}</textarea>
+            <div class="form-text">
+                Ordered list of {"over": threshold, "rate": marginal rate, "base": cumulative tax at threshold}.
+                If monthly taxable income &ge; <code>over</code>, tax = (income − over) × rate + base. Income below the lowest threshold is untaxed.
+            </div>
+        </div>
+        <div class="col-12">
+            <label class="form-label" for="notes">Notes / Source</label>
+            <input class="form-control" type="text" id="notes" name="notes" placeholder="e.g. GRA circular ref, gazette date">
+        </div>
+        <div class="col-12 d-flex gap-2">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-save"></i>Save Rate Version</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('statutory.index') }}">Cancel</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

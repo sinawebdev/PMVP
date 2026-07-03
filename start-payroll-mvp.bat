@@ -21,7 +21,7 @@ echo Open / refresh in your browser:  http://127.0.0.1:5000
 echo Keep this window open while using the app. Press Ctrl+C to stop.
 echo If you see "address already in use", an old copy (e.g. the WSL one)
 echo is still running - close that first, then run this again.
-echo.
+echo. 
 start "" http://127.0.0.1:5000
 where python >nul 2>nul
 if %ERRORLEVEL%==0 ( python run.py ) else ( py -3 run.py )

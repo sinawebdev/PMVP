@@ -1,10 +1,10 @@
 """Employee payslip PDF generation.
 
 One generator, shared by the MVP's per-employee download button (app/payroll.py)
-and the distribution feature's public link (app/distribution). Updated to the new
-pay-advice layout: a clean header, an Employee Details block, an EARNINGS table and a
-DEDUCTIONS table (each with a bold total row), and a prominent NET PAY band — matching
-the distribution payslip design so both surfaces produce the same modern format.
+and the distribution feature's public link (app/distribution). The layout mirrors
+the client's original Excel "VBA PAYSLIP" sheet: a two-column employee header
+block, EARNINGS (left) against DEDUCTIONS (right) in one side-by-side table, and
+a NET PAY totals band beneath — in Chrisnat brand colors (deep teal + gold).
 """
 import os
 from datetime import datetime
@@ -24,19 +24,23 @@ from reportlab.platypus import (
 
 from app.excel_utils import slug_filename
 
-# Shared palette (matches the distribution payslip in app/channels/pdf.py).
-_INK = colors.HexColor("#1f3a5f")
+# Chrisnat brand palette.
+_TEAL = colors.HexColor("#052420")   # headers / bands
+_GOLD = colors.HexColor("#C9A24B")   # accent lines / totals
 _HAIRLINE = colors.HexColor("#dddddd")
-_RULE = colors.HexColor("#888888")
 _MUTED = colors.HexColor("#666666")
 
-# Two-column geometry: A4 content width (~174mm) split label / amount.
-_LABEL_W = 118 * mm
-_AMOUNT_W = 56 * mm
+# Side-by-side geometry: A4 content width (~174mm) split into two
+# label/amount column pairs (earnings | deductions).
+_ITEM_W = 56 * mm
+_AMT_W = 31 * mm
 
 
 def money(value):
-    return f"GH₵ {float(value or 0):,.2f}"
+    # Plain ASCII cent sign (U+00A2), matching the source workbooks' "GH¢"
+    # convention. The Unicode Ghana Cedi Sign (U+20B5) has no glyph in
+    # ReportLab's base Helvetica/WinAnsiEncoding and renders as a tofu box.
+    return f"GH¢ {float(value or 0):,.2f}"
 
 
 def payslip_filename(payroll_item):
@@ -48,59 +52,120 @@ def payslip_filename(payroll_item):
     )
 
 
-def _info_table(rows):
-    """Borderless label/value block for the employee header details."""
-    table = Table(rows, colWidths=[40 * mm, 134 * mm])
+def _header_block(rows):
+    """Two label/value column pairs, VBA PAYSLIP style (label, value, label, value)."""
+    table = Table(rows, colWidths=[30 * mm, 57 * mm, 30 * mm, 57 * mm])
     table.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
         ("TEXTCOLOR", (0, 0), (0, -1), _MUTED),
-        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+        ("TEXTCOLOR", (2, 0), (2, -1), _MUTED),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING", (0, 0), (-1, -1), 1.5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("LEFTPADDING", (0, 0), (0, -1), 0),
+        ("LINEBELOW", (0, -1), (-1, -1), 1, _GOLD),
     ]))
     return table
 
 
-def _amount_section(heading, rows, total_label, total_value):
-    """[Item | AMOUNT] table with a coloured header band and a bold total row."""
-    data = [[heading, "AMOUNT"]]
-    data += [[label, money(value)] for label, value in rows]
-    data.append([total_label, money(total_value)])
+def _earnings_rows(item):
+    """VBA PAYSLIP earnings order: Basic Salary, Medical Allowance,
+    Productivity Bonus, Overtime — each from its dedicated PayrollItem column.
+    Transport/housing/other rows are appended when present so the total always
+    reconciles with gross pay."""
+    rows = [
+        ("Basic Salary", item.basic_salary),
+        ("Medical Allowance", item.medical_allowance),
+        ("Productivity Bonus", item.productivity_bonus),
+        ("Overtime", item.overtime_pay),
+    ]
+    if item.transport_allowance:
+        rows.append(("Transport Allowance", item.transport_allowance))
+    if item.housing_allowance:
+        rows.append(("Housing Allowance", item.housing_allowance))
+    if item.other_allowances:
+        rows.append(("Other Allowances", item.other_allowances))
+    return rows
 
-    table = Table(data, colWidths=[_LABEL_W, _AMOUNT_W])
+
+def _deduction_rows(item):
+    rows = [
+        ("Income Tax", item.paye),
+        ("Social Security 5.5%", item.ssnit),
+        ("I.O.U", item.other_deductions),
+        ("Loan/Salary Advance", item.loan_deduction),
+    ]
+    if item.pf_fund_employee:
+        rows.append(("PF Fund (Employee)", item.pf_fund_employee))
+    if item.tier_2_pension:
+        rows.append(("Tier 2 Pension", item.tier_2_pension))
+    return rows
+
+
+def _earnings_deductions_table(item):
+    """Single side-by-side table: EARNINGS columns on the left, DEDUCTIONS on
+    the right, with a gold-ruled totals row, matching the VBA PAYSLIP body."""
+    earnings = _earnings_rows(item)
+    deductions = _deduction_rows(item)
+    depth = max(len(earnings), len(deductions))
+    earnings += [("", None)] * (depth - len(earnings))
+    deductions += [("", None)] * (depth - len(deductions))
+
+    data = [["EARNINGS", "AMOUNT", "DEDUCTIONS", "AMOUNT"]]
+    for (e_label, e_val), (d_label, d_val) in zip(earnings, deductions):
+        data.append([
+            e_label,
+            money(e_val) if e_label else "",
+            d_label,
+            money(d_val) if d_label else "",
+        ])
+    data.append([
+        "Total Earnings",
+        money(item.gross_pay),
+        "Total Deductions",
+        money(item.total_deductions),
+    ])
+
+    table = Table(data, colWidths=[_ITEM_W, _AMT_W, _ITEM_W, _AMT_W])
     table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), _INK),
+        ("BACKGROUND", (0, 0), (-1, 0), _TEAL),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
-        ("ALIGN", (0, 0), (0, -1), "LEFT"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+        ("ALIGN", (3, 0), (3, -1), "RIGHT"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 4.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4.5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
         ("LINEBELOW", (0, 1), (-1, -2), 0.25, _HAIRLINE),
-        ("LINEABOVE", (0, -1), (-1, -1), 0.75, _RULE),
+        ("LINEAFTER", (1, 0), (1, -1), 0.5, _HAIRLINE),
+        ("LINEABOVE", (0, -1), (-1, -1), 1, _GOLD),
         ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("TEXTCOLOR", (0, -1), (-1, -1), _TEAL),
     ]))
     return table
 
 
 def _net_band(value):
-    table = Table([["NET PAY", money(value)]], colWidths=[_LABEL_W, _AMOUNT_W])
+    table = Table(
+        [["NET PAY", money(value)]],
+        colWidths=[_ITEM_W + _AMT_W + _ITEM_W, _AMT_W],
+    )
     table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), _INK),
-        ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+        ("BACKGROUND", (0, 0), (-1, -1), _TEAL),
+        ("TEXTCOLOR", (0, 0), (-1, -1), _GOLD),
         ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 11),
+        ("FONTSIZE", (0, 0), (-1, -1), 11.5),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-        ("TOPPADDING", (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("LINEABOVE", (0, 0), (-1, 0), 1.5, _GOLD),
     ]))
     return table
 
@@ -108,7 +173,8 @@ def _net_band(value):
 def generate_payslip_pdf(payroll_item, export_folder):
     run = payroll_item.payroll_run
     employee = payroll_item.employee
-    client_name = run.client_company.name if run.client_company else "Unassigned Client"
+    client = run.client_company
+    client_name = client.name if client else "Unassigned Client"
     payslip_folder = os.path.join(export_folder, "payslips")
     os.makedirs(payslip_folder, exist_ok=True)
     file_path = os.path.join(payslip_folder, payslip_filename(payroll_item))
@@ -126,7 +192,7 @@ def generate_payslip_pdf(payroll_item, export_folder):
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
         "cn_title", parent=styles["Title"], fontSize=17, alignment=0,
-        spaceAfter=2, textColor=_INK,
+        spaceAfter=2, textColor=_TEAL,
     )
     sub_style = ParagraphStyle("cn_sub", parent=styles["Normal"], fontSize=10, textColor=_MUTED)
     note_style = ParagraphStyle(
@@ -135,47 +201,34 @@ def generate_payslip_pdf(payroll_item, export_folder):
 
     story = [
         Paragraph(escape("Chrisnat Limited"), title_style),
-        Paragraph(escape(f"Individual Employee Payslip — {run.month} {run.year}"), sub_style),
+        Paragraph(escape(f"Employee Payslip — {client_name}"), sub_style),
         Spacer(1, 10),
     ]
 
-    info_rows = [
-        ["Employee Name", payroll_item.full_name or ""],
-        ["Staff ID", payroll_item.staff_id or ""],
-        ["Client Company", client_name],
-        ["SSNIT Number", payroll_item.ssnit_number or (employee.ssnit_number if employee else "")],
-        ["Bank", employee.bank_name if employee else ""],
-        ["Bank Account", employee.bank_account_number if employee else ""],
-        ["Payslip Generated", datetime.now().strftime("%Y-%m-%d %H:%M")],
+    period = f"{run.month} {run.year}"
+    location = (client.location if client else "") or (employee.assigned_client if employee else "") or ""
+    header_rows = [
+        ["Employee Reg #", payroll_item.staff_id or "", "Period", period],
+        ["Employee Name", payroll_item.full_name or "", "Department",
+         (employee.department if employee else "") or ""],
+        ["Job Title", payroll_item.job_role or "", "Location", location],
+        ["SSNIT No", payroll_item.ssnit_number or (employee.ssnit_number if employee else "") or "",
+         "GH Card", payroll_item.ghana_card_number or (employee.ghana_card_number if employee else "") or ""],
+        ["Account No", payroll_item.bank_account_number or (employee.bank_account_number if employee else "") or "",
+         "Bank", payroll_item.bank_name or (employee.bank_name if employee else "") or ""],
     ]
-    story.append(_info_table(info_rows))
+    story.append(_header_block(header_rows))
     story.append(Spacer(1, 12))
 
-    earnings = [
-        ("Basic Salary", payroll_item.basic_salary),
-        ("Transport Allowance", payroll_item.transport_allowance),
-        ("Housing Allowance", payroll_item.housing_allowance),
-        ("Overtime Pay", payroll_item.overtime_pay),
-        ("Other Allowances", payroll_item.other_allowances),
-    ]
-    deductions = [
-        ("PAYE", payroll_item.paye),
-        ("SSNIT", payroll_item.ssnit),
-        ("Other Deductions", payroll_item.other_deductions),
-    ]
-
-    story.append(_amount_section("EARNINGS", earnings, "Total Earnings", payroll_item.gross_pay))
-    story.append(Spacer(1, 8))
-    story.append(
-        _amount_section("DEDUCTIONS", deductions, "Total Deductions", payroll_item.total_deductions)
-    )
+    story.append(_earnings_deductions_table(payroll_item))
     story.append(Spacer(1, 4))
     story.append(_net_band(payroll_item.net_pay))
 
     story.append(
         Paragraph(
             "This payslip is generated from the approved payroll records in the Chrisnat "
-            "system. PAYE and SSNIT values are based on the uploaded payroll data.",
+            f"system on {datetime.now().strftime('%Y-%m-%d %H:%M')}. PAYE and SSNIT values "
+            "are based on the approved payroll data.",
             note_style,
         )
     )

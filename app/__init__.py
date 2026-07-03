@@ -11,12 +11,9 @@ db = SQLAlchemy()
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 
-try:
-    from flask_migrate import Migrate
-except ImportError:  # Keeps existing local installs working until requirements are installed.
-    Migrate = None
+from flask_migrate import Migrate
 
-migrate = Migrate() if Migrate else None
+migrate = Migrate()
 
 
 def resolve_database_uri(local_sqlite_path):
@@ -157,8 +154,7 @@ def create_app():
 
     db.init_app(app)
     login_manager.init_app(app)
-    if migrate:
-        migrate.init_app(app, db)
+    migrate.init_app(app, db)
     app.jinja_env.filters["cedis"] = format_ghana_cedis
     app.jinja_env.filters["role_label"] = format_role_label
 
@@ -169,6 +165,7 @@ def create_app():
     from app.payroll import payroll_bp
     from app.payslip import payslip_bp
     from app.routes import main_bp
+    from app.statutory import statutory_bp
 
     app.register_blueprint(audit_bp)
     app.register_blueprint(auth_bp)
@@ -178,6 +175,7 @@ def create_app():
     app.register_blueprint(distribution_bp)
     app.register_blueprint(payslip_link_bp)
     app.register_blueprint(employees_bp)
+    app.register_blueprint(statutory_bp)
 
     @app.context_processor
     def inject_sidebar_clients():
@@ -217,9 +215,6 @@ def initialize_database(app):
                     exc,
                 )
                 time.sleep(2)
-        from app.schema import ensure_phase2_schema
-
-        ensure_phase2_schema()
         from app.seed import seed_default_data
 
         seed_default_data()

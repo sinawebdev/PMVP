@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Edit Figures · Payroll Run · Chrisnat Payroll{% endblock %}
+{% block page_title %}Edit Figures — {{ payroll_run.client_company.name if payroll_run.client_company else "Run" }} {{ payroll_run.month }} {{ payroll_run.year }}{% endblock %}
+{% block page_intro %}Correct raw input figures for a few employees without a full re-upload. Computed figures (gross, PAYE, SSNIT, net) only ever come from Calculate Pay — they cannot be typed in here.{% endblock %}
+{% block content %}
+{% if not editable %}
+<div class="alert alert-warning">
+    <i class="bi bi-lock"></i>
+    This run is <strong>{{ payroll_run.status }}</strong> — figures are read-only. Only Draft runs can be edited.
+</div>
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-exclamation-triangle"></i>
+    Computed columns show the <strong>last Calculate Pay result</strong> and are stale once you save edits —
+    run <strong>Calculate Pay</strong> from the run page afterwards to recompute PAYE, SSNIT and net pay.
+</div>
+{% endif %}
+<div class="toolbar">
+    <a class="btn btn-outline-secondary" href="{{ url_for('payroll.detail', run_id=payroll_run.id) }}"><i class="bi bi-arrow-left"></i>Back to Run</a>
+</div>
+<form method="post">
+<section class="panel">
+    {% if is_raw %}
+    <div class="panel-header"><h2><i class="bi bi-pencil-square"></i>Imported Hours</h2><span>{{ raw_entries|length }} lines</span></div>
+    <div class="excel-grid-wrap">
+        <table class="table table-sm align-middle excel-grid">
+            <thead><tr><th>Employee ID</th><th>Pay Code</th><th>Hours</th></tr></thead>
+            <tbody>
+            {% for entry in raw_entries %}
+                <tr>
+                    <td>{{ entry.employee_id_str }}</td>
+                    <td><code>{{ entry.pay_code }}</code></td>
+                    <td style="max-width: 8rem">
+                        <input class="form-control form-control-sm" type="number" step="0.01" min="0"
+                               name="entry-{{ entry.id }}-hours" value="{{ entry.hours }}"
+                               {% if not editable %}disabled{% endif %}>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="panel-header"><h2><i class="bi bi-pencil-square"></i>Employee Figures</h2><span>{{ payroll_run.items|length }} rows</span></div>
+    <div class="excel-grid-wrap">
+        <table class="table table-sm align-middle excel-grid">
+            <thead>
+                <tr>
+                    <th>Staff ID</th><th>Name</th>
+                    <th>Basic</th><th>Transport</th><th>Medical</th><th>Bonus</th><th>Overtime</th>
+                    <th>PF Fund</th><th>Loan</th><th>Other Ded.</th>
+                    <th class="text-muted">Gross*</th><th class="text-muted">PAYE*</th>
+                    <th class="text-muted">SSNIT*</th><th class="text-muted">Net*</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in payroll_run.items %}
+                <tr>
+                    <td>{{ item.staff_id }}</td>
+                    <td>{{ item.full_name }}</td>
+                    {% for field in editable_fields %}
+                    <td style="min-width: 6.5rem">
+                        <input class="form-control form-control-sm" type="number" step="0.01" min="0"
+                               name="item-{{ item.id }}-{{ field }}" value="{{ '%.2f'|format(item[field] or 0) }}"
+                               {% if not editable %}disabled{% endif %}>
+                    </td>
+                    {% endfor %}
+                    <td class="money-cell text-muted">{{ item.gross_pay|cedis }}</td>
+                    <td class="money-cell text-muted">{{ item.paye|cedis }}</td>
+                    <td class="money-cell text-muted">{{ item.ssnit|cedis }}</td>
+                    <td class="money-cell text-muted">{{ item.net_pay|cedis }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="mini-note mt-2"><i class="bi bi-calculator"></i> * Computed by Calculate Pay — read-only, stale until the run is recalculated.</p>
+    {% endif %}
+    {% if editable %}
+    <div class="d-flex gap-2 mt-3">
+        <button class="btn btn-primary" type="submit"><i class="bi bi-save"></i>Save Changes</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('payroll.detail', run_id=payroll_run.id) }}">Cancel</a>
+    </div>
+    {% endif %}
+</section>
+</form>
+{% endblock %}

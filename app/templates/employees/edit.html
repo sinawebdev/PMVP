@@ -31,6 +31,11 @@
             <input class="form-control" id="bank_account" name="bank_account" value="{{ emp.bank_account_number or '' }}">
         </div>
         <div class="col-md-4">
+            <label class="form-label" for="tax_relief">GRA Tax Relief (monthly, GH¢)</label>
+            <input class="form-control" type="number" step="0.01" min="0" id="tax_relief" name="tax_relief" value="{{ emp.tax_relief_monthly or 0 }}">
+            <div class="form-text">Marriage/dependents/disability/age relief per the current GRA circular. Subtracted from taxable income each month.</div>
+        </div>
+        <div class="col-md-4">
             <label class="form-label" for="status">Status</label>
             <select class="form-select" id="status" name="status">
                 <option value="Active" {% if emp.status == 'Active' %}selected{% endif %}>Active</option>
