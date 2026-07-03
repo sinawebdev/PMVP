@@ -22,6 +22,8 @@ from app.models import (
     User,
 )
 
+from app.payroll_status import PENDING_STATUSES
+
 main_bp = Blueprint("main", __name__)
 
 
@@ -101,7 +103,7 @@ def dashboard():
         month=selected_month,
         year=selected_year,
     ).all()
-    pending_statuses = ("Draft", "Pending Review", "Pending MD Approval")
+    pending_statuses = PENDING_STATUSES
     client_costs = [
         {
             "client": client.name,
@@ -277,7 +279,7 @@ def client_detail(client_id):
         paye_total=sum(run.total_paye for run in current_runs),
         ssnit_total=sum(run.total_ssnit for run in current_runs),
         pending_approvals=sum(
-            1 for run in client.payroll_runs if run.status in ("Draft", "Pending Review", "Pending MD Approval")
+            1 for run in client.payroll_runs if run.status in PENDING_STATUSES
         ),
         validation_warnings=sum(run.warning_count for run in client.payroll_runs),
     )

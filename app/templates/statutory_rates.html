@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Statutory Rates · Chrisnat Payroll{% endblock %}
+{% block page_title %}Statutory Rates{% endblock %}
+{% block page_intro %}Versioned SSNIT split and PAYE bands. Payroll calculations always use the version in force for the run's period, so adding a new version never changes past runs.{% endblock %}
+{% block content %}
+<div class="toolbar">
+    <a class="btn btn-primary" href="{{ url_for('statutory.new') }}"><i class="bi bi-plus-circle"></i>Add Rate Version</a>
+</div>
+<section class="panel">
+    <div class="panel-header"><h2><i class="bi bi-bank"></i>Rate Versions</h2><span>{{ rates|length }} versions</span></div>
+    {% if not rates %}
+        <p class="text-muted mb-0">No statutory rate versions yet. Add the current GRA/SSNIT rates to enable payroll calculation.</p>
+    {% else %}
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead><tr><th>Effective From</th><th>SSF Employee</th><th>SSF Employer</th><th>PAYE Bands</th><th>Notes</th><th></th></tr></thead>
+            <tbody>
+            {% for rate in rates %}
+                <tr>
+                    <td>{{ rate.effective_from.strftime("%d %b %Y") }}</td>
+                    <td>{{ "%.2f%%"|format(rate.ssf_employee_rate * 100) }}</td>
+                    <td>{{ "%.2f%%"|format(rate.ssf_employer_rate * 100) }}</td>
+                    <td>
+                        <details>
+                            <summary>{{ rate.paye_bands|length }} bands</summary>
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th>Over</th><th>Rate</th><th>Base Tax</th></tr></thead>
+                                <tbody>
+                                {% for band in rate.paye_bands %}
+                                    <tr><td>{{ band.over|cedis }}</td><td>{{ "%.2f%%"|format(band.rate * 100) }}</td><td>{{ band.base|cedis }}</td></tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </details>
+                    </td>
+                    <td class="small text-muted">{{ rate.notes or "" }}</td>
+                    <td>{% if active and rate.id == active.id %}<span class="badge text-bg-success">Active today</span>{% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

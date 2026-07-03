@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Wage Rates · {{ client.name }} · Chrisnat Payroll{% endblock %}
+{% block page_title %}Wage Rates — {{ client.name }}{% endblock %}
+{% block page_intro %}Hourly rate per pay code used to turn imported raw hours into gross pay. Client-wide defaults apply to every worker; an employee row overrides the default for that worker only.{% endblock %}
+{% block content %}
+{% if missing_codes %}
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle"></i>
+    Pay codes imported for this client with <strong>no configured rate</strong>: {{ missing_codes|join(", ") }}.
+    Runs cannot be calculated until each has a rate.
+</div>
+{% endif %}
+<section class="panel form-panel mb-3">
+    <div class="panel-header"><h2><i class="bi bi-cash"></i>Add / Update Rate</h2></div>
+    <form method="post" class="row g-3">
+        <div class="col-md-3">
+            <label class="form-label" for="pay_code">Pay Code</label>
+            <input class="form-control" type="text" id="pay_code" name="pay_code" placeholder="e.g. ABNH01" required>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label" for="hourly_rate">Hourly Rate (GH¢)</label>
+            <input class="form-control" type="number" step="0.01" min="0" id="hourly_rate" name="hourly_rate" required>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label" for="category">Category</label>
+            <select class="form-select" id="category" name="category" required>
+                <option value="basic">Basic (normal hours)</option>
+                <option value="overtime">Overtime (concessionary)</option>
+                <option value="bonus">Bonus (concessionary)</option>
+                <option value="allowance">Shift allowance</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="employee_id">Employee (optional override)</label>
+            <select class="form-select" id="employee_id" name="employee_id">
+                <option value="">— Client default —</option>
+                {% for employee in employees %}
+                <option value="{{ employee.id }}">{{ employee.staff_id }} · {{ employee.full_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="description">Description</label>
+            <input class="form-control" type="text" id="description" name="description" placeholder="e.g. Saturday OT">
+        </div>
+        <div class="col-md-1 d-flex align-items-end">
+            <button class="btn btn-primary w-100" type="submit">Save</button>
+        </div>
+    </form>
+</section>
+<section class="panel">
+    <div class="panel-header"><h2><i class="bi bi-table"></i>Configured Rates</h2><span>{{ profiles|length }} rates</span></div>
+    {% if not profiles %}
+        <p class="text-muted mb-0">No wage rates configured for this client yet.</p>
+    {% else %}
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead><tr><th>Pay Code</th><th>Scope</th><th>Hourly Rate</th><th>Category</th><th>Description</th><th>Updated</th></tr></thead>
+            <tbody>
+            {% for profile in profiles %}
+                <tr>
+                    <td><code>{{ profile.pay_code }}</code></td>
+                    <td>{% if profile.employee %}{{ profile.employee.staff_id }} · {{ profile.employee.full_name }}{% else %}<span class="badge text-bg-secondary">Client default</span>{% endif %}</td>
+                    <td>{{ profile.hourly_rate|cedis }}</td>
+                    <td><span class="badge text-bg-{{ 'info' if profile.category == 'overtime' else 'warning' if profile.category == 'bonus' else 'light' if profile.category == 'allowance' else 'secondary' }}">{{ profile.category }}</span></td>
+                    <td>{{ profile.description or "" }}</td>
+                    <td class="small text-muted">{{ profile.updated_at.strftime("%d %b %Y") if profile.updated_at else "" }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

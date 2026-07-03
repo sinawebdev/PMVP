@@ -75,6 +75,19 @@ def roster(client_id):
 # ── Add single employee ───────────────────────────────────────────────────────
 
 
+def _parse_tax_relief(raw, fallback=0):
+    """GRA tax relief as a non-negative monthly amount; blank keeps/zeros it.
+    Never hardcode relief category figures here — the amount comes from the
+    current GRA circular and is entered per employee."""
+    if raw is None or not str(raw).strip():
+        return fallback or 0
+    try:
+        value = float(raw)
+    except ValueError:
+        return fallback or 0
+    return value if value >= 0 else (fallback or 0)
+
+
 @employees_bp.route("/clients/<int:client_id>/add", methods=["GET", "POST"])
 @role_required(*REP_ROLES)
 def add(client_id):
@@ -101,6 +114,7 @@ def add(client_id):
             phone=request.form.get("phone", "").strip() or None,
             department=request.form.get("department", "").strip() or None,
             bank_account_number=request.form.get("bank_account", "").strip() or None,
+            tax_relief_monthly=_parse_tax_relief(request.form.get("tax_relief")),
             status=ACTIVE,
         )
         db.session.add(emp)
@@ -126,6 +140,9 @@ def edit(client_id, emp_id):
         emp.phone = request.form.get("phone", "").strip() or None
         emp.department = request.form.get("department", "").strip() or None
         emp.bank_account_number = request.form.get("bank_account", "").strip() or None
+        emp.tax_relief_monthly = _parse_tax_relief(
+            request.form.get("tax_relief"), emp.tax_relief_monthly
+        )
         # status comes through as "Active"/"Inactive"; reject anything else.
         new_status = request.form.get("status", emp.status)
         emp.status = new_status if new_status in (ACTIVE, INACTIVE) else emp.status

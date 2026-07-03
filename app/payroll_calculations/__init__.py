@@ -1,0 +1,38 @@
+"""Payroll calculation services.
+
+Two calculators mirror the two client shapes that exist today:
+  * SalariedCalculator  — PayrollRun.upload_type == 'standard' (monthly salary)
+  * HourlyShiftCalculator — PayrollRun.upload_type == 'raw' (imported hours × rates)
+
+Both pull SSF/PAYE from the StatutoryRate version active for the run's period,
+never from constants, so past runs stay reproducible when rates change.
+"""
+import calendar
+from datetime import date
+
+from app.models import StatutoryRate
+
+_MONTH_NUMBERS = {name: idx for idx, name in enumerate(calendar.month_name) if name}
+_MONTH_NUMBERS.update(
+    {name: idx for idx, name in enumerate(calendar.month_abbr) if name}
+)
+
+
+def period_start(month, year):
+    """First day of a payroll run's period ("January", 2026) -> date(2026, 1, 1)."""
+    month_number = _MONTH_NUMBERS.get(str(month).strip().capitalize())
+    if not month_number:
+        raise ValueError(f"Unrecognised payroll month name: {month!r}")
+    return date(int(year), month_number, 1)
+
+
+def statutory_rate_for_run(payroll_run):
+    """The StatutoryRate version in force for the run's period, or raise."""
+    on_date = period_start(payroll_run.month, payroll_run.year)
+    rate = StatutoryRate.active_for(on_date)
+    if rate is None:
+        raise LookupError(
+            f"No statutory rate version is effective on {on_date.isoformat()}. "
+            "Add one under Statutory Rates before calculating this run."
+        )
+    return rate

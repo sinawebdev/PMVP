@@ -27,6 +27,8 @@ from app.excel_utils import (
     calculate_worker_stats,
     detect_company_name,
     extract_payroll_sheet,
+    export_bank_listing,
+    export_gra_paye_schedule,
     export_payroll_run,
     export_import_error_report,
     match_client_sheet,
@@ -41,6 +43,15 @@ from app.models import (
     PayrollItem,
     PayrollRun,
     RawPayEntry,
+    WageRateProfile,
+)
+from app.payroll_status import (
+    APPROVED,
+    DRAFT,
+    PENDING_APPROVAL,
+    PENDING_STATUSES,
+    PROCESSED,
+    REJECTED,
 )
 from app.pdf_service import generate_payslip_pdf
 from app.raw_import import normalise_emp_id
@@ -434,7 +445,7 @@ def runs():
         selected_client = db.get_or_404(ClientCompany, client_id)
         query = query.filter(PayrollRun.client_company_id == selected_client.id)
     if status_filter == "needs_approval":
-        query = query.filter(PayrollRun.status.in_(["Draft", "Pending Approval"]))
+        query = query.filter(PayrollRun.status.in_(PENDING_STATUSES))
     elif status_filter:
         query = query.filter(PayrollRun.status == status_filter)
     payroll_runs = query.order_by(PayrollRun.created_at.desc()).all()
@@ -566,7 +577,7 @@ def create_payroll_run_from_payload(payload, client, validation, import_mode):
     payroll_run = PayrollRun(
         month=payload["month"],
         year=int(payload["year"]),
-        status="Draft",
+        status=DRAFT,
         created_by=current_user.id,
         client_company_id=client.id,
         total_workers=payload["worker_stats"]["total_unique_workers"],
@@ -624,6 +635,8 @@ def create_payroll_run_from_payload(payload, client, validation, import_mode):
             basic_salary=float(row.get("basic_salary") or 0),
             transport_allowance=float(row.get("transport_allowance") or 0),
             housing_allowance=float(row.get("housing_allowance") or 0),
+            medical_allowance=float(row.get("medical_allowance") or 0),
+            productivity_bonus=float(row.get("productivity_bonus") or 0),
             overtime_hours=float(row.get("overtime_hours") or 0),
             overtime_pay=float(row.get("overtime_pay") or 0),
             other_allowances=float(row.get("other_allowances") or 0),
@@ -631,6 +644,7 @@ def create_payroll_run_from_payload(payload, client, validation, import_mode):
             paye=float(row.get("paye") or 0),
             ssnit=float(row.get("ssnit") or 0),
             tier_2_pension=float(row.get("tier_2_pension") or 0),
+            pf_fund_employee=float(row.get("pf_fund_employee") or 0),
             loan_deduction=float(row.get("loan_deduction") or 0),
             other_deductions=float(row.get("other_deductions") or 0),
             total_deductions=float(row.get("total_deductions") or 0),
@@ -929,7 +943,7 @@ def raw_confirm_new():
         client_company_id=staged["client_company_id"],
         month=staged["month"],
         year=int(staged["year"]),
-        status="Draft",
+        status=DRAFT,
         upload_type="raw",
         created_by=current_user.id,
         source_filename=staged.get("source_filename"),
@@ -969,33 +983,323 @@ def raw_confirm_new():
     })
 
 
-@payroll_bp.route("/runs/<int:run_id>/mark-reviewed", methods=["POST"])
+@payroll_bp.route("/runs/<int:run_id>/calculate", methods=["POST"])
 @role_required("admin")
-def mark_reviewed(run_id):
+def calculate(run_id):
+    """Compute statutory pay for a run in code — no rep ever types a tax or
+    SSF figure. Dispatches on upload_type: 'raw' builds PayrollItems from the
+    imported hours × WageRateProfile rates; otherwise each existing item's
+    SSNIT/PAYE/net is recomputed from its earnings columns. Uses the
+    StatutoryRate version in force for the run's period."""
+    from app.payroll_calculations import statutory_rate_for_run
+    from app.payroll_calculations.hourly import HourlyShiftCalculator
+    from app.payroll_calculations.salaried import SalariedCalculator
+
     payroll_run = db.get_or_404(PayrollRun, run_id)
-    payroll_run.status = "Pending Approval"
-    record_audit("Payroll edit", payroll_run, "Payroll moved to Pending Approval.")
+    if payroll_run.status not in PENDING_STATUSES:
+        flash("Only Draft or Pending Approval runs can be recalculated.", "warning")
+        return redirect(url_for("payroll.detail", run_id=run_id))
+    try:
+        statutory_rate = statutory_rate_for_run(payroll_run)
+    except (LookupError, ValueError) as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("payroll.detail", run_id=run_id))
+
+    if payroll_run.upload_type == "raw":
+        calculator = HourlyShiftCalculator(payroll_run, statutory_rate)
+        results = calculator.calculate_run()
+        missing = sorted(
+            {code for r in results.values() for code in r.missing_rate_codes}
+        )
+        if missing:
+            flash(
+                "No wage rate configured for pay code(s): "
+                f"{', '.join(missing)}. Add them under Wage Rates, then recalculate.",
+                "danger",
+            )
+            return redirect(url_for("payroll.detail", run_id=run_id))
+
+        PayrollItem.query.filter_by(payroll_run_id=payroll_run.id).delete()
+        employees_by_id = {
+            e.id: e
+            for e in Employee.query.filter_by(
+                client_company_id=payroll_run.client_company_id
+            ).all()
+        }
+        for emp_key, result in results.items():
+            employee = employees_by_id.get(result.employee_id)
+            db.session.add(
+                PayrollItem(
+                    payroll_run_id=payroll_run.id,
+                    employee_id=result.employee_id,
+                    staff_id=emp_key,
+                    full_name=employee.full_name if employee else emp_key,
+                    status=employee.status if employee else None,
+                    ssnit_number=employee.ssnit_number if employee else None,
+                    ghana_card_number=employee.ghana_card_number if employee else None,
+                    bank_name=employee.bank_name if employee else None,
+                    bank_account_number=employee.bank_account_number if employee else None,
+                    momo_number=employee.momo_number if employee else None,
+                    email=employee.email if employee else None,
+                    payroll_month=f"{payroll_run.month} {payroll_run.year}",
+                    validation_status="OK" if result.employee_id else "Warning",
+                    warning_notes=(
+                        "" if result.employee_id else "No matching roster employee."
+                    ),
+                    **result.as_payroll_item_fields(),
+                )
+            )
+        summary = f"Calculated {len(results)} workers from imported hours."
+    else:
+        calculator = SalariedCalculator(statutory_rate)
+        for item in payroll_run.items:
+            result = calculator.calculate(
+                item.basic_salary,
+                transport_allowance=item.transport_allowance,
+                housing_allowance=item.housing_allowance,
+                medical_allowance=item.medical_allowance,
+                productivity_bonus=item.productivity_bonus,
+                other_allowances=item.other_allowances,
+                overtime_pay=item.overtime_pay,
+                pf_fund_employee=item.pf_fund_employee,
+                tax_relief_monthly=(
+                    item.employee.tax_relief_monthly if item.employee else 0
+                ),
+                loan_deduction=item.loan_deduction,
+                other_deductions=item.other_deductions,
+            )
+            item.gross_pay = result.gross_pay
+            item.ssnit = result.ssnit
+            item.paye = result.paye
+            item.total_deductions = result.total_deductions
+            item.net_pay = result.net_pay
+        summary = f"Recalculated statutory pay for {len(payroll_run.items)} workers."
+
+    db.session.flush()
+    items = PayrollItem.query.filter_by(payroll_run_id=payroll_run.id).all()
+    payroll_run.total_gross_pay = round(sum(i.gross_pay or 0 for i in items), 2)
+    payroll_run.total_deductions = round(sum(i.total_deductions or 0 for i in items), 2)
+    payroll_run.total_net_pay = round(sum(i.net_pay or 0 for i in items), 2)
+    payroll_run.total_paye = round(sum(i.paye or 0 for i in items), 2)
+    payroll_run.total_ssnit = round(sum(i.ssnit or 0 for i in items), 2)
+    payroll_run.total_workers = len(items)
+
+    record_audit(
+        "Payroll calculated",
+        payroll_run,
+        f"{summary} Statutory rates effective {statutory_rate.effective_from.isoformat()}.",
+    )
     db.session.commit()
-    flash("Payroll submitted for approval.", "success")
+    flash(summary, "success")
     return redirect(url_for("payroll.detail", run_id=run_id))
 
 
-@payroll_bp.route("/runs/<int:run_id>/submit-review", methods=["POST"])
-@role_required("admin")
-def submit_review(run_id):
-    return mark_reviewed(run_id)
+# Raw-input fields a rep may edit in the grid. Computed figures (gross_pay,
+# paye, ssnit, total_deductions, net_pay) are NEVER writable here — they only
+# ever come from the calculator, so the grid cannot bypass the statutory math.
+EDITABLE_ITEM_FIELDS = (
+    "basic_salary",
+    "transport_allowance",
+    "medical_allowance",
+    "productivity_bonus",
+    "overtime_pay",
+    "pf_fund_employee",
+    "loan_deduction",
+    "other_deductions",
+)
 
 
-@payroll_bp.route("/runs/<int:run_id>/submit-md-approval", methods=["POST"])
-@role_required("admin", "accounts_officer")
-def submit_md_approval(run_id):
+@payroll_bp.route("/runs/<int:run_id>/items/edit", methods=["GET", "POST"])
+@role_required("admin", "payroll_officer")
+def edit_items(run_id):
+    """Grid editing of a run's raw input figures without a full re-upload.
+
+    Editable only while the run is Draft — read-only afterwards, so the
+    approval flow cannot be bypassed through a back door. Saving does NOT
+    recalculate: 'Calculate Pay' stays a separate, separately-audited action
+    tied to the statutory rate version, and a rep can batch several cell
+    corrections before recomputing once. Every changed field is audit-logged
+    with its old and new value.
+    """
     payroll_run = db.get_or_404(PayrollRun, run_id)
-    payroll_run.status = "Pending Approval"
-    payroll_run.reviewed_by = current_user.id
-    payroll_run.reviewed_at = datetime.now(timezone.utc)
-    record_audit("Payroll review", payroll_run, "Payroll submitted for approval.")
+    editable = payroll_run.status == DRAFT
+    is_raw = payroll_run.upload_type == "raw"
+
+    if request.method == "POST":
+        if not editable:
+            flash("This run is no longer in Draft — figures are read-only.", "warning")
+            return redirect(url_for("payroll.edit_items", run_id=run_id))
+
+        changes = 0
+        rejected = 0
+        if is_raw:
+            entries = RawPayEntry.query.filter_by(payroll_run_id=run_id).all()
+            for entry in entries:
+                raw_value = request.form.get(f"entry-{entry.id}-hours")
+                if raw_value is None or not str(raw_value).strip():
+                    continue
+                try:
+                    new_value = float(raw_value)
+                except ValueError:
+                    rejected += 1
+                    continue
+                if new_value < 0:
+                    rejected += 1
+                    continue
+                old_value = float(entry.hours or 0)
+                if abs(new_value - old_value) < 0.005:
+                    continue
+                entry.hours = new_value
+                record_audit(
+                    "Payroll figures edited",
+                    payroll_run,
+                    f"Raw hours {entry.employee_id_str}/{entry.pay_code}: "
+                    f"{old_value:g} -> {new_value:g}",
+                )
+                changes += 1
+        else:
+            for item in payroll_run.items:
+                for field in EDITABLE_ITEM_FIELDS:
+                    raw_value = request.form.get(f"item-{item.id}-{field}")
+                    if raw_value is None or not str(raw_value).strip():
+                        continue
+                    try:
+                        new_value = float(raw_value)
+                    except ValueError:
+                        rejected += 1
+                        continue
+                    if new_value < 0:
+                        rejected += 1
+                        continue
+                    old_value = float(getattr(item, field) or 0)
+                    if abs(new_value - old_value) < 0.005:
+                        continue
+                    setattr(item, field, new_value)
+                    record_audit(
+                        "Payroll figures edited",
+                        payroll_run,
+                        f"{item.staff_id or item.full_name} {field}: "
+                        f"{old_value:.2f} -> {new_value:.2f}",
+                    )
+                    changes += 1
+        db.session.commit()
+        if rejected:
+            flash(f"{rejected} invalid value(s) were ignored (must be numbers >= 0).", "warning")
+        if changes:
+            flash(
+                f"Saved {changes} change(s). Computed figures are now stale — "
+                "run Calculate Pay to recompute PAYE/SSNIT/net.",
+                "success",
+            )
+        else:
+            flash("No changes to save.", "info")
+        return redirect(url_for("payroll.edit_items", run_id=run_id))
+
+    raw_entries = (
+        RawPayEntry.query.filter_by(payroll_run_id=run_id)
+        .order_by(RawPayEntry.employee_id_str, RawPayEntry.pay_code)
+        .all()
+        if is_raw
+        else []
+    )
+    return render_template(
+        "payroll_items_edit.html",
+        payroll_run=payroll_run,
+        editable=editable,
+        is_raw=is_raw,
+        raw_entries=raw_entries,
+        editable_fields=EDITABLE_ITEM_FIELDS,
+    )
+
+
+@payroll_bp.route("/clients/<int:client_id>/wage-rates", methods=["GET", "POST"])
+@role_required("admin")
+def wage_rates(client_id):
+    """Admin-managed hourly rates per pay code for a raw/hourly client —
+    client-wide defaults plus optional per-employee overrides."""
+    client = db.get_or_404(ClientCompany, client_id)
+    if request.method == "POST":
+        pay_code = (request.form.get("pay_code") or "").strip().upper()
+        try:
+            hourly_rate = float(request.form["hourly_rate"])
+        except (KeyError, ValueError):
+            flash("Enter a numeric hourly rate.", "warning")
+            return redirect(url_for("payroll.wage_rates", client_id=client_id))
+        if not pay_code or hourly_rate <= 0:
+            flash("Pay code and a positive hourly rate are required.", "warning")
+            return redirect(url_for("payroll.wage_rates", client_id=client_id))
+        category = (request.form.get("category") or "").strip().lower()
+        if category not in WageRateProfile.CATEGORIES:
+            flash("Choose a pay category (basic / overtime / bonus / allowance).", "warning")
+            return redirect(url_for("payroll.wage_rates", client_id=client_id))
+        employee_id = request.form.get("employee_id") or None
+        profile = WageRateProfile.query.filter_by(
+            client_company_id=client.id,
+            employee_id=int(employee_id) if employee_id else None,
+            pay_code=pay_code,
+        ).first()
+        if profile is None:
+            profile = WageRateProfile(
+                client_company_id=client.id,
+                employee_id=int(employee_id) if employee_id else None,
+                pay_code=pay_code,
+            )
+            db.session.add(profile)
+        profile.hourly_rate = hourly_rate
+        profile.category = category
+        profile.description = request.form.get("description") or profile.description
+        record_audit(
+            "Wage rate saved",
+            profile,
+            f"{client.name} {pay_code} = {hourly_rate} [{category}] "
+            f"({'employee override' if employee_id else 'client default'})",
+        )
+        db.session.commit()
+        flash(f"Rate saved for {pay_code}.", "success")
+        return redirect(url_for("payroll.wage_rates", client_id=client_id))
+
+    profiles = (
+        WageRateProfile.query.filter_by(client_company_id=client.id)
+        .order_by(WageRateProfile.pay_code, WageRateProfile.employee_id)
+        .all()
+    )
+    employees = (
+        Employee.query.filter_by(client_company_id=client.id, status="Active")
+        .order_by(Employee.staff_id)
+        .all()
+    )
+    # Pay codes seen in this client's raw imports but with no configured rate.
+    imported_codes = {
+        row[0]
+        for row in db.session.query(RawPayEntry.pay_code)
+        .join(PayrollRun, RawPayEntry.payroll_run_id == PayrollRun.id)
+        .filter(PayrollRun.client_company_id == client.id)
+        .distinct()
+        .all()
+    }
+    configured_codes = {p.pay_code for p in profiles if p.employee_id is None}
+    missing_codes = sorted(imported_codes - configured_codes)
+    return render_template(
+        "wage_rates.html",
+        client=client,
+        profiles=profiles,
+        employees=employees,
+        missing_codes=missing_codes,
+    )
+
+
+# Single-stage approval: Draft -> Pending Approval -> Approved/Rejected.
+# The legacy two-stage review flow (mark-reviewed / submit-review /
+# submit-md-approval writing reviewed_by/reviewed_at) is retired; the columns
+# remain in the schema but are no longer written.
+@payroll_bp.route("/runs/<int:run_id>/submit-for-approval", methods=["POST"])
+@role_required("admin", "accounts_officer")
+def submit_for_approval(run_id):
+    payroll_run = db.get_or_404(PayrollRun, run_id)
+    payroll_run.status = PENDING_APPROVAL
+    record_audit("Payroll edit", payroll_run, "Payroll moved to Pending Approval.")
     db.session.commit()
-    flash("Payroll sent for approval.", "success")
+    flash("Payroll submitted for approval.", "success")
     return redirect(url_for("payroll.detail", run_id=run_id))
 
 
@@ -1003,10 +1307,10 @@ def submit_md_approval(run_id):
 @role_required("admin", "md")
 def approve(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
-    payroll_run.status = "Approved"
+    payroll_run.status = APPROVED
     payroll_run.approved_by = current_user.id
     payroll_run.approved_at = datetime.now(timezone.utc)
-    record_audit("Payroll approval", payroll_run, "MD/Admin approved payroll.")
+    record_audit("Payroll approval", payroll_run, "Payroll approved (single-stage approval).")
     db.session.commit()
     flash("Payroll approved.", "success")
     return redirect(url_for("payroll.detail", run_id=run_id))
@@ -1016,7 +1320,7 @@ def approve(run_id):
 @role_required("admin", "md")
 def reject(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
-    payroll_run.status = "Rejected"
+    payroll_run.status = REJECTED
     payroll_run.rejected_at = datetime.now(timezone.utc)
     payroll_run.notes = request.form.get("notes") or payroll_run.notes
     record_audit("Payroll rejection", payroll_run, payroll_run.notes or "Payroll rejected.")
@@ -1029,7 +1333,7 @@ def reject(run_id):
 @role_required("admin", "accounts_officer")
 def mark_paid(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
-    payroll_run.status = "Processed"
+    payroll_run.status = PROCESSED
     record_audit("Payroll processed", payroll_run, "Payroll marked as processed.")
     db.session.commit()
     flash("Payroll marked as processed.", "success")
@@ -1041,8 +1345,36 @@ def mark_paid(run_id):
 def export(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     file_path = export_payroll_run(payroll_run, current_app.config["EXPORT_FOLDER"])
-    payroll_run.status = "Processed"
+    payroll_run.status = PROCESSED
     record_audit("Payroll export", payroll_run, "Payroll exported and marked as processed.")
+    db.session.commit()
+    return send_file(file_path, as_attachment=True)
+
+
+@payroll_bp.route("/runs/<int:run_id>/export/bank-listing")
+@role_required("admin", "md", "accounts_officer", "payroll_officer")
+def export_bank_listing_route(run_id):
+    """Bank transfer batch listing grouped by bank_name — generated from the
+    run's items, not a hand-maintained sheet."""
+    payroll_run = db.get_or_404(PayrollRun, run_id)
+    file_path = export_bank_listing(payroll_run, current_app.config["EXPORT_FOLDER"])
+    record_audit("Bank listing export", payroll_run, "Bank transfer listing generated.")
+    db.session.commit()
+    return send_file(file_path, as_attachment=True)
+
+
+@payroll_bp.route("/runs/<int:run_id>/export/gra-paye")
+@role_required("admin", "md", "accounts_officer", "payroll_officer")
+def export_gra_paye_route(run_id):
+    """GRA Employer's Monthly Tax Deductions Schedule (P.A.Y.E.) for the run."""
+    payroll_run = db.get_or_404(PayrollRun, run_id)
+    file_path = export_gra_paye_schedule(
+        payroll_run,
+        current_app.config["EXPORT_FOLDER"],
+        employer_tin=os.getenv("CHRISNAT_EMPLOYER_TIN", ""),
+        tax_office=os.getenv("CHRISNAT_TAX_OFFICE", ""),
+    )
+    record_audit("GRA PAYE schedule export", payroll_run, "GRA PAYE schedule generated.")
     db.session.commit()
     return send_file(file_path, as_attachment=True)
 
