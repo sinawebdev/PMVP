@@ -51,6 +51,7 @@
         <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export', run_id=payroll_run.id) }}"><i class="bi bi-download"></i>Export Payroll</a>
         {% if current_user.role in ["admin", "md", "payroll_officer", "accounts_officer"] %}
             <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export_bank_listing_route', run_id=payroll_run.id) }}"><i class="bi bi-bank2"></i>Bank Listing</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export_wages_sheet_route', run_id=payroll_run.id) }}"><i class="bi bi-table"></i>Wages Sheet</a>
             <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export_gra_paye_route', run_id=payroll_run.id) }}"><i class="bi bi-receipt"></i>GRA PAYE Schedule</a>
         {% endif %}
     </div>

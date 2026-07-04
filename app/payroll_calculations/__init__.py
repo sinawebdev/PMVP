@@ -36,3 +36,41 @@ def statutory_rate_for_run(payroll_run):
             "Add one under Statutory Rates before calculating this run."
         )
     return rate
+
+
+def bonus_concession_used_ytd(employee_id, year, exclude_run_id=None):
+    """Bonus-concession cedis this employee already used in OTHER FINALIZED
+    payroll runs within ``year``, so the 15%-of-annual-basic cap is enforced
+    once per tax year, not once per run. Only Approved/Processed runs count —
+    Draft, Pending Approval, and Rejected runs never actually paid the
+    employee, so their bonus figures must not eat into the annual cap. Per
+    item, the concession cedis actually applied is
+    ``productivity_bonus + end_of_year_bonus - bonus_excess`` — the same
+    arithmetic ``StatutoryRate.split_bonus`` used to produce that item's
+    stored bonus_excess in the first place."""
+    from app.models import PayrollItem, PayrollRun
+    from app.payroll_status import CLOSED_STATUSES
+
+    if not employee_id:
+        return 0.0
+
+    query = (
+        PayrollItem.query.join(PayrollRun, PayrollItem.payroll_run_id == PayrollRun.id)
+        .filter(
+            PayrollItem.employee_id == employee_id,
+            PayrollRun.year == year,
+            PayrollRun.status.in_(CLOSED_STATUSES),
+        )
+    )
+    if exclude_run_id is not None:
+        query = query.filter(PayrollRun.id != exclude_run_id)
+
+    return round(
+        sum(
+            (item.productivity_bonus or 0)
+            + (item.end_of_year_bonus or 0)
+            - (item.bonus_excess or 0)
+            for item in query.all()
+        ),
+        2,
+    )

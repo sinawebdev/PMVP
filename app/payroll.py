@@ -30,6 +30,7 @@ from app.excel_utils import (
     export_bank_listing,
     export_gra_paye_schedule,
     export_payroll_run,
+    export_wages_sheet,
     export_import_error_report,
     match_client_sheet,
     normalize_company_key,
@@ -637,15 +638,18 @@ def create_payroll_run_from_payload(payload, client, validation, import_mode):
             housing_allowance=float(row.get("housing_allowance") or 0),
             medical_allowance=float(row.get("medical_allowance") or 0),
             productivity_bonus=float(row.get("productivity_bonus") or 0),
+            end_of_year_bonus=float(row.get("end_of_year_bonus") or 0),
             overtime_hours=float(row.get("overtime_hours") or 0),
             overtime_pay=float(row.get("overtime_pay") or 0),
             other_allowances=float(row.get("other_allowances") or 0),
+            pay_difference=float(row.get("pay_difference") or 0),
             gross_pay=float(row.get("gross_pay") or 0),
             paye=float(row.get("paye") or 0),
             ssnit=float(row.get("ssnit") or 0),
             tier_2_pension=float(row.get("tier_2_pension") or 0),
             pf_fund_employee=float(row.get("pf_fund_employee") or 0),
             loan_deduction=float(row.get("loan_deduction") or 0),
+            loan_advance=float(row.get("loan_advance") or 0),
             other_deductions=float(row.get("other_deductions") or 0),
             total_deductions=float(row.get("total_deductions") or 0),
             net_pay=float(row.get("net_pay") or 0),
@@ -664,7 +668,97 @@ def create_payroll_run_from_payload(payload, client, validation, import_mode):
     payroll_run.total_net_pay = totals["net"]
     payroll_run.total_paye = totals["paye"]
     payroll_run.total_ssnit = totals["ssnit"]
+
+    # Statutory figures are computed the moment the import is confirmed — any
+    # SSF/PAYE numbers from the uploaded file are preview-only and never
+    # survive as the official values. The manual "Calculate Pay" button stays
+    # for recomputing after grid edits.
+    auto_calculate_on_confirm(payroll_run)
     return payroll_run
+
+
+def auto_calculate_on_confirm(payroll_run):
+    """Run the salaried statutory calculation on a freshly confirmed run.
+
+    If no statutory rate version covers the run's period the run is left in
+    Draft with the uploaded figures and a visible warning — the import itself
+    must not fail, but the numbers are not trustworthy until Calculate Pay
+    succeeds."""
+    from app.payroll_calculations import statutory_rate_for_run
+
+    db.session.flush()
+    try:
+        statutory_rate = statutory_rate_for_run(payroll_run)
+    except (LookupError, ValueError) as exc:
+        record_audit(
+            "Payroll auto-calculation skipped",
+            payroll_run,
+            f"Imported figures kept unverified: {exc}",
+        )
+        flash(
+            f"Payroll imported but statutory figures could NOT be computed: {exc}",
+            "warning",
+        )
+        return
+
+    recalculate_salaried_items(payroll_run, statutory_rate)
+    db.session.flush()
+    refresh_run_totals(payroll_run)
+    record_audit(
+        "Payroll auto-calculated on import",
+        payroll_run,
+        f"Statutory SSF/PAYE computed for {len(payroll_run.items)} workers on "
+        f"confirm. Statutory rates effective {statutory_rate.effective_from.isoformat()}.",
+    )
+
+
+def recalculate_salaried_items(payroll_run, statutory_rate):
+    """Recompute every item's statutory figures from its raw earnings inputs."""
+    from app.payroll_calculations import bonus_concession_used_ytd
+    from app.payroll_calculations.salaried import SalariedCalculator
+
+    calculator = SalariedCalculator(statutory_rate)
+    for item in payroll_run.items:
+        # Annual bonus concession cap, enforced once per tax year: subtract
+        # whatever concession this employee's OTHER runs already used.
+        used_ytd = bonus_concession_used_ytd(
+            item.employee_id, payroll_run.year, exclude_run_id=payroll_run.id
+        )
+        result = calculator.calculate(
+            item.basic_salary,
+            transport_allowance=item.transport_allowance,
+            housing_allowance=item.housing_allowance,
+            medical_allowance=item.medical_allowance,
+            productivity_bonus=item.productivity_bonus,
+            end_of_year_bonus=item.end_of_year_bonus,
+            other_allowances=item.other_allowances,
+            overtime_pay=item.overtime_pay,
+            pay_difference=item.pay_difference,
+            pf_fund_employee=item.pf_fund_employee,
+            tax_relief_monthly=(
+                item.employee.tax_relief_monthly if item.employee else 0
+            ),
+            loan_deduction=item.loan_deduction,
+            loan_advance=item.loan_advance,
+            other_deductions=item.other_deductions,
+            bonus_concession_used_ytd=used_ytd,
+        )
+        for field, value in result.as_payroll_item_fields().items():
+            setattr(item, field, value)
+
+
+def refresh_run_totals(payroll_run):
+    """Re-derive the run's persisted totals from its items."""
+    items = PayrollItem.query.filter_by(payroll_run_id=payroll_run.id).all()
+    payroll_run.total_gross_pay = round(sum(i.gross_pay or 0 for i in items), 2)
+    payroll_run.total_deductions = round(sum(i.total_deductions or 0 for i in items), 2)
+    payroll_run.total_net_pay = round(sum(i.net_pay or 0 for i in items), 2)
+    payroll_run.total_paye = round(sum(i.paye or 0 for i in items), 2)
+    payroll_run.total_ssnit = round(sum(i.ssnit or 0 for i in items), 2)
+    payroll_run.total_ssnit_employer = round(
+        sum(i.ssf_employer or 0 for i in items), 2
+    )
+    payroll_run.total_workers = len(items)
 
 
 def create_or_update_employee_from_import(row, client, payroll_run, row_index):
@@ -993,7 +1087,6 @@ def calculate(run_id):
     StatutoryRate version in force for the run's period."""
     from app.payroll_calculations import statutory_rate_for_run
     from app.payroll_calculations.hourly import HourlyShiftCalculator
-    from app.payroll_calculations.salaried import SalariedCalculator
 
     payroll_run = db.get_or_404(PayrollRun, run_id)
     if payroll_run.status not in PENDING_STATUSES:
@@ -1051,38 +1144,11 @@ def calculate(run_id):
             )
         summary = f"Calculated {len(results)} workers from imported hours."
     else:
-        calculator = SalariedCalculator(statutory_rate)
-        for item in payroll_run.items:
-            result = calculator.calculate(
-                item.basic_salary,
-                transport_allowance=item.transport_allowance,
-                housing_allowance=item.housing_allowance,
-                medical_allowance=item.medical_allowance,
-                productivity_bonus=item.productivity_bonus,
-                other_allowances=item.other_allowances,
-                overtime_pay=item.overtime_pay,
-                pf_fund_employee=item.pf_fund_employee,
-                tax_relief_monthly=(
-                    item.employee.tax_relief_monthly if item.employee else 0
-                ),
-                loan_deduction=item.loan_deduction,
-                other_deductions=item.other_deductions,
-            )
-            item.gross_pay = result.gross_pay
-            item.ssnit = result.ssnit
-            item.paye = result.paye
-            item.total_deductions = result.total_deductions
-            item.net_pay = result.net_pay
+        recalculate_salaried_items(payroll_run, statutory_rate)
         summary = f"Recalculated statutory pay for {len(payroll_run.items)} workers."
 
     db.session.flush()
-    items = PayrollItem.query.filter_by(payroll_run_id=payroll_run.id).all()
-    payroll_run.total_gross_pay = round(sum(i.gross_pay or 0 for i in items), 2)
-    payroll_run.total_deductions = round(sum(i.total_deductions or 0 for i in items), 2)
-    payroll_run.total_net_pay = round(sum(i.net_pay or 0 for i in items), 2)
-    payroll_run.total_paye = round(sum(i.paye or 0 for i in items), 2)
-    payroll_run.total_ssnit = round(sum(i.ssnit or 0 for i in items), 2)
-    payroll_run.total_workers = len(items)
+    refresh_run_totals(payroll_run)
 
     record_audit(
         "Payroll calculated",
@@ -1102,9 +1168,12 @@ EDITABLE_ITEM_FIELDS = (
     "transport_allowance",
     "medical_allowance",
     "productivity_bonus",
+    "end_of_year_bonus",
     "overtime_pay",
+    "pay_difference",
     "pf_fund_employee",
     "loan_deduction",
+    "loan_advance",
     "other_deductions",
 )
 
@@ -1359,6 +1428,18 @@ def export_bank_listing_route(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     file_path = export_bank_listing(payroll_run, current_app.config["EXPORT_FOLDER"])
     record_audit("Bank listing export", payroll_run, "Bank transfer listing generated.")
+    db.session.commit()
+    return send_file(file_path, as_attachment=True)
+
+
+@payroll_bp.route("/runs/<int:run_id>/export/wages-sheet")
+@role_required("admin", "md", "accounts_officer", "payroll_officer")
+def export_wages_sheet_route(run_id):
+    """Wages Sheet (ACS "WAGE SHT" layout) for the run — 17 columns plus
+    totals, generated from the run's items."""
+    payroll_run = db.get_or_404(PayrollRun, run_id)
+    file_path = export_wages_sheet(payroll_run, current_app.config["EXPORT_FOLDER"])
+    record_audit("Wages sheet export", payroll_run, "Wages sheet generated.")
     db.session.commit()
     return send_file(file_path, as_attachment=True)
 

@@ -217,7 +217,8 @@ COLUMN_ALIASES = {
     "email": ["email", "email address", "e-mail", "mail"],
     "phone": ["phone", "phone number", "mobile", "whatsapp", "contact", "tel"],
     "department": ["department", "dept", "division", "unit"],
-    "bank_account": ["bank account", "account number", "acct no", "bank acct", "account"],
+    "bank_account": ["bank account", "account number", "acct no", "bank acct", "account",
+                     "a/c number", "a/c no"],
 }
 
 
