@@ -15,34 +15,58 @@ logger = logging.getLogger(__name__)
 COLUMN_ALIASES = {
     "staff_id": ["staff no", "staff no.", "staff id", "employee id", "emp id", "staff number", "employee no", "worker id", "s/n", "sn", "no", "serial"],
     "full_name": ["name", "employee name", "full name", "worker name", "employee", "worker", "officer", "personnel"],
-    "client_company": ["client", "client company", "company", "company name"],
-    "ssnit_number": ["ssnit no", "ssnit number", "ssnit id", "ssnit contribution number"],
-    "ghana_card_number": ["ghana card", "ghana card no", "ghana card number"],
+    "client_company": ["client", "client company", "company", "company name", "company assigned", "assigned client"],
+    # ID-shaped social-security headers must resolve here, never to the ssnit
+    # amount field — hence the explicit "S.S number" / "social security number"
+    # variants (and no bare "social security" alias on the amount field below).
+    "ssnit_number": ["ssnit no", "ssnit number", "ssnit id", "ssnit contribution number", "s.s number", "ss number", "s.s no", "s s number", "social security number", "social security no"],
+    "ghana_card_number": ["ghana card", "ghana card no", "ghana card number", "gh card", "gh card no", "gh card number"],
     "momo_number": ["momo", "momo number", "momo no", "mobile money", "mobile money number", "phone", "phone number", "phone no", "telephone", "tel", "mobile", "mobile number", "mobile no", "cell", "cellphone", "contact number", "contact no"],
     "email": ["email", "e-mail", "e mail", "email address", "email id", "mail"],
     "bank_name": ["bank", "bank name"],
-    "bank_account_number": ["account no", "account number", "bank account", "bank account number"],
+    "bank_account_number": ["account no", "account number", "bank account", "bank account number", "a/c number", "a/c no"],
     "status": ["status", "employee status", "worker status", "employment status"],
     "service_line": ["service line", "department", "unit"],
-    "job_role": ["job role", "role", "position", "designation"],
+    "job_role": ["job role", "job title", "role", "position", "designation"],
     "payroll_month": ["payroll month", "month"],
-    "basic_salary": ["basic", "basic salary", "base pay", "basic pay", "base salary", "monthly salary", "salary"],
+    "basic_salary": ["basic", "basic salary", "base pay", "basic pay", "base salary", "monthly salary", "salary", "basic wage"],
     "transport_allowance": ["transport", "transport allowance", "transportation"],
     "housing_allowance": ["housing", "housing allowance", "rent allowance"],
     "medical_allowance": ["medical", "medical allowance", "med allowance", "med. allowance"],
+    # end_of_year_bonus is listed BEFORE productivity_bonus so its longer
+    # aliases win the substring fallback over productivity's bare "bonus".
+    "end_of_year_bonus": ["end of year bonus", "end-of-year bonus", "13th month", "13th month bonus", "annual bonus", "eoy bonus"],
     "productivity_bonus": ["productivity bonus", "productivity", "prod bonus", "prod. bonus", "bonus"],
     "overtime_hours": ["overtime hours", "ot hours"],
-    "overtime_pay": ["overtime", "ot pay", "overtime pay"],
-    "other_allowances": ["other allowance", "other allowances", "allowances", "allowance"],
+    "overtime_pay": ["overtime", "ot pay", "overtime pay", "overtime allowance"],
+    "other_allowances": ["other allowance", "other allowances", "allowances", "allowance", "meal allowance"],
+    "pay_difference": ["pay difference", "pay diff"],
     "gross_pay": ["gross", "gross pay", "gross salary", "total earnings", "gross earnings", "gross amount"],
     "paye": ["paye", "tax", "income tax", "paye tax", "tax deducted"],
-    "ssnit": ["ssnit", "social security", "ssnit contribution", "ssnit employee", "ssnit emp", "ssnit (employee)"],
+    # No bare "social security" here — that substring caught ID headers like
+    # "Social Security Number" and dumped an ID into the amount field.
+    "ssnit": ["ssnit", "ssnit contribution", "ssnit employee", "ssnit emp", "ssnit (employee)", "ssnit deduction"],
     "tier_2_pension": ["tier 2", "tier 2 pension", "tier two pension", "pension"],
     "pf_fund_employee": ["pf fund / employee", "pf fund employee", "pf fund", "pf employee", "provident fund", "provident fund employee"],
-    "loan_deduction": ["loan deduction", "loan deductions", "loan"],
-    "other_deductions": ["deduction", "deductions", "other deduction", "other deductions"],
+    # loan_advance before loan_deduction is deliberate NOT: loan_deduction
+    # stays first so a bare "Loan" header keeps its historical meaning
+    # (a deduction); "loan advance" resolves by exact match.
+    "loan_deduction": ["loan deduction", "loan deductions", "loan repayment"],
+    "loan_advance": ["loan advance", "loan advances", "salary advance"],
+    "other_deductions": ["deduction", "deductions", "other deduction", "other deductions", "welfare supplies", "iou deduction"],
     "total_deductions": ["total deductions", "total deduction"],
     "net_pay": ["net", "net pay", "net salary", "take home", "take home pay", "net amount", "amount payable", "net earnings"],
+}
+
+# Headers for figures the system always derives itself (spec: never read from
+# an upload). They must land in unmapped_columns — visible in the preview —
+# instead of substring-matching into basic_salary/net_pay and corrupting them.
+DERIVED_OUTPUT_HEADERS = {
+    "net basic wage",
+    "annual salary",
+    "15 of annual salary",          # normalize_label("15% of Annual Salary")
+    "15 percent of annual salary",
+    "15 of annual",
 }
 
 MONEY_FIELDS = {
@@ -51,15 +75,18 @@ MONEY_FIELDS = {
     "housing_allowance",
     "medical_allowance",
     "productivity_bonus",
+    "end_of_year_bonus",
     "pf_fund_employee",
     "overtime_hours",
     "overtime_pay",
     "other_allowances",
+    "pay_difference",
     "gross_pay",
     "paye",
     "ssnit",
     "tier_2_pension",
     "loan_deduction",
+    "loan_advance",
     "other_deductions",
     "total_deductions",
     "net_pay",
@@ -192,6 +219,12 @@ def map_columns(columns):
 
     for column in columns:
         normalized = normalize_label(column)
+        if normalized in DERIVED_OUTPUT_HEADERS:
+            # System-derived figure: never accepted from an upload — leave it
+            # unmapped so the rep sees it in the preview instead of it
+            # silently overwriting basic_salary/net_pay via substring match.
+            mapping[column] = "unmapped"
+            continue
         mapped_field = alias_lookup.get(normalized)
         if mapped_field is None:
             for alias, field in alias_lookup.items():
@@ -437,6 +470,8 @@ def mapped_rows_from_dataframe(df, mapping):
             + row["housing_allowance"]
             + row["overtime_pay"]
             + row["other_allowances"]
+            + row["pay_difference"]
+            + row["end_of_year_bonus"]
         )
         if not row["gross_pay"] and calculated_gross:
             row["gross_pay"] = calculated_gross
@@ -854,61 +889,177 @@ def export_bank_listing(payroll_run, export_folder):
     return save_workbook(workbook, export_folder, filename)
 
 
+def export_wages_sheet(payroll_run, export_folder):
+    """Wages Sheet export matching Chrisnat's own ACS "WAGE SHT" tab: 17
+    columns in the client's exact order, plus a totals row over every money
+    column. All figures come from the run's items — the SSF/derived columns
+    are calculator output persisted at Calculate/confirm time."""
+    client_name = payroll_run.client_company.name if payroll_run.client_company else "Client"
+    title = f"{client_name} Wages Sheet {payroll_run.month} {payroll_run.year}"
+    workbook, sheet = create_workbook(title)
+    headers = [
+        "Staff ID",
+        "Name",
+        "Basic Wage",
+        "SSF 5.5%",
+        "SSF 13%",
+        "Net Basic Wage",
+        "Transport Allowance",
+        "Pay Difference",
+        "Other Allowance",
+        "Overtime Allowance",
+        "Gross Pay",
+        "Provident Fund",
+        "Other Deductions",
+        "Tax (PAYE)",
+        "Net Pay",
+        "Annual Salary",
+        "15% of Annual Salary",
+    ]
+    rows = []
+    for item in sorted(payroll_run.items, key=lambda i: (i.full_name or "").upper()):
+        rows.append([
+            item.staff_id,
+            item.full_name,
+            round(item.basic_salary or 0, 2),
+            round(item.ssnit or 0, 2),
+            round(item.ssf_employer or 0, 2),
+            round(item.net_basic_wage or 0, 2),
+            round(item.transport_allowance or 0, 2),
+            round(item.pay_difference or 0, 2),
+            round(item.other_allowances or 0, 2),
+            round(item.overtime_pay or 0, 2),
+            round(item.gross_pay or 0, 2),
+            round(item.pf_fund_employee or 0, 2),
+            round(item.other_deductions or 0, 2),
+            round(item.paye or 0, 2),
+            round(item.net_pay or 0, 2),
+            round(item.annual_salary or 0, 2),
+            round(item.annual_salary_15pct or 0, 2),
+        ])
+    write_table(sheet, 5, headers, rows)
+    total_row = 5 + len(rows) + 1
+    total_label = sheet.cell(row=total_row, column=2, value="TOTALS")
+    total_label.font = Font(bold=True)
+    for column in range(3, len(headers) + 1):
+        total = round(sum(row[column - 1] or 0 for row in rows), 2)
+        cell = sheet.cell(row=total_row, column=column, value=total)
+        cell.font = Font(bold=True)
+    filename = (
+        f"{slug_filename(client_name)}_Wages_Sheet_"
+        f"{slug_filename(payroll_run.month)}_{payroll_run.year}.xlsx"
+    )
+    return save_workbook(workbook, export_folder, filename)
+
+
+GRA_TAX_OFFICES = ("LTO", "MTO", "STO")
+
+
+def format_tax_office_tickboxes(tax_office):
+    """Render the GRA form's LTO/MTO/STO tick-boxes from CHRISNAT_TAX_OFFICE.
+    An unrecognised value is appended verbatim rather than dropped."""
+    selected = str(tax_office or "").strip().upper()
+    boxes = "   ".join(
+        f"{office} [{'X' if office == selected else ' '}]"
+        for office in GRA_TAX_OFFICES
+    )
+    if selected and selected not in GRA_TAX_OFFICES:
+        boxes += f"   Other: {tax_office}"
+    return boxes
+
+
 def export_gra_paye_schedule(payroll_run, export_folder, employer_tin="", tax_office=""):
-    """Employer's Monthly Tax Deductions Schedule (P.A.Y.E.) — the statutory
-    GRA layout from the source workbook's GRA PAYE sheet: employer TIN, tax
-    office and month up top, then one row per employee with the PAYE deducted."""
+    """Employer's Monthly Tax Deductions Schedule (P.A.Y.E.) in the statutory
+    GRA format. The employer of record is always CHRISNAT LIMITED — Chrisnat is
+    the legal employer regardless of the client site a worker is deployed to;
+    the client name appears only as deployment context. Columns with no backing
+    data yet (TIN where unset, Non-Resident, Secondary Employment, benefit
+    elements, Severance, Remark) are left blank for hand-filling in Excel."""
     client_name = payroll_run.client_company.name if payroll_run.client_company else "Client"
     workbook, sheet = create_workbook(
         f"GRA PAYE {payroll_run.month} {payroll_run.year}"
     )
     sheet["A2"] = "EMPLOYER'S MONTHLY TAX DEDUCTIONS SCHEDULE (P.A.Y.E.)"
     sheet["A2"].font = Font(bold=True)
-    sheet["A4"] = f"Employer TIN: {employer_tin or ''}"
-    sheet["A5"] = f"Tax Office: {tax_office or ''}"
-    sheet["A6"] = f"Client / Employer: {client_name}"
-    sheet["A7"] = f"Month: {payroll_run.month} {payroll_run.year}"
+    sheet["A4"] = "Name of Employer: CHRISNAT LIMITED"
+    sheet["A4"].font = Font(bold=True)
+    sheet["A5"] = f"Employer TIN: {employer_tin or ''}"
+    sheet["A6"] = f"Tax Office (tick one): {format_tax_office_tickboxes(tax_office)}"
+    sheet["A7"] = f"Client / Deployment Site: {client_name}"
+    sheet["A8"] = f"Month: {payroll_run.month} {payroll_run.year}"
 
     headers = [
         "No.",
         "Employee Name",
         "Staff ID",
-        "TIN / Ghana Card",
+        "TIN",
+        "Ghana Card No.",
         "SSNIT No.",
+        "Non-Resident (Y/N)",
+        "Secondary Employment (Y/N)",
         "Basic Salary",
-        "Total Cash Emoluments (Gross)",
+        "Total Cash Emoluments",
         "Employee SSF",
-        "Taxable Income",
+        "Third Tier / Provident Fund",
+        "Accommodation Element",
+        "Vehicle Element",
+        "Non-Cash Benefit",
+        "Chargeable Income",
         "Tax Deducted (PAYE)",
+        "Overtime Income",
+        "Overtime Tax",
+        "Bonus Income",
+        "Final Tax on Bonus Income",
+        "Excess Bonus",
+        "Severance Pay",
+        "Total Tax Payable to GRA",
+        "Remark",
     ]
     rows = []
     for index, item in enumerate(
         sorted(payroll_run.items, key=lambda i: (i.full_name or "").upper()), start=1
     ):
-        taxable = round(
-            (item.gross_pay or 0) - (item.ssnit or 0) - (item.pf_fund_employee or 0), 2
+        # Concession bonus income = total bonus minus the excess that joined
+        # ordinary taxable income (both persisted by the calculator).
+        total_bonus = (item.productivity_bonus or 0) + (item.end_of_year_bonus or 0)
+        bonus_concession = round(max(total_bonus - (item.bonus_excess or 0), 0), 2)
+        ordinary_paye = round(
+            (item.paye or 0) - (item.overtime_tax or 0) - (item.bonus_tax or 0), 2
         )
         rows.append([
             index,
             item.full_name,
             item.staff_id,
+            item.employee.tin if item.employee else "",
             item.ghana_card_number,
             item.ssnit_number,
+            "",  # Non-Resident — no backing data, hand-fill if applicable
+            "",  # Secondary Employment — same
             round(item.basic_salary or 0, 2),
             round(item.gross_pay or 0, 2),
             round(item.ssnit or 0, 2),
-            taxable,
+            round(item.pf_fund_employee or 0, 2),
+            "",  # Accommodation Element
+            "",  # Vehicle Element
+            "",  # Non-Cash Benefit
+            round(item.taxable_income or 0, 2),
+            ordinary_paye,
+            round(item.overtime_pay or 0, 2),
+            round(item.overtime_tax or 0, 2),
+            bonus_concession,
+            round(item.bonus_tax or 0, 2),
+            round(item.bonus_excess or 0, 2),
+            "",  # Severance Pay
             round(item.paye or 0, 2),
+            "",  # Remark
         ])
-    write_table(sheet, 9, headers, rows)
-    total_row = 9 + len(rows) + 1
+    write_table(sheet, 10, headers, rows)
+    total_row = 10 + len(rows) + 1
     sheet.cell(row=total_row, column=2, value="TOTALS").font = Font(bold=True)
-    for column, value in [
-        (7, payroll_run.total_gross_pay),
-        (8, payroll_run.total_ssnit),
-        (10, payroll_run.total_paye),
-    ]:
-        cell = sheet.cell(row=total_row, column=column, value=round(value or 0, 2))
+    money_columns = (9, 10, 11, 12, 16, 17, 18, 19, 20, 21, 22, 24)
+    for column in money_columns:
+        total = round(sum(row[column - 1] or 0 for row in rows), 2)
+        cell = sheet.cell(row=total_row, column=column, value=total)
         cell.font = Font(bold=True)
     filename = (
         f"{slug_filename(client_name)}_GRA_PAYE_Schedule_"

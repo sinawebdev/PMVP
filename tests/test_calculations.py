@@ -15,6 +15,7 @@ from app import create_app, db
 from app.models import (
     ClientCompany,
     Employee,
+    PayrollItem,
     PayrollRun,
     RawPayEntry,
     StatutoryRate,
@@ -41,7 +42,9 @@ class CalculationTestCase(unittest.TestCase):
         return rate
 
     def test_salaried_ac605_regression(self):
-        """ACS workbook, AC605, January 2026 — exact figures (±0.01).
+        """ACS workbook, AC605 (Sampson K. Kluvie), January 2026 — exact
+        figures (±0.01), independently verified against Chrisnat's actual
+        "WAGE SHT" and "GRA PAYE" Excel tabs, including every derived field.
 
         The 100.00 line is "PF FUND / EMPLOYEE" (ACS RAW DATA column AA), a
         pre-tax deduction: it reduces both taxable income and net pay.
@@ -55,11 +58,30 @@ class CalculationTestCase(unittest.TestCase):
 
         self.assertAlmostEqual(result.ssnit, 150.56, delta=0.01)
         self.assertAlmostEqual(result.ssf_employer, 355.86, delta=0.01)
-        self.assertAlmostEqual(result.basic_salary - result.ssnit, 2586.81, delta=0.01)
+        self.assertAlmostEqual(result.net_basic_wage, 2586.81, delta=0.01)
+        self.assertAlmostEqual(result.gross_pay, 3061.30, delta=0.01)
         self.assertAlmostEqual(result.taxable_income, 2810.74, delta=0.01)
         self.assertAlmostEqual(result.paye, 382.63, delta=0.01)
         self.assertAlmostEqual(result.net_pay, 2428.11, delta=0.01)
         self.assertAlmostEqual(result.pf_fund_employee, 100.00, delta=0.01)
+        self.assertAlmostEqual(result.annual_salary, 32848.44, delta=0.01)
+        self.assertAlmostEqual(result.annual_salary_15pct, 4927.27, delta=0.01)
+        self.assertEqual(result.overtime_tax, 0.0)
+        self.assertEqual(result.bonus_tax, 0.0)
+        self.assertEqual(result.bonus_excess, 0.0)
+        self.assertEqual(result.pay_difference, 0.0)
+        self.assertEqual(result.loan_advance, 0.0)
+        self.assertEqual(result.end_of_year_bonus, 0.0)
+        # Every new field must survive into the PayrollItem column mapping.
+        fields = result.as_payroll_item_fields()
+        self.assertAlmostEqual(fields["ssf_employer"], 355.86, delta=0.01)
+        self.assertAlmostEqual(fields["net_basic_wage"], 2586.81, delta=0.01)
+        self.assertAlmostEqual(fields["annual_salary"], 32848.44, delta=0.01)
+        self.assertAlmostEqual(fields["annual_salary_15pct"], 4927.27, delta=0.01)
+        self.assertAlmostEqual(fields["taxable_income"], 2810.74, delta=0.01)
+        for key in ("overtime_tax", "bonus_tax", "bonus_excess",
+                    "pay_difference", "loan_advance", "end_of_year_bonus"):
+            self.assertEqual(fields[key], 0.0)
 
     def test_salaried_ac636_overtime_concession_regression(self):
         """ACS workbook, AC636 (David Kwame Tetteh), January 2026 — verifies
@@ -82,6 +104,19 @@ class CalculationTestCase(unittest.TestCase):
         # Overtime must NOT appear in ordinary taxable income.
         self.assertAlmostEqual(result.taxable_income, 1806.94, delta=0.01)
         self.assertEqual(result.bonus_tax, 0.0)
+        self.assertEqual(result.bonus_excess, 0.0)
+        # Derived fields for the same row, verified against the WAGE SHT tab.
+        self.assertAlmostEqual(result.ssnit, 92.13, delta=0.01)      # 5.5% of basic
+        self.assertAlmostEqual(result.ssf_employer, 217.77, delta=0.01)  # 13% of basic
+        self.assertAlmostEqual(result.net_basic_wage, 1583.01, delta=0.01)
+        self.assertAlmostEqual(result.annual_salary, 20101.68, delta=0.01)
+        self.assertAlmostEqual(result.annual_salary_15pct, 3015.25, delta=0.01)
+        fields = result.as_payroll_item_fields()
+        self.assertAlmostEqual(fields["overtime_tax"], 270.65, delta=0.01)
+        self.assertAlmostEqual(fields["ssf_employer"], 217.77, delta=0.01)
+        self.assertAlmostEqual(fields["net_basic_wage"], 1583.01, delta=0.01)
+        self.assertAlmostEqual(fields["annual_salary"], 20101.68, delta=0.01)
+        self.assertAlmostEqual(fields["annual_salary_15pct"], 3015.25, delta=0.01)
 
     def test_salaried_bonus_concession_threshold(self):
         """Synthetic bonus case (no real fixture exists this month): bonus up
@@ -533,6 +568,262 @@ class CalculationTestCase(unittest.TestCase):
         results = calc.calculate_run()
         self.assertIn("MYSTERY", results["DZ777"].missing_rate_codes)
         self.assertEqual(results["DZ777"].gross_pay, 0)
+
+
+class NewFieldBehaviourTestCase(unittest.TestCase):
+    """Spec behaviours for the enhancement fields: pay difference is ordinary
+    taxable income, the end-of-year bonus shares the annual concession cap,
+    and a loan advance adds to net pay without touching tax."""
+
+    def setUp(self):
+        self.app = create_app()
+        self.app.config["TESTING"] = True
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+        self.calc = SalariedCalculator(StatutoryRate.active_for(date(2026, 1, 1)))
+
+    def tearDown(self):
+        self.ctx.pop()
+
+    def test_pay_difference_taxed_normally(self):
+        base = self.calc.calculate(2000)
+        with_diff = self.calc.calculate(2000, pay_difference=400)
+        self.assertAlmostEqual(with_diff.gross_pay, base.gross_pay + 400, delta=0.001)
+        self.assertAlmostEqual(
+            with_diff.taxable_income, base.taxable_income + 400, delta=0.001
+        )
+        # Both taxables sit in the 17.5% band — no concessionary treatment.
+        self.assertAlmostEqual(
+            with_diff.ordinary_paye - base.ordinary_paye, 70.00, delta=0.001
+        )
+        self.assertEqual(with_diff.overtime_tax, base.overtime_tax)
+        self.assertEqual(with_diff.bonus_tax, base.bonus_tax)
+
+    def test_end_of_year_bonus_shares_annual_cap_with_productivity(self):
+        # basic 2000 -> annual 24000 -> concession cap 3600. Split 2000 + 2000
+        # across the two bonus fields: 3600 flat at 5%, 400 excess to taxable.
+        base = self.calc.calculate(2000)
+        result = self.calc.calculate(
+            2000, productivity_bonus=2000, end_of_year_bonus=2000
+        )
+        self.assertAlmostEqual(result.bonus_tax, 180.00, delta=0.001)  # 3600 * 5%
+        self.assertAlmostEqual(result.bonus_excess, 400.00, delta=0.001)
+        self.assertAlmostEqual(
+            result.taxable_income, base.taxable_income + 400.00, delta=0.001
+        )
+        self.assertAlmostEqual(result.gross_pay, base.gross_pay + 4000, delta=0.001)
+
+    def test_bonus_cap_enforced_once_per_tax_year_across_runs(self):
+        """The 15%-of-annual-basic bonus concession is an ANNUAL cap, not a
+        per-run one. If an employee already used it all in an earlier run
+        this tax year, a later run's bonus should get none of it."""
+        from app.payroll import recalculate_salaried_items
+        from app.payroll_calculations import bonus_concession_used_ytd
+
+        client = ClientCompany.query.first()
+        employee = Employee(
+            staff_id="YTD1", full_name="YTD Cap Test",
+            client_company_id=client.id, basic_salary=2000,
+        )
+        db.session.add(employee)
+        db.session.flush()
+        rate = StatutoryRate.active_for(date(2026, 1, 1))
+
+        # Run 1 (June): productivity bonus of 3600 exactly exhausts the
+        # annual cap (2000 x 12 x 15% = 3600) at the flat 5% rate.
+        run1 = PayrollRun(
+            month="June", year=2026, status="Approved",
+            upload_type="standard", client_company_id=client.id,
+        )
+        db.session.add(run1)
+        db.session.flush()
+        item1 = PayrollItem(
+            payroll_run_id=run1.id, employee_id=employee.id,
+            staff_id=employee.staff_id, full_name=employee.full_name,
+            basic_salary=2000, productivity_bonus=3600,
+        )
+        db.session.add(item1)
+        db.session.flush()
+        recalculate_salaried_items(run1, rate)
+        self.assertAlmostEqual(item1.bonus_tax, 180.00, delta=0.001)
+        self.assertAlmostEqual(item1.bonus_excess, 0.0, delta=0.001)
+
+        # bonus_concession_used_ytd should now report the full cap consumed.
+        used = bonus_concession_used_ytd(employee.id, 2026)
+        self.assertAlmostEqual(used, 3600.00, delta=0.001)
+
+        # Run 2 (December): a 1000 end-of-year bonus with NO cap left should
+        # get zero concessionary treatment — all of it joins taxable income.
+        run2 = PayrollRun(
+            month="December", year=2026, status="Draft",
+            upload_type="standard", client_company_id=client.id,
+        )
+        db.session.add(run2)
+        db.session.flush()
+        item2 = PayrollItem(
+            payroll_run_id=run2.id, employee_id=employee.id,
+            staff_id=employee.staff_id, full_name=employee.full_name,
+            basic_salary=2000, end_of_year_bonus=1000,
+        )
+        db.session.add(item2)
+        db.session.flush()
+        recalculate_salaried_items(run2, rate)
+        self.assertAlmostEqual(item2.bonus_tax, 0.0, delta=0.001)
+        self.assertAlmostEqual(item2.bonus_excess, 1000.00, delta=0.001)
+
+    def test_draft_run_bonus_does_not_count_toward_ytd_cap(self):
+        """A Draft (or Rejected) run never actually paid the employee, so its
+        bonus figures must not shrink the annual cap for a later, real run."""
+        from app.payroll import recalculate_salaried_items
+
+        client = ClientCompany.query.first()
+        employee = Employee(
+            staff_id="YTD2", full_name="YTD Draft Test",
+            client_company_id=client.id, basic_salary=2000,
+        )
+        db.session.add(employee)
+        db.session.flush()
+        rate = StatutoryRate.active_for(date(2026, 1, 1))
+
+        # A Draft run exhausts the cap on paper only — never approved.
+        draft_run = PayrollRun(
+            month="June", year=2026, status="Draft",
+            upload_type="standard", client_company_id=client.id,
+        )
+        db.session.add(draft_run)
+        db.session.flush()
+        draft_item = PayrollItem(
+            payroll_run_id=draft_run.id, employee_id=employee.id,
+            staff_id=employee.staff_id, full_name=employee.full_name,
+            basic_salary=2000, productivity_bonus=3600,
+        )
+        db.session.add(draft_item)
+        db.session.flush()
+        recalculate_salaried_items(draft_run, rate)
+
+        # A later Approved run's 1000 end-of-year bonus should get the FULL
+        # cap (3600 unused, since the draft never counted) — no excess.
+        approved_run = PayrollRun(
+            month="December", year=2026, status="Approved",
+            upload_type="standard", client_company_id=client.id,
+        )
+        db.session.add(approved_run)
+        db.session.flush()
+        approved_item = PayrollItem(
+            payroll_run_id=approved_run.id, employee_id=employee.id,
+            staff_id=employee.staff_id, full_name=employee.full_name,
+            basic_salary=2000, end_of_year_bonus=1000,
+        )
+        db.session.add(approved_item)
+        db.session.flush()
+        recalculate_salaried_items(approved_run, rate)
+        self.assertAlmostEqual(approved_item.bonus_tax, 50.00, delta=0.001)  # 1000*5%
+        self.assertAlmostEqual(approved_item.bonus_excess, 0.0, delta=0.001)
+
+    def test_loan_advance_adds_to_net_pay_untaxed(self):
+        base = self.calc.calculate(2000)
+        result = self.calc.calculate(2000, loan_advance=300)
+        # Opposite cash direction to loan_deduction: net rises, nothing else moves.
+        self.assertAlmostEqual(result.net_pay, base.net_pay + 300, delta=0.001)
+        self.assertAlmostEqual(result.gross_pay, base.gross_pay, delta=0.001)
+        self.assertAlmostEqual(result.taxable_income, base.taxable_income, delta=0.001)
+        self.assertAlmostEqual(result.paye, base.paye, delta=0.001)
+        self.assertAlmostEqual(
+            result.total_deductions, base.total_deductions, delta=0.001
+        )
+
+    def test_hourly_result_persists_new_fields(self):
+        client = ClientCompany.query.first()
+        run = PayrollRun(
+            month="January", year=2026, status="Draft",
+            upload_type="raw", client_company_id=client.id,
+        )
+        db.session.add(run)
+        db.session.flush()
+        db.session.add(
+            WageRateProfile(
+                client_company_id=client.id, employee_id=None,
+                pay_code="NF-NORM", hourly_rate=20.0, category="basic",
+            )
+        )
+        db.session.add(
+            RawPayEntry(payroll_run_id=run.id, employee_id_str="NF01",
+                        pay_code="NF-NORM", hours=100)
+        )
+        db.session.flush()
+        rate = StatutoryRate.active_for(date(2026, 1, 1))
+        result = HourlyShiftCalculator(run, rate).calculate_run()["NF01"]
+        fields = result.as_payroll_item_fields()
+        # basic 2000 -> ssf 110 / 260, net basic 1890, annual 24000, 15% 3600.
+        self.assertAlmostEqual(fields["ssf_employer"], 260.00, delta=0.001)
+        self.assertAlmostEqual(fields["net_basic_wage"], 1890.00, delta=0.001)
+        self.assertAlmostEqual(fields["annual_salary"], 24000.00, delta=0.001)
+        self.assertAlmostEqual(fields["annual_salary_15pct"], 3600.00, delta=0.001)
+        self.assertAlmostEqual(fields["taxable_income"], 1890.00, delta=0.001)
+        self.assertEqual(fields["overtime_tax"], 0.0)
+        self.assertEqual(fields["bonus_tax"], 0.0)
+        self.assertEqual(fields["bonus_excess"], 0.0)
+
+
+class ColumnAliasTestCase(unittest.TestCase):
+    """Alias-map fixes: ID-shaped headers never land in amount fields, derived
+    output headers never map at all, and the new dedicated fields resolve
+    without colliding with their older siblings."""
+
+    def _map(self, *headers):
+        from app.excel_utils import map_columns
+
+        return map_columns(list(headers))
+
+    def test_social_security_id_headers_map_to_ssnit_number(self):
+        mapping = self._map(
+            "Social Security Number", "S.S Number", "SS Number", "SSNIT No"
+        )
+        for header, field in mapping.items():
+            self.assertEqual(field, "ssnit_number", header)
+
+    def test_ssnit_amount_header_still_maps_to_amount(self):
+        self.assertEqual(self._map("SSNIT")["SSNIT"], "ssnit")
+        self.assertEqual(self._map("SSNIT Employee")["SSNIT Employee"], "ssnit")
+
+    def test_derived_output_headers_stay_unmapped(self):
+        mapping = self._map(
+            "Basic Salary", "Net Basic Wage", "Annual Salary", "15% of Annual Salary"
+        )
+        self.assertEqual(mapping["Basic Salary"], "basic_salary")
+        self.assertEqual(mapping["Net Basic Wage"], "unmapped")
+        self.assertEqual(mapping["Annual Salary"], "unmapped")
+        self.assertEqual(mapping["15% of Annual Salary"], "unmapped")
+
+    def test_loan_advance_and_deduction_stay_separate(self):
+        mapping = self._map("Loan Advance", "Loan Deduction", "Loan")
+        self.assertEqual(mapping["Loan Advance"], "loan_advance")
+        self.assertEqual(mapping["Loan Deduction"], "loan_deduction")
+        # A bare "Loan" header keeps its historical meaning: a deduction.
+        self.assertEqual(mapping["Loan"], "loan_deduction")
+
+    def test_end_of_year_bonus_does_not_collide_with_productivity(self):
+        mapping = self._map("End of Year Bonus", "13th Month", "Annual Bonus", "Bonus")
+        self.assertEqual(mapping["End of Year Bonus"], "end_of_year_bonus")
+        self.assertEqual(mapping["13th Month"], "end_of_year_bonus")
+        self.assertEqual(mapping["Annual Bonus"], "end_of_year_bonus")
+        self.assertEqual(mapping["Bonus"], "productivity_bonus")
+
+    def test_new_explicit_aliases(self):
+        mapping = self._map(
+            "Job Title", "Gh Card", "A/C Number", "Company Assigned",
+            "Overtime Allowance", "Meal Allowance", "Welfare Supplies",
+            "IOU Deduction", "Pay Difference",
+        )
+        self.assertEqual(mapping["Job Title"], "job_role")
+        self.assertEqual(mapping["Gh Card"], "ghana_card_number")
+        self.assertEqual(mapping["A/C Number"], "bank_account_number")
+        self.assertEqual(mapping["Company Assigned"], "client_company")
+        self.assertEqual(mapping["Overtime Allowance"], "overtime_pay")
+        self.assertEqual(mapping["Meal Allowance"], "other_allowances")
+        self.assertEqual(mapping["Welfare Supplies"], "other_deductions")
+        self.assertEqual(mapping["IOU Deduction"], "other_deductions")
+        self.assertEqual(mapping["Pay Difference"], "pay_difference")
 
 
 class GridEditTestCase(unittest.TestCase):

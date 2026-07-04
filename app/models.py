@@ -54,6 +54,9 @@ class Employee(db.Model):
     bank_account_number = db.Column(db.String(80))
     momo_number = db.Column(db.String(40))
     email = db.Column(db.String(160))
+    # GRA Taxpayer Identification Number — captured when known, exported on the
+    # GRA PAYE schedule; no dedicated capture workflow yet (hand-fill allowed).
+    tin = db.Column(db.String(80))
     employment_type = db.Column(db.String(80))
     service_line = db.Column(db.String(120))
     assigned_client = db.Column(db.String(160))
@@ -137,6 +140,9 @@ class PayrollRun(db.Model):
     total_net_pay = db.Column(db.Float, default=0)
     total_paye = db.Column(db.Float, default=0)
     total_ssnit = db.Column(db.Float, default=0)
+    # Employer-side SSF (13%) for the whole run — a Chrisnat cost, not a
+    # payslip deduction, persisted so remittances stop re-deriving it.
+    total_ssnit_employer = db.Column(db.Float, default=0)
     notes = db.Column(db.Text)
     # 'standard' | 'raw'. Null means no file has been uploaded for the run yet.
     # 'raw' marks a billable raw-hours import awaiting Chrisnat pay calculation.
@@ -185,17 +191,41 @@ class PayrollItem(db.Model):
     # Dedicated earnings columns for the ACS/VBA payslip shape.
     medical_allowance = db.Column(db.Float, default=0)
     productivity_bonus = db.Column(db.Float, default=0)
+    # One-off end-of-year/13th-month bonus — kept separate from the monthly
+    # productivity bonus; both share the ANNUAL concession cap on StatutoryRate.
+    end_of_year_bonus = db.Column(db.Float, default=0)
     overtime_hours = db.Column(db.Float, default=0)
     overtime_pay = db.Column(db.Float, default=0)
     other_allowances = db.Column(db.Float, default=0)
+    # Arrears/back-pay for prior periods, sourced from the upload. Joins this
+    # period's taxable gross and is taxed normally — no deferred treatment.
+    pay_difference = db.Column(db.Float, default=0)
     gross_pay = db.Column(db.Float, default=0)
     paye = db.Column(db.Float, default=0)
     ssnit = db.Column(db.Float, default=0)
+    # Employer SSF (13% of basic) — not a payslip deduction; persisted for the
+    # Wages Sheet export and employer remittance figures.
+    ssf_employer = db.Column(db.Float, default=0)
+    # Calculator outputs previously discarded, persisted for the GRA schedule:
+    # concessionary overtime/bonus tax components, the bonus excess that joins
+    # ordinary taxable income, and the chargeable income itself.
+    overtime_tax = db.Column(db.Float, default=0)
+    bonus_tax = db.Column(db.Float, default=0)
+    bonus_excess = db.Column(db.Float, default=0)
+    taxable_income = db.Column(db.Float, default=0)
+    # Derived figures — always computed from basic salary and the active
+    # StatutoryRate, never read from an upload.
+    net_basic_wage = db.Column(db.Float, default=0)
+    annual_salary = db.Column(db.Float, default=0)
+    annual_salary_15pct = db.Column(db.Float, default=0)
     tier_2_pension = db.Column(db.Float, default=0)
     # "PF FUND / EMPLOYEE" (ACS RAW DATA column AA): a pre-tax deduction —
     # it reduces taxable income before PAYE as well as net pay.
     pf_fund_employee = db.Column(db.Float, default=0)
     loan_deduction = db.Column(db.Float, default=0)
+    # Cash advanced to the worker with this payroll — opposite cash direction
+    # to loan_deduction (adds to net pay, not taxable income).
+    loan_advance = db.Column(db.Float, default=0)
     other_deductions = db.Column(db.Float, default=0)
     total_deductions = db.Column(db.Float, default=0)
     net_pay = db.Column(db.Float, default=0)
@@ -460,18 +490,27 @@ class StatutoryRate(db.Model):
             + high_portion * D(self.overtime_rate_high)
         )
 
-    def split_bonus(self, bonus, basic_salary):
+    def split_bonus(self, bonus, basic_salary, already_used=0):
         """(concessionary tax, excess) for a one-off bonus: the portion up to
         ``bonus_annual_basic_threshold`` of ANNUAL basic salary is taxed flat
-        at ``bonus_rate``; the excess joins ordinary taxable income."""
+        at ``bonus_rate``; the excess joins ordinary taxable income.
+
+        ``already_used`` is bonus-concession cedis this employee already
+        consumed in OTHER payroll runs within the same tax year — the cap is
+        annual, not per-run, so what's left here is this run's cap minus
+        whatever earlier runs already used. Caller sums that figure (see
+        ``bonus_concession_used_ytd`` in payroll_calculations); this assumes
+        basic salary doesn't change mid-year, since the cap is derived from
+        THIS run's basic salary, not stored separately per tax year."""
         from app.money import D, money
 
         bonus = D(bonus)
         if bonus <= 0:
             return 0.0, 0.0
         cap = D(basic_salary) * D(12) * D(self.bonus_annual_basic_threshold)
-        concession = min(bonus, cap)
-        excess = max(bonus - cap, D(0))
+        remaining_cap = max(cap - D(already_used), D(0))
+        concession = min(bonus, remaining_cap)
+        excess = max(bonus - remaining_cap, D(0))
         return money(concession * D(self.bonus_rate)), money(excess)
 
 

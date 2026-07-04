@@ -4,26 +4,27 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn run:app --bind 0.0.0.0:10000
+    # Apply Alembic migrations before serving so schema changes actually reach
+    # the database. (Previously nothing ran migrations, so columns added in
+    # migrations never existed in the deployed DB and pages 500'd.)
+    startCommand: flask db upgrade && gunicorn run:app --bind 0.0.0.0:10000
     healthCheckPath: /health
     envVars:
+      - key: FLASK_APP
+        value: run.py
       - key: SECRET_KEY
         generateValue: true
+      # DATABASE_URL points at the Supabase-hosted Postgres and is managed in the
+      # Render dashboard. sync:false stops Blueprint syncs from overwriting it
+      # (it must NOT be bound to a Render-managed database).
       - key: DATABASE_URL
-        fromDatabase:
-          name: chrisnat-payroll-db
-          property: connectionString
+        sync: false
+      # Schema is owned by migrations now, not create_all().
       - key: AUTO_INIT_DB
-        value: "true"
+        value: "false"
       - key: PERSISTENCE_REQUIRED
         value: "true"
       - key: SEED_DEMO_DATA
         value: "false"
       - key: SEED_ARCHIVED_FEATURES
         value: "false"
-
-databases:
-  - name: chrisnat-payroll-db
-    databaseName: chrisnat_payroll
-    user: chrisnat_payroll_user
-    plan: free

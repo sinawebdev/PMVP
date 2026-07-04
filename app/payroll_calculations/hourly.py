@@ -46,10 +46,14 @@ class HourlyResult:
     gross_pay: float = 0.0
     ssnit: float = 0.0               # employee SSF (on basic wage only)
     ssf_employer: float = 0.0
+    net_basic_wage: float = 0.0      # basic wage - employee SSF (derived)
+    annual_salary: float = 0.0       # basic wage x 12 (derived)
+    annual_salary_15pct: float = 0.0 # annual x bonus concession threshold (derived)
     taxable_income: float = 0.0      # ordinary taxable income (includes bonus excess)
     ordinary_paye: float = 0.0
     overtime_tax: float = 0.0
     bonus_tax: float = 0.0
+    bonus_excess: float = 0.0        # bonus over the annual cap, joins taxable income
     paye: float = 0.0                # TOTAL tax = ordinary + overtime + bonus
     total_deductions: float = 0.0
     net_pay: float = 0.0
@@ -63,6 +67,14 @@ class HourlyResult:
             "gross_pay": self.gross_pay,
             "paye": self.paye,
             "ssnit": self.ssnit,
+            "ssf_employer": self.ssf_employer,
+            "net_basic_wage": self.net_basic_wage,
+            "annual_salary": self.annual_salary,
+            "annual_salary_15pct": self.annual_salary_15pct,
+            "taxable_income": self.taxable_income,
+            "overtime_tax": self.overtime_tax,
+            "bonus_tax": self.bonus_tax,
+            "bonus_excess": self.bonus_excess,
             "total_deductions": self.total_deductions,
             "net_pay": self.net_pay,
         }
@@ -139,15 +151,28 @@ class HourlyShiftCalculator:
         """Same three-component tax chain as the salaried path: SSF on the
         basic wage, concessionary overtime/bonus tax, ordinary PAYE on the
         rest (verified against the Richard Woode DZ fixture)."""
+        from app.payroll_calculations import bonus_concession_used_ytd
+
         result.ssnit = _r2(result.basic_wage * self.rate.ssf_employee_rate)
         result.ssf_employer = _r2(result.basic_wage * self.rate.ssf_employer_rate)
+        result.net_basic_wage = _r2(result.basic_wage - result.ssnit)
+        result.annual_salary = _r2(result.basic_wage * 12)
+        result.annual_salary_15pct = _r2(
+            result.annual_salary * self.rate.bonus_annual_basic_threshold
+        )
 
         result.overtime_tax = self.rate.compute_overtime_tax(
             result.overtime_pay, result.basic_wage
         )
-        result.bonus_tax, bonus_excess = self.rate.split_bonus(
-            result.bonus, result.basic_wage
+        # Annual bonus concession cap, enforced once per tax year: subtract
+        # whatever concession this employee's OTHER runs already used.
+        used_ytd = bonus_concession_used_ytd(
+            result.employee_id, self.run.year, exclude_run_id=self.run.id
         )
+        result.bonus_tax, bonus_excess = self.rate.split_bonus(
+            result.bonus, result.basic_wage, already_used=used_ytd
+        )
+        result.bonus_excess = bonus_excess
 
         result.taxable_income = _r2(
             result.basic_wage
