@@ -1,12 +1,22 @@
-Flask
-Flask-SQLAlchemy
-Flask-Login
-Flask-Migrate
-Werkzeug
-pandas
-openpyxl
-xlrd
-python-dotenv
-reportlab
-gunicorn
-psycopg2-binary
+# Pinned to the exact versions the full test suite passed against
+# (2026-07-05, local verification pass). Bump deliberately, one at a time,
+# with the suite green — never let a Render deploy pick versions for you.
+Flask==3.1.2
+Flask-SQLAlchemy==3.1.1
+Flask-Login==0.6.3
+Flask-Migrate==4.1.0
+Werkzeug==3.1.5
+pandas==3.0.3
+numpy==2.4.6
+openpyxl==3.1.5
+xlrd==2.0.2
+python-dotenv==1.2.1
+reportlab==4.5.1
+gunicorn==26.0.0
+psycopg2-binary==2.9.12
+# Version-critical transitive dependencies, pinned explicitly so a loose
+# sub-dependency can't drift underneath the app on deploy.
+SQLAlchemy==2.0.46
+alembic==1.18.4
+itsdangerous==2.2.0
+Jinja2==3.1.6
