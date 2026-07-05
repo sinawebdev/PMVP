@@ -108,8 +108,19 @@ def save_import_session(payload):
     return str(batch.id)
 
 
+def parse_import_id_or_404(import_id):
+    """The <import_id> URL segment as an int, or a 404 — a non-numeric id is
+    a bad URL, not a server error (bare int() raised ValueError -> 500)."""
+    from flask import abort
+
+    try:
+        return int(import_id)
+    except (TypeError, ValueError):
+        abort(404)
+
+
 def load_import_session(import_id):
-    batch = db.get_or_404(ImportBatch, int(import_id))
+    batch = db.get_or_404(ImportBatch, parse_import_id_or_404(import_id))
     return json.loads(batch.payload_json or "{}")
 
 
@@ -623,7 +634,7 @@ def confirm_multi_client_import(import_id, payload):
         created_runs.append(payroll_run)
         record_audit("Payroll import confirmed", payroll_run, f"Created multi-client payroll run from {run_payload['source_filename']}.")
 
-    batch = db.session.get(ImportBatch, int(import_id))
+    batch = db.session.get(ImportBatch, parse_import_id_or_404(import_id))
     batch.status = "Imported"
     if created_runs:
         batch.payroll_run_id = created_runs[0].id
@@ -672,8 +683,11 @@ def create_payroll_run_from_payload(payload, client, validation, import_mode):
     # a large share of why big confirms hit the worker timeout. New employees
     # created during this import are added to the map so duplicate staff IDs
     # within one file reuse the same record instead of re-querying.
+    # Keyed by the NORMALISED staff id ("DCL 9" == "DCL9") so an upload with
+    # spacing/case variants resolves to the roster record instead of forking
+    # a duplicate Employee.
     employees_by_staff_id = {
-        e.staff_id: e
+        normalise_emp_id(e.staff_id): e
         for e in Employee.query.filter_by(client_company_id=client.id).all()
     }
     for index, row in enumerate(payload["mapped_rows"], start=1):
@@ -899,11 +913,16 @@ def refresh_run_totals(payroll_run):
 def create_or_update_employee_from_import(
     row, client, payroll_run, row_index, employees_by_staff_id
 ):
-    """``employees_by_staff_id`` is the client's prefetched roster
-    ({staff_id: Employee}); newly created employees are inserted into it so
-    later rows (and later imports in the same request) reuse them without
-    another query."""
-    staff_id = str(row.get("staff_id") or "").strip()
+    """``employees_by_staff_id`` is the client's prefetched roster keyed by
+    NORMALISED staff id ({normalise_emp_id(staff_id): Employee}); newly
+    created employees are inserted into it so later rows (and later imports
+    in the same request) reuse them without another query."""
+    # Normalise the join key exactly like the roster side
+    # (Employee.normalise_staff_id): "DCL 9" -> "DCL9". Without this, an
+    # upload with a spacing variant created a second Employee for the same
+    # worker, splitting their history and breaking payslip distribution's
+    # contact lookup (which normalises before matching).
+    staff_id = normalise_emp_id(row.get("staff_id") or "")
     full_name = str(row.get("full_name") or "").strip()
     if not staff_id:
         staff_id = f"IMPORT-{client.id}-{payroll_run.id}-{row_index}"
