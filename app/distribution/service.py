@@ -41,8 +41,17 @@ def get_distribution_contact(client_company_id, employee_id_str):
 
 
 def _roster_employee(item):
-    """The active roster Employee matching this payroll item's staff_id, or None."""
-    run = item.payroll_run
+    """The roster Employee behind this payroll item.
+
+    The item's own employee relationship (set at import time) is preferred —
+    and returned regardless of roster status, because a worker deactivated
+    after payday still needs the payslip for work already done. Only items
+    that never got linked fall back to an active-roster lookup by normalised
+    staff_id."""
+    employee = getattr(item, "employee", None)
+    if employee is not None:
+        return employee
+    run = getattr(item, "payroll_run", None)
     client_id = run.client_company_id if run else None
     if not client_id or not item.staff_id:
         return None
@@ -54,14 +63,21 @@ def _roster_employee(item):
 
 
 def _contact_for(channel, item):
-    """The address an item is reachable at on a channel — sourced from the roster only."""
+    """The address an item is reachable at on a channel.
+
+    The active roster record is authoritative when it has a contact, but the
+    payroll item's own momo/email is a real fallback, not noise: reps can edit
+    momo_number directly on the payroll row, and a worker deactivated (or not
+    yet registered) on the roster after payday still has to be able to receive
+    the payslip for work already done."""
     employee = _roster_employee(item)
-    if not employee:
-        return None
     if channel == CHANNEL_EMAIL:
-        return employee.email
-    # sms / whatsapp -> a phone number (roster phone preferred, then momo)
-    return employee.phone or employee.momo_number
+        roster_contact = employee.email if employee else None
+        return roster_contact or item.email
+    # sms / whatsapp -> a phone number (roster phone preferred, then momo,
+    # then the momo captured on the payroll row itself)
+    roster_contact = (employee.phone or employee.momo_number) if employee else None
+    return roster_contact or item.momo_number
 
 
 def resolve_channel(item, default_pref=None):
