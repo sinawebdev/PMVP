@@ -1,3 +1,5 @@
+from sqlalchemy import or_
+
 from app.excel_utils import normalize_label, normalize_worker
 from app.models import Employee, PayrollItem, PayrollRun
 from app.payroll_status import CLOSED_STATUSES
@@ -61,30 +63,63 @@ def validate_payroll_rows(
             f"Selected client is {client_company.name}, but Excel appears to mention {detected_company_name}."
         )
 
+    # One query each instead of one per row — the per-row versions of these
+    # lookups were the bulk of the confirm request's DB round trips and pushed
+    # large confirms past the gunicorn worker timeout.
+    file_staff_ids = {
+        str(row.get("staff_id") or "").strip()
+        for row in mapped_rows
+        if str(row.get("staff_id") or "").strip()
+    }
+    file_full_names = {
+        str(row.get("full_name") or "").strip()
+        for row in mapped_rows
+        if str(row.get("full_name") or "").strip()
+    }
+    cross_client_by_staff_id = {}
+    cross_client_by_name = {}
+    if file_staff_ids or file_full_names:
+        identity_filters = []
+        if file_staff_ids:
+            identity_filters.append(PayrollItem.staff_id.in_(file_staff_ids))
+        if file_full_names:
+            identity_filters.append(PayrollItem.full_name.in_(file_full_names))
+        cross_client_items = (
+            PayrollItem.query.join(PayrollRun)
+            .filter(
+                PayrollRun.month == month,
+                PayrollRun.year == int(year),
+                PayrollRun.client_company_id != client_company.id,
+            )
+            .filter(or_(*identity_filters))
+            .all()
+        )
+        for item in cross_client_items:
+            other = item.payroll_run.client_company
+            other_name = other.name if other else "another client"
+            if item.staff_id:
+                cross_client_by_staff_id.setdefault(item.staff_id, other_name)
+            if item.full_name:
+                cross_client_by_name.setdefault(item.full_name, other_name)
+    employees_by_staff_id = (
+        {e.staff_id: e for e in Employee.query.filter(Employee.staff_id.in_(file_staff_ids)).all()}
+        if file_staff_ids
+        else {}
+    )
+
     for index, row in enumerate(mapped_rows, start=1):
-        row_warnings = validate_single_row(row)
+        row_warnings = validate_single_row(row, employees_by_staff_id=employees_by_staff_id)
         key = build_worker_key(row)
         if key and key in duplicate_keys:
             row_warnings.append("Worker appears more than once in this client payroll.")
 
         if key:
-            cross_client_item = (
-                PayrollItem.query.join(PayrollRun)
-                .filter(
-                    PayrollRun.month == month,
-                    PayrollRun.year == int(year),
-                    PayrollRun.client_company_id != client_company.id,
-                )
-                .filter(
-                    (PayrollItem.staff_id == row.get("staff_id"))
-                    | (PayrollItem.full_name == row.get("full_name"))
-                )
-                .first()
-            )
-            if cross_client_item:
-                other_client = cross_client_item.payroll_run.client_company
+            other_client_name = cross_client_by_staff_id.get(
+                str(row.get("staff_id") or "").strip()
+            ) or cross_client_by_name.get(str(row.get("full_name") or "").strip())
+            if other_client_name:
                 row_warnings.append(
-                    f"Worker also appears in {other_client.name} payroll for {month} {year}."
+                    f"Worker also appears in {other_client_name} payroll for {month} {year}."
                 )
 
         if row_warnings:
@@ -129,7 +164,10 @@ def validate_payroll_rows(
     }
 
 
-def validate_single_row(row):
+def validate_single_row(row, employees_by_staff_id=None):
+    """``employees_by_staff_id`` is an optional prefetched ``{staff_id: Employee}``
+    map (see validate_payroll_rows) so bulk validation costs one query, not one
+    per row. When omitted, falls back to the per-row lookup."""
     warnings = []
     staff_id = str(row.get("staff_id") or "").strip()
     full_name = str(row.get("full_name") or "").strip()
@@ -145,7 +183,10 @@ def validate_single_row(row):
     if not full_name:
         warnings.append("Missing employee name.")
     if not ssnit_number:
-        employee = Employee.query.filter_by(staff_id=staff_id).first() if staff_id else None
+        if employees_by_staff_id is not None:
+            employee = employees_by_staff_id.get(staff_id) if staff_id else None
+        else:
+            employee = Employee.query.filter_by(staff_id=staff_id).first() if staff_id else None
         if not employee or not employee.ssnit_number:
             warnings.append("Missing SSNIT number.")
     if not ghana_card_number:

@@ -506,7 +506,12 @@ def confirm(import_id):
         )
         return redirect(url_for("payroll.runs"))
     client = db.get_or_404(ClientCompany, payload["client_company_id"])
-    validation = validate_payroll_rows(
+    # Reuse the validation computed at upload time (stored in the payload)
+    # instead of re-running the whole row sweep — the rows can't have changed
+    # between preview and confirm, and the recompute doubled the confirm
+    # request's query load. Recompute only for payloads persisted before
+    # validation was stored.
+    validation = payload.get("validation") or validate_payroll_rows(
         payload["mapped_rows"],
         client,
         payload["month"],
@@ -555,7 +560,9 @@ def confirm_multi_client_import(import_id, payload):
     created_runs = []
     for run_payload in runs:
         client = db.get_or_404(ClientCompany, run_payload["client_company_id"])
-        validation = validate_payroll_rows(
+        # Same reuse as the single-client confirm: the per-run validation was
+        # computed and stored at upload time.
+        validation = run_payload.get("validation") or validate_payroll_rows(
             run_payload["mapped_rows"],
             client,
             run_payload["month"],
@@ -610,19 +617,29 @@ def create_payroll_run_from_payload(payload, client, validation, import_mode):
         "paye": 0,
         "ssnit": 0,
     }
+    # The client's whole roster in ONE query. The previous per-row
+    # Employee.query + db.session.flush() pair was 2 round trips per row and
+    # a large share of why big confirms hit the worker timeout. New employees
+    # created during this import are added to the map so duplicate staff IDs
+    # within one file reuse the same record instead of re-querying.
+    employees_by_staff_id = {
+        e.staff_id: e
+        for e in Employee.query.filter_by(client_company_id=client.id).all()
+    }
     for index, row in enumerate(payload["mapped_rows"], start=1):
         if not str(row.get("staff_id") or "").strip() and not str(row.get("full_name") or "").strip():
             continue
 
-        employee = create_or_update_employee_from_import(row, client, payroll_run, index)
-        db.session.flush()
+        employee = create_or_update_employee_from_import(
+            row, client, payroll_run, index, employees_by_staff_id
+        )
 
         warnings = validation["per_row_warnings"].get(str(index)) or validation[
             "per_row_warnings"
         ].get(index, [])
         item = PayrollItem(
             payroll_run_id=payroll_run.id,
-            employee_id=employee.id if employee else None,
+            employee=employee,
             staff_id=row.get("staff_id"),
             full_name=row.get("full_name"),
             status=row.get("status"),
@@ -703,9 +720,44 @@ def auto_calculate_on_confirm(payroll_run):
         )
         return
 
-    recalculate_salaried_items(payroll_run, statutory_rate)
-    db.session.flush()
-    refresh_run_totals(payroll_run)
+    # The math itself (recalculate_salaried_items) used to run unprotected —
+    # any exception there (bad row data, an edge case in the calculator)
+    # propagated as a raw 500 with zero diagnostic trail: no Postgres error,
+    # nothing in the audit log, just "Internal Server Error." Catch broadly
+    # here so a bad row degrades the run (kept in Draft, uploaded figures
+    # intact, visible warning) instead of taking down the whole request —
+    # matching the "import itself must not fail" contract above.
+    try:
+        recalculate_salaried_items(payroll_run, statutory_rate)
+        db.session.flush()
+        refresh_run_totals(payroll_run)
+    except Exception as exc:
+        # No rollback here: the PayrollRun/PayrollItem rows from
+        # create_payroll_run_from_payload are already flushed in this same
+        # (uncommitted) transaction. A rollback would silently discard the
+        # entire import, contradicting "uploaded figures were kept" below.
+        # Items processed before the failure keep their recalculated values;
+        # items from the failure point on keep their raw uploaded figures —
+        # an inconsistent but non-destructive partial state, flagged by the
+        # warning and fixable via Calculate Pay once the underlying issue
+        # (see traceback) is resolved.
+        current_app.logger.exception(
+            "auto_calculate_on_confirm: calculation failed for run %s", payroll_run.id
+        )
+        record_audit(
+            "Payroll auto-calculation failed",
+            payroll_run,
+            f"{type(exc).__name__}: {exc}",
+        )
+        flash(
+            f"Payroll imported but statutory calculation failed ({type(exc).__name__}: {exc}). "
+            "Uploaded figures were kept (some items may be partially recalculated); check "
+            "Render logs for the full traceback, fix the underlying data/rate issue, then "
+            "use Calculate Pay to retry.",
+            "danger",
+        )
+        return
+
     record_audit(
         "Payroll auto-calculated on import",
         payroll_run,
@@ -716,17 +768,52 @@ def auto_calculate_on_confirm(payroll_run):
 
 def recalculate_salaried_items(payroll_run, statutory_rate):
     """Recompute every item's statutory figures from its raw earnings inputs."""
-    from app.payroll_calculations import bonus_concession_used_ytd
+    from app.payroll_calculations import bonus_concession_used_ytd_bulk
     from app.payroll_calculations.salaried import SalariedCalculator
 
     calculator = SalariedCalculator(statutory_rate)
-    for item in payroll_run.items:
-        # Annual bonus concession cap, enforced once per tax year: subtract
-        # whatever concession this employee's OTHER runs already used.
-        used_ytd = bonus_concession_used_ytd(
-            item.employee_id, payroll_run.year, exclude_run_id=payroll_run.id
+    # Annual bonus concession cap, enforced once per tax year: subtract
+    # whatever concession each employee's OTHER runs already used. Fetched
+    # for the whole run in ONE query — the per-item version was a join query
+    # per worker and helped push large confirms past the worker timeout.
+    try:
+        used_ytd_by_employee = bonus_concession_used_ytd_bulk(
+            [item.employee_id for item in payroll_run.items],
+            payroll_run.year,
+            exclude_run_id=payroll_run.id,
         )
-        result = calculator.calculate(
+    except Exception as exc:
+        raise RuntimeError(
+            f"bonus_concession_used_ytd_bulk failed for run {payroll_run.id}: {exc}"
+        ) from exc
+    # Tax relief comes off the roster record; loading it via item.employee
+    # inside the loop would be one lazy-load query per item, so prefetch the
+    # run's employees in one query instead.
+    employee_ids = [item.employee_id for item in payroll_run.items if item.employee_id]
+    relief_by_employee = (
+        {
+            e.id: (e.tax_relief_monthly or 0)
+            for e in Employee.query.filter(Employee.id.in_(set(employee_ids))).all()
+        }
+        if employee_ids
+        else {}
+    )
+    for item in payroll_run.items:
+        used_ytd = used_ytd_by_employee.get(item.employee_id, 0.0)
+        tax_relief = relief_by_employee.get(item.employee_id, 0)
+        try:
+            result = _calculate_item(calculator, item, used_ytd, tax_relief)
+        except Exception as exc:
+            raise RuntimeError(
+                f"SalariedCalculator.calculate failed for staff_id={item.staff_id!r} "
+                f"(item id={item.id}, employee_id={item.employee_id}): {exc}"
+            ) from exc
+        for field, value in result.as_payroll_item_fields().items():
+            setattr(item, field, value)
+
+
+def _calculate_item(calculator, item, used_ytd, tax_relief_monthly):
+    return calculator.calculate(
             item.basic_salary,
             transport_allowance=item.transport_allowance,
             housing_allowance=item.housing_allowance,
@@ -737,16 +824,12 @@ def recalculate_salaried_items(payroll_run, statutory_rate):
             overtime_pay=item.overtime_pay,
             pay_difference=item.pay_difference,
             pf_fund_employee=item.pf_fund_employee,
-            tax_relief_monthly=(
-                item.employee.tax_relief_monthly if item.employee else 0
-            ),
+            tax_relief_monthly=tax_relief_monthly,
             loan_deduction=item.loan_deduction,
             loan_advance=item.loan_advance,
             other_deductions=item.other_deductions,
             bonus_concession_used_ytd=used_ytd,
         )
-        for field, value in result.as_payroll_item_fields().items():
-            setattr(item, field, value)
 
 
 def refresh_run_totals(payroll_run):
@@ -763,7 +846,13 @@ def refresh_run_totals(payroll_run):
     payroll_run.total_workers = len(items)
 
 
-def create_or_update_employee_from_import(row, client, payroll_run, row_index):
+def create_or_update_employee_from_import(
+    row, client, payroll_run, row_index, employees_by_staff_id
+):
+    """``employees_by_staff_id`` is the client's prefetched roster
+    ({staff_id: Employee}); newly created employees are inserted into it so
+    later rows (and later imports in the same request) reuse them without
+    another query."""
     staff_id = str(row.get("staff_id") or "").strip()
     full_name = str(row.get("full_name") or "").strip()
     if not staff_id:
@@ -771,10 +860,7 @@ def create_or_update_employee_from_import(row, client, payroll_run, row_index):
     if not full_name:
         full_name = f"Imported Worker {staff_id}"
 
-    employee = Employee.query.filter_by(
-        staff_id=staff_id,
-        client_company_id=client.id,
-    ).first()
+    employee = employees_by_staff_id.get(staff_id)
     if employee is None:
         employee = Employee(
             staff_id=staff_id,
@@ -784,6 +870,7 @@ def create_or_update_employee_from_import(row, client, payroll_run, row_index):
             service_line="Personnel Outsourcing",
         )
         db.session.add(employee)
+        employees_by_staff_id[staff_id] = employee
 
     employee.full_name = full_name
     employee.ssnit_number = row.get("ssnit_number") or employee.ssnit_number

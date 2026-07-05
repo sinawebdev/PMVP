@@ -54,10 +54,29 @@ def bonus_concession_used_ytd(employee_id, year, exclude_run_id=None):
     if not employee_id:
         return 0.0
 
+    return bonus_concession_used_ytd_bulk(
+        [employee_id], year, exclude_run_id=exclude_run_id
+    ).get(employee_id, 0.0)
+
+
+def bonus_concession_used_ytd_bulk(employee_ids, year, exclude_run_id=None):
+    """``{employee_id: concession_used}`` for many employees in ONE query —
+    the per-item version turned a run recalculation into one join query per
+    worker, which is what pushed large confirms past the worker timeout.
+    Same arithmetic and same CLOSED_STATUSES scoping as the single version;
+    employees with no finalized bonus history are simply absent from the map
+    (callers use ``.get(id, 0.0)``)."""
+    from app.models import PayrollItem, PayrollRun
+    from app.payroll_status import CLOSED_STATUSES
+
+    employee_ids = [eid for eid in set(employee_ids or []) if eid]
+    if not employee_ids:
+        return {}
+
     query = (
         PayrollItem.query.join(PayrollRun, PayrollItem.payroll_run_id == PayrollRun.id)
         .filter(
-            PayrollItem.employee_id == employee_id,
+            PayrollItem.employee_id.in_(employee_ids),
             PayrollRun.year == year,
             PayrollRun.status.in_(CLOSED_STATUSES),
         )
@@ -65,12 +84,11 @@ def bonus_concession_used_ytd(employee_id, year, exclude_run_id=None):
     if exclude_run_id is not None:
         query = query.filter(PayrollRun.id != exclude_run_id)
 
-    return round(
-        sum(
+    used = {}
+    for item in query.all():
+        used[item.employee_id] = used.get(item.employee_id, 0.0) + (
             (item.productivity_bonus or 0)
             + (item.end_of_year_bonus or 0)
             - (item.bonus_excess or 0)
-            for item in query.all()
-        ),
-        2,
-    )
+        )
+    return {employee_id: round(total, 2) for employee_id, total in used.items()}

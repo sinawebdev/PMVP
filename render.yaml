@@ -7,7 +7,11 @@ services:
     # Apply Alembic migrations before serving so schema changes actually reach
     # the database. (Previously nothing ran migrations, so columns added in
     # migrations never existed in the deployed DB and pages 500'd.)
-    startCommand: flask db upgrade && gunicorn run:app --bind 0.0.0.0:10000
+    # --timeout 120: the confirm flow can legitimately take tens of seconds on
+    # large files; gunicorn's default 30s SIGKILLed the worker mid-confirm with
+    # no traceback and no DB error. Single worker kept deliberately — the free
+    # plan's 512MB doesn't fit two pandas-loaded sync workers.
+    startCommand: flask db upgrade && gunicorn run:app --bind 0.0.0.0:10000 --timeout 120
     healthCheckPath: /health
     envVars:
       - key: FLASK_APP
