@@ -40,12 +40,16 @@ from app.excel_utils import (
     workbook_sheet_names,
 )
 from app.models import (
+    DELIVERY_SENT,
     ClientCompany,
     Employee,
+    Expense,
     ImportBatch,
     PayrollItem,
     PayrollRun,
+    PayslipDelivery,
     RawPayEntry,
+    Remittance,
     WageRateProfile,
 )
 from app.payroll_status import (
@@ -132,6 +136,26 @@ def has_duplicate_payroll(client_id, month, year):
         ).first()
         is not None
     )
+
+
+def replace_existing_runs(client_id, month, year):
+    """Hard-delete every existing run for (client, month, year) ahead of a
+    confirmed replacement import. All-or-nothing: if any existing run is not
+    deletable, nothing is deleted and the reason is returned. Does not commit
+    (the surrounding confirm flow owns the transaction, so a failed import
+    also rolls the deletions back)."""
+    existing_runs = PayrollRun.query.filter_by(
+        client_company_id=client_id, month=month, year=int(year)
+    ).all()
+    for run in existing_runs:
+        blockers = payroll_run_delete_blockers(run)
+        if blockers:
+            return False, f"run #{run.id} ({run.status}) is not deletable: " + "; ".join(blockers)
+    for run in existing_runs:
+        ok, reason = hard_delete_payroll_run(run)
+        if not ok:  # pragma: no cover - blockers already checked above
+            return False, reason
+    return True, None
 
 
 def save_temporary_upload(file_storage):
@@ -522,6 +546,18 @@ def confirm(import_id):
     if duplicate_exists and request.form.get("replace_existing") != "1":
         flash("Duplicate payroll found. Tick confirm replacement before importing this client/month again.", "warning")
         return redirect(url_for("payroll.preview", import_id=import_id))
+    if duplicate_exists:
+        # "Replace" must actually replace: previously this checkbox only
+        # suppressed the warning, leaving two live runs for the same
+        # client/month double-counting on the dashboard and in the YTD bonus
+        # cap. Hard-delete the old run(s) first, subject to the same
+        # restrictions as manual deletion — if the old run doesn't qualify
+        # (approved, voucher, sent payslips...), refuse loudly instead of
+        # silently importing a duplicate.
+        ok, reason = replace_existing_runs(client.id, payload["month"], payload["year"])
+        if not ok:
+            flash(f"Cannot replace the existing payroll: {reason}.", "danger")
+            return redirect(url_for("payroll.preview", import_id=import_id))
 
     payroll_run = create_payroll_run_from_payload(payload, client, validation, "single_client")
     batch_id = payload.get("import_batch_id")
@@ -549,13 +585,27 @@ def confirm_multi_client_import(import_id, payload):
     duplicates = []
     for run_payload in runs:
         if has_duplicate_payroll(run_payload["client_company_id"], run_payload["month"], run_payload["year"]):
-            duplicates.append(run_payload["client_company_name"])
+            duplicates.append(run_payload)
     if duplicates and request.form.get("replace_existing") != "1":
+        duplicate_names = ", ".join(d["client_company_name"] for d in duplicates)
         flash(
-            f"Duplicate payroll found for: {', '.join(duplicates)}. Tick confirm replacement before importing again.",
+            f"Duplicate payroll found for: {duplicate_names}. Tick confirm replacement before importing again.",
             "warning",
         )
         return redirect(url_for("payroll.preview", import_id=import_id))
+    for run_payload in duplicates:
+        # Replacement means the old run really goes away (see the single-client
+        # confirm). Refuse the whole import if any old run isn't deletable.
+        ok, reason = replace_existing_runs(
+            run_payload["client_company_id"], run_payload["month"], run_payload["year"]
+        )
+        if not ok:
+            db.session.rollback()
+            flash(
+                f"Cannot replace the existing payroll for {run_payload['client_company_name']}: {reason}.",
+                "danger",
+            )
+            return redirect(url_for("payroll.preview", import_id=import_id))
 
     created_runs = []
     for run_payload in runs:
@@ -989,6 +1039,11 @@ def raw_confirm(run_id):
         return jsonify({"error": "No import data in session."}), 400
 
     run = db.get_or_404(PayrollRun, run_id)
+
+    # Replace, never append: a re-import of the same (or a corrected) file for
+    # this run must supersede the previous hours. Appending on top doubled
+    # every worker's hours — and therefore pay — on the next Calculate.
+    RawPayEntry.query.filter_by(payroll_run_id=run_id).delete()
 
     for emp_id, pay_codes in employees.items():
         for pay_code, hours in pay_codes.items():
@@ -1496,6 +1551,98 @@ def mark_paid(run_id):
     db.session.commit()
     flash("Payroll marked as processed.", "success")
     return redirect(url_for("payroll.detail", run_id=run_id))
+
+
+# Hard delete is deliberately narrow: only pre-approval runs qualify, and any
+# run that produced real-world artifacts (a payment voucher, a remittance, a
+# payslip that already reached a worker) is untouchable — those records are
+# the evidence trail for money that moved or a message a worker received.
+DELETABLE_STATUSES = {DRAFT, "Previewed"}
+
+
+def payroll_run_delete_blockers(payroll_run):
+    """Why this run may NOT be hard-deleted, as human-readable reasons.
+    Empty list means deletion is allowed."""
+    blockers = []
+    if payroll_run.status not in DELETABLE_STATUSES:
+        blockers.append(
+            f"run status is {payroll_run.status} (only Draft runs can be deleted)"
+        )
+    if payroll_run.voucher:
+        blockers.append(
+            f"a payment voucher exists ({payroll_run.voucher.voucher_number})"
+        )
+    if payroll_run.remittances:
+        blockers.append(f"{len(payroll_run.remittances)} remittance record(s) exist")
+    sent_deliveries = PayslipDelivery.query.filter_by(
+        payroll_run_id=payroll_run.id, status=DELIVERY_SENT
+    ).count()
+    if sent_deliveries:
+        blockers.append(
+            f"{sent_deliveries} payslip(s) were already sent to workers"
+        )
+    # Not in the original spec but required by the schema: Expense rows hold a
+    # plain FK to payroll_run with no cascade, so deleting past them would
+    # raise IntegrityError — and they are money records in their own right.
+    linked_expenses = Expense.query.filter_by(payroll_run_id=payroll_run.id).count()
+    if linked_expenses:
+        blockers.append(f"{linked_expenses} expense record(s) are linked to this run")
+    return blockers
+
+
+def hard_delete_payroll_run(payroll_run):
+    """Irreversibly delete a payroll run and its dependent rows.
+
+    Returns ``(True, None)`` or ``(False, reason)``. Does NOT commit — the
+    caller owns the transaction so callers like the replace-existing flow can
+    delete-and-recreate atomically.
+
+    Order matters: PayslipDelivery and RawPayEntry carry non-nullable FKs to
+    payroll_run with no DB-side cascade, so they go first; ImportBatch rows
+    for the run are removed too (these are the "Previewed" leftovers this
+    feature exists to clean up). PayrollItem rows are handled by the
+    relationship's own delete-orphan cascade — no extra code."""
+    blockers = payroll_run_delete_blockers(payroll_run)
+    if blockers:
+        return False, "; ".join(blockers)
+
+    client = payroll_run.client_company
+    record_audit(
+        "Payroll run hard-deleted",
+        payroll_run,
+        f"Deleted run #{payroll_run.id} {client.name if client else 'no client'} "
+        f"{payroll_run.month} {payroll_run.year} (status {payroll_run.status}): "
+        f"workers={payroll_run.total_workers} gross={payroll_run.total_gross_pay} "
+        f"net={payroll_run.total_net_pay} paye={payroll_run.total_paye} "
+        f"ssnit={payroll_run.total_ssnit}. Source file: "
+        f"{payroll_run.source_filename or 'n/a'}.",
+    )
+
+    PayslipDelivery.query.filter_by(payroll_run_id=payroll_run.id).delete()
+    RawPayEntry.query.filter_by(payroll_run_id=payroll_run.id).delete()
+    ImportBatch.query.filter_by(payroll_run_id=payroll_run.id).delete()
+    db.session.delete(payroll_run)  # PayrollItems cascade via the relationship
+    return True, None
+
+
+# Deletion is more sensitive than export: it destroys payroll history, so it
+# is restricted to admin and MD. accounts_officer/payroll_officer keep their
+# export access but cannot erase runs.
+@payroll_bp.route("/runs/<int:run_id>/delete", methods=["POST"])
+@role_required("admin", "md")
+def delete_run(run_id):
+    payroll_run = db.get_or_404(PayrollRun, run_id)
+    label = (
+        f"{payroll_run.client_company.name if payroll_run.client_company else 'Run'} "
+        f"{payroll_run.month} {payroll_run.year}"
+    )
+    ok, reason = hard_delete_payroll_run(payroll_run)
+    if not ok:
+        flash(f"Cannot delete {label}: {reason}.", "danger")
+        return redirect(url_for("payroll.detail", run_id=run_id))
+    db.session.commit()
+    flash(f"Payroll run {label} permanently deleted.", "success")
+    return redirect(url_for("payroll.runs"))
 
 
 @payroll_bp.route("/runs/<int:run_id>/export")
