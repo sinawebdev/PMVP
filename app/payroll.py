@@ -4,6 +4,8 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 
+import pandas as pd
+
 from flask import (
     Blueprint,
     current_app,
