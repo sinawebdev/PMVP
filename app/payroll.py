@@ -906,7 +906,7 @@ def _raw_import_session_path(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/raw-upload", methods=["POST"])
-@login_required
+@role_required("admin")
 def raw_upload(run_id):
     """Accept a raw-data Excel file, parse it, cross-validate, and return a JSON
     preview for user confirmation. Does NOT write any payroll data to the DB."""
@@ -973,7 +973,7 @@ def raw_upload(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/raw-confirm", methods=["POST"])
-@login_required
+@role_required("admin")
 def raw_confirm(run_id):
     """User confirmed the preview. Commit raw hours and mark the run
     upload_type='raw'. Does NOT calculate pay — that is a later operator step."""
@@ -1025,7 +1025,7 @@ def _raw_new_path(token):
 
 
 @payroll_bp.route("/runs/raw-upload", methods=["POST"])
-@login_required
+@role_required("admin")
 def raw_upload_new():
     """Upload-page raw-data flow: parse a raw-hours workbook for the chosen client
     and return a JSON preview. Creates NO payroll run yet — that happens on confirm,
@@ -1104,7 +1104,7 @@ def raw_upload_new():
 
 
 @payroll_bp.route("/runs/raw-confirm", methods=["POST"])
-@login_required
+@role_required("admin")
 def raw_confirm_new():
     """Commit a previewed upload-page raw import: create a Draft payroll run marked
     upload_type='raw', store the raw hours, and hand back the run detail URL. Pay is
@@ -1499,7 +1499,7 @@ def mark_paid(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/export")
-@login_required
+@role_required("admin", "md", "accounts_officer", "payroll_officer")
 def export(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     file_path = export_payroll_run(payroll_run, current_app.config["EXPORT_FOLDER"])
@@ -1550,7 +1550,7 @@ def export_gra_paye_route(run_id):
 
 
 @payroll_bp.route("/items/<int:item_id>/payslip")
-@login_required
+@role_required("admin", "md", "accounts_officer", "payroll_officer")
 def payslip(item_id):
     payroll_item = db.get_or_404(PayrollItem, item_id)
     file_path = generate_payslip_pdf(payroll_item, current_app.config["EXPORT_FOLDER"])
