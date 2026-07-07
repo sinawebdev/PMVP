@@ -259,12 +259,39 @@ def sheet_name_suggests_payroll(sheet_name):
     return any(keyword in normalized for keyword in PAYROLL_SHEET_NAME_KEYWORDS)
 
 
-def header_score(row):
-    known_labels = set()
+def known_header_labels():
+    """Every normalized string header_score recognises as a column header:
+    field names, their aliases, and the loose payroll keywords. Kept identical
+    to header_score's original inline set so the misdetection guard that reuses
+    it can't perturb header-row scoring."""
+    labels = set()
     for field, aliases in COLUMN_ALIASES.items():
-        known_labels.add(normalize_label(field))
-        known_labels.update(normalize_label(alias) for alias in aliases)
-    known_labels.update(PAYROLL_HEADER_KEYWORDS)
+        labels.add(normalize_label(field))
+        labels.update(normalize_label(alias) for alias in aliases)
+    labels.update(PAYROLL_HEADER_KEYWORDS)
+    return labels
+
+
+def looks_like_header_label(value, *, numeric_is_suspicious=False):
+    """True when a value that should be human data (a person's name, a company
+    name) instead reads like a spreadsheet column header — the signature of the
+    header-row detector locking onto the wrong row (as with the "acs 1.xlsx"
+    import, where "GH CARD"/"JOB TITLE" header cells landed in the company
+    field). Matches the whole cell against any known column alias/label (plus
+    the system-derived output headers); when ``numeric_is_suspicious`` is set,
+    also flags a bare number like "0" sitting where a name belongs."""
+    text = normalize_label(value)
+    if not text:
+        return False
+    if text in known_header_labels() or text in DERIVED_OUTPUT_HEADERS:
+        return True
+    if numeric_is_suspicious and re.fullmatch(r"-?\d+(?:\.\d+)?", str(value).strip()):
+        return True
+    return False
+
+
+def header_score(row):
+    known_labels = known_header_labels()
 
     labels = [normalize_label(value) for value in row if value not in (None, "")]
     score = 0

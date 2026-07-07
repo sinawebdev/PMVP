@@ -1,6 +1,6 @@
 from sqlalchemy import or_
 
-from app.excel_utils import normalize_label, normalize_worker
+from app.excel_utils import looks_like_header_label, normalize_label, normalize_worker
 from app.models import Employee, PayrollItem, PayrollRun
 from app.payroll_status import CLOSED_STATUSES
 
@@ -61,6 +61,18 @@ def validate_payroll_rows(
     ):
         warnings.append(
             f"Selected client is {client_company.name}, but Excel appears to mention {detected_company_name}."
+        )
+
+    # Header-misdetection guard: when the detected company name is itself a
+    # column label (e.g. "GH CARD", "JOB TITLE" from the acs 1.xlsx import), the
+    # header-row detector locked onto the wrong row and the mapped data is
+    # almost certainly shifted. Surface it loudly rather than persisting garbage.
+    if detected_company_name and looks_like_header_label(detected_company_name):
+        warnings.append(
+            f'The detected company name "{detected_company_name}" looks like a '
+            "spreadsheet column heading, not a company — the wrong header row was "
+            "likely picked. Check that names, salaries and bank details lined up "
+            "before confirming this import."
         )
 
     # One query each instead of one per row — the per-row versions of these
@@ -182,6 +194,14 @@ def validate_single_row(row, employees_by_staff_id=None):
         warnings.append("Missing staff ID.")
     if not full_name:
         warnings.append("Missing employee name.")
+    # Header-misdetection guard: a "name" that is actually a column heading
+    # ("NAMES", "JOB TITLE") or a bare number ("0") means the row is data-shifted
+    # — the same failure that gave every acs 1.xlsx worker the name "0".
+    elif looks_like_header_label(full_name, numeric_is_suspicious=True):
+        warnings.append(
+            f'Employee name "{full_name}" looks like a column heading or placeholder, '
+            "not a real name — the upload may have the wrong header row."
+        )
     if not ssnit_number:
         if employees_by_staff_id is not None:
             employee = employees_by_staff_id.get(staff_id) if staff_id else None
