@@ -963,6 +963,10 @@ def detail(run_id):
     return render_template(
         "payroll_detail.html",
         payroll_run=payroll_run,
+        # Drive the delete button off the same set the backend gate uses, so the
+        # two can't silently drift apart again (a hardcoded "Draft" in the
+        # template is exactly how the button went missing for Rejected runs).
+        deletable_statuses=DELETABLE_STATUSES,
     )
 
 
