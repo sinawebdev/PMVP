@@ -46,7 +46,7 @@
     <div class="stat-card"><i class="bi bi-cash-coin stat-icon"></i><span>Current Payroll</span><strong>{{ current_month_total|cedis }}</strong></div>
     <a class="stat-card stat-link" href="{{ url_for('payroll.runs', status='needs_approval') }}"><i class="bi bi-hourglass-split stat-icon"></i><span>Pending Approvals</span><strong>{{ pending_approvals }}</strong></a>
     <div class="stat-card"><i class="bi bi-receipt-cutoff stat-icon"></i><span>PAYE Total</span><strong>{{ paye_total|cedis }}</strong></div>
-    <div class="stat-card"><i class="bi bi-shield-check stat-icon"></i><span>SSNIT Total</span><strong>{{ ssnit_total|cedis }}</strong></div>
+    <div class="stat-card" title="Combined employee (5.5%) + employer (13%) SSF — the amount remitted to SSNIT."><i class="bi bi-shield-check stat-icon"></i><span>SSNIT Payable</span><strong>{{ ssnit_total|cedis }}</strong></div>
     <div class="stat-card"><i class="bi bi-exclamation-triangle stat-icon"></i><span>Validation Warnings</span><strong>{{ warning_count }}</strong></div>
     <div class="stat-card" title="{{ payslips_delivered }} of {{ payslips_total }} payslips pushed to workers"><i class="bi bi-send-check stat-icon"></i><span>Payslips Delivered</span><strong>{{ delivery_rate }}%</strong></div>
 </section>

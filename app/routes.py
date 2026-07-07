@@ -188,7 +188,11 @@ def dashboard():
         current_month_total=sum(run.total_net_pay for run in current_runs),
         pending_approvals=pending_approvals,
         paye_total=sum(run.total_paye for run in current_runs),
-        ssnit_total=sum(run.total_ssnit for run in current_runs),
+        # Combined employee (5.5%) + employer (13%) SSF — the figure actually
+        # remitted to SSNIT, not just the worker-side deduction.
+        ssnit_total=sum(
+            run.total_ssnit + run.total_ssnit_employer for run in current_runs
+        ),
         total_expenses=sum(expense.amount for expense in Expense.query.all()),
         recent_runs=PayrollRun.query.filter_by(month=selected_month, year=selected_year)
         .order_by(PayrollRun.created_at.desc())
@@ -277,7 +281,10 @@ def client_detail(client_id):
         previous_month_payroll=sum(run.total_net_pay for run in previous_runs),
         payroll_status=", ".join({run.status for run in current_runs}) if current_runs else "No run submitted",
         paye_total=sum(run.total_paye for run in current_runs),
-        ssnit_total=sum(run.total_ssnit for run in current_runs),
+        # Combined employee (5.5%) + employer (13%) SSF — the remittable figure.
+        ssnit_total=sum(
+            run.total_ssnit + run.total_ssnit_employer for run in current_runs
+        ),
         pending_approvals=sum(
             1 for run in client.payroll_runs if run.status in PENDING_STATUSES
         ),
