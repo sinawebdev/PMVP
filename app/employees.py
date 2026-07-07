@@ -5,9 +5,11 @@ inside the system. Contact details (email, phone) used when sending payslips alw
 from these records, never from uploaded payroll Excel files.
 
 Access is rep-only (admin / md / payroll_officer / accounts_officer). Client self-service
-is deferred to Phase 3. Employees are never hard-deleted — only deactivated — so past
-payroll runs and the audit trail stay intact. The join key is ``staff_id``, normalised on
-every read and write so "DCL 9" and "DCL9" resolve to the same record.
+is deferred to Phase 3. Deactivation is the default for a worker who has left — it keeps
+past payroll runs intact. Hard delete exists too but is deliberately narrow (admin/md
+only) and refused outright for any employee with payroll history, so payslip records can
+never be silently destroyed. The join key is ``staff_id``, normalised on every read and
+write so "DCL 9" and "DCL9" resolve to the same record.
 """
 import io
 import json
@@ -29,8 +31,9 @@ from flask import (
 from flask_login import login_required
 
 from app import db
+from app.audit import record_audit
 from app.auth import role_required
-from app.models import ClientCompany, Employee
+from app.models import ClientCompany, Employee, PayrollItem
 from app.raw_import import normalise_emp_id
 
 employees_bp = Blueprint("employees", __name__, url_prefix="/employees")
@@ -174,6 +177,57 @@ def reactivate(client_id, emp_id):
     emp.status = ACTIVE
     db.session.commit()
     flash(f"{emp.full_name} reactivated.", "success")
+    return redirect(url_for("employees.roster", client_id=client_id))
+
+
+# ── Hard delete (admin/md only; refused when payroll history exists) ──────────
+
+
+def employee_delete_blockers(emp):
+    """Why this employee may NOT be hard-deleted, as human-readable reasons.
+    Empty list means deletion is allowed. The only blocker is payroll history:
+    PayrollItem.employee_id is a plain FK with no cascade, so deleting past it
+    would either raise IntegrityError or destroy real payslip records."""
+    blockers = []
+    item_count = PayrollItem.query.filter_by(employee_id=emp.id).count()
+    if item_count:
+        blockers.append(
+            f"{item_count} payroll record(s) reference this employee "
+            "(deactivate instead to keep payroll history intact)"
+        )
+    return blockers
+
+
+# Deletion is more sensitive than deactivation — it erases the roster record
+# permanently — so it is restricted to admin and MD, unlike the rep-wide
+# deactivate/reactivate actions.
+@employees_bp.route("/clients/<int:client_id>/delete/<int:emp_id>", methods=["POST"])
+@role_required("admin", "md")
+def delete(client_id, emp_id):
+    emp = Employee.query.filter_by(id=emp_id, client_company_id=client_id).first_or_404()
+    blockers = employee_delete_blockers(emp)
+    if blockers:
+        flash(
+            f"Cannot delete {emp.full_name}: {'; '.join(blockers)}.", "danger"
+        )
+        return redirect(url_for("employees.roster", client_id=client_id))
+
+    client = emp.client_company
+    # Snapshot identity before deletion — after commit the instance is expired
+    # and its attributes can't be read back off the deleted row.
+    full_name = emp.full_name
+    # Audit BEFORE the row is gone — AuditTrail.related_record_id has no enforced
+    # FK, so it stays a valid reference after deletion.
+    record_audit(
+        "Employee hard-deleted",
+        emp,
+        f"Deleted employee {emp.staff_id} ({full_name}) from "
+        f"{client.name if client else 'no client'}. No payroll history existed.",
+    )
+    # EmployeeDeployment rows cascade via the relationship's delete-orphan.
+    db.session.delete(emp)
+    db.session.commit()
+    flash(f"{full_name} permanently deleted.", "success")
     return redirect(url_for("employees.roster", client_id=client_id))
 
 

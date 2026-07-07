@@ -1572,11 +1572,12 @@ def mark_paid(run_id):
     return redirect(url_for("payroll.detail", run_id=run_id))
 
 
-# Hard delete is deliberately narrow: only pre-approval runs qualify, and any
-# run that produced real-world artifacts (a payment voucher, a remittance, a
-# payslip that already reached a worker) is untouchable — those records are
-# the evidence trail for money that moved or a message a worker received.
-DELETABLE_STATUSES = {DRAFT, "Previewed"}
+# Hard delete is deliberately narrow: only runs that never moved money or
+# reached a worker qualify. Draft/Previewed are pre-approval; Rejected is a
+# terminal dead-end that (per the approval workflow) can never have produced a
+# voucher, remittance, or sent payslip — so it is exactly as safe to delete as
+# a Draft, and reuploading over it should replace it.
+DELETABLE_STATUSES = {DRAFT, "Previewed", REJECTED}
 
 
 def payroll_run_delete_blockers(payroll_run):
@@ -1585,7 +1586,8 @@ def payroll_run_delete_blockers(payroll_run):
     blockers = []
     if payroll_run.status not in DELETABLE_STATUSES:
         blockers.append(
-            f"run status is {payroll_run.status} (only Draft runs can be deleted)"
+            f"run status is {payroll_run.status} "
+            "(only Draft or Rejected runs can be deleted)"
         )
     if payroll_run.voucher:
         blockers.append(

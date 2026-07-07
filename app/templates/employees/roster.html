@@ -54,6 +54,11 @@
                                         <button class="btn btn-sm btn-outline-success" type="submit">Reactivate</button>
                                     </form>
                                 {% endif %}
+                                {% if current_user.role in ['admin', 'md'] %}
+                                    <form method="post" action="{{ url_for('employees.delete', client_id=client.id, emp_id=emp.id) }}" onsubmit="return confirm('Permanently delete {{ emp.full_name }}? This cannot be undone. Only workers with no payroll history can be deleted — otherwise use Deactivate.');">
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                                    </form>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
