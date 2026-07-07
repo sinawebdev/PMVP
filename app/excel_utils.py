@@ -580,10 +580,28 @@ def extract_payroll_sheet(file_path, sheet_name=None):
     }
 
 
+# openpyxl raises ValueError if a sheet title contains any of these, regardless
+# of length — a client name like "ACS/GMT Shipping" would crash the export.
+_INVALID_SHEET_TITLE_CHARS = r'\/?*[]:'
+
+
+def safe_sheet_title(title):
+    """A workbook-safe sheet (tab) title: forbidden characters replaced with a
+    space (readable — "ACS/GMT" -> "ACS GMT", not "ACSGMT"), collapsed, and
+    truncated to Excel's 31-character limit. Never returns an empty string."""
+    cleaned = "".join(
+        " " if ch in _INVALID_SHEET_TITLE_CHARS else ch for ch in str(title)
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()[:31].strip()
+    return cleaned or "Sheet"
+
+
 def create_workbook(report_title):
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = report_title[:31]
+    # Only the sheet tab name is constrained by Excel; the A2 header cell keeps
+    # the original title (slash and all) so the report still reads correctly.
+    sheet.title = safe_sheet_title(report_title)
     sheet["A1"] = "Chrisnat Limited"
     sheet["A1"].font = Font(bold=True, size=14)
     sheet["A2"] = report_title
