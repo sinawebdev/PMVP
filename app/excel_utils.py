@@ -24,6 +24,12 @@ COLUMN_ALIASES = {
     "momo_number": ["momo", "momo number", "momo no", "mobile money", "mobile money number", "phone", "phone number", "phone no", "telephone", "tel", "mobile", "mobile number", "mobile no", "cell", "cellphone", "contact number", "contact no"],
     "email": ["email", "e-mail", "e mail", "email address", "email id", "mail"],
     "bank_name": ["bank", "bank name"],
+    # "bank branch" must resolve here (exact match wins over the bare "bank"
+    # alias above, which would otherwise catch it via substring). Deliberately
+    # NO "location"/"bank location" alias: map_columns' substring fallback also
+    # matches when the header is a substring of an alias, so a bare "Location"
+    # column would map into "bank location" and get mis-filed as a branch.
+    "bank_branch": ["bank branch", "branch", "branch name"],
     "bank_account_number": ["account no", "account number", "bank account", "bank account number", "a/c number", "a/c no"],
     "status": ["status", "employee status", "worker status", "employment status"],
     "service_line": ["service line", "department", "unit"],
@@ -455,6 +461,7 @@ def mapped_rows_from_dataframe(df, mapping):
         row.setdefault("ghana_card_number", "")
         row.setdefault("momo_number", "")
         row.setdefault("bank_name", "")
+        row.setdefault("bank_branch", "")
         row.setdefault("bank_account_number", "")
         row.setdefault("status", "")
         row.setdefault("service_line", "")
@@ -866,11 +873,11 @@ def export_bank_listing(payroll_run, export_folder):
         band = sheet.cell(row=row_index, column=1, value=bank)
         band.font = Font(bold=True, color="FFFFFF")
         band.fill = band_fill
-        for col in range(2, 5):
+        for col in range(2, 6):
             sheet.cell(row=row_index, column=col).fill = band_fill
         row_index += 1
         for col_index, header in enumerate(
-            ["Staff ID", "Employee Name", "Account Number", "Net Pay (GH¢)"], start=1
+            ["Staff ID", "Employee Name", "Bank Branch", "Account Number", "Net Pay (GH¢)"], start=1
         ):
             cell = sheet.cell(row=row_index, column=col_index, value=header)
             cell.font = Font(bold=True)
@@ -880,20 +887,21 @@ def export_bank_listing(payroll_run, export_folder):
         for item in items:
             sheet.cell(row=row_index, column=1, value=item.staff_id)
             sheet.cell(row=row_index, column=2, value=item.full_name)
-            sheet.cell(row=row_index, column=3, value=item.bank_account_number)
-            sheet.cell(row=row_index, column=4, value=round(item.net_pay or 0, 2))
+            sheet.cell(row=row_index, column=3, value=item.bank_branch)
+            sheet.cell(row=row_index, column=4, value=item.bank_account_number)
+            sheet.cell(row=row_index, column=5, value=round(item.net_pay or 0, 2))
             subtotal += item.net_pay or 0
             row_index += 1
         total_cell = sheet.cell(row=row_index, column=2, value=f"{bank} Total ({len(items)} workers)")
         total_cell.font = Font(bold=True)
-        amount_cell = sheet.cell(row=row_index, column=4, value=round(subtotal, 2))
+        amount_cell = sheet.cell(row=row_index, column=5, value=round(subtotal, 2))
         amount_cell.font = Font(bold=True)
         row_index += 2
 
     grand = sheet.cell(row=row_index, column=2, value="GRAND TOTAL")
     grand.font = Font(bold=True, size=12)
     grand_amount = sheet.cell(
-        row=row_index, column=4,
+        row=row_index, column=5,
         value=round(sum(i.net_pay or 0 for i in payroll_run.items), 2),
     )
     grand_amount.font = Font(bold=True, size=12)

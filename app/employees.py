@@ -116,6 +116,8 @@ def add(client_id):
             email=request.form.get("email", "").strip() or None,
             phone=request.form.get("phone", "").strip() or None,
             department=request.form.get("department", "").strip() or None,
+            bank_name=request.form.get("bank_name", "").strip() or None,
+            bank_branch=request.form.get("bank_branch", "").strip() or None,
             bank_account_number=request.form.get("bank_account", "").strip() or None,
             tax_relief_monthly=_parse_tax_relief(request.form.get("tax_relief")),
             status=ACTIVE,
@@ -142,6 +144,8 @@ def edit(client_id, emp_id):
         emp.email = request.form.get("email", "").strip() or None
         emp.phone = request.form.get("phone", "").strip() or None
         emp.department = request.form.get("department", "").strip() or None
+        emp.bank_name = request.form.get("bank_name", "").strip() or None
+        emp.bank_branch = request.form.get("bank_branch", "").strip() or None
         emp.bank_account_number = request.form.get("bank_account", "").strip() or None
         emp.tax_relief_monthly = _parse_tax_relief(
             request.form.get("tax_relief"), emp.tax_relief_monthly

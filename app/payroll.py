@@ -713,6 +713,7 @@ def create_payroll_run_from_payload(payload, client, validation, import_mode):
             ssnit_number=row.get("ssnit_number"),
             ghana_card_number=row.get("ghana_card_number"),
             bank_name=row.get("bank_name"),
+            bank_branch=row.get("bank_branch"),
             bank_account_number=row.get("bank_account_number"),
             momo_number=row.get("momo_number"),
             email=row.get("email"),
@@ -945,6 +946,7 @@ def create_or_update_employee_from_import(
     employee.ssnit_number = row.get("ssnit_number") or employee.ssnit_number
     employee.ghana_card_number = row.get("ghana_card_number") or employee.ghana_card_number
     employee.bank_name = row.get("bank_name") or employee.bank_name
+    employee.bank_branch = row.get("bank_branch") or employee.bank_branch
     employee.bank_account_number = row.get("bank_account_number") or employee.bank_account_number
     employee.momo_number = row.get("momo_number") or employee.momo_number
     employee.email = row.get("email") or employee.email
@@ -1298,6 +1300,7 @@ def calculate(run_id):
                     ssnit_number=employee.ssnit_number if employee else None,
                     ghana_card_number=employee.ghana_card_number if employee else None,
                     bank_name=employee.bank_name if employee else None,
+                    bank_branch=employee.bank_branch if employee else None,
                     bank_account_number=employee.bank_account_number if employee else None,
                     momo_number=employee.momo_number if employee else None,
                     email=employee.email if employee else None,
@@ -1418,6 +1421,22 @@ def edit_items(run_id):
                         f"{old_value:.2f} -> {new_value:.2f}",
                     )
                     changes += 1
+
+                # bank_branch is free text, not a money field — handled outside
+                # the numeric loop so the float() guard doesn't reject it.
+                raw_branch = request.form.get(f"item-{item.id}-bank_branch")
+                if raw_branch is not None:
+                    new_branch = raw_branch.strip() or None
+                    old_branch = item.bank_branch or None
+                    if new_branch != old_branch:
+                        item.bank_branch = new_branch
+                        record_audit(
+                            "Payroll figures edited",
+                            payroll_run,
+                            f"{item.staff_id or item.full_name} bank_branch: "
+                            f"{old_branch or '—'} -> {new_branch or '—'}",
+                        )
+                        changes += 1
         db.session.commit()
         if rejected:
             flash(f"{rejected} invalid value(s) were ignored (must be numbers >= 0).", "warning")
