@@ -62,6 +62,9 @@ def new():
             bonus_annual_basic_threshold = float(
                 request.form["bonus_annual_basic_threshold"]
             )
+            overtime_junior_monthly_threshold = float(
+                request.form.get("overtime_junior_monthly_threshold") or 1500
+            )
         except (KeyError, ValueError) as exc:
             flash(f"Invalid rate version: {exc}", "danger")
             return redirect(url_for("statutory.new"))
@@ -83,6 +86,7 @@ def new():
             overtime_basic_threshold=overtime_basic_threshold,
             bonus_rate=bonus_rate,
             bonus_annual_basic_threshold=bonus_annual_basic_threshold,
+            overtime_junior_monthly_threshold=overtime_junior_monthly_threshold,
             notes=request.form.get("notes") or None,
             created_by=current_user.id,
         )
@@ -107,6 +111,9 @@ def new():
         "bonus_rate": latest.bonus_rate if latest else 0.05,
         "bonus_annual_basic_threshold": (
             latest.bonus_annual_basic_threshold if latest else 0.15
+        ),
+        "overtime_junior_monthly_threshold": (
+            latest.overtime_junior_monthly_threshold if latest else 1500.0
         ),
     }
     return render_template("statutory_rate_form.html", prefill=prefill)

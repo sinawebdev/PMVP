@@ -39,13 +39,16 @@ COLUMN_ALIASES = {
     "transport_allowance": ["transport", "transport allowance", "transportation"],
     "housing_allowance": ["housing", "housing allowance", "rent allowance"],
     "medical_allowance": ["medical", "medical allowance", "med allowance", "med. allowance"],
+    # "MEALS" (ACS RAW DATA column L) gets its own column — it used to fold
+    # silently into other_allowances, destroying the sheet's audit trail.
+    "meal_allowance": ["meal allowance", "meals allowance", "meals", "meal"],
     # end_of_year_bonus is listed BEFORE productivity_bonus so its longer
     # aliases win the substring fallback over productivity's bare "bonus".
     "end_of_year_bonus": ["end of year bonus", "end-of-year bonus", "13th month", "13th month bonus", "annual bonus", "eoy bonus"],
     "productivity_bonus": ["productivity bonus", "productivity", "prod bonus", "prod. bonus", "bonus"],
     "overtime_hours": ["overtime hours", "ot hours"],
     "overtime_pay": ["overtime", "ot pay", "overtime pay", "overtime allowance"],
-    "other_allowances": ["other allowance", "other allowances", "allowances", "allowance", "meal allowance"],
+    "other_allowances": ["other allowance", "other allowances", "allowances", "allowance"],
     "pay_difference": ["pay difference", "pay diff"],
     "gross_pay": ["gross", "gross pay", "gross salary", "total earnings", "gross earnings", "gross amount"],
     "paye": ["paye", "tax", "income tax", "paye tax", "tax deducted"],
@@ -59,7 +62,14 @@ COLUMN_ALIASES = {
     # (a deduction); "loan advance" resolves by exact match.
     "loan_deduction": ["loan deduction", "loan deductions", "loan repayment"],
     "loan_advance": ["loan advance", "loan advances", "salary advance"],
-    "other_deductions": ["deduction", "deductions", "other deduction", "other deductions", "welfare supplies", "iou deduction"],
+    # Welfare (ACS column AC) and IOU (AE) get their own columns — previously
+    # folded into other_deductions. No bare "iou" alias in the list: the
+    # substring fallback would match it inside words like "previous"; a bare
+    # "IOU" header still resolves because the normalized header is itself a
+    # substring of "iou deduction".
+    "welfare_deduction": ["welfare", "welfare deduction", "welfare deductions", "welfare supplies"],
+    "iou_deduction": ["iou deduction", "iou deductions", "i o u"],
+    "other_deductions": ["deduction", "deductions", "other deduction", "other deductions"],
     "total_deductions": ["total deductions", "total deduction"],
     "net_pay": ["net", "net pay", "net salary", "take home", "take home pay", "net amount", "amount payable", "net earnings"],
 }
@@ -80,6 +90,7 @@ MONEY_FIELDS = {
     "transport_allowance",
     "housing_allowance",
     "medical_allowance",
+    "meal_allowance",
     "productivity_bonus",
     "end_of_year_bonus",
     "pf_fund_employee",
@@ -93,6 +104,8 @@ MONEY_FIELDS = {
     "tier_2_pension",
     "loan_deduction",
     "loan_advance",
+    "welfare_deduction",
+    "iou_deduction",
     "other_deductions",
     "total_deductions",
     "net_pay",
@@ -502,6 +515,9 @@ def mapped_rows_from_dataframe(df, mapping):
             row["basic_salary"]
             + row["transport_allowance"]
             + row["housing_allowance"]
+            + row["medical_allowance"]
+            + row["meal_allowance"]
+            + row["productivity_bonus"]
             + row["overtime_pay"]
             + row["other_allowances"]
             + row["pay_difference"]
@@ -510,7 +526,12 @@ def mapped_rows_from_dataframe(df, mapping):
         if not row["gross_pay"] and calculated_gross:
             row["gross_pay"] = calculated_gross
         statutory_deductions = row["paye"] + row["ssnit"] + row["tier_2_pension"]
-        itemized_other = row["loan_deduction"] + row["other_deductions"]
+        itemized_other = (
+            row["loan_deduction"]
+            + row["welfare_deduction"]
+            + row["iou_deduction"]
+            + row["other_deductions"]
+        )
         if row["total_deductions"]:
             pass
         elif row["other_deductions"] >= statutory_deductions and statutory_deductions:
@@ -984,7 +1005,17 @@ def export_wages_sheet(payroll_run, export_folder):
             round(item.overtime_pay or 0, 2),
             round(item.gross_pay or 0, 2),
             round(item.pf_fund_employee or 0, 2),
-            round(item.other_deductions or 0, 2),
+            # WAGE SHT "OTHER DEDUCTIONS" is the fold of every non-statutory
+            # deduction: loan + welfare + other + IOU (spec §9) — the sheet
+            # has no separate columns for them, and the row only reconciles
+            # to net pay if all four are in here.
+            round(
+                (item.loan_deduction or 0)
+                + (item.welfare_deduction or 0)
+                + (item.other_deductions or 0)
+                + (item.iou_deduction or 0),
+                2,
+            ),
             round(item.paye or 0, 2),
             round(item.net_pay or 0, 2),
             round(item.annual_salary or 0, 2),

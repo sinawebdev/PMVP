@@ -15,3 +15,8 @@ exports/*
 
 cloudflared.log
 *.log
+
+# Real client payroll workbooks (contain employee PII/salary data) that ended
+# up at repo root during debugging — never committed. The canonical copy for
+# testing lives in uploads/ (already ignored above).
+/acs 1.xlsx

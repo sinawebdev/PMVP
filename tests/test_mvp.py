@@ -257,15 +257,17 @@ class MvpTestCase(unittest.TestCase):
         guide.title = "README"
         guide.append(["Guide sheet, not payroll"])
 
-        for sheet_name, staff_id, worker_name, gross, net in [
-            ("MSC_Ghana_Ltd", "MSC-MC-001", "Adwoa Frimpong", 1500, 1300),
-            ("Stellar_Logistics", "STL-MC-001", "Yaw Antwi", 1000, 900),
+        # Rows carry a basic salary: the compute engine derives everything
+        # from basic, and the §8 hard-stop refuses active workers without one.
+        for sheet_name, staff_id, worker_name, basic, gross, net in [
+            ("MSC_Ghana_Ltd", "MSC-MC-001", "Adwoa Frimpong", 1200, 1500, 1300),
+            ("Stellar_Logistics", "STL-MC-001", "Yaw Antwi", 800, 1000, 900),
         ]:
             sheet = workbook.create_sheet(sheet_name)
             sheet.append(["Client payroll export"])
             sheet.append([])
-            sheet.append(["Staff ID", "Employee Name", "Status", "Gross Pay", "PAYE", "SSNIT", "Net Pay"])
-            sheet.append([staff_id, worker_name, "Active", gross, 100, 50, net])
+            sheet.append(["Staff ID", "Employee Name", "Status", "Basic Salary", "Gross Pay", "PAYE", "SSNIT", "Net Pay"])
+            sheet.append([staff_id, worker_name, "Active", basic, gross, 100, 50, net])
 
         unmatched = workbook.create_sheet("Unknown_Client_Payroll")
         unmatched.append(["Staff ID", "Employee Name", "Gross Pay", "Net Pay"])
@@ -282,9 +284,9 @@ class MvpTestCase(unittest.TestCase):
         sheet.title = "Consolidated_Mixed_Clients"
         sheet.append(["Chrisnat Limited", "Mixed client payroll"])
         sheet.append([])
-        sheet.append(["Client Company", "Staff ID", "Worker", "Gross Amount", "Tax Deducted", "SSNIT Emp", "Net Amount"])
-        sheet.append(["MSC Ghana Ltd", "MSC-C-001", "Efua Mensah", "GHC 1,200.00", "100", "50", "1,050.00"])
-        sheet.append(["Stellar Logistics", "STL-C-001", "Kofi Adu", "900", "80", "40", "780"])
+        sheet.append(["Client Company", "Staff ID", "Worker", "Basic Pay", "Gross Amount", "Tax Deducted", "SSNIT Emp", "Net Amount"])
+        sheet.append(["MSC Ghana Ltd", "MSC-C-001", "Efua Mensah", "1,000.00", "GHC 1,200.00", "100", "50", "1,050.00"])
+        sheet.append(["Stellar Logistics", "STL-C-001", "Kofi Adu", "750", "900", "80", "40", "780"])
         stream = BytesIO()
         workbook.save(stream)
         stream.seek(0)
@@ -830,6 +832,50 @@ class MvpTestCase(unittest.TestCase):
             self.assertIsNotNone(stellar_run)
             self.assertEqual(PayrollItem.query.filter_by(payroll_run_id=msc_run.id).count(), 1)
             self.assertEqual(PayrollItem.query.filter_by(payroll_run_id=stellar_run.id).count(), 1)
+
+    def test_confirm_blocks_upload_with_zero_basic_active_workers(self):
+        """§8 hard-stop: an upload whose active workers carry no basic salary
+        is refused at confirm — everything is derived from basic, so a zero
+        basic silently zeroes the whole row (the run-9 defect class)."""
+        self.login_admin()
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "MSC_Ghana_Ltd"
+        sheet.append(["Staff ID", "Employee Name", "Status", "Gross Pay", "Net Pay"])
+        sheet.append(["MSC-ZB-001", "Zero Basic Worker", "Active", 1500, 1300])
+        stream = BytesIO()
+        workbook.save(stream)
+        stream.seek(0)
+
+        with self.app.app_context():
+            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_id = client_company.id
+
+        response = self.client.post(
+            "/payroll/runs",
+            data={
+                "client_company_id": str(client_id),
+                "month": "August",
+                "year": "2101",
+                "payroll_file": (stream, "zero_basic.xlsx"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        import_id = response.headers["Location"].rstrip("/").split("/")[-1]
+
+        confirm_response = self.client.post(
+            f"/payroll/confirm/{import_id}", follow_redirects=True
+        )
+        self.assertEqual(confirm_response.status_code, 200)
+        self.assertIn(b"Import blocked", confirm_response.data)
+        with self.app.app_context():
+            self.assertIsNone(
+                PayrollRun.query.filter_by(
+                    client_company_id=client_id, month="August", year=2101
+                ).first()
+            )
 
     def test_duplicate_payroll_requires_replacement_confirmation(self):
         self.login_admin()

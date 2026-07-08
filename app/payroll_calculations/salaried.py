@@ -39,6 +39,7 @@ class SalariedResult:
     transport_allowance: float
     housing_allowance: float
     medical_allowance: float
+    meal_allowance: float       # "MEALS" (ACS column L) — taxable cash allowance
     productivity_bonus: float
     end_of_year_bonus: float    # one-off bonus; shares the annual concession cap
     other_allowances: float
@@ -60,6 +61,8 @@ class SalariedResult:
     tax_relief_monthly: float   # GRA relief subtracted from ordinary taxable income
     loan_deduction: float
     loan_advance: float         # cash advanced to the worker — adds to net pay
+    welfare_deduction: float    # post-tax (ACS column AC)
+    iou_deduction: float        # post-tax (ACS column AE)
     other_deductions: float
     total_deductions: float
     net_pay: float
@@ -71,6 +74,7 @@ class SalariedResult:
             "transport_allowance": self.transport_allowance,
             "housing_allowance": self.housing_allowance,
             "medical_allowance": self.medical_allowance,
+            "meal_allowance": self.meal_allowance,
             "productivity_bonus": self.productivity_bonus,
             "end_of_year_bonus": self.end_of_year_bonus,
             "other_allowances": self.other_allowances,
@@ -90,6 +94,8 @@ class SalariedResult:
             "pf_fund_employee": self.pf_fund_employee,
             "loan_deduction": self.loan_deduction,
             "loan_advance": self.loan_advance,
+            "welfare_deduction": self.welfare_deduction,
+            "iou_deduction": self.iou_deduction,
             "other_deductions": self.other_deductions,
             "total_deductions": self.total_deductions,
             "net_pay": self.net_pay,
@@ -113,6 +119,7 @@ class SalariedCalculator:
         transport_allowance=0,
         housing_allowance=0,
         medical_allowance=0,
+        meal_allowance=0,
         productivity_bonus=0,
         end_of_year_bonus=0,
         other_allowances=0,
@@ -122,6 +129,8 @@ class SalariedCalculator:
         tax_relief_monthly=0,
         loan_deduction=0,
         loan_advance=0,
+        welfare_deduction=0,
+        iou_deduction=0,
         other_deductions=0,
         bonus_concession_used_ytd=0,
     ):
@@ -138,13 +147,17 @@ class SalariedCalculator:
         already used in OTHER runs this tax year (see
         ``payroll_calculations.bonus_concession_used_ytd``) — the annual cap
         is enforced once across the year, not once per run.
-        ``loan_deduction``/``other_deductions`` are post-tax; ``loan_advance``
-        is cash paid out with this payroll (opposite direction to the loan
-        deduction: it adds to net pay and is never taxable income)."""
+        ``meal_allowance`` ("MEALS", ACS column L) is a taxable cash allowance
+        like transport/medical. ``welfare_deduction`` (AC) and
+        ``iou_deduction`` (AE) are post-tax like ``loan_deduction`` and
+        ``other_deductions``; ``loan_advance`` is cash paid out with this
+        payroll (opposite direction to the loan deduction: it adds to net pay
+        and is never taxable income)."""
         basic_salary = _r2(basic_salary)
         transport_allowance = _r2(transport_allowance)
         housing_allowance = _r2(housing_allowance)
         medical_allowance = _r2(medical_allowance)
+        meal_allowance = _r2(meal_allowance)
         productivity_bonus = _r2(productivity_bonus)
         end_of_year_bonus = _r2(end_of_year_bonus)
         other_allowances = _r2(other_allowances)
@@ -154,6 +167,8 @@ class SalariedCalculator:
         tax_relief_monthly = _r2(tax_relief_monthly)
         loan_deduction = _r2(loan_deduction)
         loan_advance = _r2(loan_advance)
+        welfare_deduction = _r2(welfare_deduction)
+        iou_deduction = _r2(iou_deduction)
         other_deductions = _r2(other_deductions)
 
         ssf_employee = _r2(basic_salary * self.rate.ssf_employee_rate)
@@ -183,6 +198,7 @@ class SalariedCalculator:
             + transport_allowance
             + housing_allowance
             + medical_allowance
+            + meal_allowance
             + other_allowances
             + pay_difference
             + bonus_excess
@@ -196,6 +212,7 @@ class SalariedCalculator:
             + transport_allowance
             + housing_allowance
             + medical_allowance
+            + meal_allowance
             + productivity_bonus
             + end_of_year_bonus
             + other_allowances
@@ -203,7 +220,13 @@ class SalariedCalculator:
             + pay_difference
         )
         total_deductions = _r2(
-            ssf_employee + paye + pf_fund_employee + loan_deduction + other_deductions
+            ssf_employee
+            + paye
+            + pf_fund_employee
+            + loan_deduction
+            + welfare_deduction
+            + iou_deduction
+            + other_deductions
         )
         net_pay = _r2(gross_pay - total_deductions + loan_advance)
 
@@ -212,6 +235,7 @@ class SalariedCalculator:
             transport_allowance=transport_allowance,
             housing_allowance=housing_allowance,
             medical_allowance=medical_allowance,
+            meal_allowance=meal_allowance,
             productivity_bonus=productivity_bonus,
             end_of_year_bonus=end_of_year_bonus,
             other_allowances=other_allowances,
@@ -233,6 +257,8 @@ class SalariedCalculator:
             tax_relief_monthly=tax_relief_monthly,
             loan_deduction=loan_deduction,
             loan_advance=loan_advance,
+            welfare_deduction=welfare_deduction,
+            iou_deduction=iou_deduction,
             other_deductions=other_deductions,
             total_deductions=total_deductions,
             net_pay=net_pay,

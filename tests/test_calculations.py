@@ -185,8 +185,11 @@ class CalculationTestCase(unittest.TestCase):
             (730.00, 18.50),     # exact 17.5% threshold
             (3896.67, 572.67),   # exact 25% threshold
             (19896.67, 4572.67), # exact 30% threshold
-            (50000.00, 13728.67),# exact 35% threshold
-            (60000.00, 17228.67),# well into the 35% band
+            # 35% starts at GRA's 605,000/12 = 50,416.67 — NOT the source
+            # sheet's 50,000. At 50,000 the 30% band still applies.
+            (50000.00, 13603.67),  # inside the 30% band (sheet had a gap here)
+            (50416.67, 13728.67),  # exact 35% threshold, continuous with 30%
+            (60000.00, 17082.84),  # well into the 35% band
         ]
         for taxable, expected in cases:
             with self.subTest(taxable=taxable):
@@ -820,9 +823,11 @@ class ColumnAliasTestCase(unittest.TestCase):
         self.assertEqual(mapping["A/C Number"], "bank_account_number")
         self.assertEqual(mapping["Company Assigned"], "client_company")
         self.assertEqual(mapping["Overtime Allowance"], "overtime_pay")
-        self.assertEqual(mapping["Meal Allowance"], "other_allowances")
-        self.assertEqual(mapping["Welfare Supplies"], "other_deductions")
-        self.assertEqual(mapping["IOU Deduction"], "other_deductions")
+        # Meal/welfare/IOU now land in their own dedicated columns (build
+        # spec §3) instead of folding into other_allowances/other_deductions.
+        self.assertEqual(mapping["Meal Allowance"], "meal_allowance")
+        self.assertEqual(mapping["Welfare Supplies"], "welfare_deduction")
+        self.assertEqual(mapping["IOU Deduction"], "iou_deduction")
         self.assertEqual(mapping["Pay Difference"], "pay_difference")
 
 

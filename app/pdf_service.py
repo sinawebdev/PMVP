@@ -85,18 +85,26 @@ def _earnings_rows(item):
         rows.append(("Transport Allowance", item.transport_allowance))
     if item.housing_allowance:
         rows.append(("Housing Allowance", item.housing_allowance))
+    if item.meal_allowance:
+        rows.append(("Meal Allowance", item.meal_allowance))
     if item.other_allowances:
         rows.append(("Other Allowances", item.other_allowances))
     return rows
 
 
 def _deduction_rows(item):
+    # IOU now has its own PayrollItem column — other_deductions used to
+    # double as the I.O.U line back when the ACS IOU column folded into it.
     rows = [
         ("Income Tax", item.paye),
         ("Social Security 5.5%", item.ssnit),
-        ("I.O.U", item.other_deductions),
+        ("Other Deductions", item.other_deductions),
         ("Loan/Salary Advance", item.loan_deduction),
     ]
+    if item.welfare_deduction:
+        rows.append(("Welfare", item.welfare_deduction))
+    if item.iou_deduction:
+        rows.append(("I.O.U", item.iou_deduction))
     if item.pf_fund_employee:
         rows.append(("PF Fund (Employee)", item.pf_fund_employee))
     if item.tier_2_pension:
