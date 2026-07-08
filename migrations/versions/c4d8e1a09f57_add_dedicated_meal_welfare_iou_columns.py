@@ -1,10 +1,14 @@
-"""add dedicated meal/welfare/IOU columns, overtime source, junior OT threshold
+"""add dedicated meal/welfare/IOU columns and overtime source
 
 Dedicated columns for the ACS RAW DATA inputs that previously folded silently
 into other_allowances / other_deductions (spec §3: don't fold — it destroys
 the audit trail the sheet keeps): L MEALS, AC WELFARE, AE IOU. Plus the
-overtime_source marker (§2 hybrid overtime model) and the GRA junior-staff
-qualifying threshold on statutory_rates (§7.1).
+overtime_source marker (§2 hybrid overtime model).
+
+The statutory_rates.overtime_junior_monthly_threshold column originally lived
+here too, but prod had it added by hand to break a boot deadlock before this
+revision could ever apply — re-adding it here would crash the upgrade with
+DuplicateColumn. It now belongs to f1a9d3c07b62, which creates it idempotently.
 
 Revision ID: c4d8e1a09f57
 Revises: e3b9c7a41f52
@@ -42,21 +46,8 @@ def upgrade():
             )
         )
 
-    with op.batch_alter_table('statutory_rates', schema=None) as batch_op:
-        batch_op.add_column(
-            sa.Column(
-                'overtime_junior_monthly_threshold',
-                sa.Float(),
-                nullable=False,
-                server_default='1500',
-            )
-        )
-
 
 def downgrade():
-    with op.batch_alter_table('statutory_rates', schema=None) as batch_op:
-        batch_op.drop_column('overtime_junior_monthly_threshold')
-
     with op.batch_alter_table('payroll_item', schema=None) as batch_op:
         batch_op.drop_column('overtime_source')
         batch_op.drop_column('iou_deduction')
