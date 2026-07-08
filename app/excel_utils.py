@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 COLUMN_ALIASES = {
-    "staff_id": ["staff no", "staff no.", "staff id", "employee id", "emp id", "staff number", "employee no", "worker id", "s/n", "sn", "no", "serial"],
-    "full_name": ["name", "employee name", "full name", "worker name", "employee", "worker", "officer", "personnel"],
+    "staff_id": ["staff no", "staff no.", "staff id", "employee id", "emp id", "staff number", "employee no", "worker id", "s/n", "sn", "no", "serial", "irs no"],
+    "full_name": ["name", "names", "employee name", "full name", "worker name", "employee", "worker", "officer", "personnel"],
     "client_company": ["client", "client company", "company", "company name", "company assigned", "assigned client"],
     # ID-shaped social-security headers must resolve here, never to the ssnit
     # amount field — hence the explicit "S.S number" / "social security number"
@@ -38,7 +38,7 @@ COLUMN_ALIASES = {
     "basic_salary": ["basic", "basic salary", "base pay", "basic pay", "base salary", "monthly salary", "salary", "basic wage"],
     "transport_allowance": ["transport", "transport allowance", "transportation"],
     "housing_allowance": ["housing", "housing allowance", "rent allowance"],
-    "medical_allowance": ["medical", "medical allowance", "med allowance", "med. allowance"],
+    "medical_allowance": ["medical", "medical allowance", "medical allow", "med allowance", "med. allowance"],
     # "MEALS" (ACS RAW DATA column L) gets its own column — it used to fold
     # silently into other_allowances, destroying the sheet's audit trail.
     "meal_allowance": ["meal allowance", "meals allowance", "meals", "meal"],
@@ -47,9 +47,9 @@ COLUMN_ALIASES = {
     "end_of_year_bonus": ["end of year bonus", "end-of-year bonus", "13th month", "13th month bonus", "annual bonus", "eoy bonus"],
     "productivity_bonus": ["productivity bonus", "productivity", "prod bonus", "prod. bonus", "bonus"],
     "overtime_hours": ["overtime hours", "ot hours"],
-    "overtime_pay": ["overtime", "ot pay", "overtime pay", "overtime allowance"],
+    "overtime_pay": ["overtime", "ot pay", "overtime pay", "overtime allowance", "overtime allow"],
     "other_allowances": ["other allowance", "other allowances", "allowances", "allowance"],
-    "pay_difference": ["pay difference", "pay diff"],
+    "pay_difference": ["pay difference", "pay diff", "pay differece"],
     "gross_pay": ["gross", "gross pay", "gross salary", "total earnings", "gross earnings", "gross amount"],
     "paye": ["paye", "tax", "income tax", "paye tax", "tax deducted"],
     # No bare "social security" here — that substring caught ID headers like
@@ -60,7 +60,7 @@ COLUMN_ALIASES = {
     # loan_advance before loan_deduction is deliberate NOT: loan_deduction
     # stays first so a bare "Loan" header keeps its historical meaning
     # (a deduction); "loan advance" resolves by exact match.
-    "loan_deduction": ["loan deduction", "loan deductions", "loan repayment"],
+    "loan_deduction": ["loan deduction", "loan deductions", "loan repayment", "loan", "loan adv"],
     "loan_advance": ["loan advance", "loan advances", "salary advance"],
     # Welfare (ACS column AC) and IOU (AE) get their own columns — previously
     # folded into other_deductions. No bare "iou" alias in the list: the
@@ -68,7 +68,7 @@ COLUMN_ALIASES = {
     # "IOU" header still resolves because the normalized header is itself a
     # substring of "iou deduction".
     "welfare_deduction": ["welfare", "welfare deduction", "welfare deductions", "welfare supplies"],
-    "iou_deduction": ["iou deduction", "iou deductions", "i o u"],
+    "iou_deduction": ["iou deduction", "iou deductions", "i o u", "i o u deduction", "iou"],
     "other_deductions": ["deduction", "deductions", "other deduction", "other deductions"],
     "total_deductions": ["total deductions", "total deduction"],
     "net_pay": ["net", "net pay", "net salary", "take home", "take home pay", "net amount", "amount payable", "net earnings"],
@@ -268,13 +268,13 @@ def map_columns(columns):
             # silently overwriting basic_salary/net_pay via substring match.
             mapping[column] = "unmapped"
             continue
-        mapped_field = alias_lookup.get(normalized)
-        if mapped_field is None:
-            for alias, field in alias_lookup.items():
-                if alias and (alias in normalized or normalized in alias):
-                    mapped_field = field
-                    break
-        mapping[column] = mapped_field or "unmapped"
+        # Exact-match only. The former substring fallback (alias in normalized
+        # / normalized in alias) let one keyword claim several columns at once
+        # — "OVERTIME" binding both OVERTIME ALLOWANCE and EXCESS OVERTIME,
+        # "TAX" binding every TAXABLE * column to paye — collisions that
+        # mapping_conflicts() then had to refuse. A header matching no alias
+        # exactly is left unmapped and surfaced in the preview, never guessed.
+        mapping[column] = alias_lookup.get(normalized) or "unmapped"
     return mapping
 
 
