@@ -83,7 +83,26 @@ DERIVED_OUTPUT_HEADERS = {
     "15 of annual salary",          # normalize_label("15% of Annual Salary")
     "15 percent of annual salary",
     "15 of annual",
+    # Composite labels from the ACS stacked header ("BASIC" over "TAX" ->
+    # "BASIC TAX"): every one is a tax figure the engine derives itself. If
+    # "basic tax" were allowed through, the substring fallback would bind it
+    # to basic_salary — the exact acs 1.xlsx clobber.
+    "basic tax",
+    "overtime tax",
+    "ot tax",
+    "o t tax",                      # normalize_label("O.T TAX")
+    "bonus tax",
+    "total tax",
 }
+
+# A payroll import is refused outright when any of these has no column.
+MANDATORY_IMPORT_FIELDS = ("staff_id", "full_name", "basic_salary")
+
+# A staff-ID in the first column marks the first data row (AC605, MT035, ...).
+# Rows between the detected header row and this anchor are stacked sub-label
+# rows (the ACS sheet has label + sub-label + a blank row before data).
+STAFF_ID_RE = re.compile(r"^[A-Z]{2,4}\d{2,}$")
+STACKED_HEADER_MAX_DEPTH = 5
 
 MONEY_FIELDS = {
     "basic_salary",
@@ -237,7 +256,12 @@ def map_columns(columns):
             alias_lookup[normalize_label(alias)] = field
 
     for column in columns:
-        normalized = normalize_label(column)
+        # Duplicate columns arrive suffixed (" (2)", " (3)") from
+        # build_composite_columns; map them exactly like their base label so
+        # both bind the same field and mapping_conflicts() can refuse the
+        # pair — instead of the suffix garbling the lookup (e.g. "ssnit 2"
+        # substring-matching staff_id's "sn" alias).
+        normalized = normalize_label(re.sub(r"\s*\(\d+\)\s*$", "", str(column)))
         if normalized in DERIVED_OUTPUT_HEADERS:
             # System-derived figure: never accepted from an upload — leave it
             # unmapped so the rep sees it in the preview instead of it
@@ -252,6 +276,79 @@ def map_columns(columns):
                     break
         mapping[column] = mapped_field or "unmapped"
     return mapping
+
+
+def mapping_conflicts(mapping, mandatory=MANDATORY_IMPORT_FIELDS):
+    """Errors that make a column mapping unsafe to import: a field claimed by
+    more than one column (the row reader would silently last-wins — how
+    'BASIC' bound basic_salary to the tax column in acs 1.xlsx), or a
+    mandatory field with no column at all. Never guesses; the import is
+    refused with the specific collision."""
+    by_field = {}
+    for column, field in mapping.items():
+        if field and field != "unmapped":
+            by_field.setdefault(field, []).append(str(column))
+    errors = []
+    for field, columns in by_field.items():
+        if len(columns) > 1:
+            errors.append(
+                f"Field '{field}' is claimed by {len(columns)} columns "
+                f"({', '.join(columns)}). Each payroll figure must come from "
+                "exactly one column — refusing to guess which."
+            )
+    for field in mandatory:
+        if field not in by_field:
+            errors.append(
+                f"Mandatory column '{field}' was not found in the sheet "
+                "header — the import cannot proceed without it."
+            )
+    return errors
+
+
+def find_data_start(rows, header_row, max_depth=STACKED_HEADER_MAX_DEPTH):
+    """First data row below the detected header row (0-based), anchored on a
+    staff-ID in the first column. ACS-style sheets stack sub-label rows (and
+    a blank row) between the label row and the data, so 'header + 1' is
+    wrong there. Falls back to header_row + 1 when no anchor is found within
+    max_depth rows, or when an intermediate row has a non-empty first cell
+    (that's data with a different ID shape, not a sub-label row)."""
+    fallback = header_row + 1
+    limit = min(len(rows), header_row + 1 + max_depth)
+    for index in range(header_row + 1, limit):
+        row = rows[index]
+        first = str(row[0] if row else "").strip()
+        if STAFF_ID_RE.match(first):
+            return index
+        if first:
+            return fallback
+    return fallback
+
+
+def build_composite_columns(rows, header_row, data_start):
+    """One label per column from the stacked header block
+    (rows[header_row:data_start]): 'BASIC' over 'SALARY' becomes
+    'BASIC SALARY', which can never collide with 'BASIC TAX'. Duplicate
+    composites get a ' (n)' suffix so two same-named columns stay distinct
+    all the way into the mapping, where mapping_conflicts() refuses them
+    instead of letting the row reader last-wins."""
+    block = rows[header_row:data_start]
+    width = max((len(row) for row in block), default=0)
+    names, seen = [], {}
+    for col in range(width):
+        parts = []
+        for row in block:
+            cell = str(row[col] if col < len(row) else "").strip()
+            if cell and cell.lower() not in {"nan", "none"}:
+                parts.append(cell)
+        name = re.sub(r"\s+", " ", " ".join(parts)).strip()
+        if not name:
+            name = f"Unnamed: {col}"
+        count = seen.get(name, 0) + 1
+        seen[name] = count
+        if count > 1:
+            name = f"{name} ({count})"
+        names.append(name)
+    return names
 
 
 def workbook_sheet_names(file_path):
@@ -380,21 +477,39 @@ def match_client_sheet(client_name, sheet_names):
     return None
 
 
-def read_excel_file(file_path, sheet_name=None):
+def _read_sheet_frame(file_path, sheet_name=None):
+    """DataFrame + mapping + layout metadata for one sheet, resolving stacked
+    (multi-row) headers: the header block runs from the scored header row down
+    to the staff-ID data anchor, and each column's name is the composite of
+    its stacked labels — so 'BASIC SALARY' and 'BASIC TAX' arrive distinct."""
     header_row = find_header_row(file_path, sheet_name)
     ext = file_path.rsplit(".", 1)[1].lower()
     sheet_arg = sheet_name if sheet_name is not None else 0
     if ext == "csv":
-        df = pd.read_csv(file_path, header=header_row, dtype=str)
+        full = pd.read_csv(file_path, header=None, dtype=str)
     elif ext == "xlsx":
-        df = pd.read_excel(file_path, sheet_name=sheet_arg, engine="openpyxl", header=header_row, dtype=str)
+        full = pd.read_excel(file_path, sheet_name=sheet_arg, engine="openpyxl", header=None, dtype=str)
     else:
-        df = pd.read_excel(file_path, sheet_name=sheet_arg, header=header_row, dtype=str)
+        full = pd.read_excel(file_path, sheet_name=sheet_arg, header=None, dtype=str)
+    raw_rows = full.fillna("").values.tolist()
+    data_start = find_data_start(raw_rows, header_row)
+    columns = build_composite_columns(raw_rows, header_row, data_start)
+    df = full.iloc[data_start:].copy()
+    df.columns = columns
     df = df.dropna(how="all")
-    df.columns = [str(column).strip() for column in df.columns]
     df = df.fillna("")
     mapping = map_columns(df.columns)
-    return df, mapping
+    return {
+        "df": df,
+        "mapping": mapping,
+        "header_row": header_row,
+        "data_start": data_start,
+    }
+
+
+def read_excel_file(file_path, sheet_name=None):
+    frame = _read_sheet_frame(file_path, sheet_name)
+    return frame["df"], frame["mapping"]
 
 
 def detect_company_name(file_path, known_company_names=None, sheet_name=None):
@@ -607,16 +722,20 @@ def summarize_mapped_rows(mapped_rows):
 
 
 def extract_payroll_sheet(file_path, sheet_name=None):
-    header_row = find_header_row(file_path, sheet_name)
-    df, mapping = read_excel_file(file_path, sheet_name)
+    frame = _read_sheet_frame(file_path, sheet_name)
+    df, mapping = frame["df"], frame["mapping"]
+    header_row = frame["header_row"]
+    mapping_errors = mapping_conflicts(mapping)
     unmapped_columns = [column for column, field in mapping.items() if field == "unmapped"]
     logger.debug(
-        "Smart Excel Import Engine: sheet=%s detected_header_row=%s columns=%s mapped_columns=%s unmapped_columns=%s",
+        "Smart Excel Import Engine: sheet=%s detected_header_row=%s data_start_row=%s columns=%s mapped_columns=%s unmapped_columns=%s mapping_errors=%s",
         sheet_name or workbook_sheet_names(file_path)[0],
         header_row + 1,
+        frame["data_start"] + 1,
         list(df.columns),
         {column: field for column, field in mapping.items() if field != "unmapped"},
         unmapped_columns,
+        mapping_errors,
     )
     mapped_rows = mapped_rows_from_dataframe(df, mapping)
     worker_stats = calculate_worker_stats(mapped_rows)
@@ -624,8 +743,10 @@ def extract_payroll_sheet(file_path, sheet_name=None):
     return {
         "sheet_name": sheet_name or workbook_sheet_names(file_path)[0],
         "detected_header_row": header_row + 1,
+        "data_start_row": frame["data_start"] + 1,
         "columns": list(df.columns),
         "mapping": mapping,
+        "mapping_errors": mapping_errors,
         "preview_rows": df.head(20).astype(str).to_dict(orient="records"),
         "mapped_rows": mapped_rows,
         "worker_stats": worker_stats,

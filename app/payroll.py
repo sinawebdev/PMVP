@@ -34,6 +34,7 @@ from app.excel_utils import (
     export_payroll_run,
     export_wages_sheet,
     export_import_error_report,
+    mapping_conflicts,
     match_client_sheet,
     normalize_company_key,
     payroll_sheet_candidates,
@@ -205,6 +206,11 @@ def build_run_payload_from_extraction(
         file_path, known_names, extraction["sheet_name"]
     )
     validation = validate_payroll_rows(mapped_rows, client, month, year, detected_company_name)
+    # Mapping conflicts surface on the preview as warnings and hard-stop the
+    # confirm — same split as the §8 row-level checks.
+    validation.setdefault("summary_warnings", []).extend(
+        extraction.get("mapping_errors", [])
+    )
     import_summary = summarize_import(mapped_rows, validation)
     worker_stats = calculate_worker_stats(mapped_rows)
     status_breakdown = calculate_status_breakdown(mapped_rows)
@@ -219,6 +225,7 @@ def build_run_payload_from_extraction(
         "year": year,
         "columns": extraction["columns"],
         "mapping": extraction["mapping"],
+        "mapping_errors": extraction.get("mapping_errors", []),
         "unmapped_columns": [column for column, field in extraction["mapping"].items() if field == "unmapped"],
         "preview_rows": extraction["preview_rows"],
         "mapped_rows": mapped_rows,
@@ -264,6 +271,9 @@ def build_single_payload(file_path, source_filename, client, month, year, select
 
     detected_company_name = detect_company_name(file_path, known_names, matched_sheet_name)
     validation = validate_payroll_rows(mapped_rows, client, month, year, detected_company_name)
+    validation.setdefault("summary_warnings", []).extend(
+        extraction.get("mapping_errors", [])
+    )
     import_summary = summarize_import(mapped_rows, validation)
     current_app.logger.info(
         "Smart Excel Import Engine: matched_sheet=%s header_row=%s columns=%s mapping=%s rows=%s ignored=%s warnings=%s",
@@ -287,6 +297,7 @@ def build_single_payload(file_path, source_filename, client, month, year, select
         "year": year,
         "columns": extraction["columns"],
         "mapping": extraction["mapping"],
+        "mapping_errors": extraction.get("mapping_errors", []),
         "unmapped_columns": [column for column, field in extraction["mapping"].items() if field == "unmapped"],
         "preview_rows": extraction["preview_rows"],
         "mapped_rows": mapped_rows,
@@ -544,7 +555,10 @@ def confirm(import_id):
     # Spec §8 hard-stops: a corrupted upload (wrong header row, zero-basic
     # active workers) is refused outright — warn-and-proceed is what let
     # production run 9 persist net > gross rows. Cheap, no DB round trips.
-    blocking = collect_blocking_errors(
+    # Mapping conflicts (one field claimed by several columns, mandatory
+    # field unmapped) are recomputed from the stored mapping so payloads
+    # persisted before this check existed are covered too.
+    blocking = mapping_conflicts(payload.get("mapping") or {}) + collect_blocking_errors(
         payload["mapped_rows"], payload.get("detected_company_name", "")
     )
     if blocking:
@@ -609,7 +623,9 @@ def confirm_multi_client_import(import_id, payload):
     # multi-client import rather than leaving a partial batch.
     blocking = []
     for run_payload in runs:
-        for error in collect_blocking_errors(
+        for error in mapping_conflicts(
+            run_payload.get("mapping") or {}
+        ) + collect_blocking_errors(
             run_payload["mapped_rows"], run_payload.get("detected_company_name", "")
         ):
             blocking.append(f"{run_payload.get('client_company_name', 'Sheet')}: {error}")
