@@ -27,12 +27,14 @@ def seed_default_data():
     db.session.commit()
 
 
-# Initial statutory rate version, transcribed from the ACS workbook's live PAYE
-# formula (January 2026) and the SSF split encoded in both client workbooks.
+# Initial statutory rate version from the ACS workbook's live PAYE formula
+# (January 2026), CORRECTED against the GRA 2026 schedule: the sheet started
+# the 35% band at 50,000 but GRA's annual 605,000 / 12 = 50,416.67 — the
+# sheet's cumulative constant 13,728.67 is right, its threshold was low.
 # VERIFY against the current GRA circular / SSNIT gazette before relying on
 # these long-term — PAYE bands are revised regularly.
 INITIAL_PAYE_BANDS = [
-    {"over": 50000, "rate": 0.35, "base": 13728.67},
+    {"over": 50416.67, "rate": 0.35, "base": 13728.67},
     {"over": 19896.67, "rate": 0.30, "base": 4572.67},
     {"over": 3896.67, "rate": 0.25, "base": 572.67},
     {"over": 730, "rate": 0.175, "base": 18.5},
@@ -58,10 +60,16 @@ def seed_statutory_rates():
             overtime_basic_threshold=0.50,
             bonus_rate=0.05,
             bonus_annual_basic_threshold=0.15,
+            # GRA junior-staff gate for the overtime concession:
+            # GHS 18,000/year qualifying income = 1,500/month. Overtime
+            # earners above this get a visible warning (§7.1).
+            overtime_junior_monthly_threshold=1500.0,
             notes=(
                 "Seeded from ACS workbook PAYE formula (January 2026) and the "
-                "SSNIT 5.5%/13% split in the client workbooks. Verify against "
-                "the current GRA circular before treating as permanent."
+                "SSNIT 5.5%/13% split in the client workbooks; 35% band "
+                "threshold corrected to GRA's 50,416.67 (the sheet used "
+                "50,000). Verify against the current GRA circular before "
+                "treating as permanent."
             ),
         )
     )

@@ -118,6 +118,53 @@ class CalculationTestCase(unittest.TestCase):
         self.assertAlmostEqual(fields["annual_salary"], 20101.68, delta=0.01)
         self.assertAlmostEqual(fields["annual_salary_15pct"], 3015.25, delta=0.01)
 
+    def test_salaried_ac661_mid_overtime_regression(self):
+        """ACS workbook, AC661, January 2026 — the mid-overtime golden row
+        from the build brief: gross 3811.06, total tax 340.84 (overtime
+        component 156.17), net 3215.50.
+
+        Inputs reproduce the brief's targets exactly: overtime 1946.80,
+        transport 323.93, PF fund 100.00 and a 70.00 post-tax deduction
+        (booked here as loan_deduction; every post-tax bucket subtracts
+        identically, so the golden figures don't depend on the bucket)."""
+        calc = SalariedCalculator(self._rate_jan_2026())
+        result = calc.calculate(
+            1540.33,
+            overtime_pay=1946.80,
+            transport_allowance=323.93,
+            pf_fund_employee=100.00,
+            loan_deduction=70.00,
+        )
+
+        self.assertAlmostEqual(result.gross_pay, 3811.06, delta=0.01)
+        # Overtime: 50% of basic = 770.17 -> 38.51 at 5%; excess 1176.64 -> 117.66 at 10%.
+        self.assertAlmostEqual(result.overtime_tax, 156.17, delta=0.01)
+        self.assertAlmostEqual(result.ordinary_paye, 184.67, delta=0.01)
+        self.assertAlmostEqual(result.paye, 340.84, delta=0.01)
+        self.assertAlmostEqual(result.net_pay, 3215.50, delta=0.01)
+        self.assertAlmostEqual(result.ssnit, 84.72, delta=0.01)
+        self.assertAlmostEqual(result.net_basic_wage, 1455.61, delta=0.01)
+        self.assertAlmostEqual(result.taxable_income, 1679.54, delta=0.01)
+        self.assertLessEqual(result.net_pay, result.gross_pay)
+
+    def test_golden_rows_never_pay_net_above_gross(self):
+        """Build-brief invariant, asserted on all three golden fixtures:
+        net_pay <= gross_pay on every computed row (loan_advance, absent
+        from all three real rows, is the one legitimate exception)."""
+        calc = SalariedCalculator(self._rate_jan_2026())
+        fixtures = {
+            "AC605": dict(transport_allowance=323.93, pf_fund_employee=100.00),
+            "AC636": dict(overtime_pay=3125.30, transport_allowance=323.93,
+                          pf_fund_employee=100.00),
+            "AC661": dict(overtime_pay=1946.80, transport_allowance=323.93,
+                          pf_fund_employee=100.00, loan_deduction=70.00),
+        }
+        basics = {"AC605": 2737.37, "AC636": 1675.14, "AC661": 1540.33}
+        for staff, inputs in fixtures.items():
+            with self.subTest(staff=staff):
+                result = calc.calculate(basics[staff], **inputs)
+                self.assertLessEqual(result.net_pay, result.gross_pay)
+
     def test_salaried_bonus_concession_threshold(self):
         """Synthetic bonus case (no real fixture exists this month): bonus up
         to 15% of ANNUAL basic taxes flat at 5%; the excess joins ordinary
@@ -185,8 +232,11 @@ class CalculationTestCase(unittest.TestCase):
             (730.00, 18.50),     # exact 17.5% threshold
             (3896.67, 572.67),   # exact 25% threshold
             (19896.67, 4572.67), # exact 30% threshold
-            (50000.00, 13728.67),# exact 35% threshold
-            (60000.00, 17228.67),# well into the 35% band
+            # 35% starts at GRA's 605,000/12 = 50,416.67 — NOT the source
+            # sheet's 50,000. At 50,000 the 30% band still applies.
+            (50000.00, 13603.67),  # inside the 30% band (sheet had a gap here)
+            (50416.67, 13728.67),  # exact 35% threshold, continuous with 30%
+            (60000.00, 17082.84),  # well into the 35% band
         ]
         for taxable, expected in cases:
             with self.subTest(taxable=taxable):
@@ -820,9 +870,11 @@ class ColumnAliasTestCase(unittest.TestCase):
         self.assertEqual(mapping["A/C Number"], "bank_account_number")
         self.assertEqual(mapping["Company Assigned"], "client_company")
         self.assertEqual(mapping["Overtime Allowance"], "overtime_pay")
-        self.assertEqual(mapping["Meal Allowance"], "other_allowances")
-        self.assertEqual(mapping["Welfare Supplies"], "other_deductions")
-        self.assertEqual(mapping["IOU Deduction"], "other_deductions")
+        # Meal/welfare/IOU now land in their own dedicated columns (build
+        # spec §3) instead of folding into other_allowances/other_deductions.
+        self.assertEqual(mapping["Meal Allowance"], "meal_allowance")
+        self.assertEqual(mapping["Welfare Supplies"], "welfare_deduction")
+        self.assertEqual(mapping["IOU Deduction"], "iou_deduction")
         self.assertEqual(mapping["Pay Difference"], "pay_difference")
 
 

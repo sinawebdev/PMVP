@@ -1,6 +1,6 @@
 from sqlalchemy import or_
 
-from app.excel_utils import normalize_label, normalize_worker
+from app.excel_utils import looks_like_header_label, normalize_label, normalize_worker
 from app.models import Employee, PayrollItem, PayrollRun
 from app.payroll_status import CLOSED_STATUSES
 
@@ -21,6 +21,59 @@ def build_worker_key(row):
     if full_name:
         return f"name:{full_name}"
     return ""
+
+
+def collect_blocking_errors(mapped_rows, detected_company_name=""):
+    """Spec §8 hard-stops: conditions under which the confirm must refuse to
+    create the run, not warn-and-proceed. Everything here signals a corrupted
+    upload (the wrong header row / data-shifted columns of production run 9),
+    not a data-quality nit."""
+    errors = []
+
+    # A header-label company name ALONE is not proof of a shifted import —
+    # detect_company_name can grab a header cell off a perfectly aligned
+    # sheet (the acs 1.xlsx case), and that stays a warning. Block only when
+    # the row data corroborates the shift: worker names that are themselves
+    # column headings or bare numbers, the run-9 signature.
+    if detected_company_name and looks_like_header_label(detected_company_name):
+        shifted = [
+            row
+            for row in mapped_rows
+            if build_worker_key(row)
+            and looks_like_header_label(
+                str(row.get("full_name") or ""), numeric_is_suspicious=True
+            )
+        ]
+        if shifted:
+            errors.append(
+                f'The detected company name "{detected_company_name}" matches a '
+                f"spreadsheet column heading and {len(shifted)} worker name(s) "
+                "also read like headings or bare numbers — the wrong header row "
+                "was almost certainly picked and the mapped data is shifted. "
+                "Fix the sheet and re-upload."
+            )
+
+    zero_basic = []
+    for row in mapped_rows:
+        if not build_worker_key(row):
+            continue  # blank rows are dropped before persistence, not blocked
+        status = normalize_label(row.get("status"))
+        if "inactive" in status or "terminated" in status:
+            continue
+        if float(row.get("basic_salary") or 0) <= 0:
+            zero_basic.append(
+                str(row.get("staff_id") or row.get("full_name") or "?").strip()
+            )
+    if zero_basic:
+        shown = ", ".join(zero_basic[:10])
+        more = f" (+{len(zero_basic) - 10} more)" if len(zero_basic) > 10 else ""
+        errors.append(
+            f"{len(zero_basic)} active worker(s) have no basic salary: {shown}{more}. "
+            "Every statutory figure is derived from basic salary, so a zero "
+            "basic zeroes the whole row — fix the sheet before importing."
+        )
+
+    return errors
 
 
 def validate_payroll_rows(
@@ -61,6 +114,18 @@ def validate_payroll_rows(
     ):
         warnings.append(
             f"Selected client is {client_company.name}, but Excel appears to mention {detected_company_name}."
+        )
+
+    # Header-misdetection guard: when the detected company name is itself a
+    # column label (e.g. "GH CARD", "JOB TITLE" from the acs 1.xlsx import), the
+    # header-row detector locked onto the wrong row and the mapped data is
+    # almost certainly shifted. Surface it loudly rather than persisting garbage.
+    if detected_company_name and looks_like_header_label(detected_company_name):
+        warnings.append(
+            f'The detected company name "{detected_company_name}" looks like a '
+            "spreadsheet column heading, not a company — the wrong header row was "
+            "likely picked. Check that names, salaries and bank details lined up "
+            "before confirming this import."
         )
 
     # One query each instead of one per row — the per-row versions of these
@@ -182,6 +247,14 @@ def validate_single_row(row, employees_by_staff_id=None):
         warnings.append("Missing staff ID.")
     if not full_name:
         warnings.append("Missing employee name.")
+    # Header-misdetection guard: a "name" that is actually a column heading
+    # ("NAMES", "JOB TITLE") or a bare number ("0") means the row is data-shifted
+    # — the same failure that gave every acs 1.xlsx worker the name "0".
+    elif looks_like_header_label(full_name, numeric_is_suspicious=True):
+        warnings.append(
+            f'Employee name "{full_name}" looks like a column heading or placeholder, '
+            "not a real name — the upload may have the wrong header row."
+        )
     if not ssnit_number:
         if employees_by_staff_id is not None:
             employee = employees_by_staff_id.get(staff_id) if staff_id else None
@@ -197,28 +270,43 @@ def validate_single_row(row, employees_by_staff_id=None):
         warnings.append("Net pay missing; calculated by system.")
     if float(row.get("net_pay") or 0) < 0:
         warnings.append("Negative net pay.")
-    for field in ("basic_salary", "gross_pay", "paye", "ssnit", "tier_2_pension", "loan_deduction", "other_deductions", "total_deductions", "net_pay"):
+    for field in ("basic_salary", "gross_pay", "paye", "ssnit", "tier_2_pension", "pf_fund_employee", "loan_deduction", "welfare_deduction", "iou_deduction", "other_deductions", "total_deductions", "net_pay"):
         if float(row.get(field) or 0) < 0:
             warnings.append("Negative salary or deduction value.")
             break
 
     gross_pay = float(row.get("gross_pay") or 0)
     basic_salary = float(row.get("basic_salary") or 0)
+    if basic_salary <= 0 and "inactive" not in status and "terminated" not in status:
+        warnings.append(
+            "No basic salary — every derived figure will be zero; "
+            "the import will be blocked until this is fixed."
+        )
+    # The full §5.6 gross component set — missing components here produced
+    # false "does not match" warnings on rows with medical/meal/bonus figures.
     calculated_gross = (
         basic_salary
         + float(row.get("transport_allowance") or 0)
         + float(row.get("housing_allowance") or 0)
+        + float(row.get("medical_allowance") or 0)
+        + float(row.get("meal_allowance") or 0)
+        + float(row.get("productivity_bonus") or 0)
+        + float(row.get("end_of_year_bonus") or 0)
         + float(row.get("overtime_pay") or 0)
         + float(row.get("other_allowances") or 0)
+        + float(row.get("pay_difference") or 0)
     )
     total_deductions = (
         float(row.get("paye") or 0)
         + float(row.get("ssnit") or 0)
         + float(row.get("tier_2_pension") or 0)
+        + float(row.get("pf_fund_employee") or 0)
         + float(row.get("loan_deduction") or 0)
+        + float(row.get("welfare_deduction") or 0)
+        + float(row.get("iou_deduction") or 0)
         + float(row.get("other_deductions") or 0)
     )
-    expected_net_pay = gross_pay - total_deductions
+    expected_net_pay = gross_pay - total_deductions + float(row.get("loan_advance") or 0)
 
     if gross_pay < basic_salary:
         warnings.append("Gross pay is less than basic salary.")

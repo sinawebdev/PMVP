@@ -27,6 +27,14 @@
             <input class="form-control" id="department" name="department" value="{{ emp.department or '' }}">
         </div>
         <div class="col-md-4">
+            <label class="form-label" for="bank_name">Bank Name</label>
+            <input class="form-control" id="bank_name" name="bank_name" value="{{ emp.bank_name or '' }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="bank_branch">Bank Branch</label>
+            <input class="form-control" id="bank_branch" name="bank_branch" value="{{ emp.bank_branch or '' }}">
+        </div>
+        <div class="col-md-4">
             <label class="form-label" for="bank_account">Bank Account</label>
             <input class="form-control" id="bank_account" name="bank_account" value="{{ emp.bank_account_number or '' }}">
         </div>

@@ -51,6 +51,7 @@ class Employee(db.Model):
     ghana_card_number = db.Column(db.String(80))
     ssnit_number = db.Column(db.String(80))
     bank_name = db.Column(db.String(120))
+    bank_branch = db.Column(db.String(120))
     bank_account_number = db.Column(db.String(80))
     momo_number = db.Column(db.String(40))
     email = db.Column(db.String(160))
@@ -182,6 +183,7 @@ class PayrollItem(db.Model):
     ssnit_number = db.Column(db.String(80))
     ghana_card_number = db.Column(db.String(80))
     bank_name = db.Column(db.String(120))
+    bank_branch = db.Column(db.String(120))
     bank_account_number = db.Column(db.String(80))
     momo_number = db.Column(db.String(40))
     email = db.Column(db.String(160))
@@ -190,12 +192,22 @@ class PayrollItem(db.Model):
     housing_allowance = db.Column(db.Float, default=0)
     # Dedicated earnings columns for the ACS/VBA payslip shape.
     medical_allowance = db.Column(db.Float, default=0)
+    # "MEALS" (ACS RAW DATA column L): a taxable cash allowance with its own
+    # column — folding it into other_allowances destroyed the audit trail the
+    # source sheet keeps.
+    meal_allowance = db.Column(db.Float, default=0)
     productivity_bonus = db.Column(db.Float, default=0)
     # One-off end-of-year/13th-month bonus — kept separate from the monthly
     # productivity bonus; both share the ANNUAL concession cap on StatutoryRate.
     end_of_year_bonus = db.Column(db.Float, default=0)
     overtime_hours = db.Column(db.Float, default=0)
     overtime_pay = db.Column(db.Float, default=0)
+    # Where overtime_pay came from: 'manual' (typed/imported lump sum — the
+    # ACS model, RAW DATA column J) or 'computed' (hours x WageRateProfile
+    # rate, the raw-hours path). Lets the hours-based engine replace the lump
+    # sum later without a schema change; the overtime TAX split is always
+    # computed from the amount either way.
+    overtime_source = db.Column(db.String(20), default="manual")
     other_allowances = db.Column(db.Float, default=0)
     # Arrears/back-pay for prior periods, sourced from the upload. Joins this
     # period's taxable gross and is taxed normally — no deferred treatment.
@@ -226,6 +238,10 @@ class PayrollItem(db.Model):
     # Cash advanced to the worker with this payroll — opposite cash direction
     # to loan_deduction (adds to net pay, not taxable income).
     loan_advance = db.Column(db.Float, default=0)
+    # Post-tax deductions with their own ACS RAW DATA columns (AC welfare,
+    # AE IOU) — kept separate from other_deductions (AD) for the audit trail.
+    welfare_deduction = db.Column(db.Float, default=0)
+    iou_deduction = db.Column(db.Float, default=0)
     other_deductions = db.Column(db.Float, default=0)
     total_deductions = db.Column(db.Float, default=0)
     net_pay = db.Column(db.Float, default=0)
@@ -434,6 +450,15 @@ class StatutoryRate(db.Model):
     # Bonus up to this fraction of ANNUAL basic salary taxes at bonus_rate;
     # the excess joins ordinary taxable income.
     bonus_annual_basic_threshold = db.Column(db.Float, nullable=False, default=0.15)
+    # GRA junior-staff gate for the overtime concession: strictly, the 5%/10%
+    # flat rates only apply to a qualifying junior employee earning at most
+    # this much per month (GHS 18,000/year / 12). We still apply the
+    # concession to everyone (matching the client sheet) but WARN on any
+    # overtime earner above this, so the exposure is visible and the gate can
+    # be tightened later without a rewrite.
+    overtime_junior_monthly_threshold = db.Column(
+        db.Float, nullable=False, default=1500.0
+    )
     notes = db.Column(db.Text)
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
     created_at = db.Column(db.DateTime, default=utc_now)

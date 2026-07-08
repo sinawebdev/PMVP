@@ -34,6 +34,7 @@ from app.excel_utils import (
     export_payroll_run,
     export_wages_sheet,
     export_import_error_report,
+    mapping_conflicts,
     match_client_sheet,
     normalize_company_key,
     payroll_sheet_candidates,
@@ -62,7 +63,7 @@ from app.payroll_status import (
 )
 from app.pdf_service import generate_payslip_pdf
 from app.raw_import import normalise_emp_id
-from app.validators import validate_payroll_rows
+from app.validators import collect_blocking_errors, validate_payroll_rows
 
 payroll_bp = Blueprint("payroll", __name__, url_prefix="/payroll")
 
@@ -205,6 +206,11 @@ def build_run_payload_from_extraction(
         file_path, known_names, extraction["sheet_name"]
     )
     validation = validate_payroll_rows(mapped_rows, client, month, year, detected_company_name)
+    # Mapping conflicts surface on the preview as warnings and hard-stop the
+    # confirm — same split as the §8 row-level checks.
+    validation.setdefault("summary_warnings", []).extend(
+        extraction.get("mapping_errors", [])
+    )
     import_summary = summarize_import(mapped_rows, validation)
     worker_stats = calculate_worker_stats(mapped_rows)
     status_breakdown = calculate_status_breakdown(mapped_rows)
@@ -219,6 +225,7 @@ def build_run_payload_from_extraction(
         "year": year,
         "columns": extraction["columns"],
         "mapping": extraction["mapping"],
+        "mapping_errors": extraction.get("mapping_errors", []),
         "unmapped_columns": [column for column, field in extraction["mapping"].items() if field == "unmapped"],
         "preview_rows": extraction["preview_rows"],
         "mapped_rows": mapped_rows,
@@ -264,6 +271,9 @@ def build_single_payload(file_path, source_filename, client, month, year, select
 
     detected_company_name = detect_company_name(file_path, known_names, matched_sheet_name)
     validation = validate_payroll_rows(mapped_rows, client, month, year, detected_company_name)
+    validation.setdefault("summary_warnings", []).extend(
+        extraction.get("mapping_errors", [])
+    )
     import_summary = summarize_import(mapped_rows, validation)
     current_app.logger.info(
         "Smart Excel Import Engine: matched_sheet=%s header_row=%s columns=%s mapping=%s rows=%s ignored=%s warnings=%s",
@@ -287,6 +297,7 @@ def build_single_payload(file_path, source_filename, client, month, year, select
         "year": year,
         "columns": extraction["columns"],
         "mapping": extraction["mapping"],
+        "mapping_errors": extraction.get("mapping_errors", []),
         "unmapped_columns": [column for column, field in extraction["mapping"].items() if field == "unmapped"],
         "preview_rows": extraction["preview_rows"],
         "mapped_rows": mapped_rows,
@@ -541,6 +552,20 @@ def confirm(import_id):
         )
         return redirect(url_for("payroll.runs"))
     client = db.get_or_404(ClientCompany, payload["client_company_id"])
+    # Spec §8 hard-stops: a corrupted upload (wrong header row, zero-basic
+    # active workers) is refused outright — warn-and-proceed is what let
+    # production run 9 persist net > gross rows. Cheap, no DB round trips.
+    # Mapping conflicts (one field claimed by several columns, mandatory
+    # field unmapped) are recomputed from the stored mapping so payloads
+    # persisted before this check existed are covered too.
+    blocking = mapping_conflicts(payload.get("mapping") or {}) + collect_blocking_errors(
+        payload["mapped_rows"], payload.get("detected_company_name", "")
+    )
+    if blocking:
+        for error in blocking:
+            flash(error, "danger")
+        flash("Import blocked — no payroll run was created.", "danger")
+        return redirect(url_for("payroll.preview", import_id=import_id))
     # Reuse the validation computed at upload time (stored in the payload)
     # instead of re-running the whole row sweep — the rows can't have changed
     # between preview and confirm, and the recompute doubled the confirm
@@ -592,6 +617,23 @@ def confirm_multi_client_import(import_id, payload):
             "danger",
         )
         return redirect(url_for("payroll.runs"))
+
+    # Same §8 hard-stops as the single-client confirm, checked across every
+    # sheet BEFORE anything is created — one corrupted sheet blocks the whole
+    # multi-client import rather than leaving a partial batch.
+    blocking = []
+    for run_payload in runs:
+        for error in mapping_conflicts(
+            run_payload.get("mapping") or {}
+        ) + collect_blocking_errors(
+            run_payload["mapped_rows"], run_payload.get("detected_company_name", "")
+        ):
+            blocking.append(f"{run_payload.get('client_company_name', 'Sheet')}: {error}")
+    if blocking:
+        for error in blocking:
+            flash(error, "danger")
+        flash("Import blocked — no payroll runs were created.", "danger")
+        return redirect(url_for("payroll.preview", import_id=import_id))
 
     duplicates = []
     for run_payload in runs:
@@ -713,6 +755,7 @@ def create_payroll_run_from_payload(payload, client, validation, import_mode):
             ssnit_number=row.get("ssnit_number"),
             ghana_card_number=row.get("ghana_card_number"),
             bank_name=row.get("bank_name"),
+            bank_branch=row.get("bank_branch"),
             bank_account_number=row.get("bank_account_number"),
             momo_number=row.get("momo_number"),
             email=row.get("email"),
@@ -720,10 +763,14 @@ def create_payroll_run_from_payload(payload, client, validation, import_mode):
             transport_allowance=float(row.get("transport_allowance") or 0),
             housing_allowance=float(row.get("housing_allowance") or 0),
             medical_allowance=float(row.get("medical_allowance") or 0),
+            meal_allowance=float(row.get("meal_allowance") or 0),
             productivity_bonus=float(row.get("productivity_bonus") or 0),
             end_of_year_bonus=float(row.get("end_of_year_bonus") or 0),
             overtime_hours=float(row.get("overtime_hours") or 0),
             overtime_pay=float(row.get("overtime_pay") or 0),
+            # Imported overtime is a hand-keyed lump sum (the ACS model);
+            # 'computed' is reserved for the raw hours x rate path.
+            overtime_source="manual",
             other_allowances=float(row.get("other_allowances") or 0),
             pay_difference=float(row.get("pay_difference") or 0),
             gross_pay=float(row.get("gross_pay") or 0),
@@ -733,6 +780,8 @@ def create_payroll_run_from_payload(payload, client, validation, import_mode):
             pf_fund_employee=float(row.get("pf_fund_employee") or 0),
             loan_deduction=float(row.get("loan_deduction") or 0),
             loan_advance=float(row.get("loan_advance") or 0),
+            welfare_deduction=float(row.get("welfare_deduction") or 0),
+            iou_deduction=float(row.get("iou_deduction") or 0),
             other_deductions=float(row.get("other_deductions") or 0),
             total_deductions=float(row.get("total_deductions") or 0),
             net_pay=float(row.get("net_pay") or 0),
@@ -874,6 +923,74 @@ def recalculate_salaried_items(payroll_run, statutory_rate):
             ) from exc
         for field, value in result.as_payroll_item_fields().items():
             setattr(item, field, value)
+        apply_overtime_concession_warning(item, statutory_rate)
+    verify_statutory_invariants(payroll_run, statutory_rate)
+
+
+# Substring marker that identifies OUR junior-staff note inside warning_notes,
+# so recalculation can replace a stale copy instead of stacking duplicates.
+_JUNIOR_OT_MARKER = "junior-staff qualifying threshold"
+
+
+def apply_overtime_concession_warning(item, statutory_rate):
+    """Spec §7.1: the 5%/10% overtime concession legally applies only to a
+    qualifying junior employee (qualifying income <= the monthly threshold on
+    the rate version, GHS 1,500 under GRA 2026 rules). We match the client
+    sheet and apply it to everyone, but flag every overtime earner above the
+    threshold so the exposure is visible and the gate can be tightened later."""
+    existing = [
+        note.strip()
+        for note in (item.warning_notes or "").split(";")
+        if note.strip() and _JUNIOR_OT_MARKER not in note
+    ]
+    threshold = float(statutory_rate.overtime_junior_monthly_threshold or 0)
+    if (
+        threshold > 0
+        and float(item.overtime_pay or 0) > 0
+        and float(item.basic_salary or 0) > threshold
+    ):
+        existing.append(
+            "Overtime taxed at the concessionary flat rates, but basic salary "
+            f"(GHS {item.basic_salary:,.2f}) is above the GRA "
+            f"{_JUNIOR_OT_MARKER} (GHS {threshold:,.2f}/month) — strictly, "
+            "this worker's overtime belongs in the marginal PAYE bands."
+        )
+    item.warning_notes = "; ".join(existing)
+    if existing:
+        item.validation_status = "Warning"
+    elif item.validation_status == "Warning":
+        item.validation_status = "OK"
+
+
+def verify_statutory_invariants(payroll_run, statutory_rate):
+    """Spec §8 hard-stops on DERIVED figures. Since net pay and SSNIT are
+    computed, a violation can only mean a compute or import-mapping bug — the
+    kind that shipped net > gross in production run 9. Raise loudly instead of
+    persisting a bad run; callers keep the run in Draft with the failure
+    visible."""
+    from app.money import D, money
+
+    problems = []
+    for item in payroll_run.items:
+        gross = float(item.gross_pay or 0)
+        net = float(item.net_pay or 0)
+        advance = float(item.loan_advance or 0)
+        who = item.staff_id or item.full_name or f"item {item.id}"
+        # Net can legitimately exceed gross only by the cash advance.
+        if net > gross + advance + 0.01:
+            problems.append(f"{who}: net {net:.2f} exceeds gross {gross:.2f}")
+        expected_ssnit = money(
+            D(item.basic_salary or 0) * D(statutory_rate.ssf_employee_rate)
+        )
+        if abs(float(item.ssnit or 0) - expected_ssnit) > 0.01:
+            problems.append(
+                f"{who}: SSNIT {float(item.ssnit or 0):.2f} != "
+                f"{expected_ssnit:.2f} (basic x {statutory_rate.ssf_employee_rate})"
+            )
+    if problems:
+        shown = "; ".join(problems[:5])
+        more = f" (+{len(problems) - 5} more)" if len(problems) > 5 else ""
+        raise RuntimeError(f"Statutory invariant violation: {shown}{more}")
 
 
 def _calculate_item(calculator, item, used_ytd, tax_relief_monthly):
@@ -882,6 +999,7 @@ def _calculate_item(calculator, item, used_ytd, tax_relief_monthly):
             transport_allowance=item.transport_allowance,
             housing_allowance=item.housing_allowance,
             medical_allowance=item.medical_allowance,
+            meal_allowance=item.meal_allowance,
             productivity_bonus=item.productivity_bonus,
             end_of_year_bonus=item.end_of_year_bonus,
             other_allowances=item.other_allowances,
@@ -891,6 +1009,8 @@ def _calculate_item(calculator, item, used_ytd, tax_relief_monthly):
             tax_relief_monthly=tax_relief_monthly,
             loan_deduction=item.loan_deduction,
             loan_advance=item.loan_advance,
+            welfare_deduction=item.welfare_deduction,
+            iou_deduction=item.iou_deduction,
             other_deductions=item.other_deductions,
             bonus_concession_used_ytd=used_ytd,
         )
@@ -945,6 +1065,7 @@ def create_or_update_employee_from_import(
     employee.ssnit_number = row.get("ssnit_number") or employee.ssnit_number
     employee.ghana_card_number = row.get("ghana_card_number") or employee.ghana_card_number
     employee.bank_name = row.get("bank_name") or employee.bank_name
+    employee.bank_branch = row.get("bank_branch") or employee.bank_branch
     employee.bank_account_number = row.get("bank_account_number") or employee.bank_account_number
     employee.momo_number = row.get("momo_number") or employee.momo_number
     employee.email = row.get("email") or employee.email
@@ -963,6 +1084,10 @@ def detail(run_id):
     return render_template(
         "payroll_detail.html",
         payroll_run=payroll_run,
+        # Drive the delete button off the same set the backend gate uses, so the
+        # two can't silently drift apart again (a hardcoded "Draft" in the
+        # template is exactly how the button went missing for Rejected runs).
+        deletable_statuses=DELETABLE_STATUSES,
     )
 
 
@@ -1284,30 +1409,42 @@ def calculate(run_id):
         }
         for emp_key, result in results.items():
             employee = employees_by_id.get(result.employee_id)
-            db.session.add(
-                PayrollItem(
-                    payroll_run_id=payroll_run.id,
-                    employee_id=result.employee_id,
-                    staff_id=emp_key,
-                    full_name=employee.full_name if employee else emp_key,
-                    status=employee.status if employee else None,
-                    ssnit_number=employee.ssnit_number if employee else None,
-                    ghana_card_number=employee.ghana_card_number if employee else None,
-                    bank_name=employee.bank_name if employee else None,
-                    bank_account_number=employee.bank_account_number if employee else None,
-                    momo_number=employee.momo_number if employee else None,
-                    email=employee.email if employee else None,
-                    payroll_month=f"{payroll_run.month} {payroll_run.year}",
-                    validation_status="OK" if result.employee_id else "Warning",
-                    warning_notes=(
-                        "" if result.employee_id else "No matching roster employee."
-                    ),
-                    **result.as_payroll_item_fields(),
-                )
+            item = PayrollItem(
+                payroll_run_id=payroll_run.id,
+                employee_id=result.employee_id,
+                staff_id=emp_key,
+                full_name=employee.full_name if employee else emp_key,
+                status=employee.status if employee else None,
+                ssnit_number=employee.ssnit_number if employee else None,
+                ghana_card_number=employee.ghana_card_number if employee else None,
+                bank_name=employee.bank_name if employee else None,
+                bank_branch=employee.bank_branch if employee else None,
+                bank_account_number=employee.bank_account_number if employee else None,
+                momo_number=employee.momo_number if employee else None,
+                email=employee.email if employee else None,
+                payroll_month=f"{payroll_run.month} {payroll_run.year}",
+                # Raw-hours overtime IS hours x rate — the computed path
+                # of the hybrid overtime model.
+                overtime_source="computed",
+                validation_status="OK" if result.employee_id else "Warning",
+                warning_notes=(
+                    "" if result.employee_id else "No matching roster employee."
+                ),
+                **result.as_payroll_item_fields(),
             )
+            apply_overtime_concession_warning(item, statutory_rate)
+            db.session.add(item)
         summary = f"Calculated {len(results)} workers from imported hours."
     else:
-        recalculate_salaried_items(payroll_run, statutory_rate)
+        try:
+            recalculate_salaried_items(payroll_run, statutory_rate)
+        except RuntimeError as exc:
+            # Invariant violation (§8 hard-stop) or a row the calculator
+            # rejected: keep the stored figures untouched and surface the
+            # reason instead of a 500.
+            db.session.rollback()
+            flash(f"Calculation blocked: {exc}", "danger")
+            return redirect(url_for("payroll.detail", run_id=run_id))
         summary = f"Recalculated statutory pay for {len(payroll_run.items)} workers."
 
     db.session.flush()
@@ -1330,6 +1467,7 @@ EDITABLE_ITEM_FIELDS = (
     "basic_salary",
     "transport_allowance",
     "medical_allowance",
+    "meal_allowance",
     "productivity_bonus",
     "end_of_year_bonus",
     "overtime_pay",
@@ -1337,6 +1475,8 @@ EDITABLE_ITEM_FIELDS = (
     "pf_fund_employee",
     "loan_deduction",
     "loan_advance",
+    "welfare_deduction",
+    "iou_deduction",
     "other_deductions",
 )
 
@@ -1414,6 +1554,22 @@ def edit_items(run_id):
                         f"{old_value:.2f} -> {new_value:.2f}",
                     )
                     changes += 1
+
+                # bank_branch is free text, not a money field — handled outside
+                # the numeric loop so the float() guard doesn't reject it.
+                raw_branch = request.form.get(f"item-{item.id}-bank_branch")
+                if raw_branch is not None:
+                    new_branch = raw_branch.strip() or None
+                    old_branch = item.bank_branch or None
+                    if new_branch != old_branch:
+                        item.bank_branch = new_branch
+                        record_audit(
+                            "Payroll figures edited",
+                            payroll_run,
+                            f"{item.staff_id or item.full_name} bank_branch: "
+                            f"{old_branch or '—'} -> {new_branch or '—'}",
+                        )
+                        changes += 1
         db.session.commit()
         if rejected:
             flash(f"{rejected} invalid value(s) were ignored (must be numbers >= 0).", "warning")
