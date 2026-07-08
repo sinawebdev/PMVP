@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 COLUMN_ALIASES = {
-    "staff_id": ["staff no", "staff no.", "staff id", "employee id", "emp id", "staff number", "employee no", "worker id", "s/n", "sn", "no", "serial"],
-    "full_name": ["name", "employee name", "full name", "worker name", "employee", "worker", "officer", "personnel"],
+    "staff_id": ["staff no", "staff no.", "staff id", "employee id", "emp id", "staff number", "employee no", "worker id", "s/n", "sn", "no", "serial", "irs no"],
+    "full_name": ["name", "names", "employee name", "full name", "worker name", "employee", "worker", "officer", "personnel"],
     "client_company": ["client", "client company", "company", "company name", "company assigned", "assigned client"],
     # ID-shaped social-security headers must resolve here, never to the ssnit
     # amount field — hence the explicit "S.S number" / "social security number"
@@ -38,7 +38,7 @@ COLUMN_ALIASES = {
     "basic_salary": ["basic", "basic salary", "base pay", "basic pay", "base salary", "monthly salary", "salary", "basic wage"],
     "transport_allowance": ["transport", "transport allowance", "transportation"],
     "housing_allowance": ["housing", "housing allowance", "rent allowance"],
-    "medical_allowance": ["medical", "medical allowance", "med allowance", "med. allowance"],
+    "medical_allowance": ["medical", "medical allowance", "medical allow", "med allowance", "med. allowance"],
     # "MEALS" (ACS RAW DATA column L) gets its own column — it used to fold
     # silently into other_allowances, destroying the sheet's audit trail.
     "meal_allowance": ["meal allowance", "meals allowance", "meals", "meal"],
@@ -47,9 +47,9 @@ COLUMN_ALIASES = {
     "end_of_year_bonus": ["end of year bonus", "end-of-year bonus", "13th month", "13th month bonus", "annual bonus", "eoy bonus"],
     "productivity_bonus": ["productivity bonus", "productivity", "prod bonus", "prod. bonus", "bonus"],
     "overtime_hours": ["overtime hours", "ot hours"],
-    "overtime_pay": ["overtime", "ot pay", "overtime pay", "overtime allowance"],
+    "overtime_pay": ["overtime", "ot pay", "overtime pay", "overtime allowance", "overtime allow"],
     "other_allowances": ["other allowance", "other allowances", "allowances", "allowance"],
-    "pay_difference": ["pay difference", "pay diff"],
+    "pay_difference": ["pay difference", "pay diff", "pay differece"],
     "gross_pay": ["gross", "gross pay", "gross salary", "total earnings", "gross earnings", "gross amount"],
     "paye": ["paye", "tax", "income tax", "paye tax", "tax deducted"],
     # No bare "social security" here — that substring caught ID headers like
@@ -60,7 +60,7 @@ COLUMN_ALIASES = {
     # loan_advance before loan_deduction is deliberate NOT: loan_deduction
     # stays first so a bare "Loan" header keeps its historical meaning
     # (a deduction); "loan advance" resolves by exact match.
-    "loan_deduction": ["loan deduction", "loan deductions", "loan repayment"],
+    "loan_deduction": ["loan deduction", "loan deductions", "loan repayment", "loan", "loan adv"],
     "loan_advance": ["loan advance", "loan advances", "salary advance"],
     # Welfare (ACS column AC) and IOU (AE) get their own columns — previously
     # folded into other_deductions. No bare "iou" alias in the list: the
@@ -68,7 +68,7 @@ COLUMN_ALIASES = {
     # "IOU" header still resolves because the normalized header is itself a
     # substring of "iou deduction".
     "welfare_deduction": ["welfare", "welfare deduction", "welfare deductions", "welfare supplies"],
-    "iou_deduction": ["iou deduction", "iou deductions", "i o u"],
+    "iou_deduction": ["iou deduction", "iou deductions", "i o u", "i o u deduction", "iou"],
     "other_deductions": ["deduction", "deductions", "other deduction", "other deductions"],
     "total_deductions": ["total deductions", "total deduction"],
     "net_pay": ["net", "net pay", "net salary", "take home", "take home pay", "net amount", "amount payable", "net earnings"],
@@ -268,13 +268,13 @@ def map_columns(columns):
             # silently overwriting basic_salary/net_pay via substring match.
             mapping[column] = "unmapped"
             continue
-        mapped_field = alias_lookup.get(normalized)
-        if mapped_field is None:
-            for alias, field in alias_lookup.items():
-                if alias and (alias in normalized or normalized in alias):
-                    mapped_field = field
-                    break
-        mapping[column] = mapped_field or "unmapped"
+        # Exact-match only. The former substring fallback (alias in normalized
+        # / normalized in alias) let one keyword claim several columns at once
+        # — "OVERTIME" binding both OVERTIME ALLOWANCE and EXCESS OVERTIME,
+        # "TAX" binding every TAXABLE * column to paye — collisions that
+        # mapping_conflicts() then had to refuse. A header matching no alias
+        # exactly is left unmapped and surfaced in the preview, never guessed.
+        mapping[column] = alias_lookup.get(normalized) or "unmapped"
     return mapping
 
 
@@ -1108,8 +1108,6 @@ def export_wages_sheet(payroll_run, export_folder):
         "Other Deductions",
         "Tax (PAYE)",
         "Net Pay",
-        "Annual Salary",
-        "15% of Annual Salary",
     ]
     rows = []
     for item in sorted(payroll_run.items, key=lambda i: (i.full_name or "").upper()):
@@ -1139,8 +1137,6 @@ def export_wages_sheet(payroll_run, export_folder):
             ),
             round(item.paye or 0, 2),
             round(item.net_pay or 0, 2),
-            round(item.annual_salary or 0, 2),
-            round(item.annual_salary_15pct or 0, 2),
         ])
     write_table(sheet, 5, headers, rows)
     total_row = 5 + len(rows) + 1
@@ -1173,13 +1169,153 @@ def format_tax_office_tickboxes(tax_office):
     return boxes
 
 
+# The official GRA "PAYE DATA 2022" workbook, shipped as a skeleton so the
+# export is byte-faithful to the statutory form. We overwrite its embedded
+# 2022 tax formulas with the app's StatutoryRate-computed VALUES: keeping the
+# 2022 bands would print tax that disagrees with the payslips we already issue.
+GRA_TEMPLATE_PATH = Path(__file__).resolve().parent / "assets" / "gra_paye_template.xlsx"
+
+# Data rows begin at row 18 on the GRA template (rows 1-17 are the header block
+# and the column-number/label rows).
+_GRA_DATA_START_ROW = 18
+
+_MONTH_NUMBERS = {
+    name: number
+    for number, name in enumerate(
+        [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December",
+        ],
+        start=1,
+    )
+}
+
+
+def _gra_month_code(month, year):
+    """MM/YYYY for the 'FOR THE MONTH OF' cell; falls back to the raw month
+    string if it isn't a recognised English month name."""
+    key = str(month or "").strip().title()
+    number = _MONTH_NUMBERS.get(key)
+    return f"{number:02d}/{year}" if number else f"{month} {year}"
+
+
+def _fill_gra_skeleton_workbook(payroll_run, employer_tin, tax_office):
+    """Load the official GRA workbook and pour this run's already-computed
+    figures into cells A-AB, one worker per row from row 18. GRA's own formula
+    cells (I, M, O, S, U, V, W, Y, Z) are overwritten with the app's values, so
+    the filed schedule reconciles to the payslips exactly. Columns with no
+    backing data (accommodation/vehicle/non-cash elements, secondary employment,
+    severance) are left blank for hand-filling."""
+    from openpyxl import load_workbook
+
+    def m(value):
+        return round(float(value or 0), 2)
+
+    workbook = load_workbook(GRA_TEMPLATE_PATH)
+    sheet = workbook.active
+
+    # --- header block (write to the top-left cell of each merged range) ---
+    sheet["D9"] = "CHRISNAT LIMITED"                       # NAME OF EMPLOYER
+    sheet["D11"] = employer_tin or ""                      # EMPLOYER'S TIN
+    sheet["U9"] = _gra_month_code(payroll_run.month, payroll_run.year)
+    if tax_office:
+        sheet["G7"] = tax_office                           # Name of Tax Office
+
+    count = 0
+    for offset, item in enumerate(
+        sorted(payroll_run.items, key=lambda i: (i.full_name or "").upper())
+    ):
+        row = _GRA_DATA_START_ROW + offset
+        count += 1
+
+        total_bonus = (item.productivity_bonus or 0) + (item.end_of_year_bonus or 0)
+        bonus_concession = m(max(total_bonus - (item.bonus_excess or 0), 0))
+        cash_allowances = m(
+            (item.transport_allowance or 0)
+            + (item.housing_allowance or 0)
+            + (item.medical_allowance or 0)
+            + (item.meal_allowance or 0)
+            + (item.other_allowances or 0)
+            + (item.pay_difference or 0)
+        )
+        # Marginal-band tax only: strip the concessionary overtime/bonus tax
+        # back out of the persisted total (col W is "Tax Deductible" on chargeable
+        # income; overtime and bonus tax get their own columns Y and M).
+        ordinary_paye = m((item.paye or 0) - (item.overtime_tax or 0) - (item.bonus_tax or 0))
+        employee = getattr(item, "employee", None)
+        # Total Reliefs (U) = SSF + Third Tier only. Deductible Reliefs (T) is
+        # left blank: the payroll system has no reliable relief data, and GRA
+        # columns without data stay on the sheet but empty (never deleted).
+        total_reliefs = m((item.ssnit or 0) + (item.pf_fund_employee or 0))
+        tin = (getattr(employee, "tin", None) if employee else None) or item.ghana_card_number or ""
+
+        cells = {
+            "A": count,
+            "B": tin,
+            "C": item.full_name,
+            "D": item.job_role,
+            "E": "",                                 # Residency — no reliable data; blank
+            "F": m(item.basic_salary),
+            "G": "",                                 # Secondary Employment — no data; blank
+            "H": "Y" if (item.ssnit or 0) > 0 else "N",   # Paid SSNIT
+            "I": m(item.ssnit),                      # Social Security Fund
+            "J": m(item.pf_fund_employee),           # Third Tier
+            "K": cash_allowances,                    # Cash Allowances
+            "L": bonus_concession,                   # Bonus up to 15% annual basic
+            "M": m(item.bonus_tax),                  # Final Tax on Bonus Income
+            "N": m(item.bonus_excess),               # Excess Bonus
+            "O": m(item.gross_pay),                  # Total Cash Emolument
+            "P": "", "Q": "", "R": "",               # accommodation/vehicle/non-cash
+            "S": m(item.gross_pay),                  # Total Assessable Income
+            "T": "",                                 # Deductible Reliefs — no data; blank
+            "U": total_reliefs,                      # Total Reliefs (SSF + Third Tier)
+            "V": m(item.taxable_income),             # Chargeable Income
+            "W": ordinary_paye,                      # Tax Deductible
+            "X": m(item.overtime_pay),               # Overtime Income
+            "Y": m(item.overtime_tax),               # Overtime Tax
+            "Z": m(item.paye),                       # Total Tax Payable to GRA
+            "AA": "",                                # Severance Pay
+            "AB": item.warning_notes or "",          # Remarks
+        }
+        for column, value in cells.items():
+            sheet[f"{column}{row}"] = value          # overwrites GRA's 2022 formula
+
+    # Drop the template's unused formula rows below the last worker so the file
+    # doesn't ship hundreds of blank =IF(...) rows.
+    first_unused = _GRA_DATA_START_ROW + count
+    if sheet.max_row >= first_unused:
+        sheet.delete_rows(first_unused, sheet.max_row - first_unused + 1)
+
+    return workbook
+
+
 def export_gra_paye_schedule(payroll_run, export_folder, employer_tin="", tax_office=""):
     """Employer's Monthly Tax Deductions Schedule (P.A.Y.E.) in the statutory
-    GRA format. The employer of record is always CHRISNAT LIMITED — Chrisnat is
-    the legal employer regardless of the client site a worker is deployed to;
-    the client name appears only as deployment context. Columns with no backing
-    data yet (TIN where unset, Non-Resident, Secondary Employment, benefit
-    elements, Severance, Remark) are left blank for hand-filling in Excel."""
+    GRA format. Primary path loads the official GRA template (byte-faithful form)
+    and fills computed VALUES into A-AB. If the template asset is missing, it
+    falls back to the summary layout below so exports never hard-fail."""
+    if GRA_TEMPLATE_PATH.exists():
+        client_name = (
+            payroll_run.client_company.name if payroll_run.client_company else "Client"
+        )
+        workbook = _fill_gra_skeleton_workbook(payroll_run, employer_tin, tax_office)
+        filename = (
+            f"{slug_filename(client_name)}_GRA_PAYE_Schedule_"
+            f"{slug_filename(payroll_run.month)}_{payroll_run.year}.xlsx"
+        )
+        return save_workbook(workbook, export_folder, filename)
+    return _export_gra_summary_layout(
+        payroll_run, export_folder, employer_tin, tax_office
+    )
+
+
+def _export_gra_summary_layout(payroll_run, export_folder, employer_tin="", tax_office=""):
+    """Fallback summary layout (used only when the GRA template asset is absent).
+    The employer of record is always CHRISNAT LIMITED — Chrisnat is the legal
+    employer regardless of the client site a worker is deployed to; the client
+    name appears only as deployment context. Columns with no backing data yet
+    (TIN where unset, Non-Resident, Secondary Employment, benefit elements,
+    Severance, Remark) are left blank for hand-filling in Excel."""
     client_name = payroll_run.client_company.name if payroll_run.client_company else "Client"
     workbook, sheet = create_workbook(
         f"GRA PAYE {payroll_run.month} {payroll_run.year}"
