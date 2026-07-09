@@ -79,7 +79,6 @@
     <div class="stat-card"><i class="bi bi-building stat-icon"></i><span>Client Company</span><strong>{{ client.name }}</strong></div>
     <div class="stat-card"><i class="bi bi-file-spreadsheet stat-icon"></i><span>Matched Sheet</span><strong>{{ payload.matched_sheet_name or "Default sheet" }}</strong></div>
     <div class="stat-card"><i class="bi bi-list-ol stat-icon"></i><span>Detected Header Row</span><strong>{{ payload.detected_header_row or 1 }}</strong></div>
-    <div class="stat-card"><i class="bi bi-search stat-icon"></i><span>Detected Company</span><strong>{{ payload.detected_company_name or "Not detected" }}</strong></div>
     <div class="stat-card"><i class="bi bi-table stat-icon"></i><span>Total Rows Found</span><strong>{{ payload.worker_stats.total_rows }}</strong></div>
     <div class="stat-card"><i class="bi bi-person-check stat-icon"></i><span>Total Unique Workers</span><strong>{{ payload.worker_stats.total_unique_workers }}</strong></div>
     <div class="stat-card"><i class="bi bi-copy stat-icon"></i><span>Duplicate Entries Found</span><strong>{{ payload.worker_stats.duplicate_count }}</strong></div>

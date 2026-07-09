@@ -27,7 +27,6 @@ from app.excel_utils import (
     allowed_excel_file,
     calculate_status_breakdown,
     calculate_worker_stats,
-    detect_company_name,
     extract_payroll_sheet,
     export_bank_listing,
     export_gra_paye_schedule,
@@ -202,9 +201,14 @@ def build_run_payload_from_extraction(
     known_names,
     detected_company_name=None,
 ):
-    detected_company_name = detected_company_name or detect_company_name(
-        file_path, known_names, extraction["sheet_name"]
-    )
+    # Company detection is fully retired. PMVP already knows the company from
+    # the selected/matched client at upload time, and the old free-text Excel
+    # scan (detect_company_name, which produced false positives such as the
+    # "GH CARD" column header) is gone. PayrollRun.detected_company_name is
+    # deliberately left null: it no longer represents anything and will be
+    # dropped in a future schema cleanup rather than repurposed into the client
+    # name. See PMVP_INVESTIGATION_02_COMPANY_ARCHITECTURE.md.
+    detected_company_name = None
     validation = validate_payroll_rows(mapped_rows, client, month, year, detected_company_name)
     # Mapping conflicts surface on the preview as warnings and hard-stop the
     # confirm — same split as the §8 row-level checks.
@@ -269,7 +273,10 @@ def build_single_payload(file_path, source_filename, client, month, year, select
         )
         return None, f"No valid worker rows extracted from sheet '{matched_sheet_name}'. Check that the header row contains recognizable payroll column names."
 
-    detected_company_name = detect_company_name(file_path, known_names, matched_sheet_name)
+    # Company detection is retired (see build_run_payload_from_extraction).
+    # PayrollRun.detected_company_name is deliberately left null rather than
+    # echoing the client name into a field it no longer represents.
+    detected_company_name = None
     validation = validate_payroll_rows(mapped_rows, client, month, year, detected_company_name)
     validation.setdefault("summary_warnings", []).extend(
         extraction.get("mapping_errors", [])
@@ -364,7 +371,6 @@ def build_multi_client_payload(file_path, source_filename, month, year):
                         month,
                         year,
                         known_names,
-                        detected_company_name=group_name,
                     )
                 )
             continue

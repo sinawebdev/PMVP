@@ -234,15 +234,20 @@ class HeaderMisdetectionWarningTestCase(unittest.TestCase):
         self.ctx.pop()
         self.temp_dir.cleanup()
 
-    def test_company_name_that_is_a_header_label_warns(self):
+    def test_header_label_company_name_no_longer_warns(self):
+        # Company detection is retired (PMVP Investigation 02): the company is
+        # authoritative from the selected client, so a header-like string is
+        # never surfaced as a company warning. Guards against reintroducing the
+        # noisy "GH CARD" mismatch/heading warnings.
         result = validate_payroll_rows(
             [{"staff_id": "AC1", "full_name": "KOFI TEST", "net_pay": 100,
               "paye": 10, "ssnit": 5}],
             self.client_co, "July", 2026,
             detected_company_name="GH CARD",
         )
-        self.assertTrue(
+        self.assertFalse(
             any("looks like a spreadsheet column heading" in w
+                or "appears to mention" in w
                 for w in result["summary_warnings"]),
             result["summary_warnings"],
         )

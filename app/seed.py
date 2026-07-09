@@ -204,7 +204,7 @@ def seed_payroll():
         duplicate_workers_found=0,
         source_filename="seed_msc_payroll.xlsx",
         import_type="Single Company Upload",
-        detected_company_name=client.name,
+        # Company detection retired — leave detected_company_name null (see app/payroll.py).
         notes="Seed payroll run for demo.",
     )
     db.session.add(payroll_run)
