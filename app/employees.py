@@ -153,6 +153,12 @@ def edit(client_id, emp_id):
         # status comes through as "Active"/"Inactive"; reject anything else.
         new_status = request.form.get("status", emp.status)
         emp.status = new_status if new_status in (ACTIVE, INACTIVE) else emp.status
+        # Raw-engine hourly/salaried classification — correcting a mis-seeded
+        # worker here re-derives basic on the next compute (no re-seed needed).
+        # Blank leaves it unchanged; only the two valid values are accepted.
+        new_pay_type = (request.form.get("pay_type") or "").strip().lower()
+        if new_pay_type in ("hourly", "salaried"):
+            emp.pay_type = new_pay_type
         # staff_id (the join key) is intentionally immutable after creation.
         db.session.commit()
         flash(f"{emp.full_name} updated.", "success")

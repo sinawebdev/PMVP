@@ -69,6 +69,18 @@ class Employee(db.Model):
     # Roster-maintained department (free text). Sourced from the employee record, never payroll.
     department = db.Column(db.String(80))
     basic_salary = db.Column(db.Float, default=0)
+    # Explicit hourly/salaried classification for the raw-hours engine
+    # ('hourly' | 'salaried'). Seeded from the rich workbook's structure
+    # (has a per-hour rate table => hourly) as a default, then editable so a
+    # mis-seeded worker is corrected without a re-seed. Compute reads this to
+    # decide basic derivation (hours x rate vs flat basic) — never re-inferred
+    # from the presence of rate rows. Null on standard-engine employees.
+    pay_type = db.Column(db.String(10))
+    # Union (ICU) membership, set at raw-hours seed time from the source
+    # workbook's ICU-dues column (anyone with dues > 0 is a member). Drives the
+    # derived 3%-of-basic ICU deduction in the raw engine; never uploaded on a
+    # thin monthly file. Salaried/standard staff stay False.
+    icu_member = db.Column(db.Boolean, nullable=False, default=False)
     # GRA tax relief (marriage/dependents/disability/age) as a flat monthly
     # amount subtracted from ordinary taxable income before the PAYE bands.
     # Standing employee data, not a monthly input. The amount per relief
@@ -242,6 +254,11 @@ class PayrollItem(db.Model):
     # AE IOU) — kept separate from other_deductions (AD) for the audit trail.
     welfare_deduction = db.Column(db.Float, default=0)
     iou_deduction = db.Column(db.Float, default=0)
+    # Union (ICU) dues for raw-hours union members: 3% of basic, derived (never
+    # uploaded), post-tax. Its own column so the union-distribution export and
+    # the ICU tie-out validation have an auditable per-worker figure; 0 for
+    # standard/non-member rows.
+    icu_dues = db.Column(db.Float, default=0)
     other_deductions = db.Column(db.Float, default=0)
     total_deductions = db.Column(db.Float, default=0)
     net_pay = db.Column(db.Float, default=0)
@@ -450,6 +467,12 @@ class StatutoryRate(db.Model):
     # Bonus up to this fraction of ANNUAL basic salary taxes at bonus_rate;
     # the excess joins ordinary taxable income.
     bonus_annual_basic_threshold = db.Column(db.Float, nullable=False, default=0.15)
+    # Union (ICU) dues as a fraction of basic wage, deducted post-tax for
+    # seeded union members only (raw-hours engine). Config, effective-dated
+    # like every other rate — never a Python constant. 3% is verified against
+    # all 137 members in the DZ Jan-2026 sheet (the MD's earlier "2%" was
+    # superseded by the data; confirm in writing before treating as permanent).
+    icu_member_rate = db.Column(db.Float, nullable=False, default=0.03)
     # GRA junior-staff gate for the overtime concession: strictly, the 5%/10%
     # flat rates only apply to a qualifying junior employee earning at most
     # this much per month (GHS 18,000/year / 12). We still apply the
@@ -537,6 +560,16 @@ class StatutoryRate(db.Model):
         concession = min(bonus, remaining_cap)
         excess = max(bonus - remaining_cap, D(0))
         return money(concession * D(self.bonus_rate)), money(excess)
+
+    def icu_dues(self, basic_salary, is_member):
+        """Union (ICU) dues for a raw-hours worker: ``icu_member_rate`` of the
+        basic wage for a seeded member, 0 otherwise. Deducted post-tax and fed
+        into the union-distribution cascade. Rate is config, never hardcoded."""
+        from app.money import D, money
+
+        if not is_member:
+            return 0.0
+        return money(D(basic_salary) * D(self.icu_member_rate))
 
 
 class WageRateProfile(db.Model):
@@ -627,3 +660,26 @@ class RawPayEntry(db.Model):
     created_at = db.Column(db.DateTime, default=utc_now)
 
     run = db.relationship("PayrollRun", backref="raw_entries")
+
+
+class RawUploadArchive(db.Model):
+    """The original bytes of a raw-hours upload, preserved for audit.
+
+    Persisted in the database (not the ephemeral import folder — Render's disk
+    does not survive a restart) inside the seed-confirm transaction, so seeded
+    context can never exist without the workbook it came from. ``sha256`` lets a
+    later download verify the bytes were not altered."""
+
+    __tablename__ = "raw_upload_archives"
+
+    id = db.Column(db.Integer, primary_key=True)
+    payroll_run_id = db.Column(
+        db.Integer, db.ForeignKey("payroll_run.id"), nullable=False, index=True
+    )
+    filename = db.Column(db.String(255))
+    content = db.Column(db.LargeBinary, nullable=False)
+    sha256 = db.Column(db.String(64), nullable=False)
+    upload_kind = db.Column(db.String(10))  # 'seed' | 'thin'
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+    payroll_run = db.relationship("PayrollRun")

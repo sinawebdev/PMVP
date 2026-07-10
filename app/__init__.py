@@ -117,6 +117,21 @@ def create_app():
         app.instance_path, "import_sessions"
     )
 
+    # Raw-hours engine bank whitelist (config, never hardcoded in a formula —
+    # the DZ workbook's nested-IF listed 10 banks inline). A net-pay worker whose
+    # bank is on this list is routed to the bank schedule; everyone else goes to
+    # cash/PV. Override with a comma-separated RAW_BANK_WHITELIST env var.
+    _default_banks = (
+        "ADB,SG-GH,GCB,GCB BANK,FBN,FIRST BANK,ECOBANK,ACCESS,ACCESS BANK,"
+        "NIB,CBG,CONSOLIDATED BANK,ZENITH,GT BANK,GTBANK,STANBIC,ABSA,"
+        "FIDELITY,CAL BANK,CALBANK,REPUBLIC,PRUDENTIAL,UBA,BANK OF AFRICA,"
+        "SOCIETE GENERALE,STANDARD CHARTERED,ADB BANK,NATIONAL INVESTMENT BANK"
+    )
+    app.config["RAW_BANK_WHITELIST"] = [
+        b.strip() for b in os.getenv("RAW_BANK_WHITELIST", _default_banks).split(",")
+        if b.strip()
+    ]
+
     # --- Payslip distribution channels ---
     # Each channel defaults to a console backend (logs only, no credentials, no network).
     # Set the matching *_BACKEND + credentials to go live per channel.
@@ -164,6 +179,7 @@ def create_app():
     from app.employees import employees_bp
     from app.payroll import payroll_bp
     from app.payslip import payslip_bp
+    from app.raw_engine.web import raw_engine_bp
     from app.routes import main_bp
     from app.statutory import statutory_bp
 
@@ -176,6 +192,7 @@ def create_app():
     app.register_blueprint(payslip_link_bp)
     app.register_blueprint(employees_bp)
     app.register_blueprint(statutory_bp)
+    app.register_blueprint(raw_engine_bp)
 
     @app.context_processor
     def inject_sidebar_clients():

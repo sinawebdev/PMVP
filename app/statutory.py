@@ -65,6 +65,7 @@ def new():
             overtime_junior_monthly_threshold = float(
                 request.form.get("overtime_junior_monthly_threshold") or 1500
             )
+            icu_member_rate = float(request.form.get("icu_member_rate") or 0.03)
         except (KeyError, ValueError) as exc:
             flash(f"Invalid rate version: {exc}", "danger")
             return redirect(url_for("statutory.new"))
@@ -87,6 +88,7 @@ def new():
             bonus_rate=bonus_rate,
             bonus_annual_basic_threshold=bonus_annual_basic_threshold,
             overtime_junior_monthly_threshold=overtime_junior_monthly_threshold,
+            icu_member_rate=icu_member_rate,
             notes=request.form.get("notes") or None,
             created_by=current_user.id,
         )
@@ -115,5 +117,6 @@ def new():
         "overtime_junior_monthly_threshold": (
             latest.overtime_junior_monthly_threshold if latest else 1500.0
         ),
+        "icu_member_rate": latest.icu_member_rate if latest else 0.03,
     }
     return render_template("statutory_rate_form.html", prefill=prefill)

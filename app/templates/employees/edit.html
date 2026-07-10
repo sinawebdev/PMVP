@@ -50,6 +50,15 @@
                 <option value="Inactive" {% if emp.status != 'Active' %}selected{% endif %}>Inactive</option>
             </select>
         </div>
+        <div class="col-md-4">
+            <label class="form-label" for="pay_type">Pay Type (raw-hours engine)</label>
+            <select class="form-select" id="pay_type" name="pay_type">
+                <option value="" {% if not emp.pay_type %}selected{% endif %}>— Not set (standard) —</option>
+                <option value="hourly" {% if emp.pay_type == 'hourly' %}selected{% endif %}>Hourly (basic = hours × rate)</option>
+                <option value="salaried" {% if emp.pay_type == 'salaried' %}selected{% endif %}>Salaried (flat basic wage)</option>
+            </select>
+            <div class="form-text">Set at seed from the workbook; correct a mis-seeded worker here — it re-derives basic on the next compute, no re-seed needed.</div>
+        </div>
         <div class="col-12 d-flex gap-2">
             <button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle"></i>Save Changes</button>
             <a class="btn btn-outline-secondary" href="{{ url_for('employees.roster', client_id=client.id) }}">Cancel</a>
