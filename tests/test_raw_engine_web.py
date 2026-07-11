@@ -172,11 +172,14 @@ class RawEngineWebTests(unittest.TestCase):
         rate_and_run = self._thin_run_basic(staff)
         self.assertAlmostEqual(rate_and_run, 1800.0, delta=0.01)  # salaried → flat
 
-        # Correct the classification in the roster UI (no re-seed).
+        # Correct the classification in the roster UI (no re-seed). This is the
+        # George 1800→0 case, so the pay_type guard requires an explicit confirm
+        # before it will zero his basic — send confirm_pay_type to proceed.
         self._login()
         self.client.post(
             f"/employees/clients/{self.cid}/edit/{george_id}",
-            data={"full_name": "GEORGE AKOTO", "status": "Active", "pay_type": "hourly"},
+            data={"full_name": "GEORGE AKOTO", "status": "Active",
+                  "pay_type": "hourly", "confirm_pay_type": "1"},
             follow_redirects=True,
         )
         with self.app.app_context():

@@ -33,7 +33,7 @@ from flask_login import login_required
 from app import db
 from app.audit import record_audit
 from app.auth import role_required
-from app.models import ClientCompany, Employee, PayrollItem
+from app.models import ClientCompany, Employee, PayrollItem, WageRateProfile
 from app.raw_import import normalise_emp_id
 
 employees_bp = Blueprint("employees", __name__, url_prefix="/employees")
@@ -133,6 +133,55 @@ def add(client_id):
 # ── Edit employee ─────────────────────────────────────────────────────────────
 
 
+def _projected_basic(emp, pay_type):
+    """The *basic* an employee resolves to under ``pay_type``, evaluated with no
+    monthly hours in hand — i.e. a classification change, not a payroll run.
+
+    Returns ``(amount, description)``. ``amount`` is a float, or ``None`` when
+    basic is derived monthly from hours × rate (an hourly worker who *does*
+    carry a basic rate). The raw engine derives an hourly worker's basic as
+    hours × rate and only falls back to the flat basic wage for salaried
+    workers, so an hourly worker with no basic rate on file collapses to GH₵0 —
+    that is the silent-zeroing this guard exists to surface."""
+    flat = float(emp.basic_salary or 0)
+    pt = (pay_type or "").strip().lower()
+    if pt == "hourly":
+        has_basic_rate = (
+            WageRateProfile.query.filter_by(
+                employee_id=emp.id, category=WageRateProfile.CATEGORY_BASIC
+            ).first()
+            is not None
+        )
+        if has_basic_rate:
+            return None, "hours × rate each month (a basic hourly rate is on file)"
+        return 0.0, (
+            f"GH₵0.00 — no hourly basic rate is on file, so the previous flat "
+            f"wage of GH₵{flat:,.2f} would no longer apply"
+        )
+    # Salaried, or an unset/standard-engine worker: the flat basic wage stands.
+    return flat, f"flat basic wage of GH₵{flat:,.2f}"
+
+
+def pay_type_change_guard(emp, current_pay_type, requested_pay_type):
+    """Warn-and-confirm payload for a pay_type change: the basic the worker
+    resolves to now vs under the requested classification, flagged when the
+    change would zero a previously non-zero basic (the George 1800→0 case)."""
+    current_amount, current_desc = _projected_basic(emp, current_pay_type or "salaried")
+    projected_amount, projected_desc = _projected_basic(emp, requested_pay_type)
+    # "Would zero" = the new basic is a hard 0 while the worker currently carries
+    # a positive flat basic — the silent-zeroing the guard exists to stop.
+    will_zero = projected_amount == 0.0 and float(emp.basic_salary or 0) > 0
+    return {
+        "current_pay_type": current_pay_type or "not set",
+        "requested_pay_type": requested_pay_type,
+        "current_basic": current_amount,
+        "current_desc": current_desc,
+        "projected_basic": projected_amount,
+        "projected_desc": projected_desc,
+        "will_zero": will_zero,
+    }
+
+
 @employees_bp.route("/clients/<int:client_id>/edit/<int:emp_id>", methods=["GET", "POST"])
 @role_required(*REP_ROLES)
 def edit(client_id, emp_id):
@@ -140,6 +189,28 @@ def edit(client_id, emp_id):
     emp = Employee.query.filter_by(id=emp_id, client_company_id=client_id).first_or_404()
 
     if request.method == "POST":
+        # Guard the raw-engine pay_type change FIRST, before touching the DB. A
+        # salaried→hourly flip for a worker with no hourly basic rate silently
+        # zeroes their basic on the next compute (George: 1800 → 0). Require an
+        # explicit confirm and show the resulting basic before committing
+        # anything at all — no field is written until the change is confirmed.
+        requested_pay_type = (request.form.get("pay_type") or "").strip().lower()
+        current_pay_type = (emp.pay_type or "").strip().lower()
+        pay_type_changing = (
+            requested_pay_type in ("hourly", "salaried")
+            and requested_pay_type != current_pay_type
+        )
+        if pay_type_changing and request.form.get("confirm_pay_type") != "1":
+            return render_template(
+                "employees/edit.html",
+                client=client,
+                emp=emp,
+                submitted=request.form,
+                pay_type_guard=pay_type_change_guard(
+                    emp, current_pay_type, requested_pay_type
+                ),
+            )
+
         emp.full_name = request.form.get("full_name", emp.full_name).strip()
         emp.email = request.form.get("email", "").strip() or None
         emp.phone = request.form.get("phone", "").strip() or None
@@ -155,16 +226,25 @@ def edit(client_id, emp_id):
         emp.status = new_status if new_status in (ACTIVE, INACTIVE) else emp.status
         # Raw-engine hourly/salaried classification — correcting a mis-seeded
         # worker here re-derives basic on the next compute (no re-seed needed).
-        # Blank leaves it unchanged; only the two valid values are accepted.
-        new_pay_type = (request.form.get("pay_type") or "").strip().lower()
-        if new_pay_type in ("hourly", "salaried"):
-            emp.pay_type = new_pay_type
+        # Blank leaves it unchanged; only the two valid values are accepted, and
+        # a material change is confirmed above before we reach this line.
+        if requested_pay_type in ("hourly", "salaried"):
+            if pay_type_changing:
+                record_audit(
+                    "Employee pay_type changed",
+                    emp,
+                    f"pay_type {current_pay_type or 'not set'} → {requested_pay_type} "
+                    f"(confirmed). Basic now: {_projected_basic(emp, requested_pay_type)[1]}.",
+                )
+            emp.pay_type = requested_pay_type
         # staff_id (the join key) is intentionally immutable after creation.
         db.session.commit()
         flash(f"{emp.full_name} updated.", "success")
         return redirect(url_for("employees.roster", client_id=client_id))
 
-    return render_template("employees/edit.html", client=client, emp=emp)
+    return render_template(
+        "employees/edit.html", client=client, emp=emp, submitted=None, pay_type_guard=None
+    )
 
 
 # ── Deactivate / reactivate (soft, never hard delete) ─────────────────────────

@@ -54,3 +54,46 @@ Richard Woode (DCL9) rate table matches the existing hourly calculator fixture.
 
 The specimen is a real client workbook containing PII; it is **gitignored**
 (`tests/fixtures/*.xlsx`) and decrypted locally, never committed.
+
+## Migration dry-run on Postgres (head `d2a4f6108e35`)
+
+The test suite runs on SQLite, but `RawUploadArchive.content` is **BYTEA** on
+Postgres (SQLAlchemy `LargeBinary`), so the raw-engine migration
+`d2a4f6108e35_add_pay_type_and_raw_upload_archive` is dry-run against a real
+Postgres before merge. Run against a **throwaway** instance — a local container
+or a scratch cluster — **never production**.
+
+**Bootstrap note.** The baseline migration `d450b1a3317e` is FK-only (it adds
+foreign keys, it does not create the core tables). The app creates its schema
+with `db.create_all()` on boot and treats migrations as incremental deltas, so
+the production bootstrap is *create_all + `flask db stamp head`*, not a
+from-empty `flask db upgrade`. The dry-run mirrors that, then exercises the
+raw-engine migration's Postgres DDL both ways. Run the `flask db` commands with
+`AUTO_INIT_DB=false` so `create_all` can't silently re-create a table the
+downgrade just dropped (`create_all` adds missing *tables* but never ALTERs an
+existing one to re-add a dropped *column*).
+
+```bash
+# 1. throwaway Postgres (either works)
+docker run -d --name pg_dryrun -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=chrisnat_dryrun -p 5433:5432 postgres:16
+#   ...or a scratch cluster: initdb -D <dir> --auth-local=trust && pg_ctl -D <dir> -o "-p 5433" start && createdb chrisnat_dryrun
+
+export FLASK_APP=run.py DATABASE_URL="postgresql://postgres:pw@localhost:5433/chrisnat_dryrun"
+
+# 2. build the schema the production way, then mark migrations applied
+AUTO_INIT_DB=true python -c "from app import create_app; create_app()"   # create_all + seed
+AUTO_INIT_DB=false python -m flask db stamp head
+AUTO_INIT_DB=false python -m flask db heads      # -> d2a4f6108e35 (head)   [single head]
+
+# 3. exercise the raw-engine migration down then back up on Postgres
+AUTO_INIT_DB=false python -m flask db downgrade c9e5b2d478a1   # drops raw_upload_archives (BYTEA) + employee.pay_type
+AUTO_INIT_DB=false python -m flask db upgrade head             # re-creates them
+```
+
+**Result (Postgres 18.4, 2026-07-11):** clean. Single head `d2a4f6108e35`
+throughout. Before downgrade `raw_upload_archives.content` is `bytea`; after
+`downgrade c9e5b2d478a1` both `raw_upload_archives` and `employee.pay_type` are
+gone; after `upgrade head` `content` is `bytea` again, `employee.pay_type` is
+back, and index `ix_raw_upload_archives_payroll_run_id` is restored. `upgrade`
+and `downgrade` both apply cleanly; the migration is idempotent (inspects before
+acting) and dialect-agnostic. Production database untouched.
