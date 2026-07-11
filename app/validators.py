@@ -109,24 +109,16 @@ def validate_payroll_rows(
             f"Payroll already exists for {client_company.name} in {month} {year}."
         )
 
-    if detected_company_name and not client_name_matches(
-        client_company.name, detected_company_name
-    ):
-        warnings.append(
-            f"Selected client is {client_company.name}, but Excel appears to mention {detected_company_name}."
-        )
-
-    # Header-misdetection guard: when the detected company name is itself a
-    # column label (e.g. "GH CARD", "JOB TITLE" from the acs 1.xlsx import), the
-    # header-row detector locked onto the wrong row and the mapped data is
-    # almost certainly shifted. Surface it loudly rather than persisting garbage.
-    if detected_company_name and looks_like_header_label(detected_company_name):
-        warnings.append(
-            f'The detected company name "{detected_company_name}" looks like a '
-            "spreadsheet column heading, not a company — the wrong header row was "
-            "likely picked. Check that names, salaries and bank details lined up "
-            "before confirming this import."
-        )
+    # Company detection is retired: the company is authoritative from the
+    # client the operator selected (single) or the sheet/group matched to a
+    # ClientCompany record (multi), so `detected_company_name` now carries that
+    # known client name rather than a free-text guess off the workbook. The old
+    # "Excel appears to mention X" mismatch warning and the "looks like a
+    # spreadsheet column heading" guard were consequences of that retired scan
+    # (they produced the false "GH CARD") and have been removed. The per-row
+    # name guard in validate_single_row still flags genuinely data-shifted rows,
+    # and collect_blocking_errors still hard-stops a corroborated shift.
+    # See PMVP_INVESTIGATION_02_COMPANY_ARCHITECTURE.md.
 
     # One query each instead of one per row — the per-row versions of these
     # lookups were the bulk of the confirm request's DB round trips and pushed
@@ -201,10 +193,14 @@ def validate_payroll_rows(
     non_blank_count = sum(1 for row in mapped_rows if build_worker_key(row))
     if non_blank_count and missing_bank_count / non_blank_count >= 0.5:
         warnings.append("Majority of workers are missing bank account details.")
+    # PMVP computes PAYE and SSNIT itself when the run is confirmed
+    # (auto_calculate_on_confirm); any statutory figures in the file are
+    # preview-only and never persist. So an upload with no PAYE/SSNIT is normal
+    # for a salary-only sheet — inform, don't imply the client left something out.
     if sum(float(row.get("paye") or 0) for row in mapped_rows) <= 0:
-        warnings.append("PAYE total is missing or zero.")
+        warnings.append("No PAYE in the upload — PMVP will calculate it when the run is confirmed.")
     if sum(float(row.get("ssnit") or 0) for row in mapped_rows) <= 0:
-        warnings.append("SSNIT total is missing or zero.")
+        warnings.append("No SSNIT in the upload — PMVP will calculate it when the run is confirmed.")
 
     previous_run = (
         PayrollRun.query.filter(
@@ -267,7 +263,7 @@ def validate_single_row(row, employees_by_staff_id=None):
     if not bank_account_number and not momo_number:
         warnings.append("Missing bank and MoMo details.")
     if net_pay in (None, "") or row.get("_missing_original_net_pay"):
-        warnings.append("Net pay missing; calculated by system.")
+        warnings.append("Net pay not provided; PMVP will calculate it on confirm.")
     if float(row.get("net_pay") or 0) < 0:
         warnings.append("Negative net pay.")
     for field in ("basic_salary", "gross_pay", "paye", "ssnit", "tier_2_pension", "pf_fund_employee", "loan_deduction", "welfare_deduction", "iou_deduction", "other_deductions", "total_deductions", "net_pay"):
@@ -313,11 +309,13 @@ def validate_single_row(row, employees_by_staff_id=None):
     if abs(gross_pay - calculated_gross) > 1:
         warnings.append("Gross pay does not match allowance calculation.")
     if abs(float(row.get("net_pay") or 0) - expected_net_pay) > 1:
-        warnings.append("Net pay calculation mismatch.")
+        warnings.append("Uploaded net pay doesn't reconcile with its components; PMVP recalculates all figures on confirm.")
+    # PMVP derives PAYE/SSNIT on confirm, so an upload without them is expected
+    # for salary-only sheets — phrase these as informational, not client errors.
     if not row.get("paye"):
-        warnings.append("Missing PAYE.")
+        warnings.append("PAYE not provided; PMVP will calculate it on confirm.")
     if not row.get("ssnit"):
-        warnings.append("Missing SSNIT.")
+        warnings.append("SSNIT not provided; PMVP will calculate it on confirm.")
     if "inactive" in status:
         warnings.append("Inactive worker appears in payroll.")
     if "terminated" in status:

@@ -1,7 +1,6 @@
 import json
 import os
 import tempfile
-import uuid
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -10,12 +9,10 @@ from flask import (
     Blueprint,
     current_app,
     flash,
-    jsonify,
     redirect,
     render_template,
     request,
     send_file,
-    session,
     url_for,
 )
 from flask_login import current_user, login_required
@@ -27,7 +24,6 @@ from app.excel_utils import (
     allowed_excel_file,
     calculate_status_breakdown,
     calculate_worker_stats,
-    detect_company_name,
     extract_payroll_sheet,
     export_bank_listing,
     export_gra_paye_schedule,
@@ -202,9 +198,14 @@ def build_run_payload_from_extraction(
     known_names,
     detected_company_name=None,
 ):
-    detected_company_name = detected_company_name or detect_company_name(
-        file_path, known_names, extraction["sheet_name"]
-    )
+    # Company detection is fully retired. PMVP already knows the company from
+    # the selected/matched client at upload time, and the old free-text Excel
+    # scan (detect_company_name, which produced false positives such as the
+    # "GH CARD" column header) is gone. PayrollRun.detected_company_name is
+    # deliberately left null: it no longer represents anything and will be
+    # dropped in a future schema cleanup rather than repurposed into the client
+    # name. See PMVP_INVESTIGATION_02_COMPANY_ARCHITECTURE.md.
+    detected_company_name = None
     validation = validate_payroll_rows(mapped_rows, client, month, year, detected_company_name)
     # Mapping conflicts surface on the preview as warnings and hard-stop the
     # confirm — same split as the §8 row-level checks.
@@ -269,7 +270,10 @@ def build_single_payload(file_path, source_filename, client, month, year, select
         )
         return None, f"No valid worker rows extracted from sheet '{matched_sheet_name}'. Check that the header row contains recognizable payroll column names."
 
-    detected_company_name = detect_company_name(file_path, known_names, matched_sheet_name)
+    # Company detection is retired (see build_run_payload_from_extraction).
+    # PayrollRun.detected_company_name is deliberately left null rather than
+    # echoing the client name into a field it no longer represents.
+    detected_company_name = None
     validation = validate_payroll_rows(mapped_rows, client, month, year, detected_company_name)
     validation.setdefault("summary_warnings", []).extend(
         extraction.get("mapping_errors", [])
@@ -364,7 +368,6 @@ def build_multi_client_payload(file_path, source_filename, month, year):
                         month,
                         year,
                         known_names,
-                        detected_company_name=group_name,
                     )
                 )
             continue
@@ -1089,280 +1092,6 @@ def detail(run_id):
         # template is exactly how the button went missing for Rejected runs).
         deletable_statuses=DELETABLE_STATUSES,
     )
-
-
-def _raw_import_session_path(run_id):
-    """Parsed raw-hours preview is staged on disk (not the cookie session) keyed
-    by run, mirroring the standard import's IMPORT_SESSION_FOLDER pattern, so a
-    large workbook never overflows the session cookie."""
-    folder = current_app.config["IMPORT_SESSION_FOLDER"]
-    return os.path.join(folder, f"raw_import_{run_id}.json")
-
-
-@payroll_bp.route("/runs/<int:run_id>/raw-upload", methods=["POST"])
-@role_required("admin")
-def raw_upload(run_id):
-    """Accept a raw-data Excel file, parse it, cross-validate, and return a JSON
-    preview for user confirmation. Does NOT write any payroll data to the DB."""
-    from app.raw_import import (
-        build_import_preview,
-        cross_validate,
-        detect_sheet_layout,
-        normalise_emp_id,
-        parse_master_tab,
-        parse_qtarpay,
-    )
-
-    run = db.get_or_404(PayrollRun, run_id)
-
-    file = request.files.get("file")
-    if not file or not file.filename:
-        return jsonify({"error": "No file provided"}), 400
-
-    try:
-        xl = pd.ExcelFile(file)
-    except Exception:
-        return jsonify({"error": "Could not read the uploaded file as an Excel workbook."}), 422
-
-    layout = detect_sheet_layout(xl)
-    if "qtarpay" not in layout:
-        return jsonify({
-            "error": "Could not find a pay-code sheet (qtarpay format) in this file. "
-                     "Expected a sheet with Column1/Column2/Column3/Column4 headers."
-        }), 422
-
-    df_qtarpay = xl.parse(layout["qtarpay"], header=None)
-    employees, warnings = parse_qtarpay(df_qtarpay)
-
-    discrepancies = []
-    if "master" in layout:
-        df_master = xl.parse(layout["master"], header=None)
-        master_data = parse_master_tab(df_master)
-        discrepancies = cross_validate(employees, master_data)
-
-    db_emps_raw = Employee.query.filter_by(
-        client_company_id=run.client_company_id
-    ).all()
-    db_employees = {
-        normalise_emp_id(e.staff_id): {"name": e.full_name, "id": e.id}
-        for e in db_emps_raw
-    }
-
-    preview = build_import_preview(employees, db_employees)
-
-    # Stage parsed hours on disk and keep only the run id in the cookie session.
-    with open(_raw_import_session_path(run_id), "w", encoding="utf-8") as handle:
-        json.dump(employees, handle)
-    session["raw_import_run_id"] = run_id
-
-    record_audit("Raw payroll upload", run, "Raw hours uploaded for preview (billable add-on).")
-
-    return jsonify({
-        "status": "preview",
-        "preview": preview,
-        "warnings": warnings,
-        "discrepancies": discrepancies,
-        "employee_count": len(employees),
-    })
-
-
-@payroll_bp.route("/runs/<int:run_id>/raw-confirm", methods=["POST"])
-@role_required("admin")
-def raw_confirm(run_id):
-    """User confirmed the preview. Commit raw hours and mark the run
-    upload_type='raw'. Does NOT calculate pay — that is a later operator step."""
-    if session.get("raw_import_run_id") != run_id:
-        return jsonify({"error": "Session mismatch — please re-upload the file."}), 400
-
-    session_path = _raw_import_session_path(run_id)
-    employees = {}
-    if os.path.exists(session_path):
-        with open(session_path, "r", encoding="utf-8") as handle:
-            employees = json.load(handle)
-    if not employees:
-        return jsonify({"error": "No import data in session."}), 400
-
-    run = db.get_or_404(PayrollRun, run_id)
-
-    # Replace, never append: a re-import of the same (or a corrected) file for
-    # this run must supersede the previous hours. Appending on top doubled
-    # every worker's hours — and therefore pay — on the next Calculate.
-    RawPayEntry.query.filter_by(payroll_run_id=run_id).delete()
-
-    for emp_id, pay_codes in employees.items():
-        for pay_code, hours in pay_codes.items():
-            db.session.add(
-                RawPayEntry(
-                    payroll_run_id=run_id,
-                    employee_id_str=emp_id,
-                    pay_code=pay_code,
-                    hours=hours,
-                )
-            )
-
-    run.upload_type = "raw"
-    record_audit("Raw payroll confirm", run, "Raw hours committed; awaiting pay calculation.")
-    db.session.commit()
-
-    session.pop("raw_import_run_id", None)
-    try:
-        os.remove(session_path)
-    except OSError:
-        pass
-
-    return jsonify({
-        "status": "committed",
-        "run_id": run_id,
-        "imported": sum(len(v) for v in employees.values()),
-    })
-
-
-def _raw_new_path(token):
-    """Disk staging for an upload-page raw import keyed by a one-time token, so a
-    large workbook never rides in the cookie session."""
-    return os.path.join(current_app.config["IMPORT_SESSION_FOLDER"], f"raw_new_{token}.json")
-
-
-@payroll_bp.route("/runs/raw-upload", methods=["POST"])
-@role_required("admin")
-def raw_upload_new():
-    """Upload-page raw-data flow: parse a raw-hours workbook for the chosen client
-    and return a JSON preview. Creates NO payroll run yet — that happens on confirm,
-    so abandoning the preview leaves no orphan Draft run behind."""
-    from app.raw_import import (
-        build_import_preview,
-        cross_validate,
-        detect_sheet_layout,
-        normalise_emp_id,
-        parse_master_tab,
-        parse_qtarpay,
-    )
-
-    client_id = request.form.get("client_company_id")
-    if not client_id:
-        return jsonify({"error": "Select a client company first."}), 400
-    client = db.session.get(ClientCompany, int(client_id))
-    if not client:
-        return jsonify({"error": "Unknown client company."}), 404
-    month = request.form.get("month")
-    year = request.form.get("year")
-    if not month or not year:
-        return jsonify({"error": "Choose a month and year."}), 400
-
-    file = request.files.get("file")
-    if not file or not file.filename:
-        return jsonify({"error": "No file provided"}), 400
-    try:
-        xl = pd.ExcelFile(file)
-    except Exception:
-        return jsonify({"error": "Could not read the uploaded file as an Excel workbook."}), 422
-
-    layout = detect_sheet_layout(xl)
-    if "qtarpay" not in layout:
-        return jsonify({
-            "error": "Could not find a pay-code sheet (qtarpay format) in this file. "
-                     "Expected a sheet with Column1/Column2/Column3/Column4 headers."
-        }), 422
-
-    employees, warnings = parse_qtarpay(xl.parse(layout["qtarpay"], header=None))
-    discrepancies = []
-    if "master" in layout:
-        master_data = parse_master_tab(xl.parse(layout["master"], header=None))
-        discrepancies = cross_validate(employees, master_data)
-
-    db_employees = {
-        normalise_emp_id(e.staff_id): {"name": e.full_name, "id": e.id}
-        for e in Employee.query.filter_by(client_company_id=client.id).all()
-    }
-    preview = build_import_preview(employees, db_employees)
-
-    token = uuid.uuid4().hex
-    with open(_raw_new_path(token), "w", encoding="utf-8") as handle:
-        json.dump(
-            {
-                "client_company_id": client.id,
-                "month": month,
-                "year": int(year),
-                "source_filename": file.filename,
-                "employees": employees,
-            },
-            handle,
-        )
-    session["raw_new_token"] = token
-
-    return jsonify({
-        "status": "preview",
-        "token": token,
-        "preview": preview,
-        "warnings": warnings,
-        "discrepancies": discrepancies,
-        "employee_count": len(employees),
-        "client_name": client.name,
-        "period": f"{month} {year}",
-    })
-
-
-@payroll_bp.route("/runs/raw-confirm", methods=["POST"])
-@role_required("admin")
-def raw_confirm_new():
-    """Commit a previewed upload-page raw import: create a Draft payroll run marked
-    upload_type='raw', store the raw hours, and hand back the run detail URL. Pay is
-    calculated later by a Chrisnat operator — this stores hours only."""
-    token = request.form.get("token")
-    if not token or session.get("raw_new_token") != token:
-        return jsonify({"error": "Session mismatch — please re-upload the file."}), 400
-
-    path = _raw_new_path(token)
-    staged = {}
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as handle:
-            staged = json.load(handle)
-    employees = staged.get("employees", {})
-    if not employees:
-        return jsonify({"error": "No import data in session."}), 400
-
-    run = PayrollRun(
-        client_company_id=staged["client_company_id"],
-        month=staged["month"],
-        year=int(staged["year"]),
-        status=DRAFT,
-        upload_type="raw",
-        created_by=current_user.id,
-        source_filename=staged.get("source_filename"),
-        import_type="Raw Data Upload",
-        total_rows_imported=sum(len(v) for v in employees.values()),
-        total_workers=len(employees),
-        total_unique_workers=len(employees),
-    )
-    db.session.add(run)
-    db.session.flush()  # assign run.id before writing child rows
-
-    for emp_id, pay_codes in employees.items():
-        for pay_code, hours in pay_codes.items():
-            db.session.add(
-                RawPayEntry(
-                    payroll_run_id=run.id,
-                    employee_id_str=emp_id,
-                    pay_code=pay_code,
-                    hours=hours,
-                )
-            )
-
-    record_audit("Raw payroll upload", run, "Raw hours imported (billable add-on); awaiting pay calculation.")
-    db.session.commit()
-
-    session.pop("raw_new_token", None)
-    try:
-        os.remove(path)
-    except OSError:
-        pass
-
-    return jsonify({
-        "status": "committed",
-        "run_id": run.id,
-        "imported": sum(len(v) for v in employees.values()),
-        "redirect": url_for("payroll.detail", run_id=run.id),
-    })
 
 
 @payroll_bp.route("/runs/<int:run_id>/calculate", methods=["POST"])

@@ -31,11 +31,6 @@
         <span>Upload inside Payroll Runs</span>
     </div>
 
-    <div class="upload-tabs" role="tablist">
-        <button type="button" class="upload-tab active" data-tab="standard" role="tab">Standard Upload</button>
-        <button type="button" class="upload-tab" data-tab="raw" role="tab" title="Billable add-on: upload raw hours sheets for Chrisnat to process">Raw Data Upload <span class="raw-badge">Beta</span></button>
-    </div>
-
     <div class="upload-panel" data-panel="standard">
         <form method="post" enctype="multipart/form-data" class="row g-3">
             <div class="col-md-4">
@@ -69,49 +64,6 @@
             </div>
         </form>
     </div>
-
-    <div class="upload-panel" data-panel="raw" hidden>
-        <form id="raw-upload-form" enctype="multipart/form-data" class="row g-3"
-              data-upload-url="{{ url_for('payroll.raw_upload_new') }}"
-              data-confirm-url="{{ url_for('payroll.raw_confirm_new') }}">
-            <div class="col-md-6">
-                <label class="form-label">Client Company</label>
-                <select class="form-select" name="client_company_id" id="raw-client" required>
-                    <option value="">Choose client company</option>
-                    {% for client in clients %}
-                        <option value="{{ client.id }}" {% if selected_client and selected_client.id == client.id %}selected{% endif %}>{{ client.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-4">
-                <label class="form-label" for="raw-month">Month</label>
-                <select class="form-select" id="raw-month" name="month" required>
-                    {% for m in ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] %}
-                    <option value="{{ m }}" {% if current_month == m %}selected{% endif %}>{{ m }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-2"><label class="form-label">Year</label><input class="form-control" type="number" name="year" value="{{ current_year }}" required></div>
-            <div class="col-12">
-                <label class="form-label">Raw Hours Excel File (qtarpay format)</label>
-                <div class="raw-dropzone">
-                    <i class="bi bi-file-earmark-spreadsheet"></i>
-                    <input type="file" name="file" id="raw-file-input" accept=".xlsx,.xls" required>
-                </div>
-            </div>
-            <div class="col-12">
-                <div class="raw-notice">
-                    <i class="bi bi-exclamation-triangle"></i>
-                    <span>Raw data processing is a <strong>billable add-on service</strong>.
-                    Chrisnat will calculate gross pay from the uploaded hours.</span>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <button type="submit" class="btn btn-primary w-100" id="raw-upload-btn"><i class="bi bi-search"></i> Parse &amp; Preview</button>
-            </div>
-        </form>
-        <div id="raw-import-result" class="raw-result mt-3" hidden></div>
-    </div>
 </section>
 <section class="panel">
     <div class="toolbar">
@@ -141,109 +93,4 @@
         </table>
     </div>
 </section>
-
-<script>
-(function () {
-  // --- Standard / Raw tab switching ---
-  var tabs = document.querySelectorAll(".upload-tab");
-  var panels = document.querySelectorAll(".upload-panel");
-  tabs.forEach(function (tab) {
-    tab.addEventListener("click", function () {
-      tabs.forEach(function (t) { t.classList.remove("active"); });
-      tab.classList.add("active");
-      panels.forEach(function (p) {
-        p.hidden = p.getAttribute("data-panel") !== tab.getAttribute("data-tab");
-      });
-    });
-  });
-
-  // --- Raw data upload -> preview -> confirm (creates the run on confirm) ---
-  var form = document.getElementById("raw-upload-form");
-  if (!form) { return; }
-  var result = document.getElementById("raw-import-result");
-  var uploadBtn = document.getElementById("raw-upload-btn");
-
-  function esc(v) {
-    return String(v == null ? "" : v).replace(/[&<>"]/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
-    });
-  }
-
-  function renderPreview(data) {
-    var p = data.preview || { matched: [], unmatched: [] };
-    var html = '<div class="raw-summary">';
-    html += '<span class="badge text-bg-dark">' + esc(data.client_name) + " · " + esc(data.period) + '</span> ';
-    html += '<span class="badge text-bg-success">' + p.matched.length + ' matched</span> ';
-    html += '<span class="badge text-bg-secondary">' + p.unmatched.length + ' unmatched</span> ';
-    html += '<span class="badge text-bg-warning">' + (data.warnings || []).length + ' warnings</span> ';
-    html += '<span class="badge text-bg-info">' + (data.discrepancies || []).length + ' discrepancies</span> ';
-    html += '<span class="badge text-bg-primary">' + data.employee_count + ' employees</span></div>';
-
-    if (p.matched.length) {
-      html += '<table class="table table-sm mt-2"><thead><tr><th>Employee ID</th><th>Name</th><th>Pay codes (hours)</th></tr></thead><tbody>';
-      p.matched.forEach(function (m) {
-        var items = m.line_items.map(function (li) { return esc(li.pay_code) + " (" + esc(li.hours) + ")"; }).join(", ");
-        html += "<tr><td>" + esc(m.employee_id) + "</td><td>" + esc(m.name) + "</td><td>" + items + "</td></tr>";
-      });
-      html += "</tbody></table>";
-    }
-    if (p.unmatched.length) {
-      html += '<div class="raw-notice mt-2"><i class="bi bi-person-x"></i><span>Unmatched IDs (no employee record for this client): '
-        + p.unmatched.map(function (u) { return esc(u.employee_id); }).join(", ") + '</span></div>';
-    }
-    if ((data.discrepancies || []).length) {
-      html += '<div class="raw-notice mt-2"><i class="bi bi-clipboard-data"></i><span>'
-        + data.discrepancies.length + ' qtarpay/Master discrepancies were found (review before confirming).</span></div>';
-    }
-    html += '<button type="button" class="btn btn-success mt-2" id="raw-confirm-btn" data-token="' + esc(data.token)
-      + '"><i class="bi bi-check2-circle"></i> Confirm &amp; Create Raw Run</button>';
-    result.innerHTML = html;
-    result.hidden = false;
-    document.getElementById("raw-confirm-btn").addEventListener("click", confirmImport);
-  }
-
-  function confirmImport(e) {
-    var btn = e.currentTarget;
-    btn.disabled = true;
-    btn.textContent = "Committing...";
-    fetch(form.getAttribute("data-confirm-url"), {
-      method: "POST",
-      headers: { "Accept": "application/json" },
-      body: new URLSearchParams({ token: btn.getAttribute("data-token") }),
-    })
-      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
-      .then(function (res) {
-        if (!res.ok) { throw new Error(res.d.error || "Commit failed"); }
-        result.innerHTML = '<div class="raw-success"><i class="bi bi-check-circle"></i> Committed '
-          + res.d.imported + ' raw hour lines. Opening run...</div>';
-        window.location.href = res.d.redirect;
-      })
-      .catch(function (err) {
-        result.innerHTML = '<div class="raw-error"><i class="bi bi-x-octagon"></i> ' + esc(err.message) + '</div>';
-      });
-  }
-
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    if (!document.getElementById("raw-file-input").files.length) { return; }
-    uploadBtn.disabled = true;
-    uploadBtn.textContent = "Parsing...";
-    result.hidden = true;
-    fetch(form.getAttribute("data-upload-url"), { method: "POST", body: new FormData(form), headers: { "Accept": "application/json" } })
-      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
-      .then(function (res) {
-        if (!res.ok) { throw new Error(res.d.error || "Upload failed"); }
-        renderPreview(res.d);
-      })
-      .catch(function (err) {
-        result.innerHTML = '<div class="raw-error"><i class="bi bi-x-octagon"></i> ' + esc(err.message) + '</div>';
-        result.hidden = false;
-      })
-      .finally(function () {
-        uploadBtn.disabled = false;
-        uploadBtn.innerHTML = '<i class="bi bi-search"></i> Parse &amp; Preview';
-      });
-  });
-})();
-</script>
 {% endblock %}

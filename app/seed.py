@@ -60,6 +60,9 @@ def seed_statutory_rates():
             overtime_basic_threshold=0.50,
             bonus_rate=0.05,
             bonus_annual_basic_threshold=0.15,
+            # Union (ICU) dues: 3% of basic wage for seeded members (raw-hours
+            # engine), verified against all 137 members in the DZ Jan-2026 sheet.
+            icu_member_rate=0.03,
             # GRA junior-staff gate for the overtime concession:
             # GHS 18,000/year qualifying income = 1,500/month. Overtime
             # earners above this get a visible warning (§7.1).
@@ -204,7 +207,7 @@ def seed_payroll():
         duplicate_workers_found=0,
         source_filename="seed_msc_payroll.xlsx",
         import_type="Single Company Upload",
-        detected_company_name=client.name,
+        # Company detection retired — leave detected_company_name null (see app/payroll.py).
         notes="Seed payroll run for demo.",
     )
     db.session.add(payroll_run)

@@ -29,4 +29,63 @@
         </div>
     </form>
 </section>
+
+{% if current_user.role == "admin" %}
+<section class="panel form-panel mt-3">
+    <h5><i class="bi bi-clock-history"></i> Raw Hours Engine (hourly-rate clients)</h5>
+    <p class="text-muted">Select the client, month and year, then upload. An unseeded client's first upload must be the <strong>rich RAW DATA workbook</strong> (seed); a seeded client uploads the <strong>monthly thin template</strong>. Nothing is written until you confirm the preview.</p>
+    <div class="row g-3">
+        <div class="col-md-6">
+            <label class="form-label">Client Company</label>
+            <select class="form-select" id="raw_client">
+                <option value="">Choose client company</option>
+                {% for client in clients %}<option value="{{ client.id }}">{{ client.name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3"><label class="form-label">Month</label><input class="form-control" id="raw_month" value="{{ current_month }}"></div>
+        <div class="col-md-3"><label class="form-label">Year</label><input class="form-control" type="number" id="raw_year" value="{{ current_year }}"></div>
+        <div class="col-md-8"><label class="form-label">Raw / Thin File (.xlsx)</label><input class="form-control" type="file" id="raw_file" accept=".xlsx"></div>
+        <div class="col-md-4 d-flex align-items-end gap-2">
+            <button class="btn btn-outline-primary" type="button" onclick="rawUpload()"><i class="bi bi-upload"></i>Upload &amp; Preview</button>
+            <a class="btn btn-outline-secondary" id="raw_template_link" href="#" onclick="rawTemplate(event)"><i class="bi bi-download"></i>Monthly Template</a>
+        </div>
+        <div class="col-12"><div id="raw_result"></div></div>
+    </div>
+</section>
+<script>
+async function rawUpload() {
+    const cid = document.getElementById('raw_client').value;
+    const file = document.getElementById('raw_file').files[0];
+    const out = document.getElementById('raw_result');
+    if (!cid || !file) { out.innerHTML = '<div class="alert alert-warning">Choose a client and a file.</div>'; return; }
+    const fd = new FormData();
+    fd.append('client_company_id', cid);
+    fd.append('month', document.getElementById('raw_month').value);
+    fd.append('year', document.getElementById('raw_year').value);
+    fd.append('file', file);
+    const r = await fetch('{{ url_for("raw_engine.upload") }}', {method: 'POST', body: fd});
+    const d = await r.json();
+    if (!r.ok) { out.innerHTML = '<div class="alert alert-danger">' + (d.error || 'Upload failed') + '</div>'; return; }
+    out.innerHTML = '<div class="alert alert-info"><strong>' + d.mode.toUpperCase() + '</strong> preview for ' + d.client_name + ' (' + d.period + '): '
+        + '<pre>' + JSON.stringify(d.preview, null, 2) + '</pre>'
+        + '<button class="btn btn-success" onclick="rawConfirm(\'' + d.token + '\')">Confirm ' + d.mode + '</button></div>';
+}
+async function rawConfirm(token) {
+    const fd = new FormData(); fd.append('token', token);
+    const r = await fetch('{{ url_for("raw_engine.confirm") }}', {method: 'POST', body: fd});
+    const d = await r.json();
+    const out = document.getElementById('raw_result');
+    if (!r.ok) { out.innerHTML = '<div class="alert alert-danger">' + (d.error || 'Confirm failed') + '</div>'; return; }
+    window.location = d.redirect;
+}
+function rawTemplate(ev) {
+    ev.preventDefault();
+    const cid = document.getElementById('raw_client').value;
+    if (!cid) { document.getElementById('raw_result').innerHTML = '<div class="alert alert-warning">Choose a seeded client first.</div>'; return; }
+    const m = encodeURIComponent(document.getElementById('raw_month').value);
+    const y = encodeURIComponent(document.getElementById('raw_year').value);
+    window.location = '/raw/clients/' + cid + '/template?month=' + m + '&year=' + y;
+}
+</script>
+{% endif %}
 {% endblock %}

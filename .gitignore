@@ -20,3 +20,6 @@ cloudflared.log
 # up at repo root during debugging — never committed. The canonical copy for
 # testing lives in uploads/ (already ignored above).
 /acs 1.xlsx
+
+# Test specimen workbooks (real client PII) — decrypted locally, never committed.
+tests/fixtures/*.xlsx

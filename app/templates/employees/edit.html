@@ -3,6 +3,36 @@
 {% block page_title %}Edit Employee — {{ client.name }}{% endblock %}
 {% block page_intro %}Update contact and roster details. These are the details used when distributing payslips.{% endblock %}
 {% block content %}
+{# `submitted` carries the attempted values back on a pay_type confirm re-render #}
+{% set s = submitted or {} %}
+{% if pay_type_guard %}
+<section class="panel form-panel mb-3">
+    <div class="alert alert-{{ 'danger' if pay_type_guard.will_zero else 'warning' }} mb-3" role="alert">
+        <h5 class="alert-heading"><i class="bi bi-exclamation-triangle-fill"></i> Confirm pay type change</h5>
+        <p class="mb-1">You are changing <strong>{{ emp.full_name }}</strong> from
+            <strong>{{ pay_type_guard.current_pay_type }}</strong> to
+            <strong>{{ pay_type_guard.requested_pay_type }}</strong>.</p>
+        <p class="mb-1">Basic now: <strong>{{ pay_type_guard.current_desc }}</strong>.</p>
+        <p class="mb-1">Basic after this change: <strong>{{ pay_type_guard.projected_desc }}</strong>.</p>
+        {% if pay_type_guard.will_zero %}
+        <p class="mb-0"><strong>This sets their basic to GH₵0.00 on the next compute</strong> — the flat wage
+            no longer applies. Only confirm if this worker is genuinely paid by the hour.</p>
+        {% else %}
+        <p class="mb-0">Basic will be derived differently from now on. Confirm to save the change.</p>
+        {% endif %}
+    </div>
+    {# Re-post every submitted field plus the confirm flag so nothing the user typed is lost. #}
+    <form method="post" class="d-flex gap-2 flex-wrap">
+        {% for key, value in s.items() %}
+            {% if key != 'confirm_pay_type' %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}
+        {% endfor %}
+        <input type="hidden" name="confirm_pay_type" value="1">
+        <button class="btn btn-{{ 'danger' if pay_type_guard.will_zero else 'warning' }}" type="submit">
+            <i class="bi bi-check2-circle"></i> Confirm &amp; save the change</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('employees.edit', client_id=client.id, emp_id=emp.id) }}">Cancel</a>
+    </form>
+</section>
+{% endif %}
 <section class="panel form-panel">
     <form method="post" class="row g-3">
         <div class="col-md-4">
@@ -12,43 +42,54 @@
         </div>
         <div class="col-md-8">
             <label class="form-label" for="full_name">Full Name *</label>
-            <input class="form-control" id="full_name" name="full_name" value="{{ emp.full_name }}" required>
+            <input class="form-control" id="full_name" name="full_name" value="{{ s.get('full_name', emp.full_name) }}" required>
         </div>
         <div class="col-md-6">
             <label class="form-label" for="email">Email</label>
-            <input class="form-control" id="email" name="email" type="email" value="{{ emp.email or '' }}">
+            <input class="form-control" id="email" name="email" type="email" value="{{ s.get('email', emp.email or '') }}">
         </div>
         <div class="col-md-6">
             <label class="form-label" for="phone">Phone</label>
-            <input class="form-control" id="phone" name="phone" placeholder="+233244000000" value="{{ emp.phone or '' }}">
+            <input class="form-control" id="phone" name="phone" placeholder="+233244000000" value="{{ s.get('phone', emp.phone or '') }}">
         </div>
         <div class="col-md-4">
             <label class="form-label" for="department">Department</label>
-            <input class="form-control" id="department" name="department" value="{{ emp.department or '' }}">
+            <input class="form-control" id="department" name="department" value="{{ s.get('department', emp.department or '') }}">
         </div>
         <div class="col-md-4">
             <label class="form-label" for="bank_name">Bank Name</label>
-            <input class="form-control" id="bank_name" name="bank_name" value="{{ emp.bank_name or '' }}">
+            <input class="form-control" id="bank_name" name="bank_name" value="{{ s.get('bank_name', emp.bank_name or '') }}">
         </div>
         <div class="col-md-4">
             <label class="form-label" for="bank_branch">Bank Branch</label>
-            <input class="form-control" id="bank_branch" name="bank_branch" value="{{ emp.bank_branch or '' }}">
+            <input class="form-control" id="bank_branch" name="bank_branch" value="{{ s.get('bank_branch', emp.bank_branch or '') }}">
         </div>
         <div class="col-md-4">
             <label class="form-label" for="bank_account">Bank Account</label>
-            <input class="form-control" id="bank_account" name="bank_account" value="{{ emp.bank_account_number or '' }}">
+            <input class="form-control" id="bank_account" name="bank_account" value="{{ s.get('bank_account', emp.bank_account_number or '') }}">
         </div>
         <div class="col-md-4">
             <label class="form-label" for="tax_relief">GRA Tax Relief (monthly, GH¢)</label>
-            <input class="form-control" type="number" step="0.01" min="0" id="tax_relief" name="tax_relief" value="{{ emp.tax_relief_monthly or 0 }}">
+            <input class="form-control" type="number" step="0.01" min="0" id="tax_relief" name="tax_relief" value="{{ s.get('tax_relief', emp.tax_relief_monthly or 0) }}">
             <div class="form-text">Marriage/dependents/disability/age relief per the current GRA circular. Subtracted from taxable income each month.</div>
         </div>
+        {% set sel_status = s.get('status', emp.status) %}
         <div class="col-md-4">
             <label class="form-label" for="status">Status</label>
             <select class="form-select" id="status" name="status">
-                <option value="Active" {% if emp.status == 'Active' %}selected{% endif %}>Active</option>
-                <option value="Inactive" {% if emp.status != 'Active' %}selected{% endif %}>Inactive</option>
+                <option value="Active" {% if sel_status == 'Active' %}selected{% endif %}>Active</option>
+                <option value="Inactive" {% if sel_status != 'Active' %}selected{% endif %}>Inactive</option>
             </select>
+        </div>
+        {% set sel_pay_type = s.get('pay_type', emp.pay_type or '') %}
+        <div class="col-md-4">
+            <label class="form-label" for="pay_type">Pay Type (raw-hours engine)</label>
+            <select class="form-select" id="pay_type" name="pay_type">
+                <option value="" {% if not sel_pay_type %}selected{% endif %}>— Not set (standard) —</option>
+                <option value="hourly" {% if sel_pay_type == 'hourly' %}selected{% endif %}>Hourly (basic = hours × rate)</option>
+                <option value="salaried" {% if sel_pay_type == 'salaried' %}selected{% endif %}>Salaried (flat basic wage)</option>
+            </select>
+            <div class="form-text">Set at seed from the workbook; correct a mis-seeded worker here — it re-derives basic on the next compute, no re-seed needed. A change that alters basic asks you to confirm first.</div>
         </div>
         <div class="col-12 d-flex gap-2">
             <button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle"></i>Save Changes</button>
