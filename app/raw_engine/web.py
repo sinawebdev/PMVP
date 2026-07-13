@@ -38,7 +38,12 @@ from app.models import (
 )
 from app.payroll_calculations import statutory_rate_for_run
 from app.raw_engine.cleaning import normalise_emp_id
-from app.raw_engine.detection import company_is_seeded, is_rich_raw_data
+from app.raw_engine.detection import (
+    STANDARD_PAYROLL,
+    classify_workbook,
+    company_is_seeded,
+    is_rich_raw_data,
+)
 from app.raw_engine.exports.service import generate_run_exports
 from app.raw_engine.mapping import HeaderError
 from app.raw_engine.run import compute_seed_month
@@ -98,6 +103,19 @@ def upload():
     bin_path, json_path = _stage_paths(token)
     with open(bin_path, "wb") as handle:
         handle.write(content)
+
+    # Shape Guard: a Standard Payroll workbook uploaded here belongs to the
+    # other importer — stop before the seed/thin branch and point the user back
+    # to Standard Upload. A rich RAW DATA or thin workbook classifies as
+    # RAW_HOURS (not STANDARD) and passes straight through; an unknown workbook
+    # falls through to the existing seed/thin refusals below.
+    if classify_workbook(bin_path) == STANDARD_PAYROLL:
+        _cleanup(token)
+        return jsonify({
+            "error": "This workbook appears to be a Standard Payroll workbook. "
+                     "Please upload it using Standard Upload.",
+            "wrong_tab": "standard",
+        }), 422
 
     seeded = company_is_seeded(client.id)
     try:
