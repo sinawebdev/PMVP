@@ -58,6 +58,7 @@ from app.payroll_status import (
     REJECTED,
 )
 from app.pdf_service import generate_payslip_pdf
+from app.raw_engine.detection import looks_like_raw_hours
 from app.raw_import import normalise_emp_id
 from app.validators import collect_blocking_errors, validate_payroll_rows
 
@@ -425,6 +426,14 @@ def handle_payroll_upload(now):
     source_filename = file_storage.filename
     file_path = save_temporary_upload(file_storage)
     try:
+        # Shape Guard: refuse a Raw Hours workbook before any column mapping,
+        # preview, or validation runs — otherwise the standard importer chews a
+        # raw-hours sheet into scores of invalid rows (the Book1.xlsx case).
+        # Only need the raw signal here; a genuine standard/unknown workbook
+        # falls through to the existing importer unchanged. The friendly message
+        # + "Go to Raw Hour Upload" button render from the wrong_tab flag.
+        if looks_like_raw_hours(file_path):
+            return redirect(url_for("payroll.runs", wrong_tab="raw"))
         if import_mode == "multi_client":
             payload, error = build_multi_client_payload(file_path, source_filename, month, year)
             client_for_batch = None
@@ -510,6 +519,7 @@ def runs():
         clients=clients,
         current_month=now.strftime("%B"),
         current_year=now.year,
+        wrong_tab=request.args.get("wrong_tab"),
     )
 
 

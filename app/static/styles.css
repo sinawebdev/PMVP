@@ -958,51 +958,7 @@ body {
     }
 }
 
-/* --- Raw / Standard upload tabs (payroll detail) --- */
-.upload-tabs {
-    display: flex;
-    gap: 4px;
-    border-bottom: 2px solid rgba(0, 0, 0, .08);
-    margin-bottom: 16px;
-}
-.upload-tab {
-    border: none;
-    background: transparent;
-    padding: 10px 18px;
-    font-weight: 600;
-    color: #6b7280;
-    cursor: pointer;
-    border-bottom: 3px solid transparent;
-    margin-bottom: -2px;
-}
-.upload-tab:hover { color: #111827; }
-.upload-tab.active {
-    color: var(--brand, #0f766e);
-    border-bottom-color: var(--gold);
-}
-.raw-badge {
-    display: inline-block;
-    margin-left: 4px;
-    padding: 1px 7px;
-    border-radius: 999px;
-    background: #fef3c7;
-    color: #92400e;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    vertical-align: middle;
-}
-.raw-dropzone {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    border: 2px dashed rgba(201, 162, 75, .55);
-    border-radius: 12px;
-    padding: 18px 20px;
-    background: rgba(250, 204, 21, .05);
-}
-.raw-dropzone i { font-size: 1.8rem; color: var(--gold); }
+/* --- Raw upload notice (payroll detail + Raw Hour Upload panel) --- */
 .raw-notice {
     display: flex;
     align-items: flex-start;
@@ -1017,6 +973,37 @@ body {
     font-size: .9rem;
 }
 .raw-notice i { color: var(--gold); margin-top: 2px; }
-.raw-summary { display: flex; flex-wrap: wrap; gap: 6px; }
-.raw-success { color: #166534; font-weight: 600; }
-.raw-error { color: #b91c1c; font-weight: 600; }
+
+/* --- Upload-type tabs (Standard vs Raw Hour) on the Create Payroll Run panel --- */
+.upload-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 4px 0 18px;
+}
+.upload-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--shell);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.upload-tab i { font-size: 14px; }
+.upload-tab:hover { color: var(--ink); border-color: var(--brand); }
+.upload-tab:focus-visible { outline: 3px solid var(--brand-soft); outline-offset: 2px; }
+.upload-tab.is-active {
+    background: var(--brand);
+    border-color: var(--brand);
+    color: #fff;
+    box-shadow: 0 8px 18px rgba(15, 118, 110, .22);
+}
+.upload-panel[hidden] { display: none !important; }

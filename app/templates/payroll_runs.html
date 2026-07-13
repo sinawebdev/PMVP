@@ -31,7 +31,21 @@
         <span>Upload inside Payroll Runs</span>
     </div>
 
-    <div class="upload-panel" data-panel="standard">
+    {% if wrong_tab == "raw" and current_user.role == "admin" %}
+    <div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2" role="alert">
+        <span><i class="bi bi-exclamation-triangle"></i> This workbook appears to be a <strong>Raw Hours</strong> workbook. Please upload it using <strong>Raw Hour Upload</strong> instead.</span>
+        <button type="button" class="btn btn-sm btn-warning" onclick="document.getElementById('tab-raw').click()"><i class="bi bi-clock-history"></i> Go to Raw Hour Upload</button>
+    </div>
+    {% endif %}
+
+    <div class="upload-tabs" role="tablist" aria-label="Choose upload type">
+        <button type="button" class="upload-tab is-active" role="tab" aria-selected="true" id="tab-standard" data-tab-target="standard"><i class="bi bi-file-earmark-spreadsheet"></i>Standard Upload</button>
+        {% if current_user.role == "admin" %}
+        <button type="button" class="upload-tab" role="tab" aria-selected="false" id="tab-raw" data-tab-target="raw"><i class="bi bi-clock-history"></i>Raw Hour Upload</button>
+        {% endif %}
+    </div>
+
+    <div class="upload-panel is-active" data-panel="standard" role="tabpanel" aria-labelledby="tab-standard">
         <form method="post" enctype="multipart/form-data" class="row g-3">
             <div class="col-md-4">
                 <label class="form-label">Import Mode</label>
@@ -40,7 +54,7 @@
                     <option value="multi_client">Multi-Client Workbook Import</option>
                 </select>
             </div>
-            <div class="col-md-5">
+            <div class="col-md-4">
                 <label class="form-label">Client Company</label>
                 <select class="form-select" name="client_company_id">
                     <option value="">Choose client company</option>
@@ -57,14 +71,106 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-1"><label class="form-label">Year</label><input class="form-control" type="number" name="year" value="{{ current_year }}" required></div>
+            <div class="col-md-2"><label class="form-label">Year</label><input class="form-control" type="number" name="year" value="{{ current_year }}" required></div>
             <div class="col-md-8"><label class="form-label">Payroll Excel File</label><input class="form-control" type="file" name="payroll_file" accept=".xlsx,.xls,.csv" required></div>
             <div class="col-md-4 d-flex align-items-end">
                 <button class="btn btn-primary w-100"><i class="bi bi-upload"></i>Upload and Preview</button>
             </div>
         </form>
     </div>
+
+    {% if current_user.role == "admin" %}
+    <div class="upload-panel" data-panel="raw" role="tabpanel" aria-labelledby="tab-raw" hidden>
+        <p class="raw-notice"><i class="bi bi-info-circle"></i><span>Hourly-rate clients. An unseeded client's first upload is the rich <strong>RAW DATA</strong> workbook (seed); a seeded client uploads the monthly thin template. Nothing is written until you confirm the preview.</span></p>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label" for="raw_client">Client Company</label>
+                <select class="form-select" id="raw_client">
+                    <option value="">Choose client company</option>
+                    {% for client in clients %}<option value="{{ client.id }}">{{ client.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3"><label class="form-label" for="raw_month">Month</label><input class="form-control" id="raw_month" value="{{ current_month }}"></div>
+            <div class="col-md-3"><label class="form-label" for="raw_year">Year</label><input class="form-control" type="number" id="raw_year" value="{{ current_year }}"></div>
+            <div class="col-md-8"><label class="form-label" for="raw_file">Raw / Thin File (.xlsx)</label><input class="form-control" type="file" id="raw_file" accept=".xlsx"></div>
+            <div class="col-md-4 d-flex align-items-end gap-2">
+                <button class="btn btn-primary" type="button" onclick="rawUpload()"><i class="bi bi-upload"></i>Upload &amp; Preview</button>
+                <a class="btn btn-outline-secondary" href="#" onclick="rawTemplate(event)"><i class="bi bi-download"></i>Template</a>
+            </div>
+            <div class="col-12"><div id="raw_result"></div></div>
+        </div>
+    </div>
+    {% endif %}
 </section>
+
+<script>
+(function () {
+    // Upload-type tabs: activate the clicked button and reveal its matching panel.
+    var tabs = document.querySelectorAll('.upload-tab');
+    var panels = document.querySelectorAll('.upload-panel');
+    tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            var target = tab.getAttribute('data-tab-target');
+            tabs.forEach(function (t) {
+                var on = t === tab;
+                t.classList.toggle('is-active', on);
+                t.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            panels.forEach(function (p) {
+                var on = p.getAttribute('data-panel') === target;
+                p.classList.toggle('is-active', on);
+                p.hidden = !on;
+            });
+        });
+    });
+})();
+
+async function rawUpload() {
+    var cid = document.getElementById('raw_client').value;
+    var file = document.getElementById('raw_file').files[0];
+    var out = document.getElementById('raw_result');
+    if (!cid || !file) { out.innerHTML = '<div class="alert alert-warning">Choose a client and a file.</div>'; return; }
+    var fd = new FormData();
+    fd.append('client_company_id', cid);
+    fd.append('month', document.getElementById('raw_month').value);
+    fd.append('year', document.getElementById('raw_year').value);
+    fd.append('file', file);
+    out.innerHTML = '<div class="alert alert-info">Uploading…</div>';
+    var r = await fetch('{{ url_for("raw_engine.upload") }}', {method: 'POST', body: fd});
+    var d = await r.json();
+    if (!r.ok) {
+        // Shape Guard: a Standard Payroll workbook lands here by mistake — show
+        // the friendly redirect with a button back to the Standard Upload tab.
+        if (d.wrong_tab === 'standard') {
+            out.innerHTML = '<div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2">'
+                + '<span>' + (d.error || 'Wrong workbook type.') + '</span>'
+                + '<button class="btn btn-sm btn-warning" type="button" onclick="document.getElementById(\'tab-standard\').click()"><i class="bi bi-file-earmark-spreadsheet"></i> Go to Standard Upload</button>'
+                + '</div>';
+            return;
+        }
+        out.innerHTML = '<div class="alert alert-danger">' + (d.error || 'Upload failed') + '</div>'; return;
+    }
+    out.innerHTML = '<div class="alert alert-info"><strong>' + d.mode.toUpperCase() + '</strong> preview for ' + d.client_name + ' (' + d.period + '):'
+        + '<pre class="mt-2 mb-2">' + JSON.stringify(d.preview, null, 2) + '</pre>'
+        + '<button class="btn btn-success" type="button" onclick="rawConfirm(\'' + d.token + '\')">Confirm ' + d.mode + '</button></div>';
+}
+async function rawConfirm(token) {
+    var out = document.getElementById('raw_result');
+    var fd = new FormData(); fd.append('token', token);
+    var r = await fetch('{{ url_for("raw_engine.confirm") }}', {method: 'POST', body: fd});
+    var d = await r.json();
+    if (!r.ok) { out.innerHTML = '<div class="alert alert-danger">' + (d.error || 'Confirm failed') + '</div>'; return; }
+    window.location = d.redirect;
+}
+function rawTemplate(ev) {
+    ev.preventDefault();
+    var cid = document.getElementById('raw_client').value;
+    if (!cid) { document.getElementById('raw_result').innerHTML = '<div class="alert alert-warning">Choose a seeded client first.</div>'; return; }
+    var m = encodeURIComponent(document.getElementById('raw_month').value);
+    var y = encodeURIComponent(document.getElementById('raw_year').value);
+    window.location = '/raw/clients/' + cid + '/template?month=' + m + '&year=' + y;
+}
+</script>
 <section class="panel">
     <div class="toolbar">
         <label class="visually-hidden" for="runs-filter">Filter payroll runs</label>
