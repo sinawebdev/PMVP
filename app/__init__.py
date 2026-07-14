@@ -91,6 +91,28 @@ def create_app():
     assert_persistent_database_config(app)
     database_type = database_type_label(app.config["SQLALCHEMY_DATABASE_URI"])
     app.config["DATABASE_TYPE_LABEL"] = database_type
+
+    # Connection resilience for the Supabase-hosted Postgres. Without these,
+    # SQLAlchemy's default pool eventually hands out a connection the pooler has
+    # already dropped after an idle period, and the first query on that dead
+    # socket fails with 'SSL error: decryption failed or bad record mac' (the
+    # Flask-Login user-loader SELECT was the visible casualty). pool_pre_ping
+    # tests and transparently replaces a stale connection before use;
+    # pool_recycle retires one before Supabase's idle timeout; TCP keepalives
+    # keep an otherwise-idle connection from being reaped. Postgres only — these
+    # connect_args are invalid for the local SQLite fallback.
+    if database_type == "PostgreSQL":
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+            "pool_pre_ping": True,
+            "pool_recycle": 280,
+            "connect_args": {
+                "connect_timeout": 10,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5,
+            },
+        }
     startup_message = (
         "Using PostgreSQL database"
         if database_type == "PostgreSQL"
