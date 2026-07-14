@@ -30,10 +30,32 @@ from app.raw_engine.mapping import (
 )
 
 
-def open_raw_data_sheet(path):
-    """Load the RAW DATA worksheet (cached values, not formulas). Raises
-    HeaderError if the sheet is absent."""
-    wb = openpyxl.load_workbook(path, data_only=True, read_only=False)
+def load_raw_workbook(path):
+    """Load a RAW-DATA workbook once, in random-access mode (``data_only`` so
+    cached values are read, not formulas; not ``read_only`` so merged header
+    cells resolve). The caller owns the returned workbook and should close it —
+    threading it through :func:`is_rich_raw_data` +
+    :func:`~app.raw_engine.seed.parse_rich_workbook` /
+    :func:`~app.raw_engine.thin.parse_thin_workbook` lets one upload parse the
+    file exactly once instead of re-opening it per step."""
+    return openpyxl.load_workbook(path, data_only=True, read_only=False)
+
+
+def _resolve_workbook(source):
+    """``(workbook, owns)`` for a path *or* an already-open Workbook. A path is
+    loaded (``owns=True`` — close it after); a Workbook is reused
+    (``owns=False``) so one load flows through the whole pipeline.
+    Backward-compatible: every existing caller passes a path."""
+    if isinstance(source, openpyxl.Workbook):
+        return source, False
+    return load_raw_workbook(source), True
+
+
+def open_raw_data_sheet(source):
+    """The RAW DATA worksheet from ``source`` — a filesystem path or an open
+    Workbook. Raises HeaderError if the sheet is absent. Passing an open Workbook
+    (see :func:`load_raw_workbook`) reuses a single load across the pipeline."""
+    wb, _owns = _resolve_workbook(source)
     if RAW_DATA_SHEET not in wb.sheetnames:
         raise HeaderError(
             f"Workbook has no '{RAW_DATA_SHEET}' sheet (found: {wb.sheetnames}); "
@@ -42,12 +64,12 @@ def open_raw_data_sheet(path):
     return wb[RAW_DATA_SHEET]
 
 
-def is_rich_raw_data(path) -> bool:
-    """True if ``path`` looks like a DZ-style rich RAW-DATA seed workbook: it
-    has a RAW DATA sheet with the stacked NAMES header. Never raises — returns
-    False on anything it can't confirm."""
+def is_rich_raw_data(source) -> bool:
+    """True if ``source`` (a path or an open Workbook) looks like a DZ-style rich
+    RAW-DATA seed workbook: a RAW DATA sheet with the stacked NAMES header. Never
+    raises — returns False on anything it can't confirm."""
     try:
-        ws = open_raw_data_sheet(path)
+        ws = open_raw_data_sheet(source)
         find_name_header_row(ws)
         return True
     except (HeaderError, Exception):

@@ -125,12 +125,26 @@ def _classify(header_value):
     return None, None
 
 
-def parse_thin_workbook(path):
-    """Parse a thin monthly workbook into ``(list[ThinEmployeeInput], warnings)``.
-    Raises :class:`ThinFormatError` if no Staff ID column can be found."""
-    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
-    ws = wb[wb.sheetnames[0]]
-    rows = list(ws.iter_rows(values_only=True))
+def _resolve_thin_workbook(source):
+    """``(workbook, owns)`` for a path or an already-open Workbook. A path loads
+    a light read-only workbook (owns=True → close after); an open Workbook is
+    reused (owns=False) so a single upload load serves the thin path too."""
+    if isinstance(source, openpyxl.Workbook):
+        return source, False
+    return openpyxl.load_workbook(source, data_only=True, read_only=True), True
+
+
+def parse_thin_workbook(source):
+    """Parse a thin monthly workbook (a path or an already-open Workbook) into
+    ``(list[ThinEmployeeInput], warnings)``. Raises :class:`ThinFormatError` if
+    no Staff ID column can be found."""
+    wb, owns = _resolve_thin_workbook(source)
+    try:
+        ws = wb[wb.sheetnames[0]]
+        rows = list(ws.iter_rows(values_only=True))
+    finally:
+        if owns:
+            wb.close()
     if not rows:
         raise ThinFormatError("Thin upload is empty.")
 

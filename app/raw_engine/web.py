@@ -43,6 +43,7 @@ from app.raw_engine.detection import (
     classify_workbook,
     company_is_seeded,
     is_rich_raw_data,
+    load_raw_workbook,
 )
 from app.raw_engine.exports.service import generate_run_exports
 from app.raw_engine.mapping import HeaderError
@@ -118,8 +119,19 @@ def upload():
         }), 422
 
     seeded = company_is_seeded(client.id)
+    wb = None
     try:
-        rich = is_rich_raw_data(bin_path)
+        # Open the workbook ONCE and thread it through the whole preview pipeline
+        # (is_rich + parse) instead of re-opening it for each step — a rich DZ
+        # workbook is large and the repeated loads were the bulk of the upload time.
+        try:
+            wb = load_raw_workbook(bin_path)
+        except Exception:
+            _cleanup(token)
+            return jsonify({
+                "error": "The uploaded file could not be read as an .xlsx workbook."
+            }), 422
+        rich = is_rich_raw_data(wb)
         if not seeded:
             # Seed path expects the rich RAW DATA workbook.
             if not rich:
@@ -129,7 +141,7 @@ def upload():
                              "must be the rich RAW DATA workbook (with the stacked "
                              "header and rate table). Upload that to seed the company."
                 }), 422
-            context = parse_rich_workbook(bin_path, client.id, source_filename=file.filename)
+            context = parse_rich_workbook(wb, client.id, source_filename=file.filename)
             preview = {
                 "employees": len(context.employees),
                 "icu_members": context.icu_member_count,
@@ -148,7 +160,7 @@ def upload():
                              "template instead — new hires/raises are a separate "
                              "re-seed action."
                 }), 422
-            inputs, _warn = parse_thin_workbook(bin_path)
+            inputs, _warn = parse_thin_workbook(wb)
             roster = {
                 normalise_emp_id(e.staff_id)
                 for e in Employee.query.filter_by(client_company_id=client.id)
@@ -164,6 +176,9 @@ def upload():
     except (HeaderError, ThinFormatError) as exc:
         _cleanup(token)
         return jsonify({"error": str(exc)}), 422
+    finally:
+        if wb is not None:
+            wb.close()
 
     with open(json_path, "w", encoding="utf-8") as handle:
         json.dump({

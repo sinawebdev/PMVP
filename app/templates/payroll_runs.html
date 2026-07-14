@@ -94,7 +94,7 @@
             <div class="col-md-3"><label class="form-label" for="raw_year">Year</label><input class="form-control" type="number" id="raw_year" value="{{ current_year }}"></div>
             <div class="col-md-8"><label class="form-label" for="raw_file">Raw / Thin File (.xlsx)</label><input class="form-control" type="file" id="raw_file" accept=".xlsx"></div>
             <div class="col-md-4 d-flex align-items-end gap-2">
-                <button class="btn btn-primary" type="button" onclick="rawUpload()"><i class="bi bi-upload"></i>Upload &amp; Preview</button>
+                <button class="btn btn-primary" id="raw_upload_btn" type="button" onclick="rawUpload()"><i class="bi bi-upload"></i>Upload &amp; Preview</button>
                 <a class="btn btn-outline-secondary" href="#" onclick="rawTemplate(event)"><i class="bi bi-download"></i>Template</a>
             </div>
             <div class="col-12"><div id="raw_result"></div></div>
@@ -125,7 +125,38 @@
     });
 })();
 
+function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+        return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c];
+    });
+}
+function rawPreviewHTML(d) {
+    var p = d.preview || {};
+    var head = '<div class="mb-1"><strong>' + (d.mode === 'seed' ? 'Seed preview' : 'Monthly preview')
+        + '</strong> — ' + esc(d.client_name) + ' · ' + esc(d.period) + '</div>';
+    var body;
+    if (d.mode === 'seed') {
+        body = '<div>' + p.employees + ' employees found — ' + p.hourly + ' hourly, '
+            + p.salaried + ' salaried · ' + p.icu_members + ' ICU members</div>';
+    } else {
+        var blocked = p.blocked || [];
+        body = '<div>' + p.employees + ' workers in the file — ' + p.matched + ' matched to the roster'
+            + (blocked.length ? ', ' + blocked.length + ' not on the roster' : '') + '</div>';
+        if (blocked.length) {
+            body += '<div class="small text-muted mt-1">Not on roster: ' + esc(blocked.join(', ')) + '</div>';
+        }
+    }
+    var warns = p.warnings || [];
+    var warnHtml = warns.length
+        ? '<div class="small text-muted mt-1">' + warns.length + ' warning(s): '
+          + esc(warns.slice(0, 5).join('; ')) + (warns.length > 5 ? ' …' : '') + '</div>'
+        : '<div class="small text-success mt-1">No warnings.</div>';
+    return '<div class="alert alert-info">' + head + body + warnHtml
+        + '<button class="btn btn-success mt-2" id="raw_confirm_btn" type="button" onclick="rawConfirm(\'' + d.token + '\')">'
+        + '<i class="bi bi-check2-circle"></i>Confirm ' + (d.mode === 'seed' ? 'seed' : 'monthly run') + '</button></div>';
+}
 async function rawUpload() {
+    var btn = document.getElementById('raw_upload_btn');
     var cid = document.getElementById('raw_client').value;
     var file = document.getElementById('raw_file').files[0];
     var out = document.getElementById('raw_result');
@@ -135,32 +166,50 @@ async function rawUpload() {
     fd.append('month', document.getElementById('raw_month').value);
     fd.append('year', document.getElementById('raw_year').value);
     fd.append('file', file);
-    out.innerHTML = '<div class="alert alert-info">Uploading…</div>';
-    var r = await fetch('{{ url_for("raw_engine.upload") }}', {method: 'POST', body: fd});
-    var d = await r.json();
-    if (!r.ok) {
-        // Shape Guard: a Standard Payroll workbook lands here by mistake — show
-        // the friendly redirect with a button back to the Standard Upload tab.
-        if (d.wrong_tab === 'standard') {
-            out.innerHTML = '<div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2">'
-                + '<span>' + (d.error || 'Wrong workbook type.') + '</span>'
-                + '<button class="btn btn-sm btn-warning" type="button" onclick="document.getElementById(\'tab-standard\').click()"><i class="bi bi-file-earmark-spreadsheet"></i> Go to Standard Upload</button>'
-                + '</div>';
+    var original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Uploading…';
+    out.innerHTML = '<div class="alert alert-info">Parsing the workbook — this can take up to a minute on the free tier. Please don\'t re-click.</div>';
+    try {
+        var r = await fetch('{{ url_for("raw_engine.upload") }}', {method: 'POST', body: fd});
+        var d = await r.json();
+        if (!r.ok) {
+            // Shape Guard: a Standard Payroll workbook lands here by mistake — show
+            // the friendly redirect with a button back to the Standard Upload tab.
+            if (d.wrong_tab === 'standard') {
+                out.innerHTML = '<div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2">'
+                    + '<span>' + esc(d.error || 'Wrong workbook type.') + '</span>'
+                    + '<button class="btn btn-sm btn-warning" type="button" onclick="document.getElementById(\'tab-standard\').click()"><i class="bi bi-file-earmark-spreadsheet"></i> Go to Standard Upload</button>'
+                    + '</div>';
+                return;
+            }
+            out.innerHTML = '<div class="alert alert-danger">' + esc(d.error || 'Upload failed') + '</div>';
             return;
         }
-        out.innerHTML = '<div class="alert alert-danger">' + (d.error || 'Upload failed') + '</div>'; return;
+        out.innerHTML = rawPreviewHTML(d);
+    } catch (e) {
+        out.innerHTML = '<div class="alert alert-danger">Network error — the workbook may still be processing on the server. Wait a moment and check before retrying.</div>';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
     }
-    out.innerHTML = '<div class="alert alert-info"><strong>' + d.mode.toUpperCase() + '</strong> preview for ' + d.client_name + ' (' + d.period + '):'
-        + '<pre class="mt-2 mb-2">' + JSON.stringify(d.preview, null, 2) + '</pre>'
-        + '<button class="btn btn-success" type="button" onclick="rawConfirm(\'' + d.token + '\')">Confirm ' + d.mode + '</button></div>';
 }
 async function rawConfirm(token) {
     var out = document.getElementById('raw_result');
+    var btn = document.getElementById('raw_confirm_btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving…';
+    }
     var fd = new FormData(); fd.append('token', token);
-    var r = await fetch('{{ url_for("raw_engine.confirm") }}', {method: 'POST', body: fd});
-    var d = await r.json();
-    if (!r.ok) { out.innerHTML = '<div class="alert alert-danger">' + (d.error || 'Confirm failed') + '</div>'; return; }
-    window.location = d.redirect;
+    try {
+        var r = await fetch('{{ url_for("raw_engine.confirm") }}', {method: 'POST', body: fd});
+        var d = await r.json();
+        if (!r.ok) { out.innerHTML = '<div class="alert alert-danger">' + esc(d.error || 'Confirm failed') + '</div>'; return; }
+        window.location = d.redirect;
+    } catch (e) {
+        out.innerHTML = '<div class="alert alert-danger">Network error during confirm — check Payroll Runs before retrying so you don\'t double-post.</div>';
+    }
 }
 function rawTemplate(ev) {
     ev.preventDefault();

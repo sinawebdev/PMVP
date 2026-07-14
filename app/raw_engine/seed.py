@@ -117,19 +117,27 @@ def _text(value):
     return str(value).strip()
 
 
-def parse_rich_workbook(path, client_company_id, source_filename=None) -> SeedContext:
-    """Parse the RAW DATA sheet at ``path`` into a :class:`SeedContext`.
+def parse_rich_workbook(source, client_company_id, source_filename=None) -> SeedContext:
+    """Parse the RAW DATA sheet into a :class:`SeedContext`. ``source`` is a
+    filesystem path *or* an already-open Workbook (see
+    :func:`app.raw_engine.detection.load_raw_workbook`); passing a Workbook
+    reuses a single load instead of re-opening the file.
 
     Raises :class:`~app.raw_engine.mapping.HeaderError` if the sheet is missing
     or its layout does not match the DZ template.
     """
-    ws = open_raw_data_sheet(path)
+    ws = open_raw_data_sheet(source)
     name_row = find_name_header_row(ws)
     validate_layout(ws, name_row)
 
+    fallback_name = (
+        _text(source).rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        if isinstance(source, str)
+        else "raw_workbook.xlsx"
+    )
     context = SeedContext(
         client_company_id=client_company_id,
-        source_filename=source_filename or _text(path).rsplit("/", 1)[-1],
+        source_filename=source_filename or fallback_name,
     )
     seen = {}
 
