@@ -87,44 +87,84 @@ def find_name_header_row(ws, scan_limit=40):
     )
 
 
+def _merged_anchor(ws, row, col):
+    """``(anchor_row, value)`` for ``(row, col)``. openpyxl stores a merged
+    cell's value only in its top-left anchor; the other cells read ``None``. If
+    ``(row, col)`` sits inside a merged range this returns the anchor's row and
+    value, otherwise the cell itself — so a vertically-merged header label (e.g.
+    Book1's ``D10:D11`` 'NORMAL HOURS' spanning onto the NAMES row) resolves to
+    its real value instead of a blank."""
+    for rng in ws.merged_cells.ranges:
+        if rng.min_row <= row <= rng.max_row and rng.min_col <= col <= rng.max_col:
+            return rng.min_row, ws.cell(rng.min_row, rng.min_col).value
+    return row, ws.cell(row, col).value
+
+
+def find_element_row(ws, name_row, scan_up=6):
+    """The row carrying the element category labels, anchored on the NAMES row
+    rather than a hardcoded offset. Scans from the NAMES row upward for the row
+    whose first-element column reads the NORMAL label (merge-resolved) and
+    returns the merge's *top* row, so the parallel un-merged rate labels on that
+    same row stay visible. Handles all three real geometries — the 3-row stacked
+    DZ header (categories two rows above NAMES), the merged 2-row header
+    (categories merged onto the NAMES row), and a future single header row
+    (categories on the NAMES row itself) — and falls back to ``name_row - 2`` if
+    nothing matches."""
+    first_hours_col = ELEMENTS[0][3]
+    normal = normalise_element(ELEMENTS[0][5])
+    for r in range(name_row, max(1, name_row - scan_up) - 1, -1):
+        anchor_row, value = _merged_anchor(ws, r, first_hours_col)
+        if normal and normal in normalise_element(value):
+            return anchor_row
+    # Fallback to the classic DZ offset, clamped to a real row so a degenerate
+    # sheet (NAMES at the very top) fails loud in validate_layout rather than
+    # crashing on a non-positive row index.
+    return max(1, name_row - 2)
+
+
 def validate_layout(ws, name_row):
-    """Confirm the fixed positional template by checking sentinel labels in the
-    stacked header rows above ``name_row``. Collects every mismatch and raises a
-    single HeaderError listing them (fail loud, never guess)."""
-    element_row = name_row - 2  # element names (e.g. row 10 when NAMES is row 12)
+    """Confirm the RAW DATA positional template by checking sentinel labels on
+    the element-header row (located via :func:`find_element_row`, not a fixed
+    ``name_row - 2``). Two robustness rules vs. the original exact-match:
+
+      * **merge-aware** — a header cell inside a merged range resolves to its
+        anchor value, so a vertically-merged 'NORMAL HOURS' validates.
+      * **token containment** — the expected label need only be *contained* in
+        the (normalised) header, so 'NORMAL HOURS' satisfies 'NORMAL' and
+        '6 TO 6 DAY' satisfies '6 TO 6'. A genuinely wrong column (e.g. 'RATE 1')
+        still fails, so the fail-loud contract holds.
+
+    Each header is read across the element row *and the row below it*
+    (merge-resolved), so a split 'BASIC'/'WAGE' stack (DZ) reads identically to a
+    merged 'BASIC WAGE' (Book1). Collects every mismatch and raises one
+    HeaderError."""
+    element_row = find_element_row(ws, name_row)
     problems = []
 
-    def label(row, col):
-        return normalise_element(_cell(ws, row, col))
-
-    # Basic-wage and daily-rate anchors bracket the hours/rate blocks.
-    basic_composite = " ".join(
-        label(name_row - 3 + i, COL_BASIC_WAGE) for i in range(3)
-    )
-    if "BASIC" not in basic_composite or "WAGE" not in basic_composite:
-        problems.append(
-            f"column W (basic wage) header {basic_composite!r} lacks BASIC/WAGE"
+    def band(col):
+        # element row + the row below (sub-label / merge tail), merge-resolved.
+        return normalise_element(
+            f"{_merged_anchor(ws, element_row, col)[1] or ''} "
+            f"{_merged_anchor(ws, element_row + 1, col)[1] or ''}"
         )
-    if label(element_row, COL_DAILY_RATE) != "RATE":
-        problems.append(
-            f"column M (daily rate) header {label(element_row, COL_DAILY_RATE)!r} != 'RATE'"
-        )
-    icu_composite = " ".join(label(name_row - 3 + i, COL_ICU_DUES) for i in range(3))
-    if "ICU" not in icu_composite:
-        problems.append(f"column BC (ICU dues) header {icu_composite!r} lacks ICU")
 
-    # Each element's hours column and rate column must carry the expected label.
+    def require(col, token, where):
+        got = band(col)
+        if normalise_element(token) not in got:
+            problems.append(f"{where} header {got!r} lacks {token!r}")
+
+    # Bracketing anchors: daily rate (M), basic wage (W — split in the DZ
+    # stack), ICU dues (BC — likewise split).
+    require(COL_DAILY_RATE, "RATE", "column M (daily rate)")
+    basic = band(COL_BASIC_WAGE)
+    if "BASIC" not in basic or "WAGE" not in basic:
+        problems.append(f"column W (basic wage) header {basic!r} lacks BASIC/WAGE")
+    require(COL_ICU_DUES, "ICU", "column BC (ICU dues)")
+
+    # Each element's hours column and rate column must carry the expected token.
     for pay_code, _label, _cat, hours_col, rate_col, expected in ELEMENTS:
-        got_hours = label(element_row, hours_col)
-        got_rate = label(element_row, rate_col)
-        if got_hours != expected:
-            problems.append(
-                f"{pay_code}: hours column header {got_hours!r} != {expected!r}"
-            )
-        if got_rate != expected:
-            problems.append(
-                f"{pay_code}: rate column header {got_rate!r} != {expected!r}"
-            )
+        require(hours_col, expected, f"{pay_code}: hours column")
+        require(rate_col, expected, f"{pay_code}: rate column")
 
     if problems:
         raise HeaderError(
