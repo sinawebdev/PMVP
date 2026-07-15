@@ -25,22 +25,15 @@ from app.raw_engine.cleaning import (
 )
 from app.raw_engine.detection import open_raw_data_sheet
 from app.raw_engine.mapping import (
-    COL_ACCOUNT_NO,
-    COL_BANK,
     COL_BASIC_WAGE,
-    COL_BRANCH,
     COL_DAILY_RATE,
-    COL_DEPARTMENT,
-    COL_GHANA_CARD,
     COL_ICU_DUES,
-    COL_JOB_TITLE,
     COL_NAME,
-    COL_SSNIT_NO,
     COL_STAFF_KEY,
-    COL_TAX_RELIEF,
     ELEMENTS,
     ELEMENT_SET,
     find_name_header_row,
+    resolve_master_columns,
     validate_layout,
 )
 
@@ -129,6 +122,19 @@ def parse_rich_workbook(source, client_company_id, source_filename=None) -> Seed
     ws = open_raw_data_sheet(source)
     name_row = find_name_header_row(ws)
     validate_layout(ws, name_row)
+    # Locate the employee master-data columns by header, not fixed position
+    # (Book1 and the DZ specimen shift them); raises HeaderError if the
+    # payment-critical fields can't be found, so a shifted workbook fails loud
+    # instead of seeding a bank name into the SSNIT field (PMVP-05 Issue 3).
+    master_cols = resolve_master_columns(ws, name_row)
+
+    def _master_text(row, field):
+        col = master_cols.get(field)
+        return _text(ws.cell(row, col).value) if col else ""
+
+    def _master_num(row, field):
+        col = master_cols.get(field)
+        return coerce_rate(ws.cell(row, col).value) if col else 0.0
 
     fallback_name = (
         _text(source).rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
@@ -167,14 +173,14 @@ def parse_rich_workbook(source, client_company_id, source_filename=None) -> Seed
             basic_salary=coerce_rate(ws.cell(r, COL_BASIC_WAGE).value),
             icu_member=coerce_rate(ws.cell(r, COL_ICU_DUES).value) > 0,
             daily_rate=daily_rate,
-            ghana_card_number=_text(ws.cell(r, COL_GHANA_CARD).value),
-            ssnit_number=_text(ws.cell(r, COL_SSNIT_NO).value),
-            bank_name=_text(ws.cell(r, COL_BANK).value),
-            bank_branch=_text(ws.cell(r, COL_BRANCH).value),
-            bank_account_number=_text(ws.cell(r, COL_ACCOUNT_NO).value),
-            department=_text(ws.cell(r, COL_DEPARTMENT).value),
-            job_title=_text(ws.cell(r, COL_JOB_TITLE).value),
-            tax_relief_monthly=coerce_rate(ws.cell(r, COL_TAX_RELIEF).value),
+            ghana_card_number=_master_text(r, "ghana_card"),
+            ssnit_number=_master_text(r, "ssnit"),
+            bank_name=_master_text(r, "bank"),
+            bank_branch=_master_text(r, "branch"),
+            bank_account_number=_master_text(r, "account_no"),
+            department=_master_text(r, "department"),
+            job_title=_master_text(r, "job_title"),
+            tax_relief_monthly=_master_num(r, "tax_relief"),
             bonus=coerce_rate(ws.cell(r, COL_PROD_BONUS).value),
             other_allowance=coerce_rate(ws.cell(r, COL_OTHER_ALLOWANCE).value),
             pay_difference=coerce_rate(ws.cell(r, COL_PAY_DIFFERENCE).value),

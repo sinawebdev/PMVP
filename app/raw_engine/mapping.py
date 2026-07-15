@@ -171,3 +171,72 @@ def validate_layout(ws, name_row):
             "RAW DATA layout validation failed — refusing to guess columns:\n  - "
             + "\n  - ".join(problems)
         )
+
+
+# ── Master-data columns: resolved by HEADER, not fixed position ──────────────
+# The employee master block (Ghana card, SSNIT, account, bank, branch, dept,
+# job title, tax relief) sits at different columns in different real workbooks:
+# Book1 drops two tax-relief columns the DZ specimen has, shifting everything
+# from GHANA CARD onward two columns left. A fixed position that is right for
+# one is wrong for the other — and, unlike the hours block, these columns were
+# never validated, so a shift silently seeded a bank name into the SSNIT field
+# and a branch into the account number (PMVP-05 Issue 3). We now locate each
+# field by matching its header label in the element/NAMES header band.
+
+
+def _compact_header(value):
+    """Upper-case and drop every non-alphanumeric character so header labels
+    compare regardless of spacing/punctuation: "A/C NO." -> 'ACNO',
+    "DEP'T" -> 'DEPT', "SOCIAL SECURITY NO." -> 'SOCIALSECURITYNO'."""
+    return "".join(ch for ch in str(value or "").upper() if ch.isalnum())
+
+
+# field -> predicate(compact_header) -> bool. Exact where a near-label could
+# collide (branch must NOT match 'BRANCH CODE'); startswith where the label is
+# unambiguous and may be doubled by a merged header.
+_MASTER_HEADER_MATCHERS = {
+    "ghana_card": lambda h: h.startswith("GHANACARD"),
+    "ssnit": lambda h: h.startswith("SOCIALSECURITY") or h in ("SSNIT", "SSNITNO", "SSNITNUMBER"),
+    "account_no": lambda h: h in ("ACNO", "ACCNO", "ACCOUNTNO", "ACCOUNTNUMBER", "ACCOUNTSNO"),
+    "bank": lambda h: h in ("BANK", "BANKNAME"),
+    "branch": lambda h: h == "BRANCH",           # exact — must not match BRANCHCODE
+    "department": lambda h: h in ("DEPT", "DEPARTMENT"),
+    "job_title": lambda h: h in ("JOBTITLE", "POSITION", "TITLE"),
+    "tax_relief": lambda h: "MONTHLY" in h and "TAXREL" in h,
+}
+# Payment-/statutory-critical fields. If any cannot be located by header, the
+# workbook is refused rather than seeded from a guessed column.
+_MASTER_REQUIRED = ("ssnit", "account_no", "bank")
+
+
+def resolve_master_columns(ws, name_row):
+    """``{field: 1-based column}`` for the employee master-data columns, located
+    by header label (merge-resolved) instead of a fixed position. Raises
+    HeaderError if a payment-critical field (SSNIT / account / bank) can't be
+    found — fail loud instead of writing wrong PII."""
+    element_row = find_element_row(ws, name_row)
+    resolved = {}
+    max_col = ws.max_column or 100
+    for col in range(1, max_col + 1):
+        parts = []
+        for rr in (element_row, element_row + 1):
+            value = _merged_anchor(ws, rr, col)[1]
+            # Skip a repeat from a vertically-merged header so a 2-row label
+            # isn't doubled ('GHANA CARDGHANA CARD').
+            if value is not None and (not parts or parts[-1] != value):
+                parts.append(value)
+        header = _compact_header(" ".join(str(p) for p in parts))
+        if not header:
+            continue
+        for field, matches in _MASTER_HEADER_MATCHERS.items():
+            if field not in resolved and matches(header):
+                resolved[field] = col
+    missing = [f for f in _MASTER_REQUIRED if f not in resolved]
+    if missing:
+        raise HeaderError(
+            "RAW DATA master columns could not be located by header ("
+            + ", ".join(missing)
+            + ") — refusing to seed employee bank/SSNIT details from guessed "
+            "columns. Check the workbook's header labels."
+        )
+    return resolved
