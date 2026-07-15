@@ -7,11 +7,16 @@ services:
     # Apply Alembic migrations before serving so schema changes actually reach
     # the database. (Previously nothing ran migrations, so columns added in
     # migrations never existed in the deployed DB and pages 500'd.)
-    # --timeout 120: the confirm flow can legitimately take tens of seconds on
-    # large files; gunicorn's default 30s SIGKILLed the worker mid-confirm with
-    # no traceback and no DB error. Single worker kept deliberately — the free
-    # plan's 512MB doesn't fit two pandas-loaded sync workers.
-    startCommand: flask db upgrade && gunicorn run:app --bind 0.0.0.0:10000 --timeout 120
+    # --timeout 300: the seed confirm (181 employees + rate rows + payslip compute
+    # + workbook archive) can run for minutes on the free plan's 0.1 CPU; keep
+    # gunicorn from SIGKILLing it mid-write.
+    # --threads 4: the single SYNC worker was blocking Render's /health probe while
+    # a confirm ran, so Render's 5-second health-check timeout restarted the
+    # instance mid-confirm (transaction rolled back -> "Network error" + 502, no
+    # SIGKILL). gthread lets /health be answered concurrently on a spare thread.
+    # Single WORKER kept deliberately — the free plan's 512MB doesn't fit two
+    # pandas-loaded workers; threads add concurrency without a second process.
+    startCommand: flask db upgrade && gunicorn run:app --bind 0.0.0.0:10000 --timeout 300 --threads 4
     healthCheckPath: /health
     envVars:
       - key: FLASK_APP

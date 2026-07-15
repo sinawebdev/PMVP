@@ -16,6 +16,11 @@ from app.raw_engine.thin import thin_header
 
 _LABEL_BY_CODE = {code: label for code, label, _cat in ELEMENT_SET}
 ICU_MEMBER_COLUMN = "ICU Member"
+# Read-only reference columns, prefilled from the seeded Employee record so the
+# operator/client can verify master details without re-entering them. They are
+# NOT parsed back on upload (parse_thin_workbook ignores unknown headers), so
+# they never affect computation — reference only (PMVP-05 Feature 4).
+REFERENCE_COLUMNS = ["Bank", "A/C No.", "SSNIT No.", "Department", "Position", "Ghana Card", "MoMo No."]
 
 
 def seeded_element_codes(client_company_id):
@@ -44,23 +49,34 @@ def generate_monthly_template(client_company_id, export_folder, month, year):
         .all()
     )
     codes = seeded_element_codes(client_company_id)
-    header = thin_header(codes) + [ICU_MEMBER_COLUMN]
+    header = thin_header(codes) + [ICU_MEMBER_COLUMN] + REFERENCE_COLUMNS
 
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "MONTHLY TEMPLATE"
     sheet.append(header)
     header_fill = PatternFill("solid", fgColor="D9EAF7")
+    reference_fill = PatternFill("solid", fgColor="ECECEC")  # greyed = reference
+    ref_start = len(header) - len(REFERENCE_COLUMNS) + 1
     for col in range(1, len(header) + 1):
         cell = sheet.cell(row=1, column=col)
         cell.font = Font(bold=True)
-        cell.fill = header_fill
+        cell.fill = reference_fill if col >= ref_start else header_fill
 
     for emp in employees:
         row = [emp.staff_id, emp.full_name]
         row += [0] * len(codes)                 # hours, zero-filled
         row += [0, 0, 0, 0, 0]                  # adjustments, zero-filled
         row += ["Member" if emp.icu_member else ""]  # scoped to members only
+        row += [                                 # reference (read-only) fields
+            emp.bank_name or "",
+            emp.bank_account_number or "",
+            emp.ssnit_number or "",
+            emp.department or "",
+            emp.job_title or "",
+            emp.ghana_card_number or "",
+            emp.momo_number or "",
+        ]
         sheet.append(row)
 
     for column_cells in sheet.columns:

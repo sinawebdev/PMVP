@@ -68,6 +68,9 @@ class Employee(db.Model):
     preferred_channel = db.Column(db.String(16))
     # Roster-maintained department (free text). Sourced from the employee record, never payroll.
     department = db.Column(db.String(80))
+    # Roster-maintained job title / position, seeded from the rich workbook's
+    # JOB TITLE column (reference data; never drives pay).
+    job_title = db.Column(db.String(120))
     basic_salary = db.Column(db.Float, default=0)
     # Explicit hourly/salaried classification for the raw-hours engine
     # ('hourly' | 'salaried'). Seeded from the rich workbook's structure

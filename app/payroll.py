@@ -46,6 +46,7 @@ from app.models import (
     PayrollRun,
     PayslipDelivery,
     RawPayEntry,
+    RawUploadArchive,
     Remittance,
     WageRateProfile,
 )
@@ -1126,6 +1127,21 @@ def calculate(run_id):
         return redirect(url_for("payroll.detail", run_id=run_id))
 
     if payroll_run.upload_type == "raw":
+        # Raw Engine seed/thin runs compute and store their PayrollItems at
+        # confirm and never write RawPayEntry hours. The legacy hours-first
+        # rebuild below deletes every item and recreates them from RawPayEntry;
+        # for an Engine run that set is empty, so it would wipe the payroll to
+        # nothing (PMVP-05 Issue 1). Only take the destructive rebuild when there
+        # are actually raw-hours entries to rebuild from; otherwise the pay is
+        # already computed — treat Calculate Pay as a safe no-op.
+        if RawPayEntry.query.filter_by(payroll_run_id=payroll_run.id).count() == 0:
+            flash(
+                "This raw payroll was already computed when it was confirmed — "
+                "nothing to recalculate. To change it, re-upload the workbook "
+                "(a rich re-seed, or a corrected monthly file).",
+                "info",
+            )
+            return redirect(url_for("payroll.detail", run_id=run_id))
         calculator = HourlyShiftCalculator(payroll_run, statutory_rate)
         results = calculator.calculate_run()
         missing = sorted(
@@ -1513,11 +1529,11 @@ def hard_delete_payroll_run(payroll_run):
     caller owns the transaction so callers like the replace-existing flow can
     delete-and-recreate atomically.
 
-    Order matters: PayslipDelivery and RawPayEntry carry non-nullable FKs to
-    payroll_run with no DB-side cascade, so they go first; ImportBatch rows
-    for the run are removed too (these are the "Previewed" leftovers this
-    feature exists to clean up). PayrollItem rows are handled by the
-    relationship's own delete-orphan cascade — no extra code."""
+    Order matters: PayslipDelivery, RawPayEntry and RawUploadArchive carry
+    non-nullable FKs to payroll_run with no DB-side cascade, so they go first;
+    ImportBatch rows for the run are removed too (these are the "Previewed"
+    leftovers this feature exists to clean up). PayrollItem rows are handled by
+    the relationship's own delete-orphan cascade — no extra code."""
     blockers = payroll_run_delete_blockers(payroll_run)
     if blockers:
         return False, "; ".join(blockers)
@@ -1536,6 +1552,11 @@ def hard_delete_payroll_run(payroll_run):
 
     PayslipDelivery.query.filter_by(payroll_run_id=payroll_run.id).delete()
     RawPayEntry.query.filter_by(payroll_run_id=payroll_run.id).delete()
+    # RawUploadArchive stores the original workbook bytes behind a NOT-NULL FK to
+    # the run with no DB-side cascade. Every Raw Engine seed writes one, so
+    # without this delete, removing a raw run raised IntegrityError -> 500
+    # (PMVP-05 Issue 2). Removed here — the archive is worthless without its run.
+    RawUploadArchive.query.filter_by(payroll_run_id=payroll_run.id).delete()
     ImportBatch.query.filter_by(payroll_run_id=payroll_run.id).delete()
     db.session.delete(payroll_run)  # PayrollItems cascade via the relationship
     return True, None
