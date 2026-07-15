@@ -1126,6 +1126,21 @@ def calculate(run_id):
         return redirect(url_for("payroll.detail", run_id=run_id))
 
     if payroll_run.upload_type == "raw":
+        # Raw Engine seed/thin runs compute and store their PayrollItems at
+        # confirm and never write RawPayEntry hours. The legacy hours-first
+        # rebuild below deletes every item and recreates them from RawPayEntry;
+        # for an Engine run that set is empty, so it would wipe the payroll to
+        # nothing (PMVP-05 Issue 1). Only take the destructive rebuild when there
+        # are actually raw-hours entries to rebuild from; otherwise the pay is
+        # already computed — treat Calculate Pay as a safe no-op.
+        if RawPayEntry.query.filter_by(payroll_run_id=payroll_run.id).count() == 0:
+            flash(
+                "This raw payroll was already computed when it was confirmed — "
+                "nothing to recalculate. To change it, re-upload the workbook "
+                "(a rich re-seed, or a corrected monthly file).",
+                "info",
+            )
+            return redirect(url_for("payroll.detail", run_id=run_id))
         calculator = HourlyShiftCalculator(payroll_run, statutory_rate)
         results = calculator.calculate_run()
         missing = sorted(
