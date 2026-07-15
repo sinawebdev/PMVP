@@ -20,7 +20,7 @@ ICU_MEMBER_COLUMN = "ICU Member"
 # operator/client can verify master details without re-entering them. They are
 # NOT parsed back on upload (parse_thin_workbook ignores unknown headers), so
 # they never affect computation — reference only (PMVP-05 Feature 4).
-REFERENCE_COLUMNS = ["Bank", "A/C No.", "SSNIT No.", "Department", "Ghana Card", "MoMo No."]
+REFERENCE_COLUMNS = ["Bank", "A/C No.", "SSNIT No.", "Department", "Position", "Ghana Card", "MoMo No."]
 
 
 def seeded_element_codes(client_company_id):
@@ -73,6 +73,7 @@ def generate_monthly_template(client_company_id, export_folder, month, year):
             emp.bank_account_number or "",
             emp.ssnit_number or "",
             emp.department or "",
+            emp.job_title or "",
             emp.ghana_card_number or "",
             emp.momo_number or "",
         ]
