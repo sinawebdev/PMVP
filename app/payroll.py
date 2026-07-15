@@ -46,6 +46,7 @@ from app.models import (
     PayrollRun,
     PayslipDelivery,
     RawPayEntry,
+    RawUploadArchive,
     Remittance,
     WageRateProfile,
 )
@@ -1528,11 +1529,11 @@ def hard_delete_payroll_run(payroll_run):
     caller owns the transaction so callers like the replace-existing flow can
     delete-and-recreate atomically.
 
-    Order matters: PayslipDelivery and RawPayEntry carry non-nullable FKs to
-    payroll_run with no DB-side cascade, so they go first; ImportBatch rows
-    for the run are removed too (these are the "Previewed" leftovers this
-    feature exists to clean up). PayrollItem rows are handled by the
-    relationship's own delete-orphan cascade — no extra code."""
+    Order matters: PayslipDelivery, RawPayEntry and RawUploadArchive carry
+    non-nullable FKs to payroll_run with no DB-side cascade, so they go first;
+    ImportBatch rows for the run are removed too (these are the "Previewed"
+    leftovers this feature exists to clean up). PayrollItem rows are handled by
+    the relationship's own delete-orphan cascade — no extra code."""
     blockers = payroll_run_delete_blockers(payroll_run)
     if blockers:
         return False, "; ".join(blockers)
@@ -1551,6 +1552,11 @@ def hard_delete_payroll_run(payroll_run):
 
     PayslipDelivery.query.filter_by(payroll_run_id=payroll_run.id).delete()
     RawPayEntry.query.filter_by(payroll_run_id=payroll_run.id).delete()
+    # RawUploadArchive stores the original workbook bytes behind a NOT-NULL FK to
+    # the run with no DB-side cascade. Every Raw Engine seed writes one, so
+    # without this delete, removing a raw run raised IntegrityError -> 500
+    # (PMVP-05 Issue 2). Removed here — the archive is worthless without its run.
+    RawUploadArchive.query.filter_by(payroll_run_id=payroll_run.id).delete()
     ImportBatch.query.filter_by(payroll_run_id=payroll_run.id).delete()
     db.session.delete(payroll_run)  # PayrollItems cascade via the relationship
     return True, None
