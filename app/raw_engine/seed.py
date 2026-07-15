@@ -33,6 +33,7 @@ from app.raw_engine.mapping import (
     ELEMENTS,
     ELEMENT_SET,
     find_name_header_row,
+    resolve_adjustment_columns,
     resolve_master_columns,
     validate_layout,
 )
@@ -127,6 +128,10 @@ def parse_rich_workbook(source, client_company_id, source_filename=None) -> Seed
     # payment-critical fields can't be found, so a shifted workbook fails loud
     # instead of seeding a bank name into the SSNIT field (PMVP-05 Issue 3).
     master_cols = resolve_master_columns(ws, name_row)
+    # Lump-adjustment columns: header-anchored with a fixed-position fallback, so
+    # a future column shift can't silently mis-read pay without changing the
+    # (currently-aligned) behaviour for existing workbooks.
+    adj_cols = resolve_adjustment_columns(ws, name_row)
 
     def _master_text(row, field):
         col = master_cols.get(field)
@@ -135,6 +140,9 @@ def parse_rich_workbook(source, client_company_id, source_filename=None) -> Seed
     def _master_num(row, field):
         col = master_cols.get(field)
         return coerce_rate(ws.cell(row, col).value) if col else 0.0
+
+    def _adj_num(row, field, default_col):
+        return coerce_rate(ws.cell(row, adj_cols.get(field, default_col)).value)
 
     fallback_name = (
         _text(source).rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
@@ -181,14 +189,17 @@ def parse_rich_workbook(source, client_company_id, source_filename=None) -> Seed
             department=_master_text(r, "department"),
             job_title=_master_text(r, "job_title"),
             tax_relief_monthly=_master_num(r, "tax_relief"),
-            bonus=coerce_rate(ws.cell(r, COL_PROD_BONUS).value),
-            other_allowance=coerce_rate(ws.cell(r, COL_OTHER_ALLOWANCE).value),
-            pay_difference=coerce_rate(ws.cell(r, COL_PAY_DIFFERENCE).value),
-            provident_fund=coerce_rate(ws.cell(r, COL_PROVIDENT).value),
-            loan=coerce_rate(ws.cell(r, COL_LOAN).value),
-            donations=coerce_rate(ws.cell(r, COL_DONATIONS).value),
+            bonus=_adj_num(r, "bonus", COL_PROD_BONUS),
+            other_allowance=_adj_num(r, "other_allowance", COL_OTHER_ALLOWANCE),
+            pay_difference=_adj_num(r, "pay_difference", COL_PAY_DIFFERENCE),
+            provident_fund=_adj_num(r, "provident_fund", COL_PROVIDENT),
+            loan=_adj_num(r, "loan", COL_LOAN),
+            donations=_adj_num(r, "donations", COL_DONATIONS),
+            # OTHER DEDUCTION stays a fixed position: the DZ workbook carries two
+            # identical 'OTHER DEDUCTION' headers, so it can't be disambiguated
+            # by label (see resolve_adjustment_columns).
             other_deduction=coerce_rate(ws.cell(r, COL_OTHER_DEDUCTION).value),
-            welfare=coerce_rate(ws.cell(r, COL_WELFARE).value),
+            welfare=_adj_num(r, "welfare", COL_WELFARE),
         )
 
         for pay_code, label, category, hours_col, rate_col, _expected in ELEMENTS:

@@ -240,3 +240,45 @@ def resolve_master_columns(ws, name_row):
             "columns. Check the workbook's header labels."
         )
     return resolved
+
+
+# ── Monthly lump-adjustment columns: header-anchored, fixed-position fallback ─
+# These seed-month inputs (loan, welfare, bonus, etc.) currently sit at the same
+# columns in every known workbook, so unlike the master block they aren't
+# broken — but they are still fixed positions. We locate them by header too, and
+# the caller falls back to the historical fixed column when a header isn't found,
+# so behaviour is unchanged for existing files and a future shift can't silently
+# mis-read pay. NOTE: 'other_deduction' is intentionally NOT resolved here — the
+# DZ workbook carries two identical 'OTHER DEDUCTION' headers, so it can't be
+# disambiguated by label and stays a fixed position in the seed.
+_ADJUSTMENT_HEADER_MATCHERS = {
+    "bonus": lambda h: h.startswith("PROD"),          # PRODUCTIVITY ALLOWANCE / PROD'TY ALLOW
+    "other_allowance": lambda h: h == "OTHERALLOWANCE",
+    "pay_difference": lambda h: h == "PAYDIFFERENCE",
+    "provident_fund": lambda h: h.startswith("PROVIDENT"),
+    "loan": lambda h: h.startswith("LOAN"),           # LOAN ADVANCE / LOAN ADV
+    "donations": lambda h: h.startswith("DONATION"),
+    "welfare": lambda h: h == "WELFARE",
+}
+
+
+def resolve_adjustment_columns(ws, name_row):
+    """``{field: 1-based column}`` for lump-adjustment columns located by header.
+    Optional: a field whose header can't be found is simply absent (the caller
+    falls back to its historical fixed column). Never raises."""
+    element_row = find_element_row(ws, name_row)
+    resolved = {}
+    max_col = ws.max_column or 100
+    for col in range(1, max_col + 1):
+        parts = []
+        for rr in (element_row, element_row + 1):
+            value = _merged_anchor(ws, rr, col)[1]
+            if value is not None and (not parts or parts[-1] != value):
+                parts.append(value)
+        header = _compact_header(" ".join(str(p) for p in parts))
+        if not header:
+            continue
+        for field, matches in _ADJUSTMENT_HEADER_MATCHERS.items():
+            if field not in resolved and matches(header):
+                resolved[field] = col
+    return resolved
