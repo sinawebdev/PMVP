@@ -18,7 +18,7 @@ from app import create_app  # noqa: E402
 from app.models import Employee, PayrollItem, PayrollRun, User  # noqa: E402
 
 CLIENT_PAGES = ["/company", "/company/employees", "/company/employees/add",
-                "/company/runs", "/company/statutory", "/company/expenses"]
+                "/company/runs", "/company/statutory", "/company/expenses", "/company/audit"]
 
 
 class ClientInterfaceTestCase(unittest.TestCase):
@@ -74,6 +74,23 @@ class ClientInterfaceTestCase(unittest.TestCase):
             f"/company/items/{self.msc_item.id}/payslip",
         ]:
             self.assertEqual(self.client.get(path).status_code, 404, path)
+
+    def test_audit_trail_is_tenant_scoped(self):
+        # MSC user's action is auditable and shows in MSC's audit; a different
+        # tenant never sees it.
+        self._login("admin@msc.demo")
+        self.client.post(
+            "/company/employees/add",
+            data={"staff_id": "MSCAUD1", "full_name": "Audit Marker Worker"},
+        )
+        html = self.client.get("/company/audit").get_data(as_text=True)
+        self.assertEqual(self.client.get("/company/audit").status_code, 200)
+        self.assertIn("Audit Marker Worker", html)
+        # Stellar user must not see MSC's audit entry.
+        self.client.get("/logout")
+        self._login("admin@stellar.demo")
+        stellar_html = self.client.get("/company/audit").get_data(as_text=True)
+        self.assertNotIn("Audit Marker Worker", stellar_html)
 
     def test_employee_list_is_scoped(self):
         self._login("admin@msc.demo")

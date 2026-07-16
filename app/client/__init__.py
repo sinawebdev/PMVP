@@ -30,7 +30,16 @@ from flask_login import current_user
 
 from app import db
 from app.audit import record_audit
-from app.models import ClientCompany, Employee, Expense, PayrollItem, PayrollRun, StatutoryRate
+from app.models import (
+    AuditTrail,
+    ClientCompany,
+    Employee,
+    Expense,
+    PayrollItem,
+    PayrollRun,
+    StatutoryRate,
+    User,
+)
 from app.pdf_service import generate_payslip_pdf
 from app.raw_import import normalise_emp_id
 from app.tenancy import active_tenant_id, tenant_get_or_404, tenant_query, tenant_required
@@ -214,3 +223,22 @@ def expenses():
         else []
     )
     return render_template("client/expenses.html", company=_company(), expenses=rows)
+
+
+# --- Audit trail (read, tenant-scoped) -------------------------------------
+@client_bp.route("/audit")
+@tenant_required
+def audit():
+    # AuditTrail has no client_company_id, so scope by the acting user's tenant
+    # (§4): entries recorded by users belonging to this company. Never leaks
+    # another tenant's activity.
+    user_ids = [u.id for u in User.query.filter_by(client_company_id=active_tenant_id()).all()]
+    entries = (
+        AuditTrail.query.filter(AuditTrail.user_id.in_(user_ids))
+        .order_by(AuditTrail.created_at.desc())
+        .limit(200)
+        .all()
+        if user_ids
+        else []
+    )
+    return render_template("client/audit.html", company=_company(), entries=entries)

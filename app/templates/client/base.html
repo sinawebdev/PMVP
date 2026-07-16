@@ -59,6 +59,7 @@
       <a href="{{ url_for('client.runs') }}" class="{{ 'active' if ep in ('client.runs','client.run_detail') }}">Payroll</a>
       <a href="{{ url_for('client.statutory') }}" class="{{ 'active' if ep=='client.statutory' }}">Statutory</a>
       <a href="{{ url_for('client.expenses') }}" class="{{ 'active' if ep=='client.expenses' }}">Expenses</a>
+      <a href="{{ url_for('client.audit') }}" class="{{ 'active' if ep=='client.audit' }}">Audit</a>
       <a href="{{ url_for('auth.logout') }}">Log out</a>
     </nav>
   </header>

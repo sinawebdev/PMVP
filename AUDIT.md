@@ -80,6 +80,20 @@ on them (read surface exposed in Phase 3). ✔ matches §4.
 All routes `role_required(admin)` → **platform** (billable raw-hours ingestion is
 a Chrisnat operator flow).
 
+### `client` (`app/client/__init__.py`) — the tenant plane (Phase 3)
+All routes `@tenant_required` (platform users → oversight console) and scoped
+through `tenant_query` / `tenant_get_or_404`. **Tenant** access; a cross-tenant
+id returns 404.
+| Route | DB access | Scoped? |
+|---|---|---|
+| `/company` dashboard (main.company_dashboard) | `tenant_query(Employee/PayrollRun)` | yes |
+| `/company/employees` (+ add/edit/deactivate/reactivate) | `tenant_query(Employee)`, `tenant_get_or_404(Employee)`; `client_company_id` forced to tenant on write | yes |
+| `/company/runs`, `/company/runs/<id>` | `tenant_query(PayrollRun)`, `tenant_get_or_404(PayrollRun)` | yes |
+| `/company/items/<id>/payslip` | `tenant_get_or_404(PayrollItem)` (child via run) | yes |
+| `/company/statutory` | global `StatutoryRate` (view-only) | n/a — platform-owned, read-only |
+| `/company/expenses` | `tenant_query(Expense)` | yes |
+| `/company/audit` | `AuditTrail` filtered to this tenant's users (§4 acting-user scope) | yes |
+
 ## Residual items (tracked, not leaks)
 
 - **Phase 3** will introduce *tenant-scoped* client routes (own employees, runs,
