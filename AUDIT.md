@@ -76,6 +76,16 @@ on them (read surface exposed in Phase 3). ✔ matches §4.
 ### `audit` (`app/audit.py`)
 `/audit`, `/audit/expenses` → `role_required(admin, md)` → **platform**.
 
+### `oversight` (`app/oversight/__init__.py`) — risk-gate control plane (Phase 5)
+All routes `@platform_required` (tenant users → Company Dashboard). Chrisnat
+oversight *above* tenants, so it intentionally spans all clients. Scoring is in
+`app/risk.py` (pure/deterministic; thresholds N=2, net-pay 15%, headcount 20%).
+| Route | Guard | Access | Notes |
+|---|---|---|---|
+| `/oversight/risk` | **`platform_required`** | platform | all HELD runs across tenants |
+| `/oversight/runs/<id>/risk-check` (POST) | **`platform_required`** | platform | scores a pre-approval run → Held / Auto-Accepted |
+| `/oversight/runs/<id>/release` (POST) | **`platform_required`** | platform | Held → Pending Approval |
+
 ### `raw_engine` (`app/raw_engine/web.py`)
 All routes `role_required(admin)` → **platform** (billable raw-hours ingestion is
 a Chrisnat operator flow).

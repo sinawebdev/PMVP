@@ -26,6 +26,17 @@
         <div class="col-md-3"><strong>On Leave / Unknown</strong><p>{{ payroll_run.on_leave_workers or 0 }} / {{ payroll_run.unknown_status_workers or 0 }}</p></div>
     </div>
     <div class="d-flex flex-wrap gap-2 mt-2">
+        {% if payroll_run.risk_status %}
+            <span class="badge {{ 'bg-warning text-dark' if payroll_run.risk_status == 'held' else 'bg-success' }}" title="{{ payroll_run.risk_reasons or '' }}">
+                Risk gate: {{ 'Held' if payroll_run.risk_status == 'held' else 'Auto-accepted' }}
+            </span>
+        {% endif %}
+        {% if payroll_run.status in ["Draft", "Pending Approval", "Submitted", "Held", "Auto-Accepted"] %}
+            <form method="post" action="{{ url_for('oversight.risk_check', run_id=payroll_run.id) }}"><button class="btn btn-outline-secondary"><i class="bi bi-shield-check"></i>Run Risk Check</button></form>
+        {% endif %}
+        {% if payroll_run.status == "Held" %}
+            <form method="post" action="{{ url_for('oversight.release_hold', run_id=payroll_run.id) }}"><button class="btn btn-outline-success"><i class="bi bi-unlock"></i>Release Hold</button></form>
+        {% endif %}
         {% if current_user.role == "admin" and payroll_run.status in ["Draft", "Pending Approval"] %}
             <form method="post" action="{{ url_for('payroll.calculate', run_id=payroll_run.id) }}"><button class="btn btn-outline-primary"><i class="bi bi-calculator"></i>Calculate Pay</button></form>
         {% endif %}

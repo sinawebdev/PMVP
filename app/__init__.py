@@ -204,6 +204,7 @@ def create_app():
     from app.client import client_bp
     from app.distribution import distribution_bp, payslip_link_bp
     from app.employees import employees_bp
+    from app.oversight import oversight_bp
     from app.payroll import payroll_bp
     from app.payslip import payslip_bp
     from app.raw_engine.web import raw_engine_bp
@@ -221,6 +222,7 @@ def create_app():
     app.register_blueprint(employees_bp)
     app.register_blueprint(statutory_bp)
     app.register_blueprint(raw_engine_bp)
+    app.register_blueprint(oversight_bp)
 
     @app.context_processor
     def inject_sidebar_clients():

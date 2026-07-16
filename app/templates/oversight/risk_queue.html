@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Risk Queue · Chrisnat Payroll{% endblock %}
+{% block page_title %}Risk Review Queue{% endblock %}
+{% block page_intro %}Payroll runs the risk gate has held for Chrisnat review, across every client company. Open a run to see why it was held, then release it into the approval queue or reject it.{% endblock %}
+{% block content %}
+{% if held_runs %}
+<div class="mini-note mb-3">
+    <i class="bi bi-shield-exclamation"></i>
+    {{ held_runs|length }} run(s) held for review. A run is held when it is one of a client's first two runs, its total net pay moves more than 15% from the previous run, or its worker count moves more than 20%.
+</div>
+<section class="panel">
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr><th>Company</th><th>Period</th><th class="text-end">Workers</th><th class="text-end">Net pay</th><th>Why held</th><th>Checked</th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for run in held_runs %}
+                <tr>
+                    <td>{{ run.client_company.name if run.client_company else '—' }}</td>
+                    <td>{{ run.month }} {{ run.year }}</td>
+                    <td class="text-end">{{ run.total_workers }}</td>
+                    <td class="text-end">{{ run.total_net_pay | cedis }}</td>
+                    <td class="text-muted small">{{ run.risk_reasons or '—' }}</td>
+                    <td class="text-muted small">{{ run.risk_checked_at.strftime('%Y-%m-%d %H:%M') if run.risk_checked_at else '—' }}</td>
+                    <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.detail', run_id=run.id) }}">Review</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% else %}
+<div class="mini-note mb-3">
+    <i class="bi bi-shield-check"></i>
+    No runs are currently held for review.
+</div>
+{% endif %}
+{% endblock %}

@@ -167,6 +167,12 @@ class PayrollRun(db.Model):
     reviewed_at = db.Column(db.DateTime)
     approved_at = db.Column(db.DateTime)
     rejected_at = db.Column(db.DateTime)
+    # Risk gate (Phase 5): verdict from app/risk.py at submit/oversight time.
+    # risk_status is 'held' | 'accepted' | None (never scored). risk_reasons is
+    # the human-readable list of tripped-rule details, ' | '-joined.
+    risk_status = db.Column(db.String(16))
+    risk_reasons = db.Column(db.Text)
+    risk_checked_at = db.Column(db.DateTime)
 
     client_company = db.relationship("ClientCompany", back_populates="payroll_runs")
     creator = db.relationship("User", foreign_keys=[created_by])
