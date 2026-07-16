@@ -86,6 +86,21 @@ oversight *above* tenants, so it intentionally spans all clients. Scoring is in
 | `/oversight/runs/<id>/risk-check` (POST) | **`platform_required`** | platform | scores a pre-approval run → Held / Auto-Accepted |
 | `/oversight/runs/<id>/release` (POST) | **`platform_required`** | platform | Held → Pending Approval |
 
+### `notifications` (`app/notifications/__init__.py`) — in-app inbox (Phase 6)
+Per-user, both planes. Every query filters by `current_user.id`, so the owning
+user IS the scope — no cross-tenant or cross-user surface.
+| Route | Guard | Access | Scoped? |
+|---|---|---|---|
+| `/notifications` inbox | `login_required` | any user | yes — `user_id == current_user.id` |
+| `/notifications/<id>/read` (POST) | `login_required` | any user | yes — 404 if not the owner |
+| `/notifications/read-all` (POST) | `login_required` | any user | yes — only the user's own |
+
+`DomainEvent` is the append-only event log (never updated/deleted in-app),
+tenant-scoped by `client_company_id`; it is added to `TENANT_OWNED_MODELS`.
+Events are emitted (`app/events.py`) inside the oversight risk-check/release
+transitions (notifying the tenant's users) and the client distribution send
+(notifying platform admins) — the notification fan-out follows the event.
+
 ### `raw_engine` (`app/raw_engine/web.py`)
 All routes `role_required(admin)` → **platform** (billable raw-hours ingestion is
 a Chrisnat operator flow).

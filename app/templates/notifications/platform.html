@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Notifications · Chrisnat Payroll{% endblock %}
+{% block page_title %}Notifications{% endblock %}
+{% block page_intro %}Oversight notifications — activity across client companies, such as client-side payslip distribution.{% endblock %}
+{% block content %}
+<div class="toolbar">
+  {% if unread %}
+  <form method="post" action="{{ url_for('notifications.mark_all_read') }}">
+    <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-check2-all"></i>Mark all read ({{ unread }})</button>
+  </form>
+  {% endif %}
+</div>
+{% if items %}
+<section class="panel">
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th></th><th>Notification</th><th>Detail</th><th>Company</th><th>When</th><th></th></tr></thead>
+      <tbody>
+        {% for n in items %}
+        <tr class="{{ '' if n.read_at else 'fw-semibold' }}">
+          <td>{% if not n.read_at %}<span class="badge {{ 'bg-warning text-dark' if n.level=='warning' else 'bg-success' if n.level=='success' else 'bg-secondary' }}">New</span>{% endif %}</td>
+          <td>{{ n.title }}</td>
+          <td class="text-muted small">{{ n.body or '' }}</td>
+          <td class="text-muted small">{{ n.event.client_company.name if n.event and n.event.client_company else '—' }}</td>
+          <td class="text-muted small">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '—' }}</td>
+          <td class="text-end">
+            {% if not n.read_at %}
+            <form method="post" action="{{ url_for('notifications.mark_read', note_id=n.id) }}">
+              <button class="btn btn-sm btn-outline-primary" type="submit">Mark read</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% else %}
+<div class="mini-note mb-3"><i class="bi bi-bell"></i> No notifications yet.</div>
+{% endif %}
+{% endblock %}

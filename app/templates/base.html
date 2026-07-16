@@ -46,6 +46,8 @@
             {% if role == "admin" %}
             <a class="nav-link" {% if path.startswith('/statutory-rates') %}aria-current="page"{% endif %} href="{{ url_for('statutory.index') }}"><i class="bi bi-bank"></i>Statutory Rates</a>
             {% endif %}
+            <a class="nav-link" {% if path.startswith('/oversight/risk') %}aria-current="page"{% endif %} href="{{ url_for('oversight.risk_queue') }}"><i class="bi bi-shield-exclamation"></i>Risk Queue</a>
+            <a class="nav-link" {% if path.startswith('/notifications') %}aria-current="page"{% endif %} href="{{ url_for('notifications.inbox') }}"><i class="bi bi-bell"></i>Notifications{% if notif_unread %} <span class="badge bg-warning text-dark">{{ notif_unread }}</span>{% endif %}</a>
             <a class="nav-link logout-link" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-left"></i>Logout</a>
         </nav>
         <details class="client-tabs" open>

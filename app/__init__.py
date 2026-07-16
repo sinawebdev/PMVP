@@ -204,6 +204,7 @@ def create_app():
     from app.client import client_bp
     from app.distribution import distribution_bp, payslip_link_bp
     from app.employees import employees_bp
+    from app.notifications import notifications_bp
     from app.oversight import oversight_bp
     from app.payroll import payroll_bp
     from app.payslip import payslip_bp
@@ -223,6 +224,19 @@ def create_app():
     app.register_blueprint(statutory_bp)
     app.register_blueprint(raw_engine_bp)
     app.register_blueprint(oversight_bp)
+    app.register_blueprint(notifications_bp)
+
+    @app.context_processor
+    def inject_notification_count():
+        # Unread badge for both plane navbars. Never raise from a context
+        # processor (it renders on the error page too) — fail soft to 0.
+        try:
+            from app.notifications import unread_count
+
+            return {"notif_unread": unread_count()}
+        except Exception:  # noqa: BLE001
+            db.session.rollback()
+            return {"notif_unread": 0}
 
     @app.context_processor
     def inject_sidebar_clients():

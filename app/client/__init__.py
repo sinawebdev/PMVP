@@ -33,6 +33,7 @@ from flask_login import current_user
 
 from app import db
 from app.audit import record_audit
+from app.events import platform_admins, record_event
 from app.distribution.idempotency import replay_or_run
 from app.distribution.service import distribute_run, resolve_channel
 from app.models import (
@@ -318,6 +319,23 @@ def _do_client_send(run, only_failed):
     summary, replayed = replay_or_run(
         key, lambda: distribute_run(run, channel=channel, only_failed=only_failed)
     )
+    if not replayed:
+        # Notify Chrisnat oversight that a client distributed payslips
+        # (tenant -> platform direction). distribute_run already committed;
+        # this event + its notifications are committed here.
+        record_event(
+            "payslips.distributed",
+            summary=(
+                f"{run.month} {run.year}: {summary['sent']} sent, "
+                f"{summary['failed']} failed (of {summary['total']}) via {channel}."
+            ),
+            subject=run,
+            client_company_id=run.client_company_id,
+            level="info",
+            payload={k: summary.get(k) for k in ("sent", "failed", "skipped", "total")},
+            recipients=platform_admins(),
+        )
+        db.session.commit()
     note = " (already processed)" if replayed else ""
     failed_workers = summary.get("failed_workers") or []
     followup = ""

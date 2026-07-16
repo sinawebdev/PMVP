@@ -60,6 +60,7 @@
       <a href="{{ url_for('client.statutory') }}" class="{{ 'active' if ep=='client.statutory' }}">Statutory</a>
       <a href="{{ url_for('client.expenses') }}" class="{{ 'active' if ep=='client.expenses' }}">Expenses</a>
       <a href="{{ url_for('client.audit') }}" class="{{ 'active' if ep=='client.audit' }}">Audit</a>
+      <a href="{{ url_for('notifications.inbox') }}" class="{{ 'active' if ep and ep.startswith('notifications.') }}">Notifications{% if notif_unread %} <span class="badge warn">{{ notif_unread }}</span>{% endif %}</a>
       <a href="{{ url_for('auth.logout') }}">Log out</a>
     </nav>
   </header>

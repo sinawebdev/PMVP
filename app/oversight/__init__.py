@@ -19,6 +19,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from app import db
 from app.audit import record_audit
+from app.events import record_event, tenant_users
 from app.models import PayrollRun
 from app.payroll_status import AUTO_ACCEPTED, HELD, PENDING_APPROVAL, RISK_GATED_STATUSES
 from app.risk import apply_risk_gate
@@ -52,10 +53,17 @@ def risk_check(run_id):
         return redirect(url_for("payroll.detail", run_id=run.id))
     verdict = apply_risk_gate(run, when=datetime.now(timezone.utc))
     run.status = HELD if verdict.held else AUTO_ACCEPTED
-    record_audit(
-        "Risk gate evaluated",
-        run,
-        f"Verdict: {verdict.status}. " + (verdict.reasons_text() or "No rule tripped."),
+    reasons = verdict.reasons_text() or "No rule tripped."
+    record_audit("Risk gate evaluated", run, f"Verdict: {verdict.status}. {reasons}")
+    # Append a domain event and notify the client's users so a hold is visible
+    # to the tenant, not just to Chrisnat.
+    record_event(
+        "run.risk_held" if verdict.held else "run.risk_accepted",
+        summary=f"{run.month} {run.year}: {reasons}",
+        subject=run,
+        level="warning" if verdict.held else "success",
+        payload={"status": verdict.status, "reasons": verdict.reasons},
+        recipients=tenant_users(run.client_company_id) if verdict.held else None,
     )
     db.session.commit()
     if verdict.held:
@@ -79,6 +87,13 @@ def release_hold(run_id):
         "Risk hold released",
         run,
         f"Released to Pending Approval by oversight. {note}".strip(),
+    )
+    record_event(
+        "run.hold_released",
+        summary=f"{run.month} {run.year} payroll released for approval. {note}".strip(),
+        subject=run,
+        level="info",
+        recipients=tenant_users(run.client_company_id),
     )
     db.session.commit()
     flash("Hold released — run moved to Pending Approval.", "success")

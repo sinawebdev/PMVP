@@ -395,6 +395,52 @@ class AuditTrail(db.Model):
 
 
 # ---------------------------------------------------------------------------
+# Domain events + in-app notifications (PMVP v1 Phase 6).
+# DomainEvent is an APPEND-ONLY business event log — richer and more structured
+# than AuditTrail (a typed event_type + JSON payload, scoped to a tenant). It is
+# never updated or deleted in the app. Notifications are the per-user in-app
+# fan-out of an event; each is owned by one recipient User and marked read on
+# that user's own timeline.
+# ---------------------------------------------------------------------------
+
+
+class DomainEvent(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    event_type = db.Column(db.String(80), nullable=False, index=True)
+    actor_user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    actor_role = db.Column(db.String(40))
+    # The tenant this event belongs to. NULL means a platform-plane event that
+    # is not tied to a single client company.
+    client_company_id = db.Column(
+        db.Integer, db.ForeignKey("client_company.id"), index=True
+    )
+    subject_type = db.Column(db.String(80))
+    subject_id = db.Column(db.Integer)
+    summary = db.Column(db.Text)
+    payload = db.Column(db.Text)  # JSON string, optional structured detail
+    created_at = db.Column(db.DateTime, default=utc_now, index=True)
+
+    actor = db.relationship("User")
+    client_company = db.relationship("ClientCompany")
+
+
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    # Tenant context for filtering/reporting; NULL for platform-plane notices.
+    client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"))
+    event_id = db.Column(db.Integer, db.ForeignKey("domain_event.id"))
+    title = db.Column(db.String(160), nullable=False)
+    body = db.Column(db.Text)
+    level = db.Column(db.String(16), nullable=False, default="info")  # info|success|warning
+    read_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=utc_now, index=True)
+
+    user = db.relationship("User")
+    event = db.relationship("DomainEvent")
+
+
+# ---------------------------------------------------------------------------
 # Payslip distribution (multi-channel delivery of payslip breakdowns).
 # A PayrollItem IS the payslip; PayslipDelivery records one send attempt of it
 # over a channel so failures are visible and retryable, never silently lost.
