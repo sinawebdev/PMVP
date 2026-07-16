@@ -2,7 +2,13 @@
 {% block title %}{{ run.month }} {{ run.year }} payroll{% endblock %}
 {% block body %}
   <div class="toolbar">
-    <div><h1>{{ run.month }} {{ run.year }} payroll</h1><p class="sub" style="margin:0;">Status: <span class="badge">{{ run.status }}</span></p></div>
+    <div>
+      <h1>{{ run.month }} {{ run.year }} payroll</h1>
+      <p class="sub" style="margin:0;">Status: <span class="badge">{{ run.status }}</span></p>
+      {% if run.risk_status == 'held' and run.risk_reasons %}
+      <p class="sub" style="margin:4px 0 0;">Held for Chrisnat review — {{ run.risk_reasons }}</p>
+      {% endif %}
+    </div>
     <div class="actions">
       <a class="btn primary" href="{{ url_for('client.distribute', run_id=run.id) }}">Distribute payslips</a>
       <a class="btn" href="{{ url_for('client.runs') }}">Back to runs</a>

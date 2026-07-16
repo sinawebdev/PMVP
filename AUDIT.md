@@ -114,6 +114,7 @@ id returns 404.
 | `/company` dashboard (main.company_dashboard) | `tenant_query(Employee/PayrollRun)` | yes |
 | `/company/employees` (+ add/edit/deactivate/reactivate) | `tenant_query(Employee)`, `tenant_get_or_404(Employee)`; `client_company_id` forced to tenant on write | yes |
 | `/company/runs`, `/company/runs/<id>` | `tenant_query(PayrollRun)`, `tenant_get_or_404(PayrollRun)` | yes |
+| `/company/runs/upload` (GET/POST) | `tenant_role_required(client_admin, client_preparer)`; `build_single_payload`/`create_payroll_run_from_payload` with `client_company_id` **forced to the tenant** (never file-detected); new run → Phase 5 risk gate | yes — file can't choose the company |
 | `/company/items/<id>/payslip` | `tenant_get_or_404(PayrollItem)` (child via run) | yes |
 | `/company/statutory` | global `StatutoryRate` (view-only) | n/a — platform-owned, read-only |
 | `/company/expenses` | `tenant_query(Expense)` | yes |

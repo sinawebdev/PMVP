@@ -8,16 +8,18 @@ another tenant's row. Templates are a standalone client shell (no operator base)
 so cross-company / operator-only controls simply do not exist here.
 
 Full self-service (Sina, 2026-07-16): client_admin/client_preparer manage their
-own employees. Payroll-run *preparation/upload* reuses the Chrisnat raw-hours
-pipeline and is exposed here read-first; the upload entry point is wired in a
-follow-up within this phase. Statutory rates are global and view-only for clients.
+own employees AND upload a standard payroll workbook to prepare a run. The upload
+(``run_upload``) reuses the operator import pipeline with client_company_id forced
+to the tenant, then routes the new run through the Phase 5 risk gate
+(Submitted -> Held/Auto-Accepted). Raw-hours runs stay a Chrisnat operator flow.
+Statutory rates are global and view-only for clients.
 """
 
 import io
 import os
 import uuid
 import zipfile
-from datetime import date
+from datetime import date, datetime, timezone
 
 from flask import (
     Blueprint,
@@ -36,6 +38,7 @@ from app.audit import record_audit
 from app.events import platform_admins, record_event
 from app.distribution.idempotency import replay_or_run
 from app.distribution.service import distribute_run, resolve_channel
+from app.excel_utils import allowed_excel_file, mapping_conflicts
 from app.models import (
     CHANNEL_AUTO,
     DELIVERY_CHANNELS,
@@ -51,10 +54,18 @@ from app.models import (
     StatutoryRate,
     User,
 )
-from app.payroll_status import SENDABLE_STATUSES
+from app.payroll import (
+    build_single_payload,
+    create_payroll_run_from_payload,
+    has_duplicate_payroll,
+    save_temporary_upload,
+)
+from app.payroll_status import AUTO_ACCEPTED, HELD, SENDABLE_STATUSES, SUBMITTED
 from app.pdf_service import generate_payslip_pdf, payslip_filename
+from app.raw_engine.detection import looks_like_raw_hours
 from app.raw_import import normalise_emp_id
-from app.roles import CLIENT_ADMIN
+from app.risk import apply_risk_gate
+from app.roles import CLIENT_ADMIN, CLIENT_PREPARER
 from app.tenancy import (
     active_tenant_id,
     tenant_get_or_404,
@@ -62,6 +73,7 @@ from app.tenancy import (
     tenant_required,
     tenant_role_required,
 )
+from app.validators import collect_blocking_errors
 
 _VALID_SEND_CHANNELS = set(DELIVERY_CHANNELS) | {CHANNEL_AUTO}
 
@@ -207,6 +219,113 @@ def run_detail(run_id):
     return render_template(
         "client/run_detail.html", company=_company(), run=run, items=run.items
     )
+
+
+# --- Run upload (self-service run preparation) ------------------------------
+# A client prepares a payroll run by uploading a STANDARD payroll workbook for
+# their own company. It reuses the operator import pipeline (build_single_payload
+# + create_payroll_run_from_payload, which runs the frozen statutory engine
+# identically) but with client_company_id forced to the tenant — never detected
+# from the file. The new run enters the Phase 5 lifecycle: Submitted -> risk gate
+# -> Held (Chrisnat review) or Auto-Accepted. Raw-hours workbooks are refused;
+# those remain a Chrisnat operator flow.
+@client_bp.route("/runs/upload", methods=["GET", "POST"])
+@tenant_role_required(CLIENT_ADMIN, CLIENT_PREPARER)
+def run_upload():
+    company = _company()
+    now = datetime.now()
+    if request.method == "GET":
+        return render_template(
+            "client/run_upload.html",
+            company=company,
+            current_month=now.strftime("%B"),
+            current_year=now.year,
+        )
+
+    file_storage = request.files.get("payroll_file")
+    if not file_storage or not file_storage.filename:
+        flash("Choose an Excel file to upload.", "warning")
+        return redirect(url_for("client.run_upload"))
+    if not allowed_excel_file(file_storage.filename):
+        flash("Only .xlsx, .xls, or .csv files are supported.", "warning")
+        return redirect(url_for("client.run_upload"))
+
+    month = (request.form.get("month") or now.strftime("%B")).strip()
+    try:
+        year = int(request.form.get("year") or now.year)
+    except (TypeError, ValueError):
+        year = now.year
+    source_filename = file_storage.filename
+    file_path = save_temporary_upload(file_storage)
+    try:
+        if looks_like_raw_hours(file_path):
+            flash(
+                "That looks like a raw-hours workbook. Raw-hours runs are prepared "
+                "by Chrisnat — please upload a standard payroll workbook.",
+                "warning",
+            )
+            return redirect(url_for("client.run_upload"))
+        # client_company_id is forced to the tenant here — the file is never
+        # allowed to decide which company it lands in.
+        payload, error = build_single_payload(file_path, source_filename, company, month, year)
+    finally:
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
+
+    if error:
+        flash(error, "danger")
+        return redirect(url_for("client.run_upload"))
+
+    blocking = mapping_conflicts(payload.get("mapping") or {}) + collect_blocking_errors(
+        payload["mapped_rows"], payload.get("detected_company_name", "")
+    )
+    if blocking:
+        for message in blocking[:10]:
+            flash(message, "danger")
+        flash("Upload blocked — fix the highlighted issues and try again.", "danger")
+        return redirect(url_for("client.run_upload"))
+
+    if has_duplicate_payroll(company.id, payload["month"], payload["year"]):
+        flash(
+            f"A {payload['month']} {payload['year']} payroll already exists for your "
+            "company. Contact Chrisnat to replace it.",
+            "warning",
+        )
+        return redirect(url_for("client.run_upload"))
+
+    run = create_payroll_run_from_payload(payload, company, payload["validation"], "single_client")
+    # Phase 5 lifecycle: a client submission is risk-gated, not auto-approved.
+    run.status = SUBMITTED
+    db.session.flush()
+    verdict = apply_risk_gate(run, when=datetime.now(timezone.utc))
+    run.status = HELD if verdict.held else AUTO_ACCEPTED
+    reasons = verdict.reasons_text() or "no rule tripped"
+    record_audit(
+        "Client run uploaded",
+        run,
+        f"{run.month} {run.year} uploaded by client from {source_filename}. "
+        f"Risk: {verdict.status} ({reasons}).",
+    )
+    record_event(
+        "run.risk_held" if verdict.held else "run.risk_accepted",
+        summary=f"{company.name} submitted {run.month} {run.year}: {reasons}.",
+        subject=run,
+        client_company_id=company.id,
+        level="warning" if verdict.held else "info",
+        payload={"status": verdict.status, "reasons": verdict.reasons},
+        recipients=platform_admins(),
+    )
+    db.session.commit()
+    if verdict.held:
+        flash(
+            f"{run.month} {run.year} payroll uploaded and sent to Chrisnat for review.",
+            "success",
+        )
+    else:
+        flash(f"{run.month} {run.year} payroll uploaded and auto-accepted.", "success")
+    return redirect(url_for("client.run_detail", run_id=run.id))
 
 
 @client_bp.route("/items/<int:item_id>/payslip")
