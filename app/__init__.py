@@ -201,6 +201,7 @@ def create_app():
 
     from app.audit import audit_bp
     from app.auth import auth_bp
+    from app.client import client_bp
     from app.distribution import distribution_bp, payslip_link_bp
     from app.employees import employees_bp
     from app.payroll import payroll_bp
@@ -211,6 +212,7 @@ def create_app():
 
     app.register_blueprint(audit_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(client_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(payroll_bp)
     app.register_blueprint(payslip_bp)

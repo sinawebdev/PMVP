@@ -1,0 +1,39 @@
+{% extends "client/base.html" %}
+{% block title %}{{ run.month }} {{ run.year }} payroll{% endblock %}
+{% block body %}
+  <div class="toolbar">
+    <div><h1>{{ run.month }} {{ run.year }} payroll</h1><p class="sub" style="margin:0;">Status: <span class="badge">{{ run.status }}</span></p></div>
+    <a class="btn" href="{{ url_for('client.runs') }}">Back to runs</a>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="n">{{ run.total_workers }}</div><div class="l">Workers</div></div>
+    <div class="card"><div class="n">{{ run.total_gross_pay | cedis }}</div><div class="l">Gross</div></div>
+    <div class="card"><div class="n">{{ run.total_deductions | cedis }}</div><div class="l">Deductions</div></div>
+    <div class="card"><div class="n">{{ run.total_net_pay | cedis }}</div><div class="l">Net pay</div></div>
+  </div>
+
+  <h1 style="font-size:1.05rem;">Payslips</h1>
+  {% if items %}
+  <div class="panel">
+    <table>
+      <thead><tr><th>Staff ID</th><th>Name</th><th class="right">Gross</th><th class="right">PAYE</th><th class="right">SSNIT</th><th class="right">Net</th><th></th></tr></thead>
+      <tbody>
+        {% for it in items %}
+        <tr>
+          <td>{{ it.staff_id }}</td>
+          <td>{{ it.full_name }}</td>
+          <td class="right">{{ it.gross_pay | cedis }}</td>
+          <td class="right">{{ it.paye | cedis }}</td>
+          <td class="right">{{ it.ssnit | cedis }}</td>
+          <td class="right">{{ it.net_pay | cedis }}</td>
+          <td class="right"><a class="btn sm" href="{{ url_for('client.payslip', item_id=it.id) }}">Payslip PDF</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No payslip lines on this run yet.</p>
+  {% endif %}
+{% endblock %}

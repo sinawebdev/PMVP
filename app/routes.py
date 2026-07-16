@@ -242,7 +242,7 @@ def company_dashboard():
     pending_runs = sum(1 for run in runs if run.status in PENDING_STATUSES)
 
     return render_template(
-        "company_dashboard.html",
+        "client/dashboard.html",
         company=company,
         employee_count=employee_count,
         active_employee_count=active_employee_count,

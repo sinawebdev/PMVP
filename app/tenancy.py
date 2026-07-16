@@ -162,6 +162,25 @@ def platform_required(view):
     return wrapped
 
 
+def tenant_required(view):
+    """Restrict a view to tenant (client) users — the client plane.
+
+    The mirror of :func:`platform_required`: a platform (Chrisnat) user has no
+    single company, so they are sent to the oversight console. Anonymous users
+    go through login first. Every client-plane route carries this so a platform
+    user never lands inside a single tenant's scoped views by accident.
+    """
+
+    @wraps(view)
+    @login_required
+    def wrapped(*args, **kwargs):
+        if active_tenant_id() is None:  # a platform user
+            return redirect(url_for("main.dashboard"))
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
 def tenant_get_or_404(model, ident):
     """Fetch ``model`` by primary key, scoped to the active tenant, or 404.
 

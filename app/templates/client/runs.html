@@ -1,0 +1,27 @@
+{% extends "client/base.html" %}
+{% block title %}Payroll runs{% endblock %}
+{% block body %}
+  <h1>Payroll runs</h1>
+  <p class="sub">Payroll runs for {{ company.name }}. Preparation and approval happen with Chrisnat oversight.</p>
+  {% if runs %}
+  <div class="panel">
+    <table>
+      <thead><tr><th>Period</th><th>Status</th><th class="right">Workers</th><th class="right">Gross</th><th class="right">Net pay</th><th></th></tr></thead>
+      <tbody>
+        {% for run in runs %}
+        <tr>
+          <td>{{ run.month }} {{ run.year }}</td>
+          <td><span class="badge">{{ run.status }}</span></td>
+          <td class="right">{{ run.total_workers }}</td>
+          <td class="right">{{ run.total_gross_pay | cedis }}</td>
+          <td class="right">{{ run.total_net_pay | cedis }}</td>
+          <td class="right"><a class="btn sm" href="{{ url_for('client.run_detail', run_id=run.id) }}">Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No payroll runs yet.</p>
+  {% endif %}
+{% endblock %}

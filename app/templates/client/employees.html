@@ -1,0 +1,40 @@
+{% extends "client/base.html" %}
+{% block title %}Employees{% endblock %}
+{% block body %}
+  <div class="toolbar">
+    <div><h1>Employees</h1><p class="sub" style="margin:0;">{{ employees|length }} on your roster.</p></div>
+    <a class="btn primary" href="{{ url_for('client.employee_add') }}">Add employee</a>
+  </div>
+
+  {% if employees %}
+  <div class="panel">
+    <table>
+      <thead><tr><th>Staff ID</th><th>Name</th><th>Job title</th><th>Bank</th><th class="right">Basic</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for e in employees %}
+        <tr>
+          <td>{{ e.staff_id }}</td>
+          <td>{{ e.full_name }}</td>
+          <td class="muted">{{ e.job_title or '—' }}</td>
+          <td class="muted">{{ e.bank_name or '—' }}</td>
+          <td class="right">{{ e.basic_salary | cedis }}</td>
+          <td>
+            {% if e.status == 'Active' %}<span class="badge ok">Active</span>{% else %}<span class="badge warn">{{ e.status }}</span>{% endif %}
+          </td>
+          <td class="right actions" style="justify-content:flex-end;">
+            <a class="btn sm" href="{{ url_for('client.employee_edit', emp_id=e.id) }}">Edit</a>
+            {% if e.status == 'Active' %}
+            <form class="inline" method="post" action="{{ url_for('client.employee_deactivate', emp_id=e.id) }}"><button class="btn sm danger" type="submit">Deactivate</button></form>
+            {% else %}
+            <form class="inline" method="post" action="{{ url_for('client.employee_reactivate', emp_id=e.id) }}"><button class="btn sm" type="submit">Reactivate</button></form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No employees yet. Add your first with the button above.</p>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "client/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block body %}
+  <h1>Dashboard</h1>
+  <p class="sub">An overview of {{ company.name }}.</p>
+
+  <div class="grid">
+    <div class="card"><div class="n">{{ employee_count }}</div><div class="l">Employees ({{ active_employee_count }} active)</div></div>
+    <div class="card"><div class="n">{{ run_count }}</div><div class="l">Payroll runs</div></div>
+    <div class="card"><div class="n">{{ pending_runs }}</div><div class="l">Runs awaiting review</div></div>
+  </div>
+
+  <div class="toolbar">
+    <h1 style="font-size:1.05rem;margin:0;">Recent payroll runs</h1>
+    <a class="btn" href="{{ url_for('client.runs') }}">View all</a>
+  </div>
+  {% if recent_runs %}
+  <div class="panel">
+    <table>
+      <thead><tr><th>Period</th><th>Status</th><th class="right">Workers</th><th class="right">Net pay</th><th></th></tr></thead>
+      <tbody>
+        {% for run in recent_runs %}
+        <tr>
+          <td>{{ run.month }} {{ run.year }}</td>
+          <td><span class="badge">{{ run.status }}</span></td>
+          <td class="right">{{ run.total_workers }}</td>
+          <td class="right">{{ run.total_net_pay | cedis }}</td>
+          <td class="right"><a class="btn sm" href="{{ url_for('client.run_detail', run_id=run.id) }}">Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No payroll runs yet.</p>
+  {% endif %}
+{% endblock %}
