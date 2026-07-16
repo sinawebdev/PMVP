@@ -26,7 +26,11 @@ def resolve_database_uri(local_sqlite_path):
 
 
 def database_type_label(database_uri):
-    if str(database_uri or "").startswith("postgresql://"):
+    # Match both the bare "postgresql://" form and the driver-qualified
+    # "postgresql+psycopg2://" form (the DATABASE_URL shape the pmvp-v1 pooler
+    # uses). Without the "+driver" case this returns "Other", which silently
+    # skips the Supabase connection-resilience engine options below.
+    if str(database_uri or "").startswith(("postgresql://", "postgresql+")):
         return "PostgreSQL"
     if str(database_uri or "").startswith("sqlite"):
         return "SQLite"
