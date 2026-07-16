@@ -3,7 +3,7 @@ import time
 from datetime import timedelta
 
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, render_template
 from flask_login import LoginManager
 from flask_sqlalchemy import SQLAlchemy
 
@@ -220,11 +220,34 @@ def create_app():
     def inject_sidebar_clients():
         from app.models import ClientCompany
 
-        return {
-            "sidebar_clients": ClientCompany.query.filter_by(status="Active")
-            .order_by(ClientCompany.name)
-            .all()
-        }
+        # Rendered on every authenticated page — including the branded 500 page.
+        # If the DB connection is the very thing that failed, this query would
+        # raise again and turn the friendly error page into a raw crash, so fail
+        # soft to an empty sidebar rather than let the error handler re-error.
+        try:
+            clients = (
+                ClientCompany.query.filter_by(status="Active")
+                .order_by(ClientCompany.name)
+                .all()
+            )
+        except Exception:  # noqa: BLE001 - context processors must never raise
+            db.session.rollback()
+            clients = []
+        return {"sidebar_clients": clients}
+
+    # Branded error pages (A4). DEBUG is False under gunicorn in production (it
+    # imports run:app, so app.run(debug=...) never executes), which is what lets
+    # these handlers run instead of leaking a stack trace.
+    @app.errorhandler(404)
+    def handle_not_found(error):
+        return render_template("errors/404.html"), 404
+
+    @app.errorhandler(500)
+    def handle_server_error(error):
+        # A failed request may have left the session mid-transaction; roll it back
+        # so rendering the error page (and the next request) starts clean.
+        db.session.rollback()
+        return render_template("errors/500.html"), 500
 
     @app.cli.command("init-db")
     def init_db_command():

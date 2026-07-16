@@ -25,7 +25,13 @@
         <a class="btn btn-outline-secondary" href="{{ url_for('payroll.runs') }}"><i class="bi bi-x-circle"></i>Clear Filter</a>
     {% endif %}
 </div>
-<section class="panel form-panel mb-3">
+<section class="panel form-panel mb-3" style="position: relative;">
+    <div class="upload-overlay" id="run-upload-overlay">
+        <div class="spinner-border" role="status" aria-hidden="true"></div>
+        <div class="upload-stage-msg">Reading workbook…</div>
+        <div class="upload-progress"><div class="upload-progress-bar"></div></div>
+        <div class="upload-note">This can take up to a minute — please don't re-click.</div>
+    </div>
     <div class="panel-header">
         <h2><i class="bi bi-file-earmark-spreadsheet"></i>Create Payroll Run</h2>
         <span>Upload inside Payroll Runs</span>
@@ -46,7 +52,7 @@
     </div>
 
     <div class="upload-panel is-active" data-panel="standard" role="tabpanel" aria-labelledby="tab-standard">
-        <form method="post" enctype="multipart/form-data" class="row g-3">
+        <form method="post" enctype="multipart/form-data" class="row g-3" data-staged-loader="run-upload-overlay">
             <div class="col-md-4">
                 <label class="form-label">Import Mode</label>
                 <select class="form-select" name="import_mode">
@@ -169,7 +175,10 @@ async function rawUpload() {
     var original = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Uploading…';
-    out.innerHTML = '<div class="alert alert-info">Parsing the workbook — this can take up to a minute on the free tier. Please don\'t re-click.</div>';
+    // Staged loader (C1): motion + reassuring copy over the panel while parsing.
+    var loader = window.chrisnatStagedLoader
+        ? window.chrisnatStagedLoader(document.getElementById('run-upload-overlay'))
+        : { stop: function () {} };
     try {
         var r = await fetch('{{ url_for("raw_engine.upload") }}', {method: 'POST', body: fd});
         var d = await r.json();
@@ -190,6 +199,7 @@ async function rawUpload() {
     } catch (e) {
         out.innerHTML = '<div class="alert alert-danger">Network error — the workbook may still be processing on the server. Wait a moment and check before retrying.</div>';
     } finally {
+        loader.stop();
         btn.disabled = false;
         btn.innerHTML = original;
     }
@@ -201,13 +211,18 @@ async function rawConfirm(token) {
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving…';
     }
+    var loader = window.chrisnatStagedLoader
+        ? window.chrisnatStagedLoader(document.getElementById('run-upload-overlay'),
+            {messages: ['Saving records…', 'Computing PAYE & SSNIT…', 'Finalizing…', 'Almost done…']})
+        : { stop: function () {} };
     var fd = new FormData(); fd.append('token', token);
     try {
         var r = await fetch('{{ url_for("raw_engine.confirm") }}', {method: 'POST', body: fd});
         var d = await r.json();
-        if (!r.ok) { out.innerHTML = '<div class="alert alert-danger">' + esc(d.error || 'Confirm failed') + '</div>'; return; }
-        window.location = d.redirect;
+        if (!r.ok) { loader.stop(); out.innerHTML = '<div class="alert alert-danger">' + esc(d.error || 'Confirm failed') + '</div>'; return; }
+        window.location = d.redirect; // loader stays up through navigation
     } catch (e) {
+        loader.stop();
         out.innerHTML = '<div class="alert alert-danger">Network error during confirm — check Payroll Runs before retrying so you don\'t double-post.</div>';
     }
 }

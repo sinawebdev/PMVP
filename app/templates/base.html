@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
+<div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
 {% if current_user.is_authenticated %}
 <a class="skip-link" href="#main-content">Skip to content</a>
 <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="primary-nav" aria-expanded="false"><i class="bi bi-list"></i></button>
@@ -86,12 +87,15 @@
         </header>
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                {% endfor %}
+                {# Flashes are surfaced as auto-dismissing toasts by app.js. The JSON
+                   island is the data source; the <noscript> block keeps the same
+                   messages visible (and byte-identical) when JavaScript is off. #}
+                <script type="application/json" id="flash-data">{{ messages|tojson }}</script>
+                <noscript>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+                    {% endfor %}
+                </noscript>
             {% endif %}
         {% endwith %}
         <div class="content-enter">
@@ -103,6 +107,8 @@
     {% block public_content %}{% endblock %}
 {% endif %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/htmx.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='app.js') }}" defer></script>
 <script>
 (function () {
   // Mobile navigation drawer
@@ -119,10 +125,13 @@
   if (backdrop) backdrop.addEventListener('click', function () { setOpen(false); });
   if (nav) nav.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { setOpen(false); }); });
 
-  // Submit feedback: disable button + spinner on full-page form submits
+  // Submit feedback: disable button + spinner on full-page form submits.
+  // htmx-driven forms are skipped — htmx has its own hx-indicator, and a
+  // cancelled hx-confirm would otherwise leave the button stuck on "Working…".
   document.addEventListener('submit', function (e) {
     var form = e.target;
     if (!form || !form.matches('form')) return;
+    if (form.matches('[hx-post],[hx-get],[hx-put],[hx-delete],[hx-patch]')) return;
     var btn = form.querySelector('button[type="submit"], button:not([type])');
     if (btn && !btn.disabled) {
       btn.disabled = true;
@@ -130,17 +139,8 @@
     }
   }, true);
 
-  // Lightweight client-side table filter: input[data-table-filter] -> #tableId
-  document.querySelectorAll('[data-table-filter]').forEach(function (input) {
-    var table = document.getElementById(input.getAttribute('data-table-filter'));
-    if (!table) return;
-    input.addEventListener('input', function () {
-      var term = input.value.trim().toLowerCase();
-      table.querySelectorAll('tbody tr').forEach(function (row) {
-        row.style.display = row.textContent.toLowerCase().indexOf(term) === -1 ? 'none' : '';
-      });
-    });
-  });
+  // The client-side table filter (input[data-table-filter] -> #tableId) now lives
+  // in app.js as a delegated handler so it survives htmx partial swaps.
 })();
 </script>
 </body>
