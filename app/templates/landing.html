@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Chrisnat Payroll + Distribution — Calculated. Delivered. Proven.{% endblock %}
+{% block title %}Chrisnat Payroll MVP{% endblock %}
 {% block public_content %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -365,8 +365,8 @@
 <div class="progress" id="lp-prog"></div>
 <header class="topbar">
   <div class="brand">
-    <div class="cn">CN</div>
-    <div><b>Chrisnat</b><small>Payroll + Distribution</small></div>
+    <div class="cn">CNAT</div>
+    <div><b>Chrisnat</b><small>Payroll MVP</small></div>
   </div>
   <div class="topbar-right">
     <a class="login-link" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-right-to-bracket"></i> Staff Login</a>
@@ -379,7 +379,6 @@
 
   <!-- HERO -->
   <section class="sec" id="hero" data-label="Intro">
-    <div class="hero-eyebrow">Chrisnat Payroll &amp; Distribution</div>
     <h1 class="hero-title"><span class="w">Calculated.</span> <span class="w">Delivered.</span> <span class="w">Proven.</span></h1>
     <p class="hero-sub">A working payroll system for Ghanaian businesses — now delivering every payslip by <b>Email</b>, <b>WhatsApp</b> &amp; <b>SMS</b>, with proof it reached the worker.</p>
     <div class="hero-chips">
@@ -391,7 +390,7 @@
       <a class="hbtn gold" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-right-to-bracket"></i> Staff Login</a>
       <a class="hbtn ghost" href="#pipeline"><i class="fa-solid fa-play"></i> See how it works</a>
     </div>
-    <div class="meta-foot">Sinaforte Labs &nbsp;·&nbsp; In partnership with Chrisnat Limited</div>
+    <div class="meta-foot">Sinawebdesigns &nbsp;·&nbsp; In partnership with Chrisnat Limited</div>
     <div class="scrollcue"><span>Scroll</span><i class="fa-solid fa-chevron-down"></i></div>
   </section>
 
@@ -501,21 +500,18 @@
         <h3>Email</h3>
         <div class="role">Full payslip delivery</div>
         <p>The complete breakdown — gross, deductions, PAYE, SSNIT, net — formatted and readable, straight to the worker's inbox.</p>
-        <span class="badge">Primary channel</span>
       </div>
       <div class="dcard wa rv" style="--d:300ms">
         <div class="dico"><i class="fa-brands fa-whatsapp"></i></div>
         <h3>WhatsApp</h3>
         <div class="role">Full payslip delivery</div>
         <p>The same full payslip delivered to WhatsApp. No app to install, no new account — we meet workers exactly where they already are.</p>
-        <span class="badge">Ghana's #1 channel</span>
       </div>
       <div class="dcard sms rv" style="--d:420ms">
         <div class="dico"><i class="fa-solid fa-comment-sms"></i></div>
         <h3>SMS</h3>
         <div class="role">Arrival notification</div>
         <p>"Your payslip for June 2026 has arrived — check your email or WhatsApp." A lightweight nudge for workers with no data bundle.</p>
-        <span class="badge">No data needed</span>
       </div>
     </div>
     <div class="auditbar rv" style="--d:480ms">
@@ -575,28 +571,6 @@
           <li><i class="fa-solid fa-diamond"></i> Railway / Cloudflare deploys</li>
         </ul>
       </div>
-      <div class="tcard rv" style="--d:280ms">
-        <div class="avatar a2"><i class="fa-solid fa-user-tie"></i></div>
-        <h3>Samuel</h3>
-        <div class="trole">Co-Founder</div>
-        <ul>
-          <li><i class="fa-solid fa-diamond"></i> Product strategy</li>
-          <li><i class="fa-solid fa-diamond"></i> Market positioning</li>
-          <li><i class="fa-solid fa-diamond"></i> Business development</li>
-          <li><i class="fa-solid fa-diamond"></i> Client relations</li>
-        </ul>
-      </div>
-      <div class="tcard rv" style="--d:400ms">
-        <div class="avatar a3"><i class="fa-solid fa-user-tie"></i></div>
-        <h3>Jason</h3>
-        <div class="trole">Co-Founder</div>
-        <ul>
-          <li><i class="fa-solid fa-diamond"></i> Operations &amp; workflow</li>
-          <li><i class="fa-solid fa-diamond"></i> Partner coordination</li>
-          <li><i class="fa-solid fa-diamond"></i> QA &amp; user testing</li>
-          <li><i class="fa-solid fa-diamond"></i> Growth strategy</li>
-        </ul>
-      </div>
     </div>
   </section>
 
@@ -612,7 +586,7 @@
         <div>Akatua+</div>
         <div class="c-wp">Workpay</div>
         <div class="c-ot">Others</div>
-        <div class="us">Chrisnat + Dist.</div>
+        <div class="us">Chrisnat MVP</div>
       </div>
       <div class="crow"><div class="feat">Payroll calculation</div><div class="yes">✓</div><div class="c-wp yes">✓</div><div class="c-ot yes">✓</div><div class="us"><span class="yes">✓</span></div></div>
       <div class="crow"><div class="feat">Excel ingestion</div><div class="yes">✓</div><div class="c-wp part">Partial</div><div class="c-ot yes">✓</div><div class="us"><span class="yes">✓ Validated</span></div></div>
@@ -634,7 +608,7 @@
     <div class="price-grid">
       <div class="ptier starter rv" style="--d:180ms">
         <h3>Starter</h3>
-        <div class="amt"><span class="cur">GHS</span> 1,000 <small>/ mo</small></div>
+        <div class="amt"><span class="cur">GHS</span> 2,000 <small>/ mo</small></div>
         <hr>
         <ul>
           <li><i class="fa-solid fa-check"></i> Up to 30 employees</li>
@@ -646,7 +620,7 @@
       <div class="ptier growth rv" style="--d:300ms">
         <span class="popular">Most popular</span>
         <h3>Growth</h3>
-        <div class="amt"><span class="cur">GHS</span> 2,500 <small>/ mo</small></div>
+        <div class="amt"><span class="cur">GHS</span> 3,500 <small>/ mo</small></div>
         <hr>
         <ul>
           <li><i class="fa-solid fa-check"></i> Up to 150 employees</li>
@@ -657,7 +631,7 @@
       </div>
       <div class="ptier biz rv" style="--d:420ms">
         <h3>Business</h3>
-        <div class="amt"><span class="cur">GHS</span> 4,000 <small>/ mo</small></div>
+        <div class="amt"><span class="cur">GHS</span> 5,000 <small>/ mo</small></div>
         <hr>
         <ul>
           <li><i class="fa-solid fa-check"></i> Unlimited employees</li>
@@ -673,7 +647,7 @@
   <!-- CLOSE -->
   <section class="sec" id="close" data-label="Let's Talk">
     <div class="inner">
-      <div class="close-cn rv">CN</div>
+      <div class="close-cn rv">CNAT</div>
       <h2 class="rv" style="--d:80ms">Let's build this together.</h2>
       <p class="lead rv" style="--d:160ms">A working system, a real partnership, and a clear gap in the market. We're looking for the right investors to take it to every SME in Ghana.</p>
       <div class="asks">
@@ -696,7 +670,7 @@
       <div class="close-cta rv" style="--d:520ms">
         <a class="hbtn gold" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-right-to-bracket"></i> Staff Login</a>
       </div>
-      <div class="close-foot rv" style="--d:560ms">Sinaforte Labs &nbsp;·&nbsp; In partnership with Chrisnat Limited</div>
+      <div class="close-foot rv" style="--d:560ms">Sinawebdesigns &nbsp;·&nbsp; In partnership with Chrisnat Limited</div>
     </div>
   </section>
 
