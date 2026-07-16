@@ -31,8 +31,10 @@ def role_required(*roles):
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
+    from app.tenancy import landing_endpoint
+
     if current_user.is_authenticated:
-        return redirect(url_for("main.dashboard"))
+        return redirect(url_for(landing_endpoint()))
 
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
@@ -41,7 +43,9 @@ def login():
         if user and user.check_password(password):
             session.clear()
             login_user(user)
-            return redirect(url_for("main.dashboard"))
+            # Resolve the landing plane AFTER login so current_user is the new user:
+            # tenant users -> Company Dashboard, Chrisnat users -> oversight console.
+            return redirect(url_for(landing_endpoint()))
         # Re-render with the submitted email preserved (never the password) and an
         # inline error, instead of wiping the form. Not a flash — the message is
         # bound to the fields it concerns.

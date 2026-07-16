@@ -29,10 +29,13 @@ main_bp = Blueprint("main", __name__)
 
 @main_bp.route("/")
 def index():
-    # Signed-in staff go straight to the dashboard; everyone else sees the public
-    # marketing landing that positions push-distribution vs portal-only competitors.
+    # Signed-in users go to their plane's landing (tenant -> Company Dashboard,
+    # Chrisnat -> oversight console); everyone else sees the public marketing
+    # landing that positions push-distribution vs portal-only competitors.
     if current_user.is_authenticated:
-        return redirect(url_for("main.dashboard"))
+        from app.tenancy import landing_endpoint
+
+        return redirect(url_for(landing_endpoint()))
     return render_template("landing.html")
 
 
@@ -209,6 +212,42 @@ def dashboard():
         month_options=valid_months,
         year_options=sorted(known_years, reverse=True),
         action_required_count=pending_approvals + warning_count,
+    )
+
+
+@main_bp.route("/company")
+@login_required
+def company_dashboard():
+    """Tenant plane landing — a client user's own company at a glance.
+
+    Hard-scoped to ``current_user.client_company_id`` via tenant_query. A platform
+    (Chrisnat) user has no single company, so they are sent to the oversight
+    console instead. This is a Phase 1 shell; the full client interface (payroll
+    runs, payslips, employees, etc.) is built out in Phase 3.
+    """
+    from app.tenancy import active_tenant_id, is_platform_context, tenant_query
+
+    if is_platform_context():
+        return redirect(url_for("main.dashboard"))
+
+    company = db.session.get(ClientCompany, active_tenant_id())
+    if company is None:  # tenant user whose company vanished — deny softly
+        flash("Your company profile is unavailable. Contact Chrisnat.", "warning")
+        return redirect(url_for("auth.logout"))
+
+    employee_count = tenant_query(Employee).count()
+    active_employee_count = tenant_query(Employee).filter(Employee.status == "Active").count()
+    runs = tenant_query(PayrollRun).order_by(PayrollRun.created_at.desc()).all()
+    pending_runs = sum(1 for run in runs if run.status in PENDING_STATUSES)
+
+    return render_template(
+        "company_dashboard.html",
+        company=company,
+        employee_count=employee_count,
+        active_employee_count=active_employee_count,
+        run_count=len(runs),
+        pending_runs=pending_runs,
+        recent_runs=runs[:8],
     )
 
 

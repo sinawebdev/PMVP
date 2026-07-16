@@ -223,17 +223,22 @@ def create_app():
     @app.context_processor
     def inject_sidebar_clients():
         from app.models import ClientCompany
+        from app.tenancy import active_tenant_id
 
         # Rendered on every authenticated page — including the branded 500 page.
         # If the DB connection is the very thing that failed, this query would
         # raise again and turn the friendly error page into a raw crash, so fail
         # soft to an empty sidebar rather than let the error handler re-error.
+        #
+        # Tenant-scoped: a client user must never see other tenants' company
+        # names in the sidebar, so a tenant user's list is limited to their own
+        # company; platform (Chrisnat) users see all active clients.
         try:
-            clients = (
-                ClientCompany.query.filter_by(status="Active")
-                .order_by(ClientCompany.name)
-                .all()
-            )
+            query = ClientCompany.query.filter_by(status="Active")
+            tenant_id = active_tenant_id()
+            if tenant_id is not None:
+                query = query.filter(ClientCompany.id == tenant_id)
+            clients = query.order_by(ClientCompany.name).all()
         except Exception:  # noqa: BLE001 - context processors must never raise
             db.session.rollback()
             clients = []

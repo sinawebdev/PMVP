@@ -18,6 +18,10 @@ def seed_default_data():
     seed_users()
     seed_clients()
     seed_statutory_rates()
+    # PMVP v1 tenancy: one Chrisnat platform admin + a client_admin for two demo
+    # tenants, so the two-tenant zero-cross-visibility story is testable from the
+    # first boot. Runs after seed_clients() so the companies exist to bind to.
+    seed_pmvp_tenancy()
     if os.getenv("SEED_DEMO_DATA", "false").lower() == "true":
         seed_employees()
         seed_payroll()
@@ -25,6 +29,44 @@ def seed_default_data():
     if os.getenv("SEED_ARCHIVED_FEATURES", "false").lower() == "true":
         seed_client_users()
     db.session.commit()
+
+
+# The two seeded companies designated as PMVP v1 demo tenants (each gets a
+# client_admin login). They must already exist via seed_clients().
+PMVP_DEMO_TENANTS = [
+    ("MSC Ghana Ltd", "MSC Admin", "admin@msc.demo"),
+    ("Stellar Logistics", "Stellar Admin", "admin@stellar.demo"),
+]
+
+
+def seed_pmvp_tenancy():
+    """One chrisnat_admin (platform) + a client_admin for each demo tenant.
+
+    Idempotent: every user is guarded by an email-existence check, so re-running
+    on an already-seeded DB is a no-op. Passwords are demo-only ("password123").
+    """
+    # Platform (Chrisnat) oversight admin — client_company_id stays NULL.
+    if not User.query.filter_by(email="chrisnat.admin@chrisnat.local").first():
+        admin = User(
+            name="Chrisnat Admin",
+            email="chrisnat.admin@chrisnat.local",
+            role="chrisnat_admin",
+        )
+        admin.set_password("password123")
+        db.session.add(admin)
+
+    # One client_admin per demo tenant, hard-bound to that company.
+    for company_name, admin_name, admin_email in PMVP_DEMO_TENANTS:
+        company = ClientCompany.query.filter_by(name=company_name).first()
+        if company and not User.query.filter_by(email=admin_email).first():
+            tenant_admin = User(
+                name=admin_name,
+                email=admin_email,
+                role="client_admin",
+                client_company_id=company.id,
+            )
+            tenant_admin.set_password("password123")
+            db.session.add(tenant_admin)
 
 
 # Initial statutory rate version from the ACS workbook's live PAYE formula
