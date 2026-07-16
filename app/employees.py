@@ -21,6 +21,7 @@ from flask import (
     Blueprint,
     current_app,
     flash,
+    make_response,
     redirect,
     render_template,
     request,
@@ -33,6 +34,7 @@ from flask_login import login_required
 from app import db
 from app.audit import record_audit
 from app.auth import role_required
+from app.htmx_utils import wants_htmx, with_toast
 from app.models import ClientCompany, Employee, PayrollItem, WageRateProfile
 from app.raw_import import normalise_emp_id
 
@@ -54,10 +56,9 @@ def _stage_path(token):
 # ── Roster page ──────────────────────────────────────────────────────────────
 
 
-@employees_bp.route("/clients/<int:client_id>/roster")
-@role_required(*REP_ROLES)
-def roster(client_id):
-    """List a client's employees — active first, then inactive, each alphabetical."""
+def _roster_context(client_id):
+    """Shared data for the roster page and its HTMX partial: the client plus its
+    employees (active first, then inactive, each alphabetical) and the counts."""
     client = db.get_or_404(ClientCompany, client_id)
     employees = (
         Employee.query.filter_by(client_company_id=client_id)
@@ -65,14 +66,26 @@ def roster(client_id):
         .all()
     )
     active_count = sum(1 for e in employees if e.status == ACTIVE)
-    inactive_count = len(employees) - active_count
-    return render_template(
-        "employees/roster.html",
-        client=client,
-        employees=employees,
-        active_count=active_count,
-        inactive_count=inactive_count,
-    )
+    return {
+        "client": client,
+        "employees": employees,
+        "active_count": active_count,
+        "inactive_count": len(employees) - active_count,
+    }
+
+
+def _roster_body_response(client_id, category, message):
+    """Re-render just the roster body partial (table + counts) and attach a toast.
+    Used to answer an HTMX add/deactivate/reactivate/delete without a full reload."""
+    body = render_template("employees/_roster_body.html", **_roster_context(client_id))
+    return with_toast(make_response(body), category, message)
+
+
+@employees_bp.route("/clients/<int:client_id>/roster")
+@role_required(*REP_ROLES)
+def roster(client_id):
+    """List a client's employees — active first, then inactive, each alphabetical."""
+    return render_template("employees/roster.html", **_roster_context(client_id))
 
 
 # ── Add single employee ───────────────────────────────────────────────────────
@@ -97,25 +110,48 @@ def add(client_id):
     client = db.get_or_404(ClientCompany, client_id)
 
     if request.method == "POST":
+        # Validate first, and on any error re-render the form with the submitted
+        # values preserved and per-field messages, instead of redirecting to a
+        # blank form (which wiped everything the rep had typed).
         staff_id = normalise_emp_id(request.form.get("staff_id", ""))
+        full_name = request.form.get("full_name", "").strip()
+        errors = {}
         if not staff_id:
-            flash("Employee ID is required.", "danger")
-            return redirect(url_for("employees.add", client_id=client_id))
-
-        existing = Employee.query.filter_by(
-            client_company_id=client_id, staff_id=staff_id
-        ).first()
-        if existing:
-            flash(f"Employee ID {staff_id} already exists for {client.name}.", "danger")
-            return redirect(url_for("employees.add", client_id=client_id))
+            errors["staff_id"] = "Employee ID is required."
+        if not full_name:
+            errors["full_name"] = "Full name is required."
+        if staff_id and "staff_id" not in errors:
+            existing = Employee.query.filter_by(
+                client_company_id=client_id, staff_id=staff_id
+            ).first()
+            if existing:
+                errors["staff_id"] = (
+                    f"Employee ID {staff_id} already exists for {client.name}."
+                )
+        if errors:
+            return render_template(
+                "employees/add.html",
+                client=client,
+                submitted=request.form,
+                errors=errors,
+            )
 
         emp = Employee(
             client_company_id=client_id,
             staff_id=staff_id,
-            full_name=request.form.get("full_name", "").strip(),
+            full_name=full_name,
             email=request.form.get("email", "").strip() or None,
             phone=request.form.get("phone", "").strip() or None,
             department=request.form.get("department", "").strip() or None,
+            job_title=request.form.get("job_title", "").strip() or None,
+            # Standing identity fields (GRA/SSNIT/MoMo). Safe to capture manually;
+            # pay-driving fields (basic salary, pay_type, ICU membership) stay
+            # import/seed-only so manual entry can't collide with the raw-engine
+            # seed guards. See PMVP_INVESTIGATION notes / B6 decision.
+            ssnit_number=request.form.get("ssnit_number", "").strip() or None,
+            ghana_card_number=request.form.get("ghana_card_number", "").strip() or None,
+            tin=request.form.get("tin", "").strip() or None,
+            momo_number=request.form.get("momo_number", "").strip() or None,
             bank_name=request.form.get("bank_name", "").strip() or None,
             bank_branch=request.form.get("bank_branch", "").strip() or None,
             bank_account_number=request.form.get("bank_account", "").strip() or None,
@@ -127,7 +163,7 @@ def add(client_id):
         flash(f"{emp.full_name} added successfully.", "success")
         return redirect(url_for("employees.roster", client_id=client_id))
 
-    return render_template("employees/add.html", client=client)
+    return render_template("employees/add.html", client=client, submitted=None, errors={})
 
 
 # ── Edit employee ─────────────────────────────────────────────────────────────
@@ -256,7 +292,10 @@ def deactivate(client_id, emp_id):
     emp = Employee.query.filter_by(id=emp_id, client_company_id=client_id).first_or_404()
     emp.status = INACTIVE
     db.session.commit()
-    flash(f"{emp.full_name} deactivated.", "info")
+    message = f"{emp.full_name} deactivated."
+    if wants_htmx():
+        return _roster_body_response(client_id, "info", message)
+    flash(message, "info")
     return redirect(url_for("employees.roster", client_id=client_id))
 
 
@@ -266,7 +305,10 @@ def reactivate(client_id, emp_id):
     emp = Employee.query.filter_by(id=emp_id, client_company_id=client_id).first_or_404()
     emp.status = ACTIVE
     db.session.commit()
-    flash(f"{emp.full_name} reactivated.", "success")
+    message = f"{emp.full_name} reactivated."
+    if wants_htmx():
+        return _roster_body_response(client_id, "success", message)
+    flash(message, "success")
     return redirect(url_for("employees.roster", client_id=client_id))
 
 
@@ -297,9 +339,11 @@ def delete(client_id, emp_id):
     emp = Employee.query.filter_by(id=emp_id, client_company_id=client_id).first_or_404()
     blockers = employee_delete_blockers(emp)
     if blockers:
-        flash(
-            f"Cannot delete {emp.full_name}: {'; '.join(blockers)}.", "danger"
-        )
+        message = f"Cannot delete {emp.full_name}: {'; '.join(blockers)}."
+        if wants_htmx():
+            # Row is unchanged — re-render the body so nothing is removed.
+            return _roster_body_response(client_id, "danger", message)
+        flash(message, "danger")
         return redirect(url_for("employees.roster", client_id=client_id))
 
     client = emp.client_company
@@ -317,7 +361,10 @@ def delete(client_id, emp_id):
     # EmployeeDeployment rows cascade via the relationship's delete-orphan.
     db.session.delete(emp)
     db.session.commit()
-    flash(f"{full_name} permanently deleted.", "success")
+    message = f"{full_name} permanently deleted."
+    if wants_htmx():
+        return _roster_body_response(client_id, "success", message)
+    flash(message, "success")
     return redirect(url_for("employees.roster", client_id=client_id))
 
 

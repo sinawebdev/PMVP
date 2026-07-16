@@ -42,7 +42,14 @@ def login():
             session.clear()
             login_user(user)
             return redirect(url_for("main.dashboard"))
-        flash("Invalid email or password.", "danger")
+        # Re-render with the submitted email preserved (never the password) and an
+        # inline error, instead of wiping the form. Not a flash — the message is
+        # bound to the fields it concerns.
+        return render_template(
+            "login.html",
+            email=email,
+            login_error="Invalid email or password.",
+        )
 
     return render_template("login.html")
 

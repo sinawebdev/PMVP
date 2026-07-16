@@ -93,14 +93,18 @@
                 <div class="alert alert-{{ category }}">{{ message }}</div>
             {% endfor %}
         {% endwith %}
+        {% if login_error %}
+            <div class="alert alert-danger" role="alert">{{ login_error }}</div>
+        {% endif %}
         <form method="post">
             <div class="mb-3">
                 <label class="form-label" for="email">Email</label>
-                <input class="form-control" type="email" id="email" name="email" required autofocus>
+                {# Preserve the submitted email on a failed attempt; never the password. #}
+                <input class="form-control {% if login_error %}is-invalid{% endif %}" type="email" id="email" name="email" value="{{ email or '' }}" required {% if not login_error %}autofocus{% endif %}>
             </div>
             <div class="mb-3">
                 <label class="form-label" for="password">Password</label>
-                <input class="form-control" type="password" id="password" name="password" required>
+                <input class="form-control {% if login_error %}is-invalid{% endif %}" type="password" id="password" name="password" required {% if login_error %}autofocus{% endif %}>
             </div>
             <button class="btn btn-primary w-100" type="submit"><i class="bi bi-box-arrow-in-right"></i>Login</button>
         </form>

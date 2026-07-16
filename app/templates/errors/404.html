@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Page not found · Chrisnat Payroll{% endblock %}
+{% block page_title %}Page not found{% endblock %}
+{% block page_intro %}That link led somewhere that doesn't exist. Nothing was changed.{% endblock %}
+
+{# Authenticated: stays inside the branded app shell. #}
+{% block content %}
+<section class="panel">
+    <div class="empty-state">
+        <i class="bi bi-compass"></i>
+        <p class="mb-1"><strong>We couldn't find that page (404).</strong></p>
+        <p class="text-muted mb-3">The address may be mistyped, or the item was moved or removed.</p>
+        <div class="d-flex gap-2">
+            <a class="btn btn-sm btn-primary" href="{{ url_for('main.dashboard') }}"><i class="bi bi-speedometer2"></i>Return to Dashboard</a>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="history.back()"><i class="bi bi-arrow-left"></i>Back</button>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{# Anonymous: a self-contained branded card (no sidebar/auth dependencies). #}
+{% block public_content %}
+<main class="error-page">
+    <section class="error-card">
+        <div class="brand justify-content-center mb-3">
+            <span class="brand-mark">CN</span>
+            <div><strong>Chrisnat Limited</strong><small>Payroll + Distribution</small></div>
+        </div>
+        <div class="error-code">404</div>
+        <h1>Page not found</h1>
+        <p>That link led somewhere that doesn't exist. Nothing was changed.</p>
+        <div class="d-flex gap-2 justify-content-center">
+            <a class="btn btn-primary" href="{{ url_for('main.index') }}"><i class="bi bi-house"></i>Back to site</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('auth.login') }}">Log in</a>
+        </div>
+    </section>
+</main>
+{% endblock %}

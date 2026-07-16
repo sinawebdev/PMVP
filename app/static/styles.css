@@ -298,6 +298,9 @@ body {
     color: #d1fae5;
     font-size: 14px;
     line-height: 1.5;
+    /* Cap the measure so intros don't stretch the full hero width — keeps the
+       right-hand space looking intentional rather than empty (B3/B4). */
+    max-width: 68ch;
     margin: 0 0 6px;
     max-width: 760px;
 }
@@ -1007,3 +1010,204 @@ body {
     box-shadow: 0 8px 18px rgba(15, 118, 110, .22);
 }
 .upload-panel[hidden] { display: none !important; }
+
+/* ============================================================================
+   Toasts — the single feedback channel (see app.js). Fixed, top-right, stacked.
+   Each type carries a left accent + icon tint drawn from the app's token set.
+   ========================================================================== */
+.toast-region {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    z-index: 1080;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: min(360px, calc(100vw - 36px));
+    pointer-events: none;
+}
+.toast-item {
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 12px 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--muted);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.35;
+    opacity: 0;
+    transform: translateX(14px);
+    transition: opacity .22s ease, transform .22s ease;
+}
+.toast-item.toast-show { opacity: 1; transform: translateX(0); }
+.toast-item.toast-hide { opacity: 0; transform: translateX(14px); }
+.toast-icon { font-size: 16px; line-height: 1.35; flex: 0 0 auto; }
+.toast-body { flex: 1 1 auto; overflow-wrap: anywhere; }
+.toast-close {
+    flex: 0 0 auto;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 20px;
+    line-height: 1;
+    padding: 0 2px;
+    cursor: pointer;
+    border-radius: 6px;
+}
+.toast-close:hover { color: var(--ink); }
+.toast-close:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.toast-success { border-left-color: var(--green); }
+.toast-success .toast-icon { color: var(--green); }
+.toast-danger  { border-left-color: var(--danger); }
+.toast-danger  .toast-icon { color: var(--danger); }
+.toast-info    { border-left-color: var(--brand); }
+.toast-info    .toast-icon { color: var(--brand); }
+.toast-warning { border-left-color: #b45309; }
+.toast-warning .toast-icon { color: #b45309; }
+@media (prefers-reduced-motion: reduce) {
+    .toast-item { transition: opacity .01ms linear; transform: none; }
+    .toast-item.toast-show { transform: none; }
+}
+
+/* ============================================================================
+   Confirm modal — styled replacement for native confirm() (which froze the
+   renderer in testing). Driven by app-level data-confirm wiring / inline usage.
+   ========================================================================== */
+.cn-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1090;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, .55);
+    opacity: 0;
+    transition: opacity .16s ease;
+}
+.cn-modal-backdrop.cn-open { opacity: 1; }
+.cn-modal {
+    width: min(440px, 100%);
+    background: var(--surface);
+    border-radius: 16px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .35);
+    padding: 22px 22px 18px;
+    transform: translateY(8px) scale(.98);
+    transition: transform .16s ease;
+}
+.cn-modal-backdrop.cn-open .cn-modal { transform: translateY(0) scale(1); }
+.cn-modal-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 8px;
+    color: var(--ink);
+}
+.cn-modal-title .bi { color: var(--danger); font-size: 20px; }
+.cn-modal-text { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+.cn-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+@media (prefers-reduced-motion: reduce) {
+    .cn-modal-backdrop, .cn-modal { transition: none; }
+    .cn-modal { transform: none; }
+}
+
+/* ============================================================================
+   Inline form-field validation (server-side re-population) + upload loader.
+   ========================================================================== */
+.field-error { color: var(--danger); font-size: 12.5px; margin-top: 4px; }
+.form-control.is-invalid, .form-select.is-invalid { border-color: var(--danger); }
+.form-control.is-invalid:focus, .form-select.is-invalid:focus {
+    box-shadow: 0 0 0 .2rem rgba(220, 38, 38, .18);
+}
+
+/* Staged upload loader: indeterminate bar + cycling copy. Shown via .is-loading
+   on the overlay; hidden by default. Cosmetic only — not tied to real progress. */
+.upload-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 24px;
+    text-align: center;
+    background: rgba(255, 255, 255, .86);
+    backdrop-filter: blur(2px);
+    border-radius: 16px;
+}
+.upload-overlay.is-loading { display: flex; }
+.upload-overlay .spinner-border { color: var(--brand); }
+.upload-stage-msg { font-weight: 600; color: var(--ink); min-height: 1.4em; }
+.upload-progress {
+    width: min(320px, 80%);
+    height: 8px;
+    border-radius: 999px;
+    background: var(--brand-soft);
+    overflow: hidden;
+}
+.upload-progress-bar {
+    height: 100%;
+    width: 40%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--brand), var(--brand-dark));
+    animation: cnIndeterminate 1.4s ease-in-out infinite;
+}
+.upload-note { color: var(--muted); font-size: 13px; }
+@keyframes cnIndeterminate {
+    0%   { margin-left: -40%; }
+    50%  { margin-left: 60%; }
+    100% { margin-left: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .upload-progress-bar { animation: none; width: 100%; }
+}
+
+/* ============================================================================
+   Branded error pages (A4) — anonymous, self-contained card (no app shell).
+   ========================================================================== */
+.error-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background:
+        radial-gradient(circle at 18% 12%, rgba(25, 184, 159, .18), transparent 38%),
+        radial-gradient(circle at 84% 82%, rgba(201, 162, 75, .14), transparent 42%),
+        linear-gradient(160deg, #052420 0%, #073b34 55%, #04201c 100%);
+    color: #edf4f1;
+    text-align: center;
+}
+.error-card {
+    width: min(460px, 100%);
+    background: rgba(255, 255, 255, .05);
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-radius: 18px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .45);
+    backdrop-filter: blur(8px);
+    padding: 32px 28px 26px;
+}
+.error-card .brand strong { color: #edf4f1; }
+.error-card .brand small { color: #86aaa2; letter-spacing: .16em; text-transform: uppercase; font-size: 10.5px; }
+.error-card .error-code {
+    font-size: 60px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -.02em;
+    background: linear-gradient(135deg, #e6c673, #c9a24b);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 6px;
+}
+.error-card h1 { font-size: 22px; font-weight: 700; margin: 0 0 8px; color: #edf4f1; }
+.error-card p { color: #a9c6bf; margin: 0 0 20px; }
