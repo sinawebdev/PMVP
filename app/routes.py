@@ -8,6 +8,7 @@ from sqlalchemy import or_, text
 
 from app import db
 from app.auth import role_required
+from app.tenancy import platform_required
 from app.models import (
     AuditTrail,
     ClientCompany,
@@ -90,7 +91,7 @@ def db_health():
 
 
 @main_bp.route("/dashboard")
-@login_required
+@platform_required
 def dashboard():
     now = datetime.now()
     valid_months = [month_name[index] for index in range(1, 13)]
@@ -252,7 +253,7 @@ def company_dashboard():
 
 
 @main_bp.route("/clients")
-@login_required
+@platform_required
 def clients():
     clients = ClientCompany.query.order_by(ClientCompany.name).all()
     return render_template("clients.html", clients=clients)
@@ -290,7 +291,7 @@ def client_form(client=None):
 
 
 @main_bp.route("/clients/<int:client_id>")
-@login_required
+@platform_required
 def client_detail(client_id):
     client = db.get_or_404(ClientCompany, client_id)
     now = datetime.now()
@@ -332,7 +333,7 @@ def client_detail(client_id):
 
 
 @main_bp.route("/search")
-@login_required
+@platform_required
 def search():
     q = request.args.get("q", "").strip()
     clients = []

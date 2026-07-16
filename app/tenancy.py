@@ -16,9 +16,13 @@ Client-facing routes must use :func:`tenant_query` (or the object guards below)
 instead of bare ``Model.query`` — see AUDIT.md (Phase 2).
 """
 
-from flask_login import current_user
+from functools import wraps
+
+from flask import flash, redirect, url_for
+from flask_login import current_user, login_required
 from werkzeug.exceptions import NotFound
 
+from app import db
 from app.models import (
     Employee,
     EmployeeDeployment,
@@ -136,13 +140,35 @@ def landing_endpoint():
     return "main.dashboard"
 
 
+def platform_required(view):
+    """Restrict a view to platform (Chrisnat) users — the oversight/control plane.
+
+    A tenant (client) user hitting an oversight/operator route (which shows data
+    across all tenants) is redirected to their own scoped Company Dashboard, never
+    served the cross-tenant page. Anonymous users go through login first.
+    Use on every route that intentionally spans tenants (dashboards, client lists,
+    search, operator payroll/payslip views) so app-layer isolation holds even
+    though those routes only carry @login_required today.
+    """
+
+    @wraps(view)
+    @login_required
+    def wrapped(*args, **kwargs):
+        if active_tenant_id() is not None:  # a tenant user
+            flash("That area is limited to your company dashboard.", "warning")
+            return redirect(url_for("main.company_dashboard"))
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
 def tenant_get_or_404(model, ident):
     """Fetch ``model`` by primary key, scoped to the active tenant, or 404.
 
     A tenant user asking for another tenant's id gets a 404 (never a 403 that
     confirms the row exists, and never the row itself).
     """
-    obj = model.query.get(ident)
+    obj = db.session.get(model, ident)
     if obj is None or not owns_object(obj):
         raise NotFound()
     return obj

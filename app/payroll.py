@@ -20,6 +20,7 @@ from flask_login import current_user, login_required
 from app import db
 from app.audit import record_audit
 from app.auth import role_required
+from app.tenancy import platform_required
 from app.excel_utils import (
     allowed_excel_file,
     calculate_status_breakdown,
@@ -490,7 +491,7 @@ def handle_payroll_upload(now):
 
 
 @payroll_bp.route("/runs", methods=["GET", "POST"])
-@login_required
+@platform_required
 def runs():
     now = datetime.now()
     if request.method == "POST":
@@ -1091,7 +1092,7 @@ def create_or_update_employee_from_import(
 
 
 @payroll_bp.route("/runs/<int:run_id>")
-@login_required
+@platform_required
 def detail(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
 

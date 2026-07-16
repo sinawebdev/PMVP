@@ -13,6 +13,12 @@ def role_required(*roles):
         @wraps(view)
         @login_required
         def wrapped(*args, **kwargs):
+            # Tenant (client) users never belong on an operator/oversight route —
+            # send them to their own scoped Company Dashboard, not the (now
+            # platform-only) operator dashboard.
+            if getattr(current_user, "client_company_id", None) is not None:
+                flash("That area is limited to your company dashboard.", "warning")
+                return redirect(url_for("main.company_dashboard"))
             if current_user.role == "client_user" and "client_user" not in roles:
                 flash("Client portal access is archived while the payroll MVP is stabilized.", "warning")
                 return redirect(url_for("main.dashboard"))

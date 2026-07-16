@@ -1,15 +1,15 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
-from flask_login import login_required
 
 from app import db
 from app.audit import record_audit
 from app.models import ClientCompany, PayrollItem, PayrollRun
+from app.tenancy import platform_required
 
 payslip_bp = Blueprint("payslip", __name__, url_prefix="/payslip")
 
 
 @payslip_bp.route("")
-@login_required
+@platform_required
 def index():
     client_id = request.args.get("client_id", type=int)
     run_id = request.args.get("run_id", type=int)
@@ -45,7 +45,7 @@ def index():
 
 
 @payslip_bp.route("/generate", methods=["POST"])
-@login_required
+@platform_required
 def generate():
     item_ids = [int(item_id) for item_id in request.form.getlist("payroll_item_ids") if item_id]
     if not item_ids:
