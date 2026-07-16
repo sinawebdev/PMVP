@@ -13,7 +13,10 @@ pipeline and is exposed here read-first; the upload entry point is wired in a
 follow-up within this phase. Statutory rates are global and view-only for clients.
 """
 
+import io
 import os
+import uuid
+import zipfile
 from datetime import date
 
 from flask import (
@@ -30,19 +33,36 @@ from flask_login import current_user
 
 from app import db
 from app.audit import record_audit
+from app.distribution.idempotency import replay_or_run
+from app.distribution.service import distribute_run, resolve_channel
 from app.models import (
+    CHANNEL_AUTO,
+    DELIVERY_CHANNELS,
+    DELIVERY_FAILED,
+    DELIVERY_SENT,
     AuditTrail,
     ClientCompany,
     Employee,
     Expense,
     PayrollItem,
     PayrollRun,
+    PayslipDelivery,
     StatutoryRate,
     User,
 )
-from app.pdf_service import generate_payslip_pdf
+from app.payroll_status import SENDABLE_STATUSES
+from app.pdf_service import generate_payslip_pdf, payslip_filename
 from app.raw_import import normalise_emp_id
-from app.tenancy import active_tenant_id, tenant_get_or_404, tenant_query, tenant_required
+from app.roles import CLIENT_ADMIN
+from app.tenancy import (
+    active_tenant_id,
+    tenant_get_or_404,
+    tenant_query,
+    tenant_required,
+    tenant_role_required,
+)
+
+_VALID_SEND_CHANNELS = set(DELIVERY_CHANNELS) | {CHANNEL_AUTO}
 
 client_bp = Blueprint("client", __name__, url_prefix="/company")
 
@@ -242,3 +262,104 @@ def audit():
         else []
     )
     return render_template("client/audit.html", company=_company(), entries=entries)
+
+
+# --- Payslip distribution ---------------------------------------------------
+# The client's own distribution surface. v1 primary channel is a payslip
+# download (single PDF or a run-wide ZIP); SMS / WhatsApp / email reuse the
+# Chrisnat distribution service and stay console-backed until real backends are
+# configured. Sending is client_admin-only; viewing/downloading is any tenant
+# user. A run is fetched via tenant_get_or_404 so a client can only ever
+# distribute their own run.
+def _latest_delivery(item_id):
+    return (
+        PayslipDelivery.query.filter_by(payroll_item_id=item_id)
+        .order_by(PayslipDelivery.created_at.desc())
+        .first()
+    )
+
+
+@client_bp.route("/runs/<int:run_id>/distribute")
+@tenant_required
+def distribute(run_id):
+    run = tenant_get_or_404(PayrollRun, run_id)  # 404 if another tenant's run
+    rows = [
+        {"item": it, "delivery": _latest_delivery(it.id), "suggested": resolve_channel(it)}
+        for it in run.items
+    ]
+    sent = sum(1 for r in rows if r["delivery"] and r["delivery"].status == DELIVERY_SENT)
+    failed = sum(1 for r in rows if r["delivery"] and r["delivery"].status == DELIVERY_FAILED)
+    return render_template(
+        "client/distribute.html",
+        company=_company(),
+        run=run,
+        rows=rows,
+        channels=DELIVERY_CHANNELS,
+        sendable=run.status in SENDABLE_STATUSES,
+        can_send=active_tenant_id() is not None
+        and (current_user.role or "").strip().lower() == CLIENT_ADMIN,
+        nonce=uuid.uuid4().hex,
+        sent_count=sent,
+        failed_count=failed,
+    )
+
+
+def _do_client_send(run, only_failed):
+    if run.status not in SENDABLE_STATUSES:
+        flash("Payslips can only be sent after the payroll run is approved.", "warning")
+        return redirect(url_for("client.distribute", run_id=run.id))
+    channel = request.form.get("channel", CHANNEL_AUTO)
+    if channel not in _VALID_SEND_CHANNELS:
+        flash(f"Unknown channel: {channel}", "warning")
+        return redirect(url_for("client.distribute", run_id=run.id))
+    nonce = request.form.get("nonce")
+    action = "resend-failed" if only_failed else "send"
+    key = f"client-distribute:{run.id}:{action}:{channel}:{nonce}" if nonce else None
+    summary, replayed = replay_or_run(
+        key, lambda: distribute_run(run, channel=channel, only_failed=only_failed)
+    )
+    note = " (already processed)" if replayed else ""
+    failed_workers = summary.get("failed_workers") or []
+    followup = ""
+    if failed_workers:
+        shown = ", ".join(failed_workers[:10])
+        more = f" +{len(failed_workers) - 10} more" if len(failed_workers) > 10 else ""
+        followup = f" No roster contact for: {shown}{more}."
+    flash(
+        f"Distribution complete{note}: {summary['sent']} sent, {summary['failed']} failed, "
+        f"{summary['skipped']} skipped (of {summary['total']}).{followup}",
+        "success" if not summary["failed"] else "warning",
+    )
+    return redirect(url_for("client.distribute", run_id=run.id))
+
+
+@client_bp.route("/runs/<int:run_id>/distribute/send", methods=["POST"])
+@tenant_role_required(CLIENT_ADMIN)
+def distribute_send(run_id):
+    run = tenant_get_or_404(PayrollRun, run_id)
+    return _do_client_send(run, only_failed=False)
+
+
+@client_bp.route("/runs/<int:run_id>/distribute/resend-failed", methods=["POST"])
+@tenant_role_required(CLIENT_ADMIN)
+def distribute_resend(run_id):
+    run = tenant_get_or_404(PayrollRun, run_id)
+    return _do_client_send(run, only_failed=True)
+
+
+@client_bp.route("/runs/<int:run_id>/payslips.zip")
+@tenant_required
+def payslips_zip(run_id):
+    """Download every payslip in the run as one ZIP — the v1 primary channel."""
+    run = tenant_get_or_404(PayrollRun, run_id)  # 404 if another tenant's run
+    export_folder = current_app.config["EXPORT_FOLDER"]
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for item in run.items:
+            pdf_path = generate_payslip_pdf(item, export_folder)
+            archive.write(pdf_path, arcname=payslip_filename(item))
+    buffer.seek(0)
+    download_name = f"payslips_{run.month}_{run.year}.zip".replace(" ", "_")
+    return send_file(
+        buffer, mimetype="application/zip", as_attachment=True, download_name=download_name
+    )

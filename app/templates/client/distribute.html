@@ -1,0 +1,76 @@
+{% extends "client/base.html" %}
+{% block title %}Distribute — {{ run.month }} {{ run.year }}{% endblock %}
+{% block body %}
+  <div class="toolbar">
+    <div>
+      <h1>Distribute payslips</h1>
+      <p class="sub" style="margin:0;">{{ run.month }} {{ run.year }} · Status: <span class="badge {{ 'ok' if sendable }}">{{ run.status }}</span></p>
+    </div>
+    <a class="btn" href="{{ url_for('client.run_detail', run_id=run.id) }}">Back to run</a>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="n">{{ rows|length }}</div><div class="l">Payslips</div></div>
+    <div class="card"><div class="n">{{ sent_count }}</div><div class="l">Sent</div></div>
+    <div class="card"><div class="n">{{ failed_count }}</div><div class="l">Failed</div></div>
+  </div>
+
+  <div class="card form" style="margin-bottom:24px;">
+    <h1 style="font-size:1.05rem;margin-top:0;">Download</h1>
+    <p class="sub">The simplest way to hand out payslips: download the whole run as a ZIP of PDFs, or grab a single worker's payslip from the run page.</p>
+    <a class="btn primary" href="{{ url_for('client.payslips_zip', run_id=run.id) }}">Download all payslips (ZIP)</a>
+  </div>
+
+  <div class="card form" style="margin-bottom:24px;">
+    <h1 style="font-size:1.05rem;margin-top:0;">Send to workers</h1>
+    {% if not sendable %}
+      <p class="sub">Payslips can be sent once the run is <strong>Approved</strong>. This run is <strong>{{ run.status }}</strong>.</p>
+    {% elif not can_send %}
+      <p class="sub">Sending payslips to workers is limited to a company administrator. You can still download payslips above.</p>
+    {% else %}
+      <p class="sub">Send each worker a link to their own payslip over SMS, WhatsApp, or email. Delivery is logged per worker below; already-sent workers are skipped, so it is safe to run again.</p>
+      <form method="post" action="{{ url_for('client.distribute_send', run_id=run.id) }}" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+        <input type="hidden" name="nonce" value="{{ nonce }}" />
+        <div style="min-width:200px;">
+          <label for="channel">Channel</label>
+          <select id="channel" name="channel">
+            <option value="auto">Auto (best contact per worker)</option>
+            {% for ch in channels %}<option value="{{ ch }}">{{ ch|capitalize }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn primary" type="submit">Send payslips</button>
+        {% if failed_count %}
+        <button class="btn" type="submit" formaction="{{ url_for('client.distribute_resend', run_id=run.id) }}">Resend failed only</button>
+        {% endif %}
+      </form>
+    {% endif %}
+  </div>
+
+  <h1 style="font-size:1.05rem;">Per-worker delivery</h1>
+  {% if rows %}
+  <div class="panel">
+    <table>
+      <thead><tr><th>Staff ID</th><th>Name</th><th>Suggested</th><th>Status</th><th>Channel</th><th>When</th><th>Detail</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.item.staff_id }}</td>
+          <td>{{ r.item.full_name }}</td>
+          <td class="muted">{{ r.suggested|capitalize }}</td>
+          <td>
+            {% if r.delivery and r.delivery.status == 'sent' %}<span class="badge ok">Sent</span>
+            {% elif r.delivery and r.delivery.status == 'failed' %}<span class="badge warn">Failed</span>
+            {% else %}<span class="badge">Not sent</span>{% endif %}
+          </td>
+          <td class="muted">{{ r.delivery.channel if r.delivery else '—' }}</td>
+          <td class="muted">{{ r.delivery.sent_at.strftime('%Y-%m-%d %H:%M') if r.delivery and r.delivery.sent_at else '—' }}</td>
+          <td class="muted">{{ r.delivery.error if r.delivery and r.delivery.error else '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No payslip lines on this run yet.</p>
+  {% endif %}
+{% endblock %}

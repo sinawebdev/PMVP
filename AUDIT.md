@@ -60,7 +60,7 @@ client-side employee CRUD for full self-service.)
 ### `payslip` (`app/payslip.py`)
 | Route | Guard | Access |
 |---|---|---|
-| `/payslip` index, `/payslip/generate` | **`platform_required`** | platform (operator payslip picker; Phase 4 adds tenant distribution) |
+| `/payslip` index, `/payslip/generate` | **`platform_required`** | platform (operator payslip picker; tenant distribution is the client `/company/runs/<id>/distribute` routes, Phase 4) |
 
 ### `distribution` (`app/distribution/__init__.py`)
 | Route | Guard | Access |
@@ -93,6 +93,9 @@ id returns 404.
 | `/company/statutory` | global `StatutoryRate` (view-only) | n/a — platform-owned, read-only |
 | `/company/expenses` | `tenant_query(Expense)` | yes |
 | `/company/audit` | `AuditTrail` filtered to this tenant's users (§4 acting-user scope) | yes |
+| `/company/runs/<id>/distribute` (view) | `tenant_get_or_404(PayrollRun)`; per-item `PayslipDelivery` | yes |
+| `/company/runs/<id>/distribute/send`, `/resend-failed` (POST) | `tenant_role_required(client_admin)` + `tenant_get_or_404(PayrollRun)`; `distribute_run` scoped to that run | yes — client_admin only |
+| `/company/runs/<id>/payslips.zip` | `tenant_get_or_404(PayrollRun)`; zips this run's payslip PDFs | yes |
 
 ## Residual items (tracked, not leaks)
 

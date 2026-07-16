@@ -23,6 +23,7 @@ from flask_login import current_user, login_required
 from werkzeug.exceptions import NotFound
 
 from app import db
+from app.roles import normalise_role
 from app.models import (
     Employee,
     EmployeeDeployment,
@@ -179,6 +180,34 @@ def tenant_required(view):
         return view(*args, **kwargs)
 
     return wrapped
+
+
+def tenant_role_required(*roles):
+    """Restrict a client-plane view to specific tenant roles (e.g. client_admin).
+
+    Layered on top of :func:`tenant_required`: a platform (Chrisnat) user is sent
+    to the oversight console; a tenant user whose role is not in ``roles`` is
+    bounced to their Company Dashboard with a flash. The plane is still decided by
+    ``client_company_id`` — the role only narrows permissions *within* the tenant
+    plane, so it can never widen a user's data horizon. Used for actions a client
+    preparer may not take (e.g. distributing payslips is client_admin-only).
+    """
+    allowed = {normalise_role(r) for r in roles}
+
+    def decorator(view):
+        @wraps(view)
+        @login_required
+        def wrapped(*args, **kwargs):
+            if active_tenant_id() is None:  # platform user
+                return redirect(url_for("main.dashboard"))
+            if normalise_role(getattr(current_user, "role", None)) not in allowed:
+                flash("That action needs a company administrator.", "warning")
+                return redirect(url_for("main.company_dashboard"))
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
 
 
 def tenant_get_or_404(model, ident):

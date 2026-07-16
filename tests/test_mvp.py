@@ -327,15 +327,24 @@ class MvpTestCase(unittest.TestCase):
         previous_render = os.environ.get("RENDER")
         previous_flask_env = os.environ.get("FLASK_ENV")
         previous_skip_dotenv = os.environ.get("SKIP_DOTENV")
+        # The hermetic suite (tests/__init__.py) sets PERSISTENCE_REQUIRED=false;
+        # clear it here so the production default (RENDER=true -> required) applies
+        # and this test doesn't depend on leaked env from other modules' order.
+        previous_persistence = os.environ.get("PERSISTENCE_REQUIRED")
         os.environ.pop("DATABASE_URL", None)
         os.environ["RENDER"] = "true"
         os.environ["SKIP_DOTENV"] = "true"
         os.environ.pop("FLASK_ENV", None)
+        os.environ.pop("PERSISTENCE_REQUIRED", None)
         try:
             with self.assertRaises(RuntimeError) as context:
                 create_app()
             self.assertIn("DATABASE_URL", str(context.exception))
         finally:
+            if previous_persistence is None:
+                os.environ.pop("PERSISTENCE_REQUIRED", None)
+            else:
+                os.environ["PERSISTENCE_REQUIRED"] = previous_persistence
             if previous_url is None:
                 os.environ.pop("DATABASE_URL", None)
             else:
