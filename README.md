@@ -2,6 +2,25 @@
 
 Phase 1 MVP for Chrisnat Limited Ghana. This Flask app bridges Excel payroll files into a simple review, approval, accounts, and export workflow. It uses SQLite locally by default and requires PostgreSQL through `DATABASE_URL` for Render/Railway deployments.
 
+## PMVP v1 — Multi-Tenant SaaS
+
+This codebase is **PMVP v1**: the single-operator app above, evolved into a
+multi-tenant SaaS. Client companies log in to a `/company` plane and see only
+their own data; Chrisnat operates an oversight/control plane above every tenant.
+The payroll **engine is frozen and unchanged** — identical inputs still produce
+identical figures.
+
+- **Multi-tenancy & isolation:** [MULTI_TENANT.md](MULTI_TENANT.md) (planes,
+  the `app/tenancy.py` choke point, per-table scoping, RLS stages).
+- **Route-by-route disposition:** [AUDIT.md](AUDIT.md).
+
+Client plane (`/company`): dashboard, self-service employee CRUD, **payroll-run
+upload**, run/payslip views (single PDF + run ZIP), **payslip distribution**
+(console channels in v1), statutory (read-only), expenses, **audit**, and
+**notifications**. A client-submitted run is risk-gated (`Submitted → Held /
+Auto-Accepted`) with Chrisnat oversight (`/oversight/risk`); business events fan
+out to in-app notifications on both planes.
+
 ## What This MVP Does
 
 - Authenticates users with role-based access.
