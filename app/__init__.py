@@ -65,6 +65,24 @@ def format_ghana_cedis(value):
     return f"GH₵ {amount:,.2f}"
 
 
+def format_duration(seconds):
+    """Human duration for the monitoring dashboard: 45 -> '45s', 125 -> '2m 5s',
+    3700 -> '1h 1m'. None/negative -> '—'."""
+    try:
+        total = int(seconds)
+    except (TypeError, ValueError):
+        return "—"
+    if total < 0:
+        return "—"
+    if total < 60:
+        return f"{total}s"
+    minutes, secs = divmod(total, 60)
+    if minutes < 60:
+        return f"{minutes}m {secs}s" if secs else f"{minutes}m"
+    hours, mins = divmod(minutes, 60)
+    return f"{hours}h {mins}m" if mins else f"{hours}h"
+
+
 def format_role_label(value):
     labels = {
         "admin": "Admin",
@@ -234,6 +252,7 @@ def create_app():
     migrate.init_app(app, db)
     app.jinja_env.filters["cedis"] = format_ghana_cedis
     app.jinja_env.filters["role_label"] = format_role_label
+    app.jinja_env.filters["duration"] = format_duration
 
     # Operator capability predicates as template globals — one source of truth
     # (app/permissions.py) for nav/action gating, replacing inline role lists.

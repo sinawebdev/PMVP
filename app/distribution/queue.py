@@ -33,6 +33,19 @@ from app.models import (
 
 from .service import distribute_run, retry_delivery
 
+# Worker heartbeat: the inline worker (same process as the web app) publishes the
+# timestamp of its most recent poll here, so the monitoring dashboard can show a
+# live worker health signal. An external `flask distribution-worker` process runs
+# in its own memory and won't populate this — the dashboard falls back to the
+# most recent processing timestamp in that case.
+_last_poll_at = None
+
+
+def worker_last_poll():
+    """The most recent time the in-process worker loop polled, or None if no
+    inline worker is running in this process."""
+    return _last_poll_at
+
 
 def _in_flight_batch(run_id):
     return DistributionBatch.query.filter(
@@ -207,7 +220,9 @@ def run_worker_loop(poll_interval=3, stop_event=None):
     `stop_event` (a threading.Event) lets a caller ask the loop to exit between
     polls; without one the loop runs until the process is killed.
     """
+    global _last_poll_at
     while stop_event is None or not stop_event.is_set():
+        _last_poll_at = datetime.now(timezone.utc)
         did_work = bool(process_all_queued())
         did_work = bool(process_due_retries()) or did_work
         if not did_work:

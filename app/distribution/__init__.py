@@ -45,6 +45,30 @@ from app.permissions import PAYROLL_ROLES  # canonical operator capability group
 VALID_SEND_CHANNELS = set(DELIVERY_CHANNELS) | {CHANNEL_AUTO}
 
 
+# ---------------------------------------------------------------------------
+# Monitoring dashboard (Phase 3, Slice 4) — the primary operational view of the
+# distribution subsystem: batch/delivery stats, retries, backlog, throughput and
+# worker health across every tenant. Operator-plane (role_required blocks tenant
+# users), read-only, live-refreshed via htmx.
+# ---------------------------------------------------------------------------
+@distribution_bp.route("/dashboard")
+@role_required(*PAYROLL_ROLES)
+def dashboard():
+    from .dashboard import collect_dashboard_stats
+
+    return render_template("distribution/dashboard.html", stats=collect_dashboard_stats())
+
+
+@distribution_bp.route("/dashboard/fragment")
+@role_required(*PAYROLL_ROLES)
+def dashboard_fragment():
+    from .dashboard import collect_dashboard_stats
+
+    return render_template(
+        "distribution/_dashboard_fragment.html", stats=collect_dashboard_stats()
+    )
+
+
 def _latest_delivery(item_id):
     return (
         PayslipDelivery.query.filter_by(payroll_item_id=item_id)

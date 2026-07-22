@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
+{% block title %}Distribution Monitor · Chrisnat Payroll{% endblock %}
+{% block page_title %}Distribution Monitor{% endblock %}
+{% block page_intro %}Live health of the payslip delivery system — batches, deliveries, retries, backlog, throughput, and worker status across every client.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([("Dashboard", url_for('main.dashboard')), ("Distribution Monitor", None)]) }}
+{% endblock %}
+{% block content %}
+{% include "distribution/_dashboard_fragment.html" %}
+{% endblock %}

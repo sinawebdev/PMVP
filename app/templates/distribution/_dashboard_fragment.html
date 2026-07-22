@@ -1,0 +1,115 @@
+{# Live-refreshing monitoring dashboard body. Polls every 5s via htmx and
+   swaps itself; there is no terminal state, so it polls for as long as the
+   page is open. #}
+<div id="distribution-monitor"
+     hx-get="{{ url_for('distribution.dashboard_fragment') }}"
+     hx-trigger="every 5s"
+     hx-swap="outerHTML">
+
+{% set d = stats.deliveries %}
+{% set b = stats.batches %}
+{% set w = stats.worker %}
+
+<section class="panel mb-3">
+    <div class="panel-header">
+        <h2><i class="bi bi-hdd-network"></i>Worker</h2>
+        {% if w.status == "stalled" %}<span class="badge text-bg-danger">Stalled</span>
+        {% elif w.status == "active" %}<span class="badge text-bg-info">Active</span>
+        {% else %}<span class="badge text-bg-success">Idle</span>{% endif %}
+    </div>
+    <div class="row g-3">
+        <div class="col-md-3"><strong>Mode</strong><p class="mb-0">{{ "In-process" if stats.worker_inline else "External process" }}</p></div>
+        <div class="col-md-3"><strong>Last poll</strong><p class="mb-0">{% if w.heartbeat_age_seconds is not none %}{{ w.heartbeat_age_seconds|duration }} ago{% else %}—{% endif %}</p></div>
+        <div class="col-md-3"><strong>Last completed</strong><p class="mb-0">{{ stats.last_processed_at.strftime("%Y-%m-%d %H:%M") if stats.last_processed_at else "—" }}</p></div>
+        <div class="col-md-3"><strong>Throughput</strong><p class="mb-0">{% if stats.throughput.payslips_per_minute is not none %}{{ stats.throughput.payslips_per_minute }}/min{% else %}—{% endif %}</p></div>
+    </div>
+    {% if w.status == "stalled" %}
+    <div class="mini-note mt-3 text-danger"><i class="bi bi-exclamation-triangle"></i> Work is queued but nothing has been processed recently — check the distribution worker is running.</div>
+    {% endif %}
+</section>
+
+<section class="stats-grid">
+    <div class="stat-card"><i class="bi bi-send-check stat-icon"></i><span>Delivered</span><strong>{{ d.sent }}</strong></div>
+    <div class="stat-card"><i class="bi bi-graph-up-arrow stat-icon"></i><span>Success rate</span><strong>{{ d.success_rate }}%</strong></div>
+    <div class="stat-card"><i class="bi bi-x-octagon stat-icon"></i><span>Failed</span><strong>{{ d.failed }}</strong></div>
+    <div class="stat-card"><i class="bi bi-arrow-repeat stat-icon"></i><span>Active retries</span><strong>{{ d.active_retries }}</strong></div>
+    <div class="stat-card"><i class="bi bi-exclamation-octagon stat-icon"></i><span>Final failures</span><strong>{{ d.final_failures }}</strong></div>
+    <div class="stat-card"><i class="bi bi-hourglass-split stat-icon"></i><span>Queue backlog</span><strong>{{ stats.backlog.queued_payslips }}</strong></div>
+    <div class="stat-card"><i class="bi bi-collection stat-icon"></i><span>Batches running</span><strong>{{ b.running }}</strong></div>
+    <div class="stat-card"><i class="bi bi-inbox stat-icon"></i><span>Batches queued</span><strong>{{ b.queued }}</strong></div>
+</section>
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-6">
+        <section class="panel h-100">
+            <div class="panel-header"><h2><i class="bi bi-collection"></i>Batches</h2><span>{{ b.total }} total</span></div>
+            <table class="table table-sm align-middle">
+                <tbody>
+                    <tr><td><span class="badge text-bg-secondary">Queued</span></td><td class="text-end"><strong>{{ b.queued }}</strong></td></tr>
+                    <tr><td><span class="badge text-bg-info">Running</span></td><td class="text-end"><strong>{{ b.running }}</strong></td></tr>
+                    <tr><td><span class="badge text-bg-success">Completed</span></td><td class="text-end"><strong>{{ b.completed }}</strong></td></tr>
+                    <tr><td><span class="badge text-bg-danger">Failed</span></td><td class="text-end"><strong>{{ b.failed }}</strong></td></tr>
+                    <tr><td><span class="badge text-bg-dark">Cancelled</span></td><td class="text-end"><strong>{{ b.cancelled }}</strong></td></tr>
+                </tbody>
+            </table>
+        </section>
+    </div>
+    <div class="col-lg-6">
+        <section class="panel h-100">
+            <div class="panel-header"><h2><i class="bi bi-activity"></i>In progress</h2><span>{{ stats.running_batches|length }} running</span></div>
+            {% if stats.running_batches %}
+            <div class="excel-grid-wrap">
+                <table class="table table-sm align-middle">
+                    <thead><tr><th>Run</th><th>Progress</th><th>Elapsed</th><th>ETA</th></tr></thead>
+                    <tbody>
+                    {% for rb in stats.running_batches %}
+                        <tr>
+                            <td>{% if rb.batch.payroll_run %}<a href="{{ url_for('distribution.run_status', run_id=rb.batch.payroll_run_id) }}">{{ rb.batch.payroll_run.month }} {{ rb.batch.payroll_run.year }}</a>{% else %}Run #{{ rb.batch.payroll_run_id }}{% endif %}</td>
+                            <td>{{ rb.done }}/{{ rb.total }} ({{ rb.percent }}%)</td>
+                            <td>{{ rb.elapsed_seconds|duration }}</td>
+                            <td>{% if rb.eta_seconds is not none %}~{{ rb.eta_seconds|duration }}{% else %}—{% endif %}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="mini-note"><i class="bi bi-check2-circle"></i> No distributions are running right now.</div>
+            {% endif %}
+        </section>
+    </div>
+</div>
+
+<section class="panel mt-4">
+    <div class="panel-header"><h2><i class="bi bi-clock-history"></i>Recent distributions</h2><span>{{ stats.recent_batches|length }}</span></div>
+    {% if stats.recent_batches %}
+    <div class="excel-grid-wrap">
+        <table class="table table-sm align-middle excel-grid">
+            <thead><tr><th>When</th><th>Client</th><th>Run</th><th>Channel</th><th>Status</th><th>Sent</th><th>Failed</th><th>By</th></tr></thead>
+            <tbody>
+            {% for batch in stats.recent_batches %}
+                <tr>
+                    <td class="nums">{{ batch.created_at.strftime("%Y-%m-%d %H:%M") if batch.created_at }}</td>
+                    <td>{{ batch.client_company.name if batch.client_company else "—" }}</td>
+                    <td>{% if batch.payroll_run %}<a href="{{ url_for('distribution.run_status', run_id=batch.payroll_run_id) }}">{{ batch.payroll_run.month }} {{ batch.payroll_run.year }}</a>{% else %}#{{ batch.payroll_run_id }}{% endif %}</td>
+                    <td>{{ batch.channel }}{% if batch.only_failed %} <span class="text-muted">(resend)</span>{% endif %}</td>
+                    <td>
+                        {% if batch.status == "queued" %}<span class="badge text-bg-secondary">Queued</span>
+                        {% elif batch.status == "running" %}<span class="badge text-bg-info">Running</span>
+                        {% elif batch.status == "completed" %}<span class="badge text-bg-success">Completed</span>
+                        {% elif batch.status == "failed" %}<span class="badge text-bg-danger" title="{{ batch.error }}">Failed</span>
+                        {% elif batch.status == "cancelled" %}<span class="badge text-bg-dark">Cancelled</span>{% endif %}
+                    </td>
+                    <td>{{ batch.sent_count if batch.sent_count is not none else "—" }}</td>
+                    <td>{{ batch.failed_count if batch.failed_count is not none else "—" }}</td>
+                    <td>{{ batch.initiated_by.name if batch.initiated_by else "System" }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><i class="bi bi-inbox"></i><p class="mb-0">No distributions yet.</p></div>
+    {% endif %}
+</section>
+</div>

@@ -40,6 +40,7 @@
             {% endif %}
             {% if can_operate_payroll(role) %}
             <a class="nav-link" {% if path.startswith('/payslip') %}aria-current="page"{% endif %} href="{{ url_for('payslip.index') }}"><i class="bi bi-file-earmark-person"></i>Payslips</a>
+            <a class="nav-link" {% if path.startswith('/distribution/dashboard') or path.startswith('/distribution/history') %}aria-current="page"{% endif %} href="{{ url_for('distribution.dashboard') }}"><i class="bi bi-hdd-network"></i>Distribution</a>
             {% endif %}
             {% if can_view_audit(role) %}
             <a class="nav-link" {% if path.startswith('/audit') %}aria-current="page"{% endif %} href="{{ url_for('audit.audit_trail') }}"><i class="bi bi-activity"></i>Expenses &amp; Audit</a>

@@ -499,6 +499,10 @@ BATCH_QUEUED = "queued"
 BATCH_RUNNING = "running"
 BATCH_COMPLETED = "completed"
 BATCH_FAILED = "failed"
+BATCH_CANCELLED = "cancelled"
+
+# A batch that has reached a terminal state (no worker will touch it again).
+BATCH_TERMINAL_STATUSES = frozenset({BATCH_COMPLETED, BATCH_FAILED, BATCH_CANCELLED})
 
 
 class DistributionBatch(db.Model):
