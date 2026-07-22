@@ -8,6 +8,17 @@
     <div class="panel-header"><h2><i class="bi bi-signpost-split"></i>Payroll Progress</h2>{{ lc.status_pill(payroll_run.status) }}</div>
     {{ lc.progress_stepper(run_progress(payroll_run, run_distributed)) }}
 </section>
+{% if duplicates %}
+<div class="alert alert-warning d-flex align-items-start gap-2 mb-3" role="alert">
+    <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+    <div>
+        <strong>Possible duplicate payroll.</strong>
+        This run's worker count and net pay exactly match
+        {% for dup in duplicates %}<a href="{{ url_for('payroll.detail', run_id=dup.id) }}">{{ dup.month }} {{ dup.year }}</a>{{ ", " if not loop.last else "" }}{% endfor %}.
+        Not blocked — just worth a second look before processing.
+    </div>
+</div>
+{% endif %}
 <section class="stats-grid">
     <div class="stat-card"><i class="bi bi-building stat-icon"></i><span>Client Company</span><strong>{{ payroll_run.client_company.name if payroll_run.client_company else "" }}</strong></div>
     <div class="stat-card"><i class="bi bi-calendar2-week stat-icon"></i><span>Payroll Month</span><strong>{{ payroll_run.month }} {{ payroll_run.year }}</strong></div>

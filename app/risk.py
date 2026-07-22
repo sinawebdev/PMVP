@@ -21,7 +21,7 @@ Thresholds settled with Sina (2026-07-16); see the pmvp-v1-decisions memory:
 from dataclasses import dataclass, field
 
 from app.models import PayrollRun
-from app.payroll_status import CLOSED_STATUSES
+from app.payroll_status import CLOSED_STATUSES, REJECTED
 
 # --- Settled thresholds (Sina, 2026-07-16) ---------------------------------
 FIRST_N_RUNS_HELD = 2        # Rule 1: a client's first N runs are always held.
@@ -233,6 +233,37 @@ def compare_to_previous(run):
             }
         )
     return {"previous": prev, "rows": rows}
+
+
+# --- Possible-duplicate detection (operator awareness, Phase 2) ------------
+# A separate concern from the exact same-client/month/year block enforced at
+# import time (see has_duplicate_payroll in app/payroll.py): this looks for
+# OTHER runs — any period — whose totals exactly match, which is what a client
+# re-uploading the same payroll under the wrong month looks like. Advisory
+# only; the caller decides what to show, and nothing here blocks a lifecycle
+# transition.
+
+
+def find_possible_duplicates(run):
+    """Other runs for the same client whose worker count and net pay exactly
+    match ``run``'s — a signal the same payroll may have been submitted twice.
+    Rejected runs are excluded (a resubmission after rejection is expected,
+    not a duplicate). Zero-total runs are excluded too, since matching on
+    zero is meaningless. Ordered most-recent-first, capped at 5."""
+    if not run.client_company_id or not run.total_net_pay or not run.total_workers:
+        return []
+    return (
+        PayrollRun.query.filter(
+            PayrollRun.client_company_id == run.client_company_id,
+            PayrollRun.id != run.id,
+            PayrollRun.status != REJECTED,
+            PayrollRun.total_net_pay == run.total_net_pay,
+            PayrollRun.total_workers == run.total_workers,
+        )
+        .order_by(PayrollRun.created_at.desc())
+        .limit(5)
+        .all()
+    )
 
 
 def apply_risk_gate(run, when=None):
