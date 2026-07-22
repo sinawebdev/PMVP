@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "macros/lifecycle.html" as lc %}
 {% block title %}Payroll Runs · Chrisnat Payroll{% endblock %}
 {% block page_title %}Payroll Runs{% endblock %}
 {% block page_intro %}Monitor every company-specific payroll run, including worker totals, source Excel files, review status, approvals, and export actions.{% endblock %}
@@ -252,7 +253,10 @@ function rawTemplate(ev) {
                     <td>{{ run.total_gross_pay|cedis }}</td>
                     <td>{{ run.total_deductions|cedis }}</td>
                     <td>{{ run.total_net_pay|cedis }}</td>
-                    <td><span class="badge text-bg-secondary">{{ run.status }}</span></td>
+                    <td>
+                        {{ lc.status_pill(run.status) }}
+                        {{ lc.progress_stepper(run_progress(run, run.id in distributed_ids), compact=true) }}
+                    </td>
                     <td>{{ run.source_filename }}</td>
                     <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.detail', run_id=run.id) }}">View</a></td>
                 </tr>

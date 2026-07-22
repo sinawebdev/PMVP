@@ -158,6 +158,24 @@ def has_duplicate_payroll(client_id, month, year):
     )
 
 
+def _distributed_run_ids(run_ids):
+    """Set of run ids that have at least one SENT payslip — the 'Distributed'
+    lifecycle signal. One query for the whole page (N+1-free) so the runs list
+    can render each run's progress stepper without a per-row lookup."""
+    if not run_ids:
+        return set()
+    return {
+        row[0]
+        for row in db.session.query(PayslipDelivery.payroll_run_id)
+        .filter(
+            PayslipDelivery.payroll_run_id.in_(run_ids),
+            PayslipDelivery.status == DELIVERY_SENT,
+        )
+        .distinct()
+        .all()
+    }
+
+
 def replace_existing_runs(client_id, month, year):
     """Hard-delete every existing run for (client, month, year) ahead of a
     confirmed replacement import. All-or-nothing: if any existing run is not
@@ -522,12 +540,14 @@ def runs():
         query = query.filter(PayrollRun.status == status_filter)
     payroll_runs = query.order_by(PayrollRun.created_at.desc()).all()
     clients = ClientCompany.query.filter_by(status="Active").order_by(ClientCompany.name).all()
+    distributed_ids = _distributed_run_ids([run.id for run in payroll_runs])
     return render_template(
         "payroll_runs.html",
         payroll_runs=payroll_runs,
         selected_client=selected_client,
         status_filter=status_filter,
         clients=clients,
+        distributed_ids=distributed_ids,
         current_month=now.strftime("%B"),
         current_year=now.year,
         wrong_tab=request.args.get("wrong_tab"),

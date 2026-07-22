@@ -224,7 +224,13 @@ def create_app():
         can_view_audit,
     )
 
+    from app.payroll_status import run_progress, status_badge_class
+
     app.jinja_env.globals.update(
+        # Lifecycle progress (presentation) — a status-derived stepper + status
+        # pill, reused across the operator dashboard, runs list, and run detail.
+        run_progress=run_progress,
+        status_badge_class=status_badge_class,
         can_operate_payroll=can_operate_payroll,
         can_maintain_roster=can_maintain_roster,
         can_view_audit=can_view_audit,

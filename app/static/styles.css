@@ -1183,3 +1183,64 @@ body {
 }
 .error-card h1 { font-size: 22px; font-weight: 700; margin: 0 0 8px; color: #edf4f1; }
 .error-card p { color: #a9c6bf; margin: 0 0 20px; }
+
+/* --- Payroll lifecycle stepper (Phase 2) --------------------------------- */
+.lifecycle-stepper {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    align-items: flex-start;
+}
+.lifecycle-stepper .lc-step {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 64px;
+    text-align: center;
+    padding: 0 2px;
+    font-size: 11px;
+    line-height: 1.2;
+}
+.lifecycle-stepper .lc-dot {
+    display: block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin: 0 auto 4px;
+    background: #cdd7d3;
+    border: 2px solid #cdd7d3;
+    position: relative;
+    z-index: 1;
+}
+/* connector line between dots */
+.lifecycle-stepper .lc-step::before {
+    content: "";
+    position: absolute;
+    top: 5px;
+    left: -50%;
+    width: 100%;
+    height: 2px;
+    background: #cdd7d3;
+    z-index: 0;
+}
+.lifecycle-stepper .lc-step:first-child::before { display: none; }
+.lifecycle-stepper .lc-label { color: #6b7b76; }
+/* states */
+.lc-step--done .lc-dot { background: var(--brand, #2f8f6b); border-color: var(--brand, #2f8f6b); }
+.lc-step--done::before { background: var(--brand, #2f8f6b); }
+.lc-step--done .lc-label { color: #2c3a36; }
+.lc-step--current .lc-dot { background: #fff; border-color: var(--brand, #2f8f6b); box-shadow: 0 0 0 3px rgba(47,143,107,.2); }
+.lc-step--current .lc-label { color: #1f2a27; font-weight: 600; }
+.lc-step--skipped .lc-dot { background: #fff; border-style: dashed; border-color: #cdd7d3; }
+.lc-step--skipped .lc-label { color: #9aa8a3; font-style: italic; }
+.lifecycle-stepper--compact .lc-step { min-width: 0; font-size: 0; }
+.lifecycle-stepper--compact .lc-label { display: none; }
+.lifecycle-stepper--compact .lc-dot { width: 9px; height: 9px; }
+.lifecycle-stepper--compact .lc-step::before { top: 3.5px; }
+@media (prefers-color-scheme: dark) {
+    .lifecycle-stepper .lc-label { color: #a9c6bf; }
+    .lc-step--done .lc-label { color: #d8e7e2; }
+    .lc-step--current .lc-label { color: #edf4f1; }
+}

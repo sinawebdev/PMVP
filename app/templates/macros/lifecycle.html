@@ -1,0 +1,16 @@
+{# Payroll lifecycle presentation — a status pill and a visual stepper.
+   Backed by app/payroll_status.py (run_progress / status_badge_class), exposed
+   as Jinja globals. Pure presentation; no business rule lives here. #}
+
+{% macro status_pill(status) %}<span class="badge {{ status_badge_class(status) }}">{{ status }}</span>{% endmacro %}
+
+{% macro progress_stepper(steps, compact=false) %}
+<ol class="lifecycle-stepper{% if compact %} lifecycle-stepper--compact{% endif %}" aria-label="Payroll progress">
+  {% for step in steps %}
+  <li class="lc-step lc-step--{{ step.state }}"{% if step.state == 'current' %} aria-current="step"{% endif %}>
+    <span class="lc-dot" aria-hidden="true"></span>
+    <span class="lc-label">{{ step.label }}</span>
+  </li>
+  {% endfor %}
+</ol>
+{% endmacro %}
