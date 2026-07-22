@@ -12,9 +12,9 @@
   <div class="card form narrow">
     <p class="sub">
       Upload a standard payroll workbook (.xlsx, .xls, or .csv) with your workers'
-      figures. The run is checked automatically and, depending on the checks, either
-      auto-accepted or sent to Chrisnat for review before approval. Raw-hours
-      workbooks are prepared by Chrisnat, not here.
+      figures. You'll get a <strong>preview</strong> — totals, field mapping and any
+      warnings — before anything is created. Nothing is submitted until you confirm.
+      Raw-hours workbooks are prepared by Chrisnat, not here.
     </p>
     <form method="post" action="{{ url_for('client.run_upload') }}" enctype="multipart/form-data">
       <div class="formgrid">
@@ -30,7 +30,7 @@
       <label for="payroll_file">Payroll workbook</label>
       <input id="payroll_file" name="payroll_file" type="file" accept=".xlsx,.xls,.csv" required />
       <div class="form-foot">
-        <button class="btn primary" type="submit">Upload &amp; check</button>
+        <button class="btn primary" type="submit">Upload &amp; preview</button>
       </div>
     </form>
   </div>

@@ -16,6 +16,7 @@ Statutory rates are global and view-only for clients.
 """
 
 import io
+import json
 import os
 import uuid
 import zipfile
@@ -38,7 +39,7 @@ from app.audit import record_audit
 from app.events import platform_admins, record_event
 from app.distribution.idempotency import replay_or_run
 from app.distribution.service import distribute_run, resolve_channel
-from app.excel_utils import allowed_excel_file, mapping_conflicts
+from app.excel_utils import allowed_excel_file, export_import_error_report, mapping_conflicts
 from app.models import (
     CHANNEL_AUTO,
     DELIVERY_CHANNELS,
@@ -48,6 +49,7 @@ from app.models import (
     ClientCompany,
     Employee,
     Expense,
+    ImportBatch,
     PayrollItem,
     PayrollRun,
     PayslipDelivery,
@@ -57,10 +59,13 @@ from app.models import (
 from app.payroll import (
     build_single_payload,
     create_payroll_run_from_payload,
+    crossref_employee_records,
     has_duplicate_payroll,
+    payroll_run_record_blockers,
+    purge_payroll_run,
     save_temporary_upload,
 )
-from app.payroll_status import AUTO_ACCEPTED, HELD, SENDABLE_STATUSES, SUBMITTED
+from app.payroll_status import AUTO_ACCEPTED, HELD, PROCESSED, SENDABLE_STATUSES, SUBMITTED
 from app.pdf_service import generate_payslip_pdf, payslip_filename
 from app.raw_engine.detection import looks_like_raw_hours
 from app.raw_import import normalise_emp_id
@@ -221,40 +226,132 @@ def run_detail(run_id):
     )
 
 
-# --- Run upload (self-service run preparation) ------------------------------
+# --- Run upload -> preview -> confirm (self-service run preparation) ---------
 # A client prepares a payroll run by uploading a STANDARD payroll workbook for
-# their own company. It reuses the operator import pipeline (build_single_payload
-# + create_payroll_run_from_payload, which runs the frozen statutory engine
-# identically) but with client_company_id forced to the tenant — never detected
-# from the file. The new run enters the Phase 5 lifecycle: Submitted -> risk gate
-# -> Held (Chrisnat review) or Auto-Accepted. Raw-hours workbooks are refused;
-# those remain a Chrisnat operator flow.
+# their own company. Instead of a blind one-shot, the upload creates a resumable
+# ImportBatch DRAFT and lands the client on a PREVIEW (totals, field mapping,
+# per-row warnings, blocking errors, a downloadable error report). Only an
+# explicit Confirm creates the run — reusing the operator import pipeline
+# (create_payroll_run_from_payload, which runs the frozen statutory engine
+# identically) with client_company_id forced to the tenant, then routing the run
+# through the Phase 5 risk gate (Submitted -> Held/Auto-Accepted). Raw-hours
+# workbooks are refused; those remain a Chrisnat operator flow.
+
+
+def _create_import_draft(company, payload, source_filename, month, year):
+    """Persist an uploaded-but-unconfirmed import as a tenant-scoped ImportBatch
+    draft (status "Draft") carrying the full parsed payload, so a client can
+    preview it, download an error report, leave and resume, or discard it."""
+    summary = payload["import_summary"]
+    stats = payload["worker_stats"]
+    batch = ImportBatch(
+        client_company_id=company.id,
+        payroll_month=month,
+        payroll_year=int(year),
+        uploaded_by=current_user.id,
+        original_filename=os.path.basename(source_filename),
+        import_mode=payload.get("mode", "single_client"),
+        source_sheet_name=payload.get("matched_sheet_name"),
+        status="Draft",
+        total_rows=summary["total_rows"],
+        valid_rows=summary["valid_rows"],
+        invalid_rows=summary["invalid_rows"],
+        total_workers=stats["total_unique_workers"],
+        gross_total=summary["gross_total"],
+        net_total=summary["net_total"],
+        paye_total=summary["paye_total"],
+        ssnit_total=summary["ssnit_total"],
+        validation_summary="\n".join(payload["validation"]["summary_warnings"]),
+    )
+    db.session.add(batch)
+    db.session.flush()
+    payload["import_batch_id"] = batch.id
+    batch.payload_json = json.dumps(payload)
+    record_audit(
+        "Client import draft",
+        batch,
+        f"Uploaded {batch.original_filename} for {month} {year} preview.",
+    )
+    db.session.commit()
+    return batch
+
+
+def _load_import_draft(import_id):
+    """Tenant-scoped ImportBatch + its decoded payload, or 404. A client can only
+    ever open their OWN draft (tenant_get_or_404); another tenant's id is a 404."""
+    batch = tenant_get_or_404(ImportBatch, import_id)
+    return batch, json.loads(batch.payload_json or "{}")
+
+
+def _import_blocking_errors(payload):
+    """§8 hard-stops recomputed from the stored payload (mapping conflicts + a
+    corroborated data-shift / zero-basic active worker). A non-empty list means
+    the import must be fixed and re-uploaded, not confirmed."""
+    return mapping_conflicts(payload.get("mapping") or {}) + collect_blocking_errors(
+        payload.get("mapped_rows", []), payload.get("detected_company_name", "")
+    )
+
+
+def _replace_precheck(company_id, month, year):
+    """(ok, reason): may the client replace every existing run for this period?
+    Blocked if any run is Processed/paid, or carries a hard money-record blocker
+    (voucher / remittances / sent payslips / linked expenses). Per Sina
+    (2026-07-22) a client may replace their own run in ANY status except
+    Processed/paid — so only the record-level blockers, not the status gate."""
+    for run in PayrollRun.query.filter_by(
+        client_company_id=company_id, month=month, year=int(year)
+    ).all():
+        if run.status == PROCESSED:
+            return False, f"the {month} {year} payroll is already closed/paid (run #{run.id})"
+        record_blockers = payroll_run_record_blockers(run)
+        if record_blockers:
+            return False, "; ".join(record_blockers)
+    return True, None
+
+
+def _client_replace_runs(company_id, month, year):
+    """Precheck, then purge every existing run for (company, month, year) so a
+    re-upload replaces it. All-or-nothing; does NOT commit (the confirm owns the
+    transaction, so a failed import rolls the deletions back too)."""
+    ok, reason = _replace_precheck(company_id, month, year)
+    if not ok:
+        return False, reason
+    for run in PayrollRun.query.filter_by(
+        client_company_id=company_id, month=month, year=int(year)
+    ).all():
+        purge_payroll_run(run)
+    return True, None
+
+
 @client_bp.route("/runs/upload", methods=["GET", "POST"])
 @tenant_role_required(CLIENT_ADMIN, CLIENT_PREPARER)
 def run_upload():
     company = _company()
     now = datetime.now()
-    if request.method == "GET":
-        return render_template(
-            "client/run_upload.html",
-            company=company,
-            current_month=now.strftime("%B"),
-            current_year=now.year,
-        )
-
-    file_storage = request.files.get("payroll_file")
-    if not file_storage or not file_storage.filename:
-        flash("Choose an Excel file to upload.", "warning")
-        return redirect(url_for("client.run_upload"))
-    if not allowed_excel_file(file_storage.filename):
-        flash("Only .xlsx, .xls, or .csv files are supported.", "warning")
-        return redirect(url_for("client.run_upload"))
-
     month = (request.form.get("month") or now.strftime("%B")).strip()
     try:
         year = int(request.form.get("year") or now.year)
     except (TypeError, ValueError):
         year = now.year
+
+    def _form():
+        # Re-render the upload form (200) with the submitted period preserved and
+        # the flashed message shown inline — clearer than a bounce to an empty form.
+        return render_template(
+            "client/run_upload.html", company=company, current_month=month, current_year=year
+        )
+
+    if request.method == "GET":
+        return _form()
+
+    file_storage = request.files.get("payroll_file")
+    if not file_storage or not file_storage.filename:
+        flash("Choose an Excel file to upload.", "warning")
+        return _form()
+    if not allowed_excel_file(file_storage.filename):
+        flash("Only .xlsx, .xls, or .csv files are supported.", "warning")
+        return _form()
+
     source_filename = file_storage.filename
     file_path = save_temporary_upload(file_storage)
     try:
@@ -264,7 +361,7 @@ def run_upload():
                 "by Chrisnat — please upload a standard payroll workbook.",
                 "warning",
             )
-            return redirect(url_for("client.run_upload"))
+            return _form()
         # client_company_id is forced to the tenant here — the file is never
         # allowed to decide which company it lands in.
         payload, error = build_single_payload(file_path, source_filename, company, month, year)
@@ -276,24 +373,76 @@ def run_upload():
 
     if error:
         flash(error, "danger")
-        return redirect(url_for("client.run_upload"))
+        return _form()
 
-    blocking = mapping_conflicts(payload.get("mapping") or {}) + collect_blocking_errors(
-        payload["mapped_rows"], payload.get("detected_company_name", "")
+    batch = _create_import_draft(company, payload, source_filename, month, year)
+    return redirect(url_for("client.import_preview", import_id=batch.id))
+
+
+@client_bp.route("/imports/<int:import_id>/preview")
+@tenant_required
+def import_preview(import_id):
+    batch, payload = _load_import_draft(import_id)
+    if batch.payroll_run_id:  # already confirmed — show the run, not a stale draft
+        return redirect(url_for("client.run_detail", run_id=batch.payroll_run_id))
+    company = _company()
+    blocking = _import_blocking_errors(payload)
+    unregistered, no_contact = crossref_employee_records(company.id, payload.get("mapped_rows", []))
+    period_exists = has_duplicate_payroll(company.id, payload["month"], payload["year"])
+    replace_blocked = None
+    if period_exists:
+        ok, reason = _replace_precheck(company.id, payload["month"], payload["year"])
+        replace_blocked = None if ok else reason
+    return render_template(
+        "client/import_preview.html",
+        company=company,
+        batch=batch,
+        payload=payload,
+        blocking=blocking,
+        unregistered=unregistered,
+        no_contact=no_contact,
+        period_exists=period_exists,
+        replace_blocked=replace_blocked,
     )
+
+
+@client_bp.route("/imports/<int:import_id>/errors")
+@tenant_required
+def import_errors(import_id):
+    """Download the per-row validation error report for this draft (Excel)."""
+    _, payload = _load_import_draft(import_id)
+    file_path = export_import_error_report(payload, current_app.config["EXPORT_FOLDER"])
+    return send_file(file_path, as_attachment=True)
+
+
+@client_bp.route("/imports/<int:import_id>/confirm", methods=["POST"])
+@tenant_role_required(CLIENT_ADMIN, CLIENT_PREPARER)
+def import_confirm(import_id):
+    company = _company()
+    batch, payload = _load_import_draft(import_id)
+    if batch.payroll_run_id:  # idempotent — a double-submit lands on the run
+        return redirect(url_for("client.run_detail", run_id=batch.payroll_run_id))
+    if not payload.get("mapped_rows"):
+        flash("No valid payroll rows were found in this upload.", "danger")
+        return redirect(url_for("client.import_preview", import_id=batch.id))
+
+    blocking = _import_blocking_errors(payload)
     if blocking:
         for message in blocking[:10]:
             flash(message, "danger")
-        flash("Upload blocked — fix the highlighted issues and try again.", "danger")
-        return redirect(url_for("client.run_upload"))
+        flash("Import blocked — no payroll run was created. Fix the sheet and re-upload.", "danger")
+        return redirect(url_for("client.import_preview", import_id=batch.id))
 
-    if has_duplicate_payroll(company.id, payload["month"], payload["year"]):
-        flash(
-            f"A {payload['month']} {payload['year']} payroll already exists for your "
-            "company. Contact Chrisnat to replace it.",
-            "warning",
-        )
-        return redirect(url_for("client.run_upload"))
+    month, year = payload["month"], payload["year"]
+    if has_duplicate_payroll(company.id, month, year):
+        ok, reason = _client_replace_runs(company.id, month, year)
+        if not ok:
+            flash(
+                f"Cannot replace the existing {month} {year} payroll: {reason}. "
+                "Contact Chrisnat.",
+                "danger",
+            )
+            return redirect(url_for("client.import_preview", import_id=batch.id))
 
     run = create_payroll_run_from_payload(payload, company, payload["validation"], "single_client")
     # Phase 5 lifecycle: a client submission is risk-gated, not auto-approved.
@@ -302,10 +451,12 @@ def run_upload():
     verdict = apply_risk_gate(run, when=datetime.now(timezone.utc))
     run.status = HELD if verdict.held else AUTO_ACCEPTED
     reasons = verdict.reasons_text() or "no rule tripped"
+    batch.status = "Imported"
+    batch.payroll_run_id = run.id
     record_audit(
-        "Client run uploaded",
+        "Client run imported",
         run,
-        f"{run.month} {run.year} uploaded by client from {source_filename}. "
+        f"{run.month} {run.year} imported by client from {batch.original_filename}. "
         f"Risk: {verdict.status} ({reasons}).",
     )
     record_event(
@@ -320,12 +471,28 @@ def run_upload():
     db.session.commit()
     if verdict.held:
         flash(
-            f"{run.month} {run.year} payroll uploaded and sent to Chrisnat for review.",
+            f"{run.month} {run.year} payroll submitted and sent to Chrisnat for review.",
             "success",
         )
     else:
-        flash(f"{run.month} {run.year} payroll uploaded and auto-accepted.", "success")
+        flash(f"{run.month} {run.year} payroll submitted and auto-accepted.", "success")
     return redirect(url_for("client.run_detail", run_id=run.id))
+
+
+@client_bp.route("/imports/<int:import_id>/discard", methods=["POST"])
+@tenant_role_required(CLIENT_ADMIN, CLIENT_PREPARER)
+def import_discard(import_id):
+    batch = tenant_get_or_404(ImportBatch, import_id)
+    if batch.payroll_run_id:  # already confirmed — there's nothing to discard
+        flash("This import was already confirmed into a run.", "warning")
+        return redirect(url_for("client.run_detail", run_id=batch.payroll_run_id))
+    record_audit(
+        "Client import discarded", batch, f"Discarded draft import {batch.original_filename}."
+    )
+    db.session.delete(batch)
+    db.session.commit()
+    flash("Import draft discarded.", "success")
+    return redirect(url_for("client.runs"))
 
 
 @client_bp.route("/items/<int:item_id>/payslip")

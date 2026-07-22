@@ -1,9 +1,12 @@
-"""Deferred Phase 3 item — client self-service run upload.
+"""Phase 1 — client self-service payroll: upload -> preview -> confirm.
 
-A client uploads a standard payroll workbook for their OWN company; it reuses the
-operator import pipeline (client_company_id forced to the tenant) and lands in the
-Phase 5 risk gate. Raw-hours workbooks and non-Excel files are refused, a platform
-user cannot reach the page, and the created run belongs to the uploading tenant.
+A client uploads a standard payroll workbook for their OWN company. The upload
+creates a resumable, tenant-scoped ImportBatch DRAFT and lands on a preview;
+only an explicit Confirm creates the run (reusing the operator import pipeline
+with client_company_id forced to the tenant) and routes it through the Phase 5
+risk gate. Re-uploading the same period replaces the existing run in any status
+EXCEPT Processed/paid. Raw-hours and non-Excel files are refused, a platform
+user cannot reach the flow, and one tenant can never touch another's draft.
 """
 
 import os
@@ -18,11 +21,11 @@ os.environ["PERSISTENCE_REQUIRED"] = "false"
 from openpyxl import Workbook  # noqa: E402
 
 from app import create_app, db  # noqa: E402
-from app.models import DomainEvent, PayrollRun, User  # noqa: E402
-from app.payroll_status import AUTO_ACCEPTED, HELD  # noqa: E402
+from app.models import DomainEvent, ImportBatch, PayrollRun, User  # noqa: E402
+from app.payroll_status import AUTO_ACCEPTED, HELD, PROCESSED  # noqa: E402
 
 # A period deliberately distinct from the seeded MSC run (which uses "now"),
-# so the duplicate guard doesn't reject the upload.
+# so the duplicate guard doesn't reject the first upload.
 UPLOAD_MONTH = "March"
 UPLOAD_YEAR = 2024
 
@@ -56,9 +59,11 @@ class ClientRunUploadTestCase(unittest.TestCase):
     def tearDown(self):
         self.ctx.pop()
 
-    def _login(self, email):
+    # --- helpers ------------------------------------------------------------
+    def _login(self, email, client=None):
+        client = client or self.client
         self.assertEqual(
-            self.client.post("/login", data={"email": email, "password": "password123"}).status_code,
+            client.post("/login", data={"email": email, "password": "password123"}).status_code,
             302,
         )
 
@@ -66,20 +71,62 @@ class ClientRunUploadTestCase(unittest.TestCase):
         data = {
             "month": overrides.get("month", UPLOAD_MONTH),
             "year": str(overrides.get("year", UPLOAD_YEAR)),
-            "payroll_file": (overrides.get("stream", _payroll_workbook()), overrides.get("filename", "payroll.xlsx")),
+            "payroll_file": (
+                overrides.get("stream", _payroll_workbook()),
+                overrides.get("filename", "payroll.xlsx"),
+            ),
         }
         return self.client.post(
             "/company/runs/upload", data=data, content_type="multipart/form-data"
         )
+
+    def _latest_draft(self):
+        return (
+            ImportBatch.query.filter_by(client_company_id=self.tenant_id)
+            .order_by(ImportBatch.id.desc())
+            .first()
+        )
+
+    def _confirm_latest(self):
+        batch = self._latest_draft()
+        resp = self.client.post(f"/company/imports/{batch.id}/confirm")
+        return batch, resp
 
     def _new_run(self):
         return PayrollRun.query.filter_by(
             client_company_id=self.tenant_id, month=UPLOAD_MONTH, year=UPLOAD_YEAR
         ).first()
 
-    def test_upload_creates_tenant_run_through_risk_gate(self):
+    def _all_period_runs(self):
+        return PayrollRun.query.filter_by(
+            client_company_id=self.tenant_id, month=UPLOAD_MONTH, year=UPLOAD_YEAR
+        ).all()
+
+    # --- upload creates a draft, not a run ----------------------------------
+    def test_upload_creates_draft_not_run(self):
         self._login("admin@msc.demo")
         resp = self._upload()
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/imports/", resp.headers["Location"])
+        # A draft exists; no run yet — confirmation is a separate, explicit step.
+        draft = self._latest_draft()
+        self.assertIsNotNone(draft)
+        self.assertEqual(draft.status, "Draft")
+        self.assertIsNone(draft.payroll_run_id)
+        self.assertIsNone(self._new_run())
+
+    def test_preview_page_renders(self):
+        self._login("admin@msc.demo")
+        self._upload()
+        draft = self._latest_draft()
+        resp = self.client.get(f"/company/imports/{draft.id}/preview")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Import preview", resp.data)
+
+    def test_confirm_creates_tenant_run_through_risk_gate(self):
+        self._login("admin@msc.demo")
+        self._upload()
+        batch, resp = self._confirm_latest()
         self.assertEqual(resp.status_code, 302)
         run = self._new_run()
         self.assertIsNotNone(run)
@@ -89,6 +136,10 @@ class ClientRunUploadTestCase(unittest.TestCase):
         # (its 2nd) is still inside the new-client window and is Held.
         self.assertEqual(run.status, HELD)
         self.assertEqual(run.risk_status, "held")
+        # The draft is now linked to the created run.
+        db.session.refresh(batch)
+        self.assertEqual(batch.status, "Imported")
+        self.assertEqual(batch.payroll_run_id, run.id)
         # Chrisnat oversight was notified (tenant -> platform).
         event = DomainEvent.query.filter_by(
             event_type="run.risk_held", subject_id=run.id
@@ -99,7 +150,8 @@ class ClientRunUploadTestCase(unittest.TestCase):
     def test_non_excel_is_rejected(self):
         self._login("admin@msc.demo")
         resp = self._upload(stream=BytesIO(b"not a workbook"), filename="notes.txt")
-        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.status_code, 200)  # re-renders the form inline
+        self.assertIsNone(self._latest_draft())
         self.assertIsNone(self._new_run())
 
     def test_platform_user_cannot_upload(self):
@@ -108,6 +160,68 @@ class ClientRunUploadTestCase(unittest.TestCase):
         self.assertEqual(self.client.get("/company/runs/upload").status_code, 302)
         self.assertEqual(self._upload().status_code, 302)
         self.assertIsNone(self._new_run())
+
+    def test_discard_removes_draft(self):
+        self._login("admin@msc.demo")
+        self._upload()
+        draft = self._latest_draft()
+        resp = self.client.post(f"/company/imports/{draft.id}/discard")
+        self.assertEqual(resp.status_code, 302)
+        self.assertIsNone(db.session.get(ImportBatch, draft.id))
+        self.assertIsNone(self._new_run())
+
+    # --- tenant isolation ---------------------------------------------------
+    def test_cross_tenant_draft_is_404(self):
+        self._login("admin@msc.demo")
+        self._upload()
+        msc_draft_id = self._latest_draft().id
+        # A different tenant (Stellar) must never reach MSC's draft. Single client
+        # + logout/login is the project's tenant-switch idiom (two test clients
+        # share a session here).
+        self.client.get("/logout")
+        self._login("admin@stellar.demo")
+        self.assertEqual(self.client.get(f"/company/imports/{msc_draft_id}/preview").status_code, 404)
+        self.assertEqual(self.client.get(f"/company/imports/{msc_draft_id}/errors").status_code, 404)
+        self.assertEqual(self.client.post(f"/company/imports/{msc_draft_id}/confirm").status_code, 404)
+        self.assertEqual(self.client.post(f"/company/imports/{msc_draft_id}/discard").status_code, 404)
+        self.client.get("/logout")
+        # MSC's draft is untouched and no run leaked into either tenant.
+        self.assertIsNotNone(db.session.get(ImportBatch, msc_draft_id))
+        self.assertIsNone(self._new_run())
+
+    # --- replace policy (Sina 2026-07-22: any status except Processed) -------
+    def test_reupload_replaces_existing_non_processed_run(self):
+        self._login("admin@msc.demo")
+        self._upload()
+        self._confirm_latest()
+        first = self._new_run()
+        self.assertIsNotNone(first)
+        # Re-upload the same period and confirm — replaces the (Held) run.
+        self._upload()
+        self._confirm_latest()
+        runs = self._all_period_runs()
+        self.assertEqual(len(runs), 1)  # replaced, not duplicated
+        self.assertNotEqual(runs[0].id, first.id)  # a fresh run
+        self.assertIsNone(db.session.get(PayrollRun, first.id))  # old run purged
+        self.assertGreater(len(runs[0].items), 0)
+
+    def test_reupload_blocked_when_existing_run_processed(self):
+        self._login("admin@msc.demo")
+        self._upload()
+        self._confirm_latest()
+        run = self._new_run()
+        run.status = PROCESSED  # closed/paid — no longer client-replaceable
+        db.session.commit()
+        processed_id = run.id
+        # A second upload+confirm for the same period must be refused.
+        self._upload()
+        batch, resp = self._confirm_latest()
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(f"/imports/{batch.id}/preview", resp.headers["Location"])
+        runs = self._all_period_runs()
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0].id, processed_id)  # untouched
+        self.assertIsNone(batch.payroll_run_id)  # draft not consumed
 
 
 if __name__ == "__main__":
