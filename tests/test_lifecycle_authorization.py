@@ -67,9 +67,15 @@ class PredicateTruthTableTestCase(unittest.TestCase):
     APPROVE = {"admin", "md", "chrisnat_admin"}
     PROCESS = {"admin", "accounts_officer", "md", "chrisnat_admin"}
     DELETE = {"admin", "md", "chrisnat_admin"}
+    # Distribution reuses the canonical PAYROLL_ROLES operator group (the four
+    # legacy payroll roles + chrisnat_admin) — the same set the /distribution
+    # routes gate on — rather than a bespoke lifecycle group.
+    DISTRIBUTE = {"admin", "md", "payroll_officer", "accounts_officer", "chrisnat_admin"}
 
     PENDING = {DRAFT, PENDING_APPROVAL}
     DELETABLE = {DRAFT, PREVIEWED, REJECTED}
+    # Payslip distribution gate: a finalized run (Approved or Processed).
+    SENDABLE = {APPROVED, PROCESSED}
 
     def test_can_calculate_run(self):
         for role in ALL_ROLES:
@@ -119,6 +125,18 @@ class PredicateTruthTableTestCase(unittest.TestCase):
                         role in self.PROCESS and status == APPROVED,
                     )
 
+    def test_can_distribute_run(self):
+        # The fix: distribution is allowed for a finalized run — Approved OR
+        # Processed. "Paid" was renamed to Processed, and a Processed run must
+        # stay distributable (the bug hid the button once a run was Processed).
+        for role in ALL_ROLES:
+            for status in ALL_STATUSES:
+                with self.subTest(role=role, status=status):
+                    self.assertEqual(
+                        permissions.can_distribute_run(role, _run(status)),
+                        role in self.DISTRIBUTE and status in self.SENDABLE,
+                    )
+
     def test_can_delete_run(self):
         for role in ALL_ROLES:
             for status in ALL_STATUSES:
@@ -156,6 +174,10 @@ class PredicateTruthTableTestCase(unittest.TestCase):
                 self.assertEqual(
                     permissions.can_delete_run("chrisnat_admin", run),
                     permissions.can_delete_run("admin", run),
+                )
+                self.assertEqual(
+                    permissions.can_distribute_run("chrisnat_admin", run),
+                    permissions.can_distribute_run("admin", run),
                 )
 
 
@@ -199,6 +221,7 @@ class RenderedButtonVisibilityTestCase(unittest.TestCase):
             "approve": f"/runs/{run_id}/approve",
             "reject": f"/runs/{run_id}/reject",
             "mark_paid": f"/runs/{run_id}/mark-paid",
+            "distribute": f"/distribution/run/{run_id}",
             "delete": f"/runs/{run_id}/delete",
         }
         return {name for name, frag in actions.items() if frag in body}
@@ -219,13 +242,37 @@ class RenderedButtonVisibilityTestCase(unittest.TestCase):
         self.assertNotIn("submit", buttons)  # Draft-only
         self.assertNotIn("delete", buttons)  # not a deletable status
 
-    def test_admin_approved_run_shows_only_mark_processed_and_edit(self):
+    def test_admin_approved_run_shows_mark_processed_edit_and_distribute(self):
         self._login("admin@chrisnat.local")
         run_id = self._make_run(APPROVED)
         buttons = self._buttons(run_id)
-        self.assertEqual(buttons, {"edit", "mark_paid"})
+        # Approved is a SENDABLE status, so Distribute Payslips appears alongside
+        # Mark Processed and Edit Figures.
+        self.assertEqual(buttons, {"edit", "mark_paid", "distribute"})
         for gone in ("approve", "reject", "calculate", "submit", "delete"):
             self.assertNotIn(gone, buttons)
+
+    def test_admin_processed_run_shows_distribute_and_edit(self):
+        # The bug fix: a Processed (terminal) run still offers Distribute
+        # Payslips. It used to disappear because the gate checked the dead
+        # "Paid" status instead of "Processed".
+        self._login("admin@chrisnat.local")
+        run_id = self._make_run(PROCESSED)
+        buttons = self._buttons(run_id)
+        self.assertEqual(buttons, {"edit", "distribute"})
+        for gone in ("approve", "reject", "calculate", "submit", "mark_paid", "delete"):
+            self.assertNotIn(gone, buttons)
+
+    def test_distribute_button_visible_only_for_sendable_statuses(self):
+        # Distribution is offered for finalized runs (Approved, Processed) and
+        # for no other lifecycle state.
+        self._login("admin@chrisnat.local")
+        for status in (APPROVED, PROCESSED):
+            with self.subTest(status=status):
+                self.assertIn("distribute", self._buttons(self._make_run(status)))
+        for status in (DRAFT, PENDING_APPROVAL, REJECTED, PREVIEWED):
+            with self.subTest(status=status):
+                self.assertNotIn("distribute", self._buttons(self._make_run(status)))
 
     def test_payroll_officer_only_sees_edit_figures(self):
         self._login("payroll@chrisnat.local")
@@ -261,7 +308,69 @@ class RenderedButtonVisibilityTestCase(unittest.TestCase):
             {"calculate", "edit", "submit", "approve", "reject", "delete"},
         )
         approved = self._make_run(APPROVED)
-        self.assertEqual(self._buttons(approved), {"edit", "mark_paid"})
+        self.assertEqual(self._buttons(approved), {"edit", "mark_paid", "distribute"})
+
+
+class DistributionRouteEnforcementTestCase(unittest.TestCase):
+    """The /distribution routes enforce the SAME status rule the button does —
+    SENDABLE_STATUSES (Approved or Processed) — so the backend and the UI can
+    never drift. Role is gated by ``@role_required(*PAYROLL_ROLES)`` (covered by
+    the predicate truth table above)."""
+
+    def setUp(self):
+        self.app = create_app()
+        self.app.config["TESTING"] = True
+        self.http = self.app.test_client()
+        with self.app.app_context():
+            self.client_id = ClientCompany.query.first().id
+        self.http.post(
+            "/login", data={"email": "admin@chrisnat.local", "password": "password123"}
+        )
+
+    def _make_run(self, status):
+        with self.app.app_context():
+            run = PayrollRun(
+                client_company_id=self.client_id,
+                month="August",
+                year=2099,
+                status=status,
+            )
+            db.session.add(run)
+            db.session.commit()
+            return run.id
+
+    def test_processed_run_page_is_sendable(self):
+        # The Send controls render only when the run is sendable — Processed must
+        # qualify (mirrors the fixed button).
+        run_id = self._make_run(PROCESSED)
+        resp = self.http.get(f"/distribution/run/{run_id}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("Send payslips", resp.get_data(as_text=True))
+
+    def test_approved_run_page_is_sendable(self):
+        run_id = self._make_run(APPROVED)
+        resp = self.http.get(f"/distribution/run/{run_id}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("Send payslips", resp.get_data(as_text=True))
+
+    def test_draft_run_page_is_not_sendable(self):
+        run_id = self._make_run(DRAFT)
+        resp = self.http.get(f"/distribution/run/{run_id}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("Send payslips", resp.get_data(as_text=True))
+
+    def test_send_on_draft_run_is_blocked(self):
+        # The write path enforces the status rule too: a non-sendable run's send
+        # is rejected before any delivery is attempted.
+        run_id = self._make_run(DRAFT)
+        resp = self.http.post(
+            f"/distribution/run/{run_id}/send", data={}, follow_redirects=True
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(
+            "Payslips can only be distributed after the payroll run is approved.",
+            resp.get_data(as_text=True),
+        )
 
 
 if __name__ == "__main__":

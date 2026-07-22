@@ -62,7 +62,7 @@
         {% if can_mark_run_processed(role, payroll_run) %}
             <form method="post" action="{{ url_for('payroll.mark_paid', run_id=payroll_run.id) }}"><button class="btn btn-warning"><i class="bi bi-check2-circle"></i>Mark Processed</button></form>
         {% endif %}
-        {% if current_user.role in ["admin", "md", "payroll_officer", "accounts_officer"] and payroll_run.status in ["Approved", "Paid"] %}
+        {% if can_distribute_run(role, payroll_run) %}
             <a class="btn btn-primary" href="{{ url_for('distribution.run_status', run_id=payroll_run.id) }}"><i class="bi bi-send-check"></i>Distribute Payslips</a>
         {% endif %}
         {% if current_user.role in ["admin", "md", "payroll_officer", "accounts_officer"] %}

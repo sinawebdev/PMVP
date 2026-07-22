@@ -24,6 +24,7 @@ from app.payroll_status import (
     DELETABLE_STATUSES,
     DRAFT,
     PENDING_STATUSES,
+    SENDABLE_STATUSES,
 )
 from app.roles import CHRISNAT_ADMIN, normalise_role
 
@@ -142,6 +143,27 @@ def can_reject_run(role, run):
 def can_mark_run_processed(role, run):
     """May mark an Approved run as Processed (accounts closes the run)."""
     return _in(role, MARK_PROCESSED_ROLES) and run.status == APPROVED
+
+
+# Distribute a run's payslips. Unlike the transitions above it needs no bespoke
+# lifecycle role group: "who may distribute" is exactly "who may operate payroll",
+# so it reuses the canonical PAYROLL_ROLES group that the /distribution routes
+# already gate on via ``@role_required(*PAYROLL_ROLES)``. The "when" is the
+# centralized SENDABLE_STATUSES (Approved or Processed) — the same group the
+# distribution routes check — so a run stays distributable after it closes
+# (Processed). The legacy "Paid" status was renamed to Processed and no longer
+# exists; this predicate replaces the last inline ``status in ["Approved",
+# "Paid"]`` gate in payroll_detail.html.
+
+
+def can_distribute_run(role, run):
+    """May distribute a run's payslips (open the delivery surface, send/resend).
+    Role AND status must both allow it: an operator payroll role (PAYROLL_ROLES)
+    and a finalized run (SENDABLE_STATUSES = Approved or Processed). Backs both
+    the payroll-detail "Distribute Payslips" button and the /distribution routes'
+    status guard, so the button a user sees and the route they may hit derive
+    from one rule."""
+    return _in(role, PAYROLL_ROLES) and run.status in SENDABLE_STATUSES
 
 
 def can_delete_run(role, run):

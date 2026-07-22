@@ -213,6 +213,7 @@ def create_app():
         can_approve_run,
         can_calculate_run,
         can_delete_run,
+        can_distribute_run,
         can_edit_run_figures,
         can_manage_statutory,
         can_maintain_roster,
@@ -236,6 +237,7 @@ def create_app():
         can_approve_run=can_approve_run,
         can_reject_run=can_reject_run,
         can_mark_run_processed=can_mark_run_processed,
+        can_distribute_run=can_distribute_run,
         can_delete_run=can_delete_run,
     )
 
