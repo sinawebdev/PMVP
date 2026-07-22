@@ -171,6 +171,70 @@ def evaluate_run(run):
     return RiskVerdict(held=any(c.tripped for c in checks), checks=checks)
 
 
+# --- Run comparison (operator productivity, Phase 2) ------------------------
+# A read-only comparison of a run against the client's previous closed run,
+# reusing the SAME baseline (_previous_closed_run) and thresholds the risk gate
+# uses — so "unusual change" on the comparison panel and "held" from the gate
+# stay consistent. No side effects; nothing here changes a lifecycle decision.
+
+# (key, label, threshold, is_money) — threshold reuses the risk-gate constants.
+_COMPARISON_METRICS = (
+    ("workers", "Workers", HEADCOUNT_SWING_PCT, False),
+    ("gross", "Gross pay", NET_PAY_VARIANCE_PCT, True),
+    ("deductions", "Deductions", NET_PAY_VARIANCE_PCT, True),
+    ("taxes", "PAYE + SSNIT", NET_PAY_VARIANCE_PCT, True),
+    ("net", "Net pay", NET_PAY_VARIANCE_PCT, True),
+)
+
+
+def _metric_value(run, key):
+    if key == "workers":
+        return run.total_workers or 0
+    if key == "gross":
+        return run.total_gross_pay or 0
+    if key == "deductions":
+        return run.total_deductions or 0
+    if key == "taxes":
+        return (run.total_paye or 0) + (run.total_ssnit or 0)
+    if key == "net":
+        return run.total_net_pay or 0
+    return 0
+
+
+def compare_to_previous(run):
+    """Compare ``run`` to the client's previous closed run across headcount,
+    gross, deductions, taxes, and net pay.
+
+    Returns ``{"previous": prev_run_or_None, "rows": [...]}`` where each row is
+    ``{key, label, current, previous, delta, pct, flag, is_money}``. ``pct`` is the
+    fractional change (None when the previous value is 0) and ``flag`` marks a
+    change beyond that metric's risk threshold — the 'unusual change' highlight."""
+    prev = _previous_closed_run(run)
+    if prev is None:
+        return {"previous": None, "rows": []}
+    rows = []
+    for key, label, threshold, is_money in _COMPARISON_METRICS:
+        current = _metric_value(run, key)
+        previous = _metric_value(prev, key)
+        delta = (current or 0) - (previous or 0)
+        pct = _pct(current, previous)  # magnitude, for the threshold flag
+        flag = pct > threshold if pct is not None else bool(current)
+        rows.append(
+            {
+                "key": key,
+                "label": label,
+                "current": current,
+                "previous": previous,
+                "delta": delta,
+                "pct": pct,
+                "signed_pct": (delta / previous) if previous else None,  # for display
+                "flag": flag,
+                "is_money": is_money,
+            }
+        )
+    return {"previous": prev, "rows": rows}
+
+
 def apply_risk_gate(run, when=None):
     """Evaluate ``run`` and persist the verdict onto it. Returns the verdict.
 

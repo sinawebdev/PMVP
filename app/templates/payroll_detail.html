@@ -88,6 +88,32 @@
     </div>
 </section>
 
+{% if comparison.previous %}
+<section class="panel mt-3">
+    <div class="panel-header"><h2><i class="bi bi-bar-chart-steps"></i>Compared to Previous Run</h2><span>vs {{ comparison.previous.month }} {{ comparison.previous.year }}</span></div>
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <thead><tr><th>Metric</th><th class="text-end">This run</th><th class="text-end">Previous</th><th class="text-end">Change</th></tr></thead>
+            <tbody>
+            {% for row in comparison.rows %}
+                <tr class="{{ 'table-warning' if row.flag }}">
+                    <td>{{ row.label }}{% if row.flag %} <i class="bi bi-exclamation-triangle text-warning" title="Unusual change vs previous run"></i>{% endif %}</td>
+                    <td class="text-end">{% if row.is_money %}{{ row.current|cedis }}{% else %}{{ row.current }}{% endif %}</td>
+                    <td class="text-end">{% if row.is_money %}{{ row.previous|cedis }}{% else %}{{ row.previous }}{% endif %}</td>
+                    <td class="text-end">
+                        {% if row.signed_pct is not none %}{{ "%+.1f"|format(row.signed_pct * 100) }}%
+                        {% elif row.is_money %}{{ row.delta|cedis }}
+                        {% else %}{{ "%+d"|format(row.delta) }}{% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="mini-note mt-2 mb-0"><i class="bi bi-info-circle"></i> Changes beyond the risk thresholds (net/gross/deductions/tax ±15%, headcount ±20%) are flagged — the same signals the risk gate uses.</p>
+</section>
+{% endif %}
+
 <section class="panel mt-3">
     <div class="panel-header"><h2><i class="bi bi-clock-history"></i>Activity &amp; Approval Timeline</h2><span>{{ activity|length }} event{{ "" if activity|length == 1 else "s" }}</span></div>
     {% if activity %}
