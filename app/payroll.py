@@ -1134,16 +1134,21 @@ def detail(run_id):
     # template no longer needs the status set passed in, and the predicate and
     # the delete route share DELETABLE_STATUSES so they can't drift apart.
     from app.events import run_activity
-    from app.risk import compare_to_previous, find_possible_duplicates
+    from app.risk import build_recommendations, compare_to_previous, evaluate_run, find_possible_duplicates
 
     run_distributed = payroll_run.id in distributed_run_ids([payroll_run.id])
+    comparison = compare_to_previous(payroll_run)
+    duplicates = find_possible_duplicates(payroll_run)
+    risk_verdict = evaluate_run(payroll_run)
     return render_template(
         "payroll_detail.html",
         payroll_run=payroll_run,
         activity=run_activity(payroll_run),
         run_distributed=run_distributed,
-        comparison=compare_to_previous(payroll_run),
-        duplicates=find_possible_duplicates(payroll_run),
+        comparison=comparison,
+        duplicates=duplicates,
+        risk_verdict=risk_verdict,
+        recommendations=build_recommendations(payroll_run, risk_verdict, comparison, duplicates),
     )
 
 

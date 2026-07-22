@@ -1,7 +1,15 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block title %}{{ client.name }} · Chrisnat Payroll{% endblock %}
 {% block page_title %}{{ client.name }}{% endblock %}
 {% block page_intro %}Review the workers and payroll history connected to this client before importing, approving, or preparing finance summaries.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Client Companies", url_for('main.clients')),
+    (client.name, None),
+]) }}
+{% endblock %}
 {% block page_actions %}
 <a class="btn btn-light btn-sm" href="{{ url_for('employees.roster', client_id=client.id) }}"><i class="bi bi-people"></i>Manage Employees</a>
 {% endblock %}

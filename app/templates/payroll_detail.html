@@ -1,8 +1,16 @@
 {% extends "base.html" %}
 {% import "macros/lifecycle.html" as lc %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Payroll Detail · Chrisnat Payroll{% endblock %}
 {% block page_title %}Payroll Detail{% endblock %}
 {% block page_intro %}Review totals, imported worker counts, duplicates, statutory figures, and row-level warnings before exporting or approving payroll.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Payroll Runs", url_for('payroll.runs')),
+] + ([(payroll_run.client_company.name, url_for('main.client_detail', client_id=payroll_run.client_company.id))] if payroll_run.client_company else [])
+    + [(payroll_run.month ~ " " ~ payroll_run.year, None)]) }}
+{% endblock %}
 {% block content %}
 <section class="panel mb-3">
     <div class="panel-header"><h2><i class="bi bi-signpost-split"></i>Payroll Progress</h2>{{ lc.status_pill(payroll_run.status) }}</div>
@@ -126,6 +134,44 @@
 {% endif %}
 
 <section class="panel mt-3">
+    <div class="panel-header">
+        <h2><i class="bi bi-shield-check"></i>Risk &amp; Validation Summary</h2>
+        <span class="badge {{ 'bg-warning text-dark' if risk_verdict.held else 'bg-success' }}">{{ 'Held' if risk_verdict.held else 'Auto-accepted' }}</span>
+    </div>
+    <div class="row g-3">
+        <div class="col-md-6">
+            <h3 class="h6">Risk gate checks</h3>
+            <ul class="list-unstyled mb-0">
+                {% for check in risk_verdict.checks %}
+                <li class="mb-1">
+                    <i class="bi {{ 'bi-exclamation-triangle-fill text-warning' if check.tripped else 'bi-check-circle-fill text-success' }}"></i>
+                    <strong>{{ check.name }}</strong> — {{ check.detail }}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="col-md-6">
+            <h3 class="h6">Row-level warnings</h3>
+            {% if payroll_run.warning_count %}
+            <p class="mb-0"><i class="bi bi-exclamation-triangle text-warning"></i>
+                {{ payroll_run.warning_count }} of {{ payroll_run.items|length }} row(s) flagged.
+                <a href="#payroll-items-grid">Jump to the Payroll Items Grid</a>.
+            </p>
+            {% else %}
+            <p class="text-success mb-0"><i class="bi bi-check-circle"></i> No row-level validation warnings.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% if recommendations %}
+    <hr>
+    <h3 class="h6">Recommendations</h3>
+    <ul class="mb-0">
+        {% for rec in recommendations %}<li>{{ rec }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+</section>
+
+<section class="panel mt-3">
     <div class="panel-header"><h2><i class="bi bi-clock-history"></i>Activity &amp; Approval Timeline</h2><span>{{ activity|length }} event{{ "" if activity|length == 1 else "s" }}</span></div>
     {% if activity %}
     <ol class="activity-timeline">
@@ -155,7 +201,7 @@
 </section>
 {% endif %}
 
-<section class="panel mt-3">
+<section class="panel mt-3" id="payroll-items-grid">
     <div class="panel-header"><h2><i class="bi bi-grid-3x3-gap"></i>Payroll Items Grid</h2><span>{{ payroll_run.items|length }} rows</span></div>
     <div class="mini-note mb-3"><i class="bi bi-table"></i> This section is styled as an Excel-like grid for scanning payroll rows, totals, warnings, and payslip actions.</div>
     {% if not payroll_run.items %}

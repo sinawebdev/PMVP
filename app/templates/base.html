@@ -75,6 +75,7 @@
         </details>
     </aside>
     <main id="main-content" class="main-content" tabindex="-1">
+        {% block breadcrumbs %}{% endblock %}
         <header class="topbar page-enter {% block topbar_class %}{% endblock %}">
             <div class="topbar-copy">
                 <h1>{% block page_title %}Dashboard{% endblock %}</h1>

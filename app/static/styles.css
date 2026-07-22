@@ -678,6 +678,41 @@ body {
     padding: 12px 14px;
 }
 
+/* Breadcrumb trail above the topbar (macros/breadcrumbs.html) — quiet by
+   design, since the sidebar carries primary navigation. */
+.chrisnat-breadcrumb {
+    margin-bottom: 10px;
+}
+
+.chrisnat-breadcrumb .breadcrumb {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 13px;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+}
+
+.chrisnat-breadcrumb .breadcrumb-item + .breadcrumb-item::before {
+    color: var(--muted);
+    content: "/";
+    padding: 0 8px;
+}
+
+.chrisnat-breadcrumb .breadcrumb-item a {
+    color: var(--brand-dark);
+    text-decoration: none;
+}
+
+.chrisnat-breadcrumb .breadcrumb-item a:hover {
+    text-decoration: underline;
+}
+
+.chrisnat-breadcrumb .breadcrumb-item.active {
+    color: var(--muted);
+}
+
 /* Guidance shown where a list/table would be once data exists */
 .empty-state {
     align-items: center;

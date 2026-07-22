@@ -1,7 +1,16 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block title %}{{ client.name }} Roster · Chrisnat Payroll{% endblock %}
 {% block page_title %}{{ client.name }} — Employee Roster{% endblock %}
 {% block page_intro %}The single source of truth for employee contact details. Payslips are always delivered to the email and phone held here — never to data from a payroll upload.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Client Companies", url_for('main.clients')),
+    (client.name, url_for('main.client_detail', client_id=client.id)),
+    ("Employee Roster", None),
+]) }}
+{% endblock %}
 {% block page_actions %}
 <a class="btn btn-light btn-sm" href="{{ url_for('employees.add', client_id=client.id) }}"><i class="bi bi-person-plus"></i>Add Employee</a>
 <a class="btn btn-outline-light btn-sm" href="{{ url_for('employees.bulk_import', client_id=client.id) }}"><i class="bi bi-file-earmark-arrow-up"></i>Bulk Import</a>

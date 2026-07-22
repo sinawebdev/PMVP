@@ -266,6 +266,40 @@ def find_possible_duplicates(run):
     )
 
 
+# --- Combined risk & validation summary (operator awareness, Phase 2) ------
+# The risk gate's per-check detail, the row-level validation warning count,
+# comparison-to-previous flags, and possible-duplicate matches each already
+# exist (evaluate_run, PayrollRun.warning_count, compare_to_previous,
+# find_possible_duplicates) but were scattered across the detail page — one in
+# a hover tooltip, one nowhere at all. This distills them into a single list
+# of plain-English next steps for the "Risk & Validation Summary" panel.
+# Advisory only: presentation over existing signals, no new rule and no
+# lifecycle decision.
+
+
+def build_recommendations(run, verdict, comparison, duplicates):
+    """Plain-English follow-ups derived from ``verdict`` (evaluate_run),
+    ``run``'s row-level warnings, ``comparison`` (compare_to_previous), and
+    ``duplicates`` (find_possible_duplicates). Empty list when nothing needs a
+    second look."""
+    recommendations = [check.detail for check in verdict.tripped]
+    if run.warning_count:
+        recommendations.append(
+            f"{run.warning_count} row-level warning(s) in the Payroll Items Grid — "
+            "review before approving."
+        )
+    if duplicates:
+        recommendations.append(
+            f"{len(duplicates)} possible duplicate run(s) found — verify before processing."
+        )
+    flagged = [row["label"] for row in comparison.get("rows", []) if row["flag"]]
+    if flagged:
+        recommendations.append(
+            f"Unusual change vs the previous run in {', '.join(flagged)} — confirm with the client."
+        )
+    return recommendations
+
+
 def apply_risk_gate(run, when=None):
     """Evaluate ``run`` and persist the verdict onto it. Returns the verdict.
 

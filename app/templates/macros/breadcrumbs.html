@@ -1,0 +1,18 @@
+{# Breadcrumb trail for pages nested under the sidebar (client/run/employee
+   detail pages) where the parent/child relationship isn't visible from the
+   sidebar alone. ``items`` is a list of (label, href_or_none) tuples in
+   order; the last item (or any item with href=None) renders as the current,
+   unlinked page. #}
+{% macro trail(items) %}
+<nav aria-label="breadcrumb" class="chrisnat-breadcrumb">
+    <ol class="breadcrumb mb-0">
+        {% for label, href in items %}
+            {% if href and not loop.last %}
+                <li class="breadcrumb-item"><a href="{{ href }}">{{ label }}</a></li>
+            {% else %}
+                <li class="breadcrumb-item active" aria-current="page">{{ label }}</li>
+            {% endif %}
+        {% endfor %}
+    </ol>
+</nav>
+{% endmacro %}
