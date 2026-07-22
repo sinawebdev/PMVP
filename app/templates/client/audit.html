@@ -1,8 +1,10 @@
 {% extends "client/base.html" %}
 {% block title %}Audit trail{% endblock %}
 {% block body %}
-  <h1>Audit trail</h1>
-  <p class="sub">Recent activity by your company's users.</p>
+  <div class="page-head">
+    <h1>Audit trail</h1>
+    <p class="sub">Recent activity by your company's users.</p>
+  </div>
   {% if entries %}
   <div class="panel">
     <table>
@@ -10,7 +12,7 @@
       <tbody>
         {% for e in entries %}
         <tr>
-          <td class="muted">{{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
+          <td class="muted nums">{{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
           <td>{{ e.user.name if e.user else '—' }}</td>
           <td class="muted">{{ e.user_role | role_label if e.user_role else '—' }}</td>
           <td>{{ e.action }}</td>
@@ -21,6 +23,6 @@
     </table>
   </div>
   {% else %}
-  <p class="muted">No activity recorded for your company yet.</p>
+  <div class="empty-state">No activity recorded for your company yet.</div>
   {% endif %}
 {% endblock %}

@@ -2,7 +2,10 @@
 {% block title %}Employees{% endblock %}
 {% block body %}
   <div class="toolbar">
-    <div><h1>Employees</h1><p class="sub" style="margin:0;">{{ employees|length }} on your roster.</p></div>
+    <div class="page-head">
+      <h1>Employees</h1>
+      <p class="sub">{{ employees|length }} on your roster.</p>
+    </div>
     <a class="btn primary" href="{{ url_for('client.employee_add') }}">Add employee</a>
   </div>
 
@@ -17,11 +20,11 @@
           <td>{{ e.full_name }}</td>
           <td class="muted">{{ e.job_title or '—' }}</td>
           <td class="muted">{{ e.bank_name or '—' }}</td>
-          <td class="right">{{ e.basic_salary | cedis }}</td>
+          <td class="right nums">{{ e.basic_salary | cedis }}</td>
           <td>
             {% if e.status == 'Active' %}<span class="badge ok">Active</span>{% else %}<span class="badge warn">{{ e.status }}</span>{% endif %}
           </td>
-          <td class="right actions" style="justify-content:flex-end;">
+          <td class="actions end">
             <a class="btn sm" href="{{ url_for('client.employee_edit', emp_id=e.id) }}">Edit</a>
             {% if e.status == 'Active' %}
             <form class="inline" method="post" action="{{ url_for('client.employee_deactivate', emp_id=e.id) }}"><button class="btn sm danger" type="submit">Deactivate</button></form>
@@ -35,6 +38,6 @@
     </table>
   </div>
   {% else %}
-  <p class="muted">No employees yet. Add your first with the button above.</p>
+  <div class="empty-state">No employees yet. Add your first with the button above.</div>
   {% endif %}
 {% endblock %}

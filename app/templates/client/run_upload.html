@@ -2,11 +2,14 @@
 {% block title %}Upload payroll{% endblock %}
 {% block body %}
   <div class="toolbar">
-    <div><h1>Upload payroll</h1><p class="sub" style="margin:0;">Prepare a new run for {{ company.name }}.</p></div>
+    <div class="page-head">
+      <h1>Upload payroll</h1>
+      <p class="sub">Prepare a new run for {{ company.name }}.</p>
+    </div>
     <a class="btn" href="{{ url_for('client.runs') }}">Back to runs</a>
   </div>
 
-  <div class="card form" style="max-width:640px;">
+  <div class="card form narrow">
     <p class="sub">
       Upload a standard payroll workbook (.xlsx, .xls, or .csv) with your workers'
       figures. The run is checked automatically and, depending on the checks, either
@@ -26,7 +29,7 @@
       </div>
       <label for="payroll_file">Payroll workbook</label>
       <input id="payroll_file" name="payroll_file" type="file" accept=".xlsx,.xls,.csv" required />
-      <div style="margin-top:16px;">
+      <div class="form-foot">
         <button class="btn primary" type="submit">Upload &amp; check</button>
       </div>
     </form>

@@ -2,9 +2,9 @@
 {% block title %}Payroll runs{% endblock %}
 {% block body %}
   <div class="toolbar">
-    <div>
+    <div class="page-head">
       <h1>Payroll runs</h1>
-      <p class="sub" style="margin:0;">Payroll runs for {{ company.name }}. Approval happens with Chrisnat oversight.</p>
+      <p class="sub">Payroll runs for {{ company.name }}. Approval happens with Chrisnat oversight.</p>
     </div>
     <a class="btn primary" href="{{ url_for('client.run_upload') }}">Upload payroll</a>
   </div>
@@ -17,9 +17,9 @@
         <tr>
           <td>{{ run.month }} {{ run.year }}</td>
           <td><span class="badge">{{ run.status }}</span></td>
-          <td class="right">{{ run.total_workers }}</td>
-          <td class="right">{{ run.total_gross_pay | cedis }}</td>
-          <td class="right">{{ run.total_net_pay | cedis }}</td>
+          <td class="right nums">{{ run.total_workers }}</td>
+          <td class="right nums">{{ run.total_gross_pay | cedis }}</td>
+          <td class="right nums">{{ run.total_net_pay | cedis }}</td>
           <td class="right"><a class="btn sm" href="{{ url_for('client.run_detail', run_id=run.id) }}">Open</a></td>
         </tr>
         {% endfor %}
@@ -27,6 +27,6 @@
     </table>
   </div>
   {% else %}
-  <p class="muted">No payroll runs yet.</p>
+  <div class="empty-state">No payroll runs yet.</div>
   {% endif %}
 {% endblock %}

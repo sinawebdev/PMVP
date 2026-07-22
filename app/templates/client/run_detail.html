@@ -2,11 +2,11 @@
 {% block title %}{{ run.month }} {{ run.year }} payroll{% endblock %}
 {% block body %}
   <div class="toolbar">
-    <div>
+    <div class="page-head">
       <h1>{{ run.month }} {{ run.year }} payroll</h1>
-      <p class="sub" style="margin:0;">Status: <span class="badge">{{ run.status }}</span></p>
+      <p class="sub">Status: <span class="badge">{{ run.status }}</span></p>
       {% if run.risk_status == 'held' and run.risk_reasons %}
-      <p class="sub" style="margin:4px 0 0;">Held for Chrisnat review — {{ run.risk_reasons }}</p>
+      <p class="sub">Held for Chrisnat review — {{ run.risk_reasons }}</p>
       {% endif %}
     </div>
     <div class="actions">
@@ -16,13 +16,13 @@
   </div>
 
   <div class="grid">
-    <div class="card"><div class="n">{{ run.total_workers }}</div><div class="l">Workers</div></div>
-    <div class="card"><div class="n">{{ run.total_gross_pay | cedis }}</div><div class="l">Gross</div></div>
-    <div class="card"><div class="n">{{ run.total_deductions | cedis }}</div><div class="l">Deductions</div></div>
-    <div class="card"><div class="n">{{ run.total_net_pay | cedis }}</div><div class="l">Net pay</div></div>
+    <div class="card stat-card"><span class="n">{{ run.total_workers }}</span><span class="l">Workers</span></div>
+    <div class="card stat-card"><span class="n">{{ run.total_gross_pay | cedis }}</span><span class="l">Gross</span></div>
+    <div class="card stat-card"><span class="n">{{ run.total_deductions | cedis }}</span><span class="l">Deductions</span></div>
+    <div class="card stat-card"><span class="n">{{ run.total_net_pay | cedis }}</span><span class="l">Net pay</span></div>
   </div>
 
-  <h1 style="font-size:1.05rem;">Payslips</h1>
+  <h2>Payslips</h2>
   {% if items %}
   <div class="panel">
     <table>
@@ -32,10 +32,10 @@
         <tr>
           <td>{{ it.staff_id }}</td>
           <td>{{ it.full_name }}</td>
-          <td class="right">{{ it.gross_pay | cedis }}</td>
-          <td class="right">{{ it.paye | cedis }}</td>
-          <td class="right">{{ it.ssnit | cedis }}</td>
-          <td class="right">{{ it.net_pay | cedis }}</td>
+          <td class="right nums">{{ it.gross_pay | cedis }}</td>
+          <td class="right nums">{{ it.paye | cedis }}</td>
+          <td class="right nums">{{ it.ssnit | cedis }}</td>
+          <td class="right nums">{{ it.net_pay | cedis }}</td>
           <td class="right"><a class="btn sm" href="{{ url_for('client.payslip', item_id=it.id) }}">Payslip PDF</a></td>
         </tr>
         {% endfor %}
@@ -43,6 +43,6 @@
     </table>
   </div>
   {% else %}
-  <p class="muted">No payslip lines on this run yet.</p>
+  <div class="empty-state">No payslip lines on this run yet.</div>
   {% endif %}
 {% endblock %}

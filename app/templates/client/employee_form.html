@@ -5,34 +5,36 @@
 {{ form.get(name) if form.get(name) is not none else (e[attr] if e else '') }}
 {%- endmacro %}
 {% block body %}
-  <h1>{{ 'Edit employee' if employee else 'Add employee' }}</h1>
-  <p class="sub">Employees you add belong to {{ company.name }} only.</p>
+  <div class="page-head">
+    <h1>{{ 'Edit employee' if employee else 'Add employee' }}</h1>
+    <p class="sub">Employees you add belong to {{ company.name }} only.</p>
+  </div>
 
   <form method="post" class="card form">
     <div class="formgrid">
-      <div><label>Staff ID *</label><input name="staff_id" required value="{{ val('staff_id','staff_id')|trim }}"></div>
-      <div><label>Full name *</label><input name="full_name" required value="{{ val('full_name','full_name')|trim }}"></div>
-      <div><label>Job title</label><input name="job_title" value="{{ val('job_title','job_title')|trim }}"></div>
-      <div><label>Department</label><input name="department" value="{{ val('department','department')|trim }}"></div>
-      <div><label>Phone</label><input name="phone" value="{{ val('phone','phone')|trim }}"></div>
-      <div><label>Mobile money</label><input name="momo_number" value="{{ val('momo_number','momo_number')|trim }}"></div>
-      <div><label>Email</label><input name="email" type="email" value="{{ val('email','email')|trim }}"></div>
-      <div><label>SSNIT number</label><input name="ssnit_number" value="{{ val('ssnit_number','ssnit_number')|trim }}"></div>
-      <div><label>Ghana Card</label><input name="ghana_card_number" value="{{ val('ghana_card_number','ghana_card_number')|trim }}"></div>
-      <div><label>TIN</label><input name="tin" value="{{ val('tin','tin')|trim }}"></div>
-      <div><label>Bank name</label><input name="bank_name" value="{{ val('bank_name','bank_name')|trim }}"></div>
-      <div><label>Bank branch</label><input name="bank_branch" value="{{ val('bank_branch','bank_branch')|trim }}"></div>
-      <div><label>Bank account</label><input name="bank_account" value="{{ form.get('bank_account') if form.get('bank_account') is not none else (e.bank_account_number if e else '') }}"></div>
-      <div><label>Basic salary (GH₵)</label><input name="basic_salary" inputmode="decimal" value="{{ form.get('basic_salary') if form.get('basic_salary') is not none else (e.basic_salary if e else '') }}"></div>
+      <div><label for="staff_id">Staff ID *</label><input id="staff_id" name="staff_id" required value="{{ val('staff_id','staff_id')|trim }}"></div>
+      <div><label for="full_name">Full name *</label><input id="full_name" name="full_name" required value="{{ val('full_name','full_name')|trim }}"></div>
+      <div><label for="job_title">Job title</label><input id="job_title" name="job_title" value="{{ val('job_title','job_title')|trim }}"></div>
+      <div><label for="department">Department</label><input id="department" name="department" value="{{ val('department','department')|trim }}"></div>
+      <div><label for="phone">Phone</label><input id="phone" name="phone" value="{{ val('phone','phone')|trim }}"></div>
+      <div><label for="momo_number">Mobile money</label><input id="momo_number" name="momo_number" value="{{ val('momo_number','momo_number')|trim }}"></div>
+      <div><label for="email">Email</label><input id="email" name="email" type="email" value="{{ val('email','email')|trim }}"></div>
+      <div><label for="ssnit_number">SSNIT number</label><input id="ssnit_number" name="ssnit_number" value="{{ val('ssnit_number','ssnit_number')|trim }}"></div>
+      <div><label for="ghana_card_number">Ghana Card</label><input id="ghana_card_number" name="ghana_card_number" value="{{ val('ghana_card_number','ghana_card_number')|trim }}"></div>
+      <div><label for="tin">TIN</label><input id="tin" name="tin" value="{{ val('tin','tin')|trim }}"></div>
+      <div><label for="bank_name">Bank name</label><input id="bank_name" name="bank_name" value="{{ val('bank_name','bank_name')|trim }}"></div>
+      <div><label for="bank_branch">Bank branch</label><input id="bank_branch" name="bank_branch" value="{{ val('bank_branch','bank_branch')|trim }}"></div>
+      <div><label for="bank_account">Bank account</label><input id="bank_account" name="bank_account" value="{{ form.get('bank_account') if form.get('bank_account') is not none else (e.bank_account_number if e else '') }}"></div>
+      <div><label for="basic_salary">Basic salary (GH₵)</label><input id="basic_salary" name="basic_salary" inputmode="decimal" value="{{ form.get('basic_salary') if form.get('basic_salary') is not none else (e.basic_salary if e else '') }}"></div>
       <div>
-        <label>Status</label>
-        <select name="status">
+        <label for="status">Status</label>
+        <select id="status" name="status">
           {% set cur = (form.get('status') if form.get('status') is not none else (e.status if e else 'Active')) %}
           {% for s in ['Active','Inactive'] %}<option value="{{ s }}" {{ 'selected' if cur==s }}>{{ s }}</option>{% endfor %}
         </select>
       </div>
     </div>
-    <div class="actions" style="margin-top:18px;">
+    <div class="actions form-foot">
       <button class="btn primary" type="submit">{{ 'Save changes' if employee else 'Add employee' }}</button>
       <a class="btn" href="{{ url_for('client.employees') }}">Cancel</a>
     </div>

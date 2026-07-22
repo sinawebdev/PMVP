@@ -2,7 +2,10 @@
 {% block title %}Notifications{% endblock %}
 {% block body %}
   <div class="toolbar">
-    <div><h1>Notifications</h1><p class="sub" style="margin:0;">{{ unread }} unread</p></div>
+    <div class="page-head">
+      <h1>Notifications</h1>
+      <p class="sub">{{ unread }} unread</p>
+    </div>
     {% if unread %}
     <form method="post" action="{{ url_for('notifications.mark_all_read') }}" class="inline">
       <button class="btn" type="submit">Mark all read</button>
@@ -16,11 +19,11 @@
       <thead><tr><th></th><th>Notification</th><th>Detail</th><th>When</th><th></th></tr></thead>
       <tbody>
         {% for n in items %}
-        <tr style="{{ 'font-weight:600;' if not n.read_at }}">
+        <tr {% if not n.read_at %}class="is-unread"{% endif %}>
           <td>{% if not n.read_at %}<span class="badge {{ 'warn' if n.level=='warning' else 'ok' if n.level=='success' }}">New</span>{% endif %}</td>
           <td>{{ n.title }}</td>
           <td class="muted">{{ n.body or '' }}</td>
-          <td class="muted">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '—' }}</td>
+          <td class="muted nums">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '—' }}</td>
           <td class="right">
             {% if not n.read_at %}
             <form method="post" action="{{ url_for('notifications.mark_read', note_id=n.id) }}" class="inline">
@@ -34,6 +37,6 @@
     </table>
   </div>
   {% else %}
-  <p class="muted">No notifications yet.</p>
+  <div class="empty-state">No notifications yet.</div>
   {% endif %}
 {% endblock %}

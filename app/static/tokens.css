@@ -1,0 +1,82 @@
+/* ---------------------------------------------------------------------------
+   PMVP design tokens — the single source of truth for colour, radius, shadow
+   and type. Loaded by BOTH shells:
+
+     base.html        (Chrisnat internal app — Bootstrap + styles.css)
+     client/base.html (tenant company portal — portal.css, no Bootstrap)
+
+   Nothing in this file may reference a layout class. Tokens only. If a value
+   appears twice in a stylesheet, it belongs here instead.
+   --------------------------------------------------------------------------- */
+
+:root {
+    /* Ink + neutrals */
+    --ink: #132034;
+    --ink-soft: #33445c;
+    --muted: #556070;
+    --line: #dce8e4;          /* teal-tinted hairline — NOT neutral grey */
+    --line-strong: #c3d9d3;
+    --surface: #ffffff;
+    --surface-alt: #f7fbfa;
+    --shell: #f2f7f5;
+
+    /* Brand */
+    --brand: #0f766e;
+    --brand-dark: #115e59;
+    --brand-soft: #ccfbf1;
+    --brand-tint: #ecfdf5;
+    --gold: #facc15;
+    --gold-deep: #f59e0b;
+
+    /* Status */
+    --green: #16a34a;
+    --green-soft: #e8f5ee;
+    --warn: #b45309;
+    --warn-soft: #fff4e0;
+    --danger: #dc2626;
+    --danger-soft: #fdecee;
+
+    /* Elevation */
+    --shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    --shadow-sm: 0 6px 18px rgba(15, 23, 42, 0.05);
+
+    /* Geometry */
+    --radius-sm: 8px;
+    --radius: 12px;
+    --radius-lg: 18px;
+    --radius-pill: 999px;
+
+    /* Type */
+    --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+    /* Motion — respected by both shells */
+    --ease: 180ms ease;
+}
+
+/* The shell gradient is brand identity, not layout — both portals share it. */
+.brand-shell-bg {
+    background:
+        radial-gradient(circle at top left, rgba(250, 204, 21, 0.16), transparent 28rem),
+        linear-gradient(135deg, var(--surface-alt) 0%, var(--shell) 52%, #eef7f2 100%);
+    background-attachment: fixed;
+}
+
+/* Gold tile used as the brand mark everywhere: sidebar, portal header,
+   public payslip, error pages. One definition, one look. */
+.brand-mark {
+    align-items: center;
+    background: linear-gradient(135deg, var(--gold), var(--gold-deep));
+    border: 2px solid rgba(255, 255, 255, 0.45);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 28px rgba(250, 204, 21, 0.25);
+    color: #172033;
+    display: inline-flex;
+    font-weight: 900;
+    height: 46px;
+    justify-content: center;
+    width: 46px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root { --ease: 1ms linear; }
+}

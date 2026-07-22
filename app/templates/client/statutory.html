@@ -1,28 +1,30 @@
 {% extends "client/base.html" %}
 {% block title %}Statutory rates{% endblock %}
 {% block body %}
-  <h1>Statutory rates</h1>
-  <p class="sub">Ghana statutory payroll rates — maintained by Chrisnat, shown here for reference (view-only).</p>
+  <div class="page-head">
+    <h1>Statutory rates</h1>
+    <p class="sub">Ghana statutory payroll rates — maintained by Chrisnat, shown here for reference (view-only).</p>
+  </div>
 
   {% if rate %}
   <div class="grid">
-    <div class="card"><div class="n">{{ '%.1f%%' | format(rate.ssf_employee_rate * 100) }}</div><div class="l">SSF — employee</div></div>
-    <div class="card"><div class="n">{{ '%.1f%%' | format(rate.ssf_employer_rate * 100) }}</div><div class="l">SSF — employer</div></div>
-    <div class="card"><div class="n">{{ rate.effective_from }}</div><div class="l">Effective from</div></div>
+    <div class="card stat-card"><span class="n">{{ '%.1f%%' | format(rate.ssf_employee_rate * 100) }}</span><span class="l">SSF — employee</span></div>
+    <div class="card stat-card"><span class="n">{{ '%.1f%%' | format(rate.ssf_employer_rate * 100) }}</span><span class="l">SSF — employer</span></div>
+    <div class="card stat-card"><span class="n">{{ rate.effective_from }}</span><span class="l">Effective from</span></div>
   </div>
 
-  <h1 style="font-size:1.05rem;">PAYE bands (monthly)</h1>
+  <h2>PAYE bands (monthly)</h2>
   <div class="panel">
     <table>
       <thead><tr><th>Income over (GH₵)</th><th class="right">Rate</th><th class="right">Base tax (GH₵)</th></tr></thead>
       <tbody>
         {% for band in rate.paye_bands %}
-        <tr><td>{{ '%.2f' | format(band.over) }}</td><td class="right">{{ '%.1f%%' | format(band.rate * 100) }}</td><td class="right">{{ '%.2f' | format(band.base) }}</td></tr>
+        <tr><td class="nums">{{ '%.2f' | format(band.over) }}</td><td class="right nums">{{ '%.1f%%' | format(band.rate * 100) }}</td><td class="right nums">{{ '%.2f' | format(band.base) }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <p class="muted">No statutory rate configured.</p>
+  <div class="empty-state">No statutory rate configured.</div>
   {% endif %}
 {% endblock %}

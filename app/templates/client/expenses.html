@@ -1,8 +1,10 @@
 {% extends "client/base.html" %}
 {% block title %}Expenses{% endblock %}
 {% block body %}
-  <h1>Expenses</h1>
-  <p class="sub">Expenses recorded against {{ company.name }}.</p>
+  <div class="page-head">
+    <h1>Expenses</h1>
+    <p class="sub">Expenses recorded against {{ company.name }}.</p>
+  </div>
   {% if expenses %}
   <div class="panel">
     <table>
@@ -14,7 +16,7 @@
           <td>{{ x.category }}</td>
           <td class="muted">{{ x.description }}</td>
           <td class="muted">{{ x.payment_method or '—' }}</td>
-          <td class="right">{{ x.amount | cedis }}</td>
+          <td class="right nums">{{ x.amount | cedis }}</td>
           <td><span class="badge">{{ x.status }}</span></td>
         </tr>
         {% endfor %}
@@ -22,6 +24,6 @@
     </table>
   </div>
   {% else %}
-  <p class="muted">No expenses recorded for your company yet.</p>
+  <div class="empty-state">No expenses recorded for your company yet.</div>
   {% endif %}
 {% endblock %}
