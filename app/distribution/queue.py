@@ -31,8 +31,31 @@ from app.models import (
 from .service import distribute_run
 
 
+def _in_flight_batch(run_id):
+    return DistributionBatch.query.filter(
+        DistributionBatch.payroll_run_id == run_id,
+        DistributionBatch.status.in_((BATCH_QUEUED, BATCH_RUNNING)),
+    ).first()
+
+
 def enqueue_distribution(run, channel, only_failed, actor):
-    """Queue a distribution action for `run`. Returns a JSON-serialisable summary."""
+    """Queue a distribution action for `run`. Returns a JSON-serialisable summary.
+
+    A run only ever has one unfinished batch at a time — if one is already
+    queued/running, that batch is returned as-is rather than piling up a second
+    one (the worker processes one batch per run at a time anyway; queuing a
+    second just confuses "latest batch" in the UI for no benefit)."""
+    existing = _in_flight_batch(run.id)
+    if existing is not None:
+        return {
+            "batch_id": existing.id,
+            "status": existing.status,
+            "total": existing.total,
+            "channel": existing.channel,
+            "only_failed": existing.only_failed,
+            "already_in_progress": True,
+        }
+
     batch = DistributionBatch(
         payroll_run_id=run.id,
         client_company_id=run.client_company_id,
@@ -51,6 +74,7 @@ def enqueue_distribution(run, channel, only_failed, actor):
         "total": batch.total,
         "channel": channel,
         "only_failed": only_failed,
+        "already_in_progress": False,
     }
 
 

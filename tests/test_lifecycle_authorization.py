@@ -372,6 +372,43 @@ class DistributionRouteEnforcementTestCase(unittest.TestCase):
             resp.get_data(as_text=True),
         )
 
+    def test_status_fragment_renders_delivery_table(self):
+        # Phase 3, Slice 2 — the htmx-polled fragment renders the same delivery
+        # table content as the full page, so a poll swap is indistinguishable
+        # from a full reload.
+        run_id = self._make_run(APPROVED)
+        resp = self.http.get(f"/distribution/run/{run_id}/status-fragment")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("Delivery Status", resp.get_data(as_text=True))
+
+    def test_send_payslips_hidden_while_a_batch_is_in_flight(self):
+        # Once a distribution is queued for a run, the send/resend controls
+        # disappear (an "in progress" badge takes their place) so an operator
+        # can't pile up a second batch on top of one still running.
+        from app.distribution.queue import enqueue_distribution
+        from app.models import CHANNEL_AUTO, User
+
+        run_id = self._make_run(APPROVED)
+        with self.app.app_context():
+            run = db.session.get(PayrollRun, run_id)
+            operator = User.query.filter_by(email="admin@chrisnat.local").first()
+            enqueue_distribution(run, CHANNEL_AUTO, False, operator)
+
+        resp = self.http.get(f"/distribution/run/{run_id}")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        self.assertNotIn("Send payslips", body)
+        self.assertIn("Distribution in progress", body)
+
+        # A second send while one is in flight doesn't queue a duplicate batch.
+        self.http.post(f"/distribution/run/{run_id}/send", data={"channel": "auto"})
+        with self.app.app_context():
+            from app.models import DistributionBatch
+
+            self.assertEqual(
+                DistributionBatch.query.filter_by(payroll_run_id=run_id).count(), 1
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

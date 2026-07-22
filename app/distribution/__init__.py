@@ -61,10 +61,9 @@ def _latest_batch(run_id):
     )
 
 
-@distribution_bp.route("/run/<int:run_id>")
-@role_required(*PAYROLL_ROLES)
-def run_status(run_id):
-    run = db.get_or_404(PayrollRun, run_id)
+def _run_status_context(run):
+    """Shared by the full page and its auto-refreshing fragment, so both ever
+    agree on what "delivery status" means for a run."""
     rows = []
     for item in run.items:
         rows.append(
@@ -76,16 +75,34 @@ def run_status(run_id):
         )
     sent = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "sent")
     failed = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "failed")
+    batch = _latest_batch(run.id)
+    return {
+        "run": run,
+        "rows": rows,
+        "channels": DELIVERY_CHANNELS,
+        "sendable": run.status in SENDABLE_STATUSES,
+        "sent_count": sent,
+        "failed_count": failed,
+        "batch": batch,
+        "in_flight": batch is not None and batch.status in ("queued", "running"),
+    }
+
+
+@distribution_bp.route("/run/<int:run_id>")
+@role_required(*PAYROLL_ROLES)
+def run_status(run_id):
+    run = db.get_or_404(PayrollRun, run_id)
     return render_template(
-        "distribution/run_status.html",
-        run=run,
-        rows=rows,
-        channels=DELIVERY_CHANNELS,
-        sendable=run.status in SENDABLE_STATUSES,
-        nonce=uuid.uuid4().hex,
-        sent_count=sent,
-        failed_count=failed,
-        batch=_latest_batch(run.id),
+        "distribution/run_status.html", nonce=uuid.uuid4().hex, **_run_status_context(run)
+    )
+
+
+@distribution_bp.route("/run/<int:run_id>/status-fragment")
+@role_required(*PAYROLL_ROLES)
+def run_status_fragment(run_id):
+    run = db.get_or_404(PayrollRun, run_id)
+    return render_template(
+        "distribution/_status_fragment.html", **_run_status_context(run)
     )
 
 
@@ -107,11 +124,14 @@ def _do_send(run_id, only_failed):
     summary, replayed = replay_or_run(
         key, lambda: enqueue_distribution(run, channel, only_failed, current_user)
     )
-    note = " (already queued)" if replayed else ""
-    flash(
-        f"Distribution queued{note}: {summary['total']} payslip(s) will be sent shortly.",
-        "success",
-    )
+    if summary.get("already_in_progress"):
+        flash("A distribution is already in progress for this run.", "warning")
+    else:
+        note = " (already queued)" if replayed else ""
+        flash(
+            f"Distribution queued{note}: {summary['total']} payslip(s) will be sent shortly.",
+            "success",
+        )
     return redirect(url_for("distribution.run_status", run_id=run.id))
 
 

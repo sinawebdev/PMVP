@@ -49,6 +49,22 @@ class DistributionQueueTestCase(unittest.TestCase):
         db.session.remove()
         self.ctx.pop()
 
+    def test_enqueue_is_a_no_op_while_a_batch_is_already_in_flight(self):
+        first = enqueue_distribution(self.run, "auto", False, self.operator)
+        self.assertFalse(first["already_in_progress"])
+        second = enqueue_distribution(self.run, "sms", True, self.operator)
+        self.assertTrue(second["already_in_progress"])
+        self.assertEqual(second["batch_id"], first["batch_id"])
+        self.assertEqual(
+            DistributionBatch.query.filter_by(payroll_run_id=self.run.id).count(), 1
+        )
+
+        # Once the in-flight batch finishes, a new enqueue creates a fresh one.
+        process_all_queued()
+        third = enqueue_distribution(self.run, "auto", False, self.operator)
+        self.assertFalse(third["already_in_progress"])
+        self.assertNotEqual(third["batch_id"], first["batch_id"])
+
     def test_enqueue_creates_queued_batch(self):
         summary = enqueue_distribution(self.run, "auto", False, self.operator)
         batch = db.session.get(DistributionBatch, summary["batch_id"])

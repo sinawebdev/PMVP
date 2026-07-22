@@ -1,0 +1,103 @@
+{# Auto-refreshing portion of the run-status page: summary counts, queue status,
+   and the per-worker delivery table. Rendered both by the full page (first
+   load) and by distribution.run_status_fragment (htmx polls this while a
+   batch is queued/running; polling stops on its own once the swapped-in
+   markup no longer carries hx-trigger, i.e. the batch reached a terminal
+   state). #}
+<div id="distribution-status"
+     {% if in_flight %}
+     hx-get="{{ url_for('distribution.run_status_fragment', run_id=run.id) }}"
+     hx-trigger="every 3s"
+     hx-swap="outerHTML"
+     {% endif %}>
+
+<section class="panel mb-3">
+    <div class="panel-header">
+        <h2><i class="bi bi-building"></i>{{ run.client_company.name if run.client_company else "Client" }} — {{ run.month }} {{ run.year }}</h2>
+        <span class="badge text-bg-{{ 'success' if sendable else 'secondary' }}">{{ run.status }}</span>
+    </div>
+    <div class="row g-3">
+        <div class="col-md-3"><strong>Workers</strong><p class="mb-0">{{ rows|length }}</p></div>
+        <div class="col-md-3"><strong>Sent</strong><p class="mb-0 text-success">{{ sent_count }}</p></div>
+        <div class="col-md-3"><strong>Failed</strong><p class="mb-0 text-danger">{{ failed_count }}</p></div>
+        <div class="col-md-3"><strong>Net total</strong><p class="mb-0">{{ run.total_net_pay|cedis }}</p></div>
+    </div>
+    {% if not sendable %}
+    <div class="mini-note mt-3"><i class="bi bi-info-circle"></i> Payslips can be distributed once this payroll run is <strong>Approved</strong>.</div>
+    {% endif %}
+</section>
+
+{% if batch %}
+<section class="panel mb-3">
+    <div class="panel-header">
+        <h2><i class="bi bi-hourglass-split"></i>Queue Status</h2>
+        {% if batch.status == "queued" %}<span class="badge text-bg-secondary">Queued</span>
+        {% elif batch.status == "running" %}<span class="badge text-bg-info">Sending…</span>
+        {% elif batch.status == "completed" %}<span class="badge text-bg-success">Completed</span>
+        {% elif batch.status == "failed" %}<span class="badge text-bg-danger">Failed</span>{% endif %}
+    </div>
+    <div class="row g-3">
+        <div class="col-md-3"><strong>Queued</strong><p class="mb-0">{{ batch.created_at.strftime("%Y-%m-%d %H:%M") if batch.created_at }}</p></div>
+        <div class="col-md-3"><strong>Channel</strong><p class="mb-0">{{ batch.channel }}{% if batch.only_failed %} (resend-failed){% endif %}</p></div>
+        {% if batch.status in ("completed", "failed") %}
+        <div class="col-md-3"><strong>Sent / Failed</strong><p class="mb-0">{{ batch.sent_count or 0 }} / {{ batch.failed_count or 0 }} (of {{ batch.total or 0 }})</p></div>
+        <div class="col-md-3"><strong>Finished</strong><p class="mb-0">{{ batch.finished_at.strftime("%Y-%m-%d %H:%M") if batch.finished_at }}</p></div>
+        {% else %}
+        <div class="col-md-3"><strong>Total queued</strong><p class="mb-0">{{ batch.total or 0 }} payslip(s)</p></div>
+        {% endif %}
+    </div>
+    {% if batch.status == "failed" and batch.error %}
+    <div class="mini-note mt-3 text-danger"><i class="bi bi-exclamation-triangle"></i> {{ batch.error }}</div>
+    {% endif %}
+    {% if batch.status in ("queued", "running") %}
+    <div class="mini-note mt-3"><i class="bi bi-info-circle"></i> A worker is processing this batch — this page updates automatically.</div>
+    {% elif batch.status in ("completed", "failed") %}
+    <div class="mini-note mt-3"><i class="bi bi-arrow-clockwise"></i> Refresh the page to send again.</div>
+    {% endif %}
+</section>
+{% endif %}
+
+<section class="panel">
+    <div class="panel-header">
+        <h2><i class="bi bi-send-check"></i>Delivery Status</h2>
+        <span>{{ rows|length }} workers</span>
+    </div>
+    <div class="excel-grid-wrap">
+        <table class="table table-sm align-middle excel-grid">
+            <thead><tr><th>Staff ID</th><th>Worker</th><th>Preferred</th><th>Channel</th><th>Recipient</th><th>Status</th><th>Attempts</th><th>Net</th></tr></thead>
+            <tbody>
+            {% for row in rows %}
+                {% set item = row.item %}
+                {% set d = row.delivery %}
+                <tr>
+                    <td>{{ item.staff_id }}</td>
+                    <td>{{ item.full_name }}</td>
+                    <td>
+                        <form method="post" action="{{ url_for('distribution.set_preferred_channel', item_id=item.id) }}">
+                            <select class="form-select form-select-sm" name="preferred_channel" onchange="this.form.submit()" {% if not item.employee_id %}disabled title="No linked employee record"{% endif %}>
+                                {% set pref = item.employee.preferred_channel if item.employee else None %}
+                                <option value="" {% if not pref %}selected{% endif %}>Auto ({{ row.suggested }})</option>
+                                {% for ch in channels %}
+                                    <option value="{{ ch }}" {% if pref == ch %}selected{% endif %}>{{ ch }}</option>
+                                {% endfor %}
+                            </select>
+                        </form>
+                    </td>
+                    <td>{% if d %}<span class="badge text-bg-light">{{ d.channel }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                    <td>{{ d.recipient if d else "—" }}</td>
+                    <td>
+                        {% if d and d.status == "sent" %}<span class="badge text-bg-success">sent</span>
+                        {% elif d and d.status == "failed" %}<span class="badge text-bg-danger" title="{{ d.error }}">failed</span>
+                        {% elif d %}<span class="badge text-bg-warning">{{ d.status }}</span>
+                        {% elif in_flight %}<span class="badge text-bg-info">queued</span>
+                        {% else %}<span class="badge text-bg-light">not sent</span>{% endif %}
+                    </td>
+                    <td>{{ d.attempts if d else 0 }}</td>
+                    <td class="money-cell">{{ item.net_pay|cedis }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+</div>

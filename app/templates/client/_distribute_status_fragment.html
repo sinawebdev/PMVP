@@ -1,0 +1,61 @@
+{# Auto-refreshing portion of the distribute page: stat cards, queue status,
+   and the per-worker delivery table. Polls while a batch is queued/running;
+   stops on its own once the swapped-in markup has no hx-trigger left (the
+   batch reached completed/failed). #}
+<div id="distribute-status"
+     {% if in_flight %}
+     hx-get="{{ url_for('client.distribute_status_fragment', run_id=run.id) }}"
+     hx-trigger="every 3s"
+     hx-swap="outerHTML"
+     {% endif %}>
+
+<div class="grid">
+  <div class="card stat-card"><span class="n">{{ rows|length }}</span><span class="l">Payslips</span></div>
+  <div class="card stat-card"><span class="n">{{ sent_count }}</span><span class="l">Sent</span></div>
+  <div class="card stat-card"><span class="n">{{ failed_count }}</span><span class="l">Failed</span></div>
+</div>
+
+{% if batch %}
+<div class="card form stack">
+  <h2>Queue status</h2>
+  {% if batch.status == "queued" %}
+    <p class="sub"><span class="badge">Queued</span> {{ batch.total or 0 }} payslip(s) queued at {{ batch.created_at.strftime("%Y-%m-%d %H:%M") if batch.created_at }} — a worker will send them shortly. This updates automatically.</p>
+  {% elif batch.status == "running" %}
+    <p class="sub"><span class="badge">Sending…</span> {{ batch.total or 0 }} payslip(s) in progress. This updates automatically.</p>
+  {% elif batch.status == "completed" %}
+    <p class="sub"><span class="badge ok">Completed</span> {{ batch.sent_count or 0 }} sent, {{ batch.failed_count or 0 }} failed (of {{ batch.total or 0 }}) — finished {{ batch.finished_at.strftime("%Y-%m-%d %H:%M") if batch.finished_at }}. Refresh the page to send again.</p>
+  {% elif batch.status == "failed" %}
+    <p class="sub"><span class="badge warn">Failed</span> {{ batch.error }}</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<h2>Per-worker delivery</h2>
+{% if rows %}
+<div class="panel">
+  <table>
+    <thead><tr><th>Staff ID</th><th>Name</th><th>Suggested</th><th>Status</th><th>Channel</th><th>When</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.item.staff_id }}</td>
+        <td>{{ r.item.full_name }}</td>
+        <td class="muted">{{ r.suggested|capitalize }}</td>
+        <td>
+          {% if r.delivery and r.delivery.status == 'sent' %}<span class="badge ok">Sent</span>
+          {% elif r.delivery and r.delivery.status == 'failed' %}<span class="badge warn">Failed</span>
+          {% elif in_flight %}<span class="badge">Queued</span>
+          {% else %}<span class="badge">Not sent</span>{% endif %}
+        </td>
+        <td class="muted">{{ r.delivery.channel if r.delivery else '—' }}</td>
+        <td class="muted nums">{{ r.delivery.sent_at.strftime('%Y-%m-%d %H:%M') if r.delivery and r.delivery.sent_at else '—' }}</td>
+        <td class="muted">{{ r.delivery.error if r.delivery and r.delivery.error else '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">No payslip lines on this run yet.</div>
+{% endif %}
+</div>

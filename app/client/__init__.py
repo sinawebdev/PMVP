@@ -584,29 +584,50 @@ def _latest_batch(run_id):
     )
 
 
-@client_bp.route("/runs/<int:run_id>/distribute")
-@tenant_required
-def distribute(run_id):
-    run = tenant_get_or_404(PayrollRun, run_id)  # 404 if another tenant's run
+def _distribute_context(run):
+    """Shared by the full page and its auto-refreshing fragment."""
     rows = [
         {"item": it, "delivery": _latest_delivery(it.id), "suggested": resolve_channel(it)}
         for it in run.items
     ]
     sent = sum(1 for r in rows if r["delivery"] and r["delivery"].status == DELIVERY_SENT)
     failed = sum(1 for r in rows if r["delivery"] and r["delivery"].status == DELIVERY_FAILED)
+    batch = _latest_batch(run.id)
+    return {
+        "run": run,
+        "rows": rows,
+        "channels": DELIVERY_CHANNELS,
+        "sendable": run.status in SENDABLE_STATUSES,
+        "sent_count": sent,
+        "failed_count": failed,
+        "batch": batch,
+        "in_flight": batch is not None and batch.status in ("queued", "running"),
+    }
+
+
+@client_bp.route("/runs/<int:run_id>/distribute")
+@tenant_required
+def distribute(run_id):
+    run = tenant_get_or_404(PayrollRun, run_id)  # 404 if another tenant's run
     return render_template(
         "client/distribute.html",
         company=_company(),
-        run=run,
-        rows=rows,
-        channels=DELIVERY_CHANNELS,
-        sendable=run.status in SENDABLE_STATUSES,
         can_send=active_tenant_id() is not None
         and (current_user.role or "").strip().lower() == CLIENT_ADMIN,
         nonce=uuid.uuid4().hex,
-        sent_count=sent,
-        failed_count=failed,
-        batch=_latest_batch(run.id),
+        **_distribute_context(run),
+    )
+
+
+@client_bp.route("/runs/<int:run_id>/distribute/status-fragment")
+@tenant_required
+def distribute_status_fragment(run_id):
+    run = tenant_get_or_404(PayrollRun, run_id)  # 404 if another tenant's run
+    return render_template(
+        "client/_distribute_status_fragment.html",
+        can_send=active_tenant_id() is not None
+        and (current_user.role or "").strip().lower() == CLIENT_ADMIN,
+        **_distribute_context(run),
     )
 
 
@@ -624,12 +645,15 @@ def _do_client_send(run, only_failed):
     summary, replayed = replay_or_run(
         key, lambda: enqueue_distribution(run, channel, only_failed, current_user)
     )
-    note = " (already queued)" if replayed else ""
-    flash(
-        f"Distribution queued{note}: {summary['total']} payslip(s) will be sent shortly. "
-        "Chrisnat oversight will be notified once it completes.",
-        "success",
-    )
+    if summary.get("already_in_progress"):
+        flash("A distribution is already in progress for this run.", "warning")
+    else:
+        note = " (already queued)" if replayed else ""
+        flash(
+            f"Distribution queued{note}: {summary['total']} payslip(s) will be sent shortly. "
+            "Chrisnat oversight will be notified once it completes.",
+            "success",
+        )
     return redirect(url_for("client.distribute", run_id=run.id))
 
 

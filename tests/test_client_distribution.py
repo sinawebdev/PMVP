@@ -132,6 +132,39 @@ class ClientDistributionTestCase(unittest.TestCase):
         self.assertEqual(
             DistributionBatch.query.filter_by(payroll_run_id=self.msc_run.id).count(), 0
         )
+        self.assertEqual(
+            self.client.get(
+                f"/company/runs/{self.msc_run.id}/distribute/status-fragment"
+            ).status_code,
+            404,
+        )
+
+    def test_status_fragment_renders_delivery_table(self):
+        self._login("admin@msc.demo")
+        resp = self.client.get(
+            f"/company/runs/{self.msc_run.id}/distribute/status-fragment"
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("Per-worker delivery", resp.get_data(as_text=True))
+
+    def test_send_hidden_while_a_batch_is_in_flight(self):
+        self._login("admin@msc.demo")
+        self.client.post(
+            f"/company/runs/{self.msc_run.id}/distribute/send",
+            data={"channel": "auto", "nonce": "n2"},
+        )
+        resp = self.client.get(f"/company/runs/{self.msc_run.id}/distribute")
+        body = resp.get_data(as_text=True)
+        self.assertNotIn("Send payslips", body)
+        self.assertIn("In progress", body)
+        # A second send while one is in flight doesn't queue a duplicate batch.
+        self.client.post(
+            f"/company/runs/{self.msc_run.id}/distribute/send",
+            data={"channel": "auto", "nonce": "n3"},
+        )
+        self.assertEqual(
+            DistributionBatch.query.filter_by(payroll_run_id=self.msc_run.id).count(), 1
+        )
 
 
 if __name__ == "__main__":
