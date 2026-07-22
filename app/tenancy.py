@@ -25,6 +25,7 @@ from werkzeug.exceptions import NotFound
 from app import db
 from app.roles import normalise_role
 from app.models import (
+    DistributionBatch,
     DomainEvent,
     Employee,
     EmployeeDeployment,
@@ -50,7 +51,7 @@ class TenantScopeError(Exception):
 # Models carrying client_company_id directly.
 TENANT_OWNED_MODELS = frozenset(
     {User, Employee, EmployeeDeployment, PayrollRun, Expense, Proposal, ImportBatch,
-     WageRateProfile, DomainEvent}
+     WageRateProfile, DomainEvent, DistributionBatch}
 )
 
 # Child models with no client_company_id — scoped by joining through payroll_run.

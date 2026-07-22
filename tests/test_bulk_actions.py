@@ -19,7 +19,14 @@ os.environ["SEED_DEMO_DATA"] = "true"
 os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from app import create_app, db  # noqa: E402
-from app.models import ClientCompany, PayrollRun, PayslipDelivery  # noqa: E402
+from app.distribution.queue import process_all_queued  # noqa: E402
+from app.models import (  # noqa: E402
+    BATCH_QUEUED,
+    ClientCompany,
+    DistributionBatch,
+    PayrollRun,
+    PayslipDelivery,
+)
 from app.payroll_status import (  # noqa: E402
     APPROVED,
     DRAFT,
@@ -189,8 +196,17 @@ class BulkActionsTestCase(unittest.TestCase):
             follow_redirects=True,
         )
         body = resp.get_data(as_text=True)
-        self.assertIn("1 run(s) processed", body)
+        self.assertIn("1 run(s) queued", body)
         self.assertIn("1 run(s) could not be distributed", body)
+        # Bulk distribute only queues the batch — no request-thread sending.
+        self.assertEqual(
+            PayslipDelivery.query.filter_by(payroll_run_id=seeded_approved.id).count(), 0
+        )
+        batch = DistributionBatch.query.filter_by(payroll_run_id=seeded_approved.id).first()
+        self.assertIsNotNone(batch)
+        self.assertEqual(batch.status, BATCH_QUEUED)
+        # A worker claiming and running the queue delivers it, same as before.
+        process_all_queued()
         rows = PayslipDelivery.query.filter_by(payroll_run_id=seeded_approved.id).all()
         self.assertTrue(rows)
 
@@ -204,7 +220,7 @@ class BulkActionsTestCase(unittest.TestCase):
         )
         self.assertIn("do not have permission", resp.get_data(as_text=True))
         self.assertEqual(
-            PayslipDelivery.query.filter_by(payroll_run_id=seeded_approved.id).count(), 0
+            DistributionBatch.query.filter_by(payroll_run_id=seeded_approved.id).count(), 0
         )
 
     def test_bulk_distribute_on_processed_run_is_eligible(self):
@@ -217,7 +233,7 @@ class BulkActionsTestCase(unittest.TestCase):
             data={"run_ids": [str(run.id)]},
             follow_redirects=True,
         )
-        self.assertIn("1 run(s) processed", resp.get_data(as_text=True))
+        self.assertIn("1 run(s) queued", resp.get_data(as_text=True))
 
     # --- UI wiring ---------------------------------------------------------
 

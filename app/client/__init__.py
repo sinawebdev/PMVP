@@ -38,7 +38,8 @@ from app import db
 from app.audit import record_audit
 from app.events import platform_admins, record_event
 from app.distribution.idempotency import replay_or_run
-from app.distribution.service import distribute_run, resolve_channel
+from app.distribution.queue import enqueue_distribution
+from app.distribution.service import resolve_channel
 from app.excel_utils import allowed_excel_file, export_import_error_report, mapping_conflicts
 from app.models import (
     CHANNEL_AUTO,
@@ -47,6 +48,7 @@ from app.models import (
     DELIVERY_SENT,
     AuditTrail,
     ClientCompany,
+    DistributionBatch,
     Employee,
     Expense,
     ImportBatch,
@@ -574,6 +576,14 @@ def _latest_delivery(item_id):
     )
 
 
+def _latest_batch(run_id):
+    return (
+        DistributionBatch.query.filter_by(payroll_run_id=run_id)
+        .order_by(DistributionBatch.created_at.desc())
+        .first()
+    )
+
+
 @client_bp.route("/runs/<int:run_id>/distribute")
 @tenant_required
 def distribute(run_id):
@@ -596,6 +606,7 @@ def distribute(run_id):
         nonce=uuid.uuid4().hex,
         sent_count=sent,
         failed_count=failed,
+        batch=_latest_batch(run.id),
     )
 
 
@@ -611,36 +622,13 @@ def _do_client_send(run, only_failed):
     action = "resend-failed" if only_failed else "send"
     key = f"client-distribute:{run.id}:{action}:{channel}:{nonce}" if nonce else None
     summary, replayed = replay_or_run(
-        key, lambda: distribute_run(run, channel=channel, only_failed=only_failed)
+        key, lambda: enqueue_distribution(run, channel, only_failed, current_user)
     )
-    if not replayed:
-        # Notify Chrisnat oversight that a client distributed payslips
-        # (tenant -> platform direction). distribute_run already committed;
-        # this event + its notifications are committed here.
-        record_event(
-            "payslips.distributed",
-            summary=(
-                f"{run.month} {run.year}: {summary['sent']} sent, "
-                f"{summary['failed']} failed (of {summary['total']}) via {channel}."
-            ),
-            subject=run,
-            client_company_id=run.client_company_id,
-            level="info",
-            payload={k: summary.get(k) for k in ("sent", "failed", "skipped", "total")},
-            recipients=platform_admins(),
-        )
-        db.session.commit()
-    note = " (already processed)" if replayed else ""
-    failed_workers = summary.get("failed_workers") or []
-    followup = ""
-    if failed_workers:
-        shown = ", ".join(failed_workers[:10])
-        more = f" +{len(failed_workers) - 10} more" if len(failed_workers) > 10 else ""
-        followup = f" No roster contact for: {shown}{more}."
+    note = " (already queued)" if replayed else ""
     flash(
-        f"Distribution complete{note}: {summary['sent']} sent, {summary['failed']} failed, "
-        f"{summary['skipped']} skipped (of {summary['total']}).{followup}",
-        "success" if not summary["failed"] else "warning",
+        f"Distribution queued{note}: {summary['total']} payslip(s) will be sent shortly. "
+        "Chrisnat oversight will be notified once it completes.",
+        "success",
     )
     return redirect(url_for("client.distribute", run_id=run.id))
 

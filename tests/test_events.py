@@ -15,6 +15,7 @@ os.environ["SEED_DEMO_DATA"] = "true"
 os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from app import create_app, db  # noqa: E402
+from app.distribution.queue import process_all_queued  # noqa: E402
 from app.events import record_event  # noqa: E402
 from app.models import (  # noqa: E402
     ClientCompany,
@@ -93,6 +94,8 @@ class EventFanoutTestCase(unittest.TestCase):
             f"/company/runs/{msc_run.id}/distribute/send",
             data={"channel": "auto", "nonce": "n1"},
         )
+        # Sending only queues the batch now; a worker runs it and fires the event.
+        process_all_queued()
         event = DomainEvent.query.filter_by(event_type="payslips.distributed").first()
         self.assertIsNotNone(event)
         self.assertEqual(event.client_company_id, msc.client_company_id)

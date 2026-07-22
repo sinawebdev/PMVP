@@ -1,4 +1,5 @@
 import os
+import threading
 import time
 from datetime import timedelta
 
@@ -196,6 +197,22 @@ def create_app():
         os.getenv("PAYSLIP_LINK_MAX_AGE", str(60 * 60 * 24 * 30))
     )
 
+    # --- Distribution queue worker (Phase 3, Slice 1) ---
+    # No separate worker dyno/service exists yet (Render's plan is a single web
+    # process), so the default is an in-process polling thread inside the web
+    # process itself — durable because the queue lives in Postgres, not memory.
+    # A real `flask distribution-worker` process (see the CLI command below) can
+    # take over later just by setting DISTRIBUTION_WORKER_INLINE=false once a
+    # dedicated worker dyno exists; claiming a batch is row-locked either way, so
+    # both can safely run at once during a migration between the two.
+    app.config["DISTRIBUTION_WORKER_POLL_INTERVAL"] = int(
+        os.getenv("DISTRIBUTION_WORKER_POLL_INTERVAL", "3")
+    )
+    app.config["DISTRIBUTION_WORKER_INLINE"] = (
+        os.getenv("DISTRIBUTION_WORKER_INLINE", "true" if is_production else "false").lower()
+        == "true"
+    )
+
     os.makedirs(app.instance_path, exist_ok=True)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(app.config["EXPORT_FOLDER"], exist_ok=True)
@@ -343,10 +360,46 @@ def create_app():
         initialize_database(app)
         print("Database initialized.")
 
+    @app.cli.command("distribution-worker")
+    def distribution_worker_command():
+        """Run the payslip distribution queue worker in the foreground (Ctrl+C to stop).
+
+        For a deployment with a dedicated worker dyno/service — run this instead of
+        (or alongside) the in-process thread, and set DISTRIBUTION_WORKER_INLINE=false
+        on the web dyno so only this process sends.
+        """
+        from app.distribution.queue import run_worker_loop
+
+        print("Distribution worker started — polling for queued batches.")
+        try:
+            run_worker_loop(poll_interval=app.config["DISTRIBUTION_WORKER_POLL_INTERVAL"])
+        except KeyboardInterrupt:
+            print("Distribution worker stopped.")
+
     if os.getenv("AUTO_INIT_DB", "true").lower() == "true":
         initialize_database(app)
 
+    if app.config["DISTRIBUTION_WORKER_INLINE"] and (
+        not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true"
+    ):
+        _start_inline_distribution_worker(app)
+
     return app
+
+
+def _start_inline_distribution_worker(app):
+    """Poll the distribution queue on a background thread inside the web process.
+
+    Guarded by the caller against Werkzeug's debug-reloader parent process, so this
+    starts exactly once per running app instance.
+    """
+    from app.distribution.queue import run_worker_loop
+
+    def _target():
+        with app.app_context():
+            run_worker_loop(poll_interval=app.config["DISTRIBUTION_WORKER_POLL_INTERVAL"])
+
+    threading.Thread(target=_target, name="distribution-worker", daemon=True).start()
 
 
 def initialize_database(app):

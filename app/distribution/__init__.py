@@ -18,11 +18,14 @@ from flask import (
     url_for,
 )
 
+from flask_login import current_user
+
 from app import db
 from app.auth import role_required
 from app.models import (
     CHANNEL_AUTO,
     DELIVERY_CHANNELS,
+    DistributionBatch,
     Employee,
     PayrollItem,
     PayrollRun,
@@ -32,7 +35,8 @@ from app.payroll_status import SENDABLE_STATUSES
 from app.pdf_service import generate_payslip_pdf
 
 from .idempotency import replay_or_run
-from .service import distribute_run, resolve_channel
+from .queue import enqueue_distribution
+from .service import resolve_channel
 from .tokens import verify_payslip_token
 
 distribution_bp = Blueprint("distribution", __name__, url_prefix="/distribution")
@@ -45,6 +49,14 @@ def _latest_delivery(item_id):
     return (
         PayslipDelivery.query.filter_by(payroll_item_id=item_id)
         .order_by(PayslipDelivery.created_at.desc())
+        .first()
+    )
+
+
+def _latest_batch(run_id):
+    return (
+        DistributionBatch.query.filter_by(payroll_run_id=run_id)
+        .order_by(DistributionBatch.created_at.desc())
         .first()
     )
 
@@ -73,6 +85,7 @@ def run_status(run_id):
         nonce=uuid.uuid4().hex,
         sent_count=sent,
         failed_count=failed,
+        batch=_latest_batch(run.id),
     )
 
 
@@ -92,19 +105,12 @@ def _do_send(run_id, only_failed):
     key = f"distribute:{run.id}:{action}:{channel}:{nonce}" if nonce else None
 
     summary, replayed = replay_or_run(
-        key, lambda: distribute_run(run, channel=channel, only_failed=only_failed)
+        key, lambda: enqueue_distribution(run, channel, only_failed, current_user)
     )
-    note = " (already processed)" if replayed else ""
-    failed_workers = summary.get("failed_workers") or []
-    followup = ""
-    if failed_workers:
-        shown = ", ".join(failed_workers[:10])
-        more = f" +{len(failed_workers) - 10} more" if len(failed_workers) > 10 else ""
-        followup = f" Needs manual follow-up (no roster contact): {shown}{more}."
+    note = " (already queued)" if replayed else ""
     flash(
-        f"Distribution complete{note}: {summary['sent']} sent, {summary['failed']} failed, "
-        f"{summary['skipped']} skipped (of {summary['total']}).{followup}",
-        "success" if not summary["failed"] else "warning",
+        f"Distribution queued{note}: {summary['total']} payslip(s) will be sent shortly.",
+        "success",
     )
     return redirect(url_for("distribution.run_status", run_id=run.id))
 

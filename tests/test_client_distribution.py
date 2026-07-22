@@ -15,7 +15,8 @@ os.environ["SEED_DEMO_DATA"] = "true"
 os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from app import create_app, db  # noqa: E402
-from app.models import PayrollRun, PayslipDelivery, User  # noqa: E402
+from app.distribution.queue import process_all_queued  # noqa: E402
+from app.models import DistributionBatch, PayrollRun, PayslipDelivery, User  # noqa: E402
 
 
 class ClientDistributionTestCase(unittest.TestCase):
@@ -68,7 +69,7 @@ class ClientDistributionTestCase(unittest.TestCase):
         self.assertEqual(resp.mimetype, "application/zip")
         self.assertTrue(resp.get_data().startswith(b"PK"))  # a real zip
 
-    def test_admin_send_records_one_delivery_per_item_and_is_idempotent(self):
+    def test_admin_send_queues_a_batch_and_is_idempotent(self):
         self._login("admin@msc.demo")
         nonce = "fixed-nonce-1"
         first = self.client.post(
@@ -76,14 +77,23 @@ class ClientDistributionTestCase(unittest.TestCase):
             data={"channel": "auto", "nonce": nonce},
         )
         self.assertEqual(first.status_code, 302)
-        n_items = len(self.msc_run.items)
-        self.assertGreater(n_items, 0)
-        self.assertEqual(len(self._deliveries_for_run(self.msc_run)), n_items)
-        # Same nonce replays — no duplicate deliveries.
+        # Sending queues a batch — no deliveries yet, request wasn't blocked on a send.
+        self.assertEqual(len(self._deliveries_for_run(self.msc_run)), 0)
+        batches = DistributionBatch.query.filter_by(payroll_run_id=self.msc_run.id).all()
+        self.assertEqual(len(batches), 1)
+        self.assertEqual(batches[0].status, "queued")
+        # Same nonce replays — no duplicate batch.
         self.client.post(
             f"/company/runs/{self.msc_run.id}/distribute/send",
             data={"channel": "auto", "nonce": nonce},
         )
+        self.assertEqual(
+            DistributionBatch.query.filter_by(payroll_run_id=self.msc_run.id).count(), 1
+        )
+        # A worker claiming and running the queue delivers it, same end state as before.
+        process_all_queued()
+        n_items = len(self.msc_run.items)
+        self.assertGreater(n_items, 0)
         self.assertEqual(len(self._deliveries_for_run(self.msc_run)), n_items)
 
     def test_preparer_can_view_but_not_send(self):
@@ -92,14 +102,16 @@ class ClientDistributionTestCase(unittest.TestCase):
         self.assertEqual(
             self.client.get(f"/company/runs/{self.msc_run.id}/distribute").status_code, 200
         )
-        # Sending is bounced to the company dashboard; nothing is distributed.
+        # Sending is bounced to the company dashboard; nothing is queued.
         resp = self.client.post(
             f"/company/runs/{self.msc_run.id}/distribute/send",
             data={"channel": "auto", "nonce": "x"},
         )
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.headers["Location"].endswith("/company"))
-        self.assertEqual(len(self._deliveries_for_run(self.msc_run)), 0)
+        self.assertEqual(
+            DistributionBatch.query.filter_by(payroll_run_id=self.msc_run.id).count(), 0
+        )
 
     def test_cross_tenant_distribution_is_404(self):
         self._login("admin@stellar.demo")  # a different tenant (also client_admin)
@@ -117,7 +129,9 @@ class ClientDistributionTestCase(unittest.TestCase):
             ).status_code,
             404,
         )
-        self.assertEqual(len(self._deliveries_for_run(self.msc_run)), 0)
+        self.assertEqual(
+            DistributionBatch.query.filter_by(payroll_run_id=self.msc_run.id).count(), 0
+        )
 
 
 if __name__ == "__main__":

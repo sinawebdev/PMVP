@@ -45,6 +45,34 @@
     {% endif %}
 </section>
 
+{% if batch %}
+<section class="panel mb-3">
+    <div class="panel-header">
+        <h2><i class="bi bi-hourglass-split"></i>Queue Status</h2>
+        {% if batch.status == "queued" %}<span class="badge text-bg-secondary">Queued</span>
+        {% elif batch.status == "running" %}<span class="badge text-bg-info">Sending…</span>
+        {% elif batch.status == "completed" %}<span class="badge text-bg-success">Completed</span>
+        {% elif batch.status == "failed" %}<span class="badge text-bg-danger">Failed</span>{% endif %}
+    </div>
+    <div class="row g-3">
+        <div class="col-md-3"><strong>Queued</strong><p class="mb-0">{{ batch.created_at.strftime("%Y-%m-%d %H:%M") if batch.created_at }}</p></div>
+        <div class="col-md-3"><strong>Channel</strong><p class="mb-0">{{ batch.channel }}{% if batch.only_failed %} (resend-failed){% endif %}</p></div>
+        {% if batch.status in ("completed", "failed") %}
+        <div class="col-md-3"><strong>Sent / Failed</strong><p class="mb-0">{{ batch.sent_count or 0 }} / {{ batch.failed_count or 0 }} (of {{ batch.total or 0 }})</p></div>
+        <div class="col-md-3"><strong>Finished</strong><p class="mb-0">{{ batch.finished_at.strftime("%Y-%m-%d %H:%M") if batch.finished_at }}</p></div>
+        {% else %}
+        <div class="col-md-3"><strong>Total queued</strong><p class="mb-0">{{ batch.total or 0 }} payslip(s)</p></div>
+        {% endif %}
+    </div>
+    {% if batch.status == "failed" and batch.error %}
+    <div class="mini-note mt-3 text-danger"><i class="bi bi-exclamation-triangle"></i> {{ batch.error }}</div>
+    {% endif %}
+    {% if batch.status in ("queued", "running") %}
+    <div class="mini-note mt-3"><i class="bi bi-info-circle"></i> A worker is processing this batch — refresh to see progress. The table below updates as each payslip is sent.</div>
+    {% endif %}
+</section>
+{% endif %}
+
 <section class="panel">
     <div class="panel-header">
         <h2><i class="bi bi-send-check"></i>Delivery Status</h2>

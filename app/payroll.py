@@ -1636,24 +1636,21 @@ def bulk_reject():
 @payroll_bp.route("/runs/bulk/distribute", methods=["POST"])
 @role_required(*PAYROLL_ROLES)
 def bulk_distribute():
-    from app.distribution.service import distribute_run
+    from app.distribution.queue import enqueue_distribution
     from app.models import CHANNEL_AUTO
 
     done, skipped = _bulk_apply(
         request.form.getlist("run_ids"),
         can_distribute_run,
-        lambda run: distribute_run(run, channel=CHANNEL_AUTO, only_failed=False),
+        lambda run: enqueue_distribution(run, CHANNEL_AUTO, False, current_user),
         "distribute",
     )
-    db.session.commit()
     if done:
-        sent = sum(result["sent"] for _run, result in done)
-        failed = sum(result["failed"] for _run, result in done)
-        already_sent = sum(result["skipped"] for _run, result in done)
+        total = sum(result["total"] for _run, result in done)
         flash(
-            f"Bulk distribute: {len(done)} run(s) processed — {sent} payslip(s) sent, "
-            f"{failed} failed, {already_sent} already sent/skipped.",
-            "success" if not failed else "warning",
+            f"Bulk distribute: {len(done)} run(s) queued — {total} payslip(s) will be sent "
+            "shortly.",
+            "success",
         )
     elif not skipped:
         flash("No runs selected for bulk distribute.", "warning")

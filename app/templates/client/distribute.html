@@ -15,6 +15,21 @@
     <div class="card stat-card"><span class="n">{{ failed_count }}</span><span class="l">Failed</span></div>
   </div>
 
+  {% if batch %}
+  <div class="card form stack">
+    <h2>Queue status</h2>
+    {% if batch.status == "queued" %}
+      <p class="sub"><span class="badge">Queued</span> {{ batch.total or 0 }} payslip(s) queued at {{ batch.created_at.strftime("%Y-%m-%d %H:%M") if batch.created_at }} — a worker will send them shortly.</p>
+    {% elif batch.status == "running" %}
+      <p class="sub"><span class="badge">Sending…</span> {{ batch.total or 0 }} payslip(s) in progress. Refresh to see updates.</p>
+    {% elif batch.status == "completed" %}
+      <p class="sub"><span class="badge ok">Completed</span> {{ batch.sent_count or 0 }} sent, {{ batch.failed_count or 0 }} failed (of {{ batch.total or 0 }}) — finished {{ batch.finished_at.strftime("%Y-%m-%d %H:%M") if batch.finished_at }}.</p>
+    {% elif batch.status == "failed" %}
+      <p class="sub"><span class="badge warn">Failed</span> {{ batch.error }}</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <div class="card form stack">
     <h2>Download</h2>
     <p class="sub">The simplest way to hand out payslips: download the whole run as a ZIP of PDFs, or grab a single worker's payslip from the run page.</p>

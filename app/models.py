@@ -481,6 +481,49 @@ class PayslipDelivery(db.Model):
     payroll_run = db.relationship("PayrollRun")
 
 
+# ---------------------------------------------------------------------------
+# Distribution queue (Phase 3, Slice 1).
+# A DistributionBatch is one queued "send" or "resend-failed" action for a run,
+# created immediately (status=queued) so the request never waits on a network
+# send. A worker (in-process thread or a separate `flask distribution-worker`
+# process) claims a queued batch and runs the existing distribute_run() against
+# it. Claiming locks the row (SELECT ... FOR UPDATE SKIP LOCKED on Postgres) so
+# multiple worker processes can safely share the queue without double-sending.
+# ---------------------------------------------------------------------------
+
+BATCH_QUEUED = "queued"
+BATCH_RUNNING = "running"
+BATCH_COMPLETED = "completed"
+BATCH_FAILED = "failed"
+
+
+class DistributionBatch(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    payroll_run_id = db.Column(
+        db.Integer, db.ForeignKey("payroll_run.id"), nullable=False, index=True
+    )
+    client_company_id = db.Column(
+        db.Integer, db.ForeignKey("client_company.id"), nullable=False, index=True
+    )
+    channel = db.Column(db.String(16), nullable=False, default=CHANNEL_AUTO)
+    only_failed = db.Column(db.Boolean, nullable=False, default=False)
+    status = db.Column(db.String(16), nullable=False, default=BATCH_QUEUED, index=True)
+    initiated_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    initiated_by_role = db.Column(db.String(40))
+    total = db.Column(db.Integer)
+    sent_count = db.Column(db.Integer)
+    failed_count = db.Column(db.Integer)
+    skipped_count = db.Column(db.Integer)
+    error = db.Column(db.String(512))
+    created_at = db.Column(db.DateTime, default=utc_now, index=True)
+    started_at = db.Column(db.DateTime)
+    finished_at = db.Column(db.DateTime)
+
+    payroll_run = db.relationship("PayrollRun")
+    client_company = db.relationship("ClientCompany")
+    initiated_by = db.relationship("User")
+
+
 class IdempotencyKey(db.Model):
     """Stores the result of a mutating action keyed by a client-supplied nonce, so a
     retried/double-clicked "Send" replays the original response instead of re-sending."""
