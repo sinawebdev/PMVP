@@ -195,8 +195,12 @@ def _attempt_send(delivery, item, run, client, ch, sender, max_attempts, backoff
     return False
 
 
-def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False):
-    """Render + send every payslip in `run`. Returns a summary dict. Commits once."""
+def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False, batch_id=None):
+    """Render + send every payslip in `run`. Returns a summary dict. Commits once.
+
+    `batch_id` (the DistributionBatch driving this send) is stamped onto every
+    delivery touched, so history can attribute a delivery to the initiating
+    operator and filter by batch."""
     client = run.client_company
     auto = channel == CHANNEL_AUTO
     max_attempts, backoff_base = _retry_config()
@@ -229,6 +233,8 @@ def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False):
             if existing is None:
                 db.session.add(delivery)
 
+        if batch_id is not None:
+            delivery.distribution_batch_id = batch_id
         if _attempt_send(delivery, item, run, client, ch, sender_for(ch),
                          max_attempts, backoff_base):
             summary["sent"] += 1

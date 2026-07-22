@@ -231,7 +231,9 @@ def process_batch(batch):
     """Run `batch` (already claimed/running) to completion via distribute_run()."""
     run = db.session.get(PayrollRun, batch.payroll_run_id)
     try:
-        summary = distribute_run(run, channel=batch.channel, only_failed=batch.only_failed)
+        summary = distribute_run(
+            run, channel=batch.channel, only_failed=batch.only_failed, batch_id=batch.id
+        )
     except Exception as exc:  # noqa: BLE001 - one bad batch must not kill the worker loop
         db.session.rollback()
         batch.status = BATCH_FAILED

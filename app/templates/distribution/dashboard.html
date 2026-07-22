@@ -6,6 +6,9 @@
 {% block breadcrumbs %}
 {{ bc.trail([("Dashboard", url_for('main.dashboard')), ("Distribution Monitor", None)]) }}
 {% endblock %}
+{% block page_actions %}
+<a class="btn btn-outline-light btn-sm" href="{{ url_for('distribution.history') }}"><i class="bi bi-clock-history"></i>History</a>
+{% endblock %}
 {% block content %}
 {% include "distribution/_dashboard_fragment.html" %}
 {% endblock %}

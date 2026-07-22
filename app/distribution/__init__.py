@@ -69,6 +69,52 @@ def dashboard_fragment():
     )
 
 
+# ---------------------------------------------------------------------------
+# Searchable delivery history (Phase 3, Slice 6) + per-batch detail pages.
+# ---------------------------------------------------------------------------
+@distribution_bp.route("/history")
+@role_required(*PAYROLL_ROLES)
+def history():
+    from .history import filter_options, search_deliveries
+
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    pagination = search_deliveries(request.args, page=page)
+    base_args = {k: v for k, v in request.args.items() if k != "page"}
+    return render_template(
+        "distribution/history.html",
+        pagination=pagination,
+        deliveries=pagination.items,
+        options=filter_options(),
+        filters=request.args,
+        base_args=base_args,
+    )
+
+
+@distribution_bp.route("/batch/<int:batch_id>")
+@role_required(*PAYROLL_ROLES)
+def batch_detail(batch_id):
+    from app.events import run_activity
+    from app.models import DistributionBatch
+
+    batch = db.get_or_404(DistributionBatch, batch_id)
+    run = db.session.get(PayrollRun, batch.payroll_run_id)
+    deliveries = (
+        PayslipDelivery.query.filter_by(distribution_batch_id=batch.id)
+        .order_by(PayslipDelivery.updated_at.desc())
+        .all()
+    )
+    return render_template(
+        "distribution/batch_detail.html",
+        batch=batch,
+        run=run,
+        deliveries=deliveries,
+        activity=run_activity(run) if run else [],
+    )
+
+
 def _latest_delivery(item_id):
     return (
         PayslipDelivery.query.filter_by(payroll_item_id=item_id)

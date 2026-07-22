@@ -470,6 +470,12 @@ class PayslipDelivery(db.Model):
     payroll_run_id = db.Column(
         db.Integer, db.ForeignKey("payroll_run.id"), nullable=False, index=True
     )
+    # The batch that last (re)sent this delivery, so history/investigation can
+    # attribute a delivery to the operator who initiated it and filter by batch
+    # (Phase 3 Slice 6). NULL for deliveries created before this column existed.
+    distribution_batch_id = db.Column(
+        db.Integer, db.ForeignKey("distribution_batch.id"), index=True
+    )
     channel = db.Column(db.String(16), nullable=False, default=CHANNEL_SMS)
     recipient = db.Column(db.String(120))
     status = db.Column(db.String(16), nullable=False, default=DELIVERY_PENDING)
@@ -486,6 +492,7 @@ class PayslipDelivery(db.Model):
 
     payroll_item = db.relationship("PayrollItem")
     payroll_run = db.relationship("PayrollRun")
+    distribution_batch = db.relationship("DistributionBatch")
 
 
 # ---------------------------------------------------------------------------
