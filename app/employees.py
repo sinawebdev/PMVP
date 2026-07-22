@@ -41,7 +41,7 @@ from app.raw_import import normalise_emp_id
 employees_bp = Blueprint("employees", __name__, url_prefix="/employees")
 
 # Chrisnat reps only — md is always allowed by role_required; client_user is blocked.
-REP_ROLES = ("admin", "payroll_officer", "accounts_officer")
+from app.permissions import REP_ROLES  # canonical operator capability group
 
 ACTIVE = "Active"
 INACTIVE = "Inactive"

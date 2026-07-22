@@ -37,7 +37,7 @@ from .tokens import verify_payslip_token
 
 distribution_bp = Blueprint("distribution", __name__, url_prefix="/distribution")
 
-PAYROLL_ROLES = ("admin", "md", "payroll_officer", "accounts_officer")
+from app.permissions import PAYROLL_ROLES  # canonical operator capability group
 VALID_SEND_CHANNELS = set(DELIVERY_CHANNELS) | {CHANNEL_AUTO}
 
 

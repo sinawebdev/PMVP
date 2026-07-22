@@ -31,20 +31,20 @@
         </form>
         <nav class="nav flex-column gap-1">
             {% set role = current_user.role %}
-            {% set can_payroll = role in ["admin", "md", "payroll_officer", "accounts_officer"] %}
+            {% set can_payroll = can_operate_payroll(role) %}
             {% set path = request.path %}
             <a class="nav-link" {% if path == '/' or path.startswith('/dashboard') %}aria-current="page"{% endif %} href="{{ url_for('main.dashboard') }}"><i class="bi bi-speedometer2"></i>Dashboard</a>
             <a class="nav-link" {% if path.startswith('/clients') %}aria-current="page"{% endif %} href="{{ url_for('main.clients') }}"><i class="bi bi-buildings"></i>Client Companies</a>
             {% if can_payroll %}
             <a class="nav-link" {% if path.startswith('/payroll') %}aria-current="page"{% endif %} href="{{ url_for('payroll.runs') }}"><i class="bi bi-cash-stack"></i>Payroll Runs</a>
             {% endif %}
-            {% if role in ["admin", "md", "payroll_officer", "accounts_officer"] %}
+            {% if can_operate_payroll(role) %}
             <a class="nav-link" {% if path.startswith('/payslip') %}aria-current="page"{% endif %} href="{{ url_for('payslip.index') }}"><i class="bi bi-file-earmark-person"></i>Payslips</a>
             {% endif %}
-            {% if role in ["admin", "md"] %}
+            {% if can_view_audit(role) %}
             <a class="nav-link" {% if path.startswith('/audit') %}aria-current="page"{% endif %} href="{{ url_for('audit.audit_trail') }}"><i class="bi bi-activity"></i>Expenses &amp; Audit</a>
             {% endif %}
-            {% if role == "admin" %}
+            {% if can_manage_statutory(role) %}
             <a class="nav-link" {% if path.startswith('/statutory-rates') %}aria-current="page"{% endif %} href="{{ url_for('statutory.index') }}"><i class="bi bi-bank"></i>Statutory Rates</a>
             {% endif %}
             <a class="nav-link" {% if path.startswith('/oversight/risk') %}aria-current="page"{% endif %} href="{{ url_for('oversight.risk_queue') }}"><i class="bi bi-shield-exclamation"></i>Risk Queue</a>

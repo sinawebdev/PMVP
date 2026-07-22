@@ -207,6 +207,22 @@ def create_app():
     app.jinja_env.filters["cedis"] = format_ghana_cedis
     app.jinja_env.filters["role_label"] = format_role_label
 
+    # Operator capability predicates as template globals — one source of truth
+    # (app/permissions.py) for nav/action gating, replacing inline role lists.
+    from app.permissions import (
+        can_manage_statutory,
+        can_maintain_roster,
+        can_operate_payroll,
+        can_view_audit,
+    )
+
+    app.jinja_env.globals.update(
+        can_operate_payroll=can_operate_payroll,
+        can_maintain_roster=can_maintain_roster,
+        can_view_audit=can_view_audit,
+        can_manage_statutory=can_manage_statutory,
+    )
+
     from app.audit import audit_bp
     from app.auth import auth_bp
     from app.client import client_bp
