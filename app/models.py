@@ -505,6 +505,9 @@ class PayslipDelivery(db.Model):
 # multiple worker processes can safely share the queue without double-sending.
 # ---------------------------------------------------------------------------
 
+# A batch waiting for its scheduled time; the worker flips it to queued once due
+# (Phase 3 Slice 7). It sits outside the claim path until then.
+BATCH_SCHEDULED = "scheduled"
 BATCH_QUEUED = "queued"
 BATCH_RUNNING = "running"
 BATCH_COMPLETED = "completed"
@@ -513,6 +516,9 @@ BATCH_CANCELLED = "cancelled"
 
 # A batch that has reached a terminal state (no worker will touch it again).
 BATCH_TERMINAL_STATUSES = frozenset({BATCH_COMPLETED, BATCH_FAILED, BATCH_CANCELLED})
+# A batch with pending work that a new enqueue must not duplicate, and that an
+# operator may still cancel.
+BATCH_PENDING_STATUSES = frozenset({BATCH_SCHEDULED, BATCH_QUEUED, BATCH_RUNNING})
 
 
 class DistributionBatch(db.Model):
@@ -533,6 +539,10 @@ class DistributionBatch(db.Model):
     failed_count = db.Column(db.Integer)
     skipped_count = db.Column(db.Integer)
     error = db.Column(db.String(512))
+    # When set, the batch runs at/after this time (UTC); it stays `scheduled`
+    # until the worker activates it (Phase 3 Slice 7). NULL == run as soon as
+    # possible.
+    scheduled_for = db.Column(db.DateTime, index=True)
     created_at = db.Column(db.DateTime, default=utc_now, index=True)
     started_at = db.Column(db.DateTime)
     finished_at = db.Column(db.DateTime)

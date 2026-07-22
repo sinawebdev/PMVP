@@ -345,19 +345,19 @@ class DistributionRouteEnforcementTestCase(unittest.TestCase):
         run_id = self._make_run(PROCESSED)
         resp = self.http.get(f"/distribution/run/{run_id}")
         self.assertEqual(resp.status_code, 200)
-        self.assertIn("Send payslips", resp.get_data(as_text=True))
+        self.assertIn("Send now", resp.get_data(as_text=True))
 
     def test_approved_run_page_is_sendable(self):
         run_id = self._make_run(APPROVED)
         resp = self.http.get(f"/distribution/run/{run_id}")
         self.assertEqual(resp.status_code, 200)
-        self.assertIn("Send payslips", resp.get_data(as_text=True))
+        self.assertIn("Send now", resp.get_data(as_text=True))
 
     def test_draft_run_page_is_not_sendable(self):
         run_id = self._make_run(DRAFT)
         resp = self.http.get(f"/distribution/run/{run_id}")
         self.assertEqual(resp.status_code, 200)
-        self.assertNotIn("Send payslips", resp.get_data(as_text=True))
+        self.assertNotIn("Send now", resp.get_data(as_text=True))
 
     def test_send_on_draft_run_is_blocked(self):
         # The write path enforces the status rule too: a non-sendable run's send
@@ -397,7 +397,7 @@ class DistributionRouteEnforcementTestCase(unittest.TestCase):
         resp = self.http.get(f"/distribution/run/{run_id}")
         self.assertEqual(resp.status_code, 200)
         body = resp.get_data(as_text=True)
-        self.assertNotIn("Send payslips", body)
+        self.assertNotIn("Send now", body)
         self.assertIn("Distribution in progress", body)
 
         # A second send while one is in flight doesn't queue a duplicate batch.

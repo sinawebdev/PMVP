@@ -5,7 +5,7 @@
    markup no longer carries hx-trigger, i.e. the batch reached a terminal
    state). #}
 <div id="distribution-status"
-     {% if in_flight %}
+     {% if live %}
      hx-get="{{ url_for('distribution.run_status_fragment', run_id=run.id) }}"
      hx-trigger="every 3s"
      hx-swap="outerHTML"
@@ -31,13 +31,19 @@
 <section class="panel mb-3">
     <div class="panel-header">
         <h2><i class="bi bi-hourglass-split"></i>Queue Status</h2>
-        {% if batch.status == "queued" %}<span class="badge text-bg-secondary">Queued</span>
+        {% if batch.status == "scheduled" %}<span class="badge text-bg-primary">Scheduled</span>
+        {% elif batch.status == "queued" %}<span class="badge text-bg-secondary">Queued</span>
         {% elif batch.status == "running" %}<span class="badge text-bg-info">Sending…</span>
         {% elif batch.status == "completed" %}<span class="badge text-bg-success">Completed</span>
-        {% elif batch.status == "failed" %}<span class="badge text-bg-danger">Failed</span>{% endif %}
+        {% elif batch.status == "failed" %}<span class="badge text-bg-danger">Failed</span>
+        {% elif batch.status == "cancelled" %}<span class="badge text-bg-dark">Cancelled</span>{% endif %}
     </div>
     <div class="row g-3">
+        {% if batch.status == "scheduled" %}
+        <div class="col-md-3"><strong>Scheduled for</strong><p class="mb-0">{{ batch.scheduled_for.strftime("%Y-%m-%d %H:%M") if batch.scheduled_for }} GMT</p></div>
+        {% else %}
         <div class="col-md-3"><strong>Queued</strong><p class="mb-0">{{ batch.created_at.strftime("%Y-%m-%d %H:%M") if batch.created_at }}</p></div>
+        {% endif %}
         <div class="col-md-3"><strong>Channel</strong><p class="mb-0">{{ batch.channel }}{% if batch.only_failed %} (resend-failed){% endif %}</p></div>
         {% if batch.status in ("completed", "failed") %}
         <div class="col-md-3"><strong>Sent / Failed</strong><p class="mb-0">{{ batch.sent_count or 0 }} / {{ batch.failed_count or 0 }} (of {{ batch.total or 0 }})</p></div>
@@ -49,7 +55,9 @@
     {% if batch.status == "failed" and batch.error %}
     <div class="mini-note mt-3 text-danger"><i class="bi bi-exclamation-triangle"></i> {{ batch.error }}</div>
     {% endif %}
-    {% if batch.status in ("queued", "running") %}
+    {% if batch.status == "scheduled" %}
+    <div class="mini-note mt-3"><i class="bi bi-calendar-event"></i> This distribution will run automatically at its scheduled time. You can reschedule or cancel it until then.</div>
+    {% elif batch.status in ("queued", "running") %}
     <div class="mini-note mt-3"><i class="bi bi-info-circle"></i> A worker is processing this batch — this page updates automatically.</div>
     {% elif in_flight %}
     <div class="mini-note mt-3"><i class="bi bi-arrow-repeat"></i> Some deliveries failed and are scheduled for automatic retry — this page updates automatically as they are re-attempted.</div>

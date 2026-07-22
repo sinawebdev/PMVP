@@ -23,8 +23,10 @@ from app.models import (
     BATCH_CANCELLED,
     BATCH_COMPLETED,
     BATCH_FAILED,
+    BATCH_PENDING_STATUSES,
     BATCH_QUEUED,
     BATCH_RUNNING,
+    BATCH_SCHEDULED,
     DELIVERY_CANCELLED,
     DELIVERY_FAILED,
     DistributionBatch,
@@ -50,19 +52,21 @@ def worker_last_poll():
 
 
 def _in_flight_batch(run_id):
+    """The run's current unfinished batch (scheduled, queued, or running), if any."""
     return DistributionBatch.query.filter(
         DistributionBatch.payroll_run_id == run_id,
-        DistributionBatch.status.in_((BATCH_QUEUED, BATCH_RUNNING)),
+        DistributionBatch.status.in_(tuple(BATCH_PENDING_STATUSES)),
     ).first()
 
 
-def enqueue_distribution(run, channel, only_failed, actor):
-    """Queue a distribution action for `run`. Returns a JSON-serialisable summary.
+def enqueue_distribution(run, channel, only_failed, actor, scheduled_for=None):
+    """Queue (or schedule) a distribution action for `run`. Returns a
+    JSON-serialisable summary.
 
     A run only ever has one unfinished batch at a time — if one is already
-    queued/running, that batch is returned as-is rather than piling up a second
-    one (the worker processes one batch per run at a time anyway; queuing a
-    second just confuses "latest batch" in the UI for no benefit)."""
+    scheduled/queued/running, that batch is returned as-is rather than piling up
+    a second one. A ``scheduled_for`` in the future creates a `scheduled` batch
+    the worker activates when due; otherwise the batch is queued immediately."""
     existing = _in_flight_batch(run.id)
     if existing is not None:
         return {
@@ -71,20 +75,30 @@ def enqueue_distribution(run, channel, only_failed, actor):
             "total": existing.total,
             "channel": existing.channel,
             "only_failed": existing.only_failed,
+            "scheduled_for": existing.scheduled_for,
             "already_in_progress": True,
         }
 
+    now = datetime.now(timezone.utc)
+    is_scheduled = scheduled_for is not None and _as_aware(scheduled_for) > now
     batch = DistributionBatch(
         payroll_run_id=run.id,
         client_company_id=run.client_company_id,
         channel=channel,
         only_failed=only_failed,
-        status=BATCH_QUEUED,
+        status=BATCH_SCHEDULED if is_scheduled else BATCH_QUEUED,
+        scheduled_for=scheduled_for if is_scheduled else None,
         initiated_by_user_id=getattr(actor, "id", None),
         initiated_by_role=getattr(actor, "role", None),
         total=len(run.items),
     )
     db.session.add(batch)
+    if is_scheduled:
+        record_audit(
+            "Distribution scheduled",
+            run,
+            f"channel={channel} scheduled_for={_as_aware(scheduled_for).isoformat()}.",
+        )
     db.session.commit()
     return {
         "batch_id": batch.id,
@@ -92,8 +106,58 @@ def enqueue_distribution(run, channel, only_failed, actor):
         "total": batch.total,
         "channel": channel,
         "only_failed": only_failed,
+        "scheduled_for": batch.scheduled_for,
         "already_in_progress": False,
     }
+
+
+def reschedule_distribution(run, new_time, actor):
+    """Change a scheduled batch's time (only while still `scheduled`). Returns a
+    summary; ``ok`` is False when there is nothing rescheduleable."""
+    batch = DistributionBatch.query.filter_by(
+        payroll_run_id=run.id, status=BATCH_SCHEDULED
+    ).first()
+    if batch is None:
+        return {"ok": False, "reason": "no_scheduled_batch"}
+    now = datetime.now(timezone.utc)
+    if new_time is None or _as_aware(new_time) <= now:
+        return {"ok": False, "reason": "not_future"}
+    batch.scheduled_for = new_time
+    record_audit(
+        "Distribution rescheduled",
+        run,
+        f"scheduled_for={_as_aware(new_time).isoformat()}.",
+    )
+    db.session.commit()
+    return {"ok": True, "batch_id": batch.id, "scheduled_for": batch.scheduled_for}
+
+
+def activate_due_scheduled():
+    """Flip every scheduled batch whose time has arrived to `queued` so the normal
+    claim path runs it. Returns the activated batches. Guards against duplicate
+    execution: the scheduled->queued transition happens once (a subsequent
+    activation no longer sees it as scheduled)."""
+    candidates = DistributionBatch.query.filter(
+        DistributionBatch.status == BATCH_SCHEDULED,
+        DistributionBatch.scheduled_for.isnot(None),
+    ).all()
+    from .notify import notify_scheduled_started
+
+    now = datetime.now(timezone.utc)
+    due = [b for b in candidates if _as_aware(b.scheduled_for) <= now]
+    for batch in due:
+        batch.status = BATCH_QUEUED
+        run = db.session.get(PayrollRun, batch.payroll_run_id)
+        record_audit(
+            "Scheduled distribution activated",
+            run,
+            f"channel={batch.channel} was scheduled for "
+            f"{_as_aware(batch.scheduled_for).isoformat()}.",
+        )
+        notify_scheduled_started(batch, run)
+    if due:
+        db.session.commit()
+    return due
 
 
 def cancel_distribution(run, actor):
@@ -115,13 +179,15 @@ def cancel_distribution(run, actor):
         return {"cancelled_batch": False, "cancelled_retries": 0, "blocked": True}
 
     now = datetime.now(timezone.utc)
-    queued = DistributionBatch.query.filter_by(
-        payroll_run_id=run.id, status=BATCH_QUEUED
+    # A scheduled OR queued batch is cancellable before it starts running.
+    pending = DistributionBatch.query.filter(
+        DistributionBatch.payroll_run_id == run.id,
+        DistributionBatch.status.in_((BATCH_SCHEDULED, BATCH_QUEUED)),
     ).first()
-    cancelled_batch = queued is not None
+    cancelled_batch = pending is not None
     if cancelled_batch:
-        queued.status = BATCH_CANCELLED
-        queued.finished_at = now
+        pending.status = BATCH_CANCELLED
+        pending.finished_at = now
 
     pending_retries = PayslipDelivery.query.filter(
         PayslipDelivery.payroll_run_id == run.id,
@@ -229,6 +295,8 @@ def _notify_platform_of_client_distribution(batch, run, summary):
 
 def process_batch(batch):
     """Run `batch` (already claimed/running) to completion via distribute_run()."""
+    from .notify import notify_batch_failed, notify_completion
+
     run = db.session.get(PayrollRun, batch.payroll_run_id)
     try:
         summary = distribute_run(
@@ -239,6 +307,7 @@ def process_batch(batch):
         batch.status = BATCH_FAILED
         batch.error = str(exc)[:500]
         batch.finished_at = datetime.now(timezone.utc)
+        notify_batch_failed(batch, run, batch.error)
         db.session.commit()
         return batch
 
@@ -248,6 +317,7 @@ def process_batch(batch):
     batch.skipped_count = summary["skipped"]
     batch.finished_at = datetime.now(timezone.utc)
     _notify_platform_of_client_distribution(batch, run, summary)
+    notify_completion(batch, run, summary)
     db.session.commit()
     return batch
 
@@ -288,6 +358,8 @@ def process_due_retries():
     if not due:
         return []
 
+    from .notify import notify_retry_exhausted
+
     by_run = {}
     for delivery in due:
         by_run.setdefault(delivery.payroll_run_id, []).append(delivery)
@@ -302,6 +374,19 @@ def process_due_retries():
             run,
             f"retried {len(deliveries)}, recovered {recovered}.",
         )
+        # Deliveries that just spent their last retry are a final failure —
+        # surface them so an operator can intervene manually.
+        exhausted = [
+            d for d in deliveries
+            if d.status == DELIVERY_FAILED and d.next_retry_at is None
+        ]
+        if exhausted:
+            batch = (
+                db.session.get(DistributionBatch, exhausted[0].distribution_batch_id)
+                if exhausted[0].distribution_batch_id
+                else None
+            )
+            notify_retry_exhausted(run, batch, len(exhausted))
     db.session.commit()
     return processed
 
@@ -316,6 +401,7 @@ def run_worker_loop(poll_interval=3, stop_event=None):
     global _last_poll_at
     while stop_event is None or not stop_event.is_set():
         _last_poll_at = datetime.now(timezone.utc)
+        activate_due_scheduled()  # scheduled -> queued when due
         did_work = bool(process_all_queued())
         did_work = bool(process_due_retries()) or did_work
         if not did_work:
@@ -323,3 +409,26 @@ def run_worker_loop(poll_interval=3, stop_event=None):
                 stop_event.wait(poll_interval)
             else:
                 time.sleep(poll_interval)
+
+
+def run_worker(poll_interval=3, stop_event=None):
+    """The worker entrypoint used in production: run_worker_loop wrapped so an
+    unexpected crash alerts platform admins (Phase 3, Slice 8) before it
+    propagates. A clean stop (stop_event / KeyboardInterrupt) is not an error."""
+    from flask import current_app
+
+    try:
+        run_worker_loop(poll_interval=poll_interval, stop_event=stop_event)
+    except KeyboardInterrupt:
+        raise
+    except Exception as exc:  # noqa: BLE001 - notify, log, then re-raise
+        from .notify import notify_worker_stopped
+
+        try:
+            db.session.rollback()
+            notify_worker_stopped(str(exc))
+            db.session.commit()
+        except Exception:  # noqa: BLE001 - notification must never mask the crash
+            db.session.rollback()
+        current_app.logger.exception("Distribution worker stopped unexpectedly.")
+        raise

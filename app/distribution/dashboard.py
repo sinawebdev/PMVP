@@ -21,6 +21,7 @@ from app.models import (
     BATCH_FAILED,
     BATCH_QUEUED,
     BATCH_RUNNING,
+    BATCH_SCHEDULED,
     DELIVERY_FAILED,
     DELIVERY_PENDING,
     DELIVERY_SENT,
@@ -178,6 +179,7 @@ def collect_dashboard_stats(recent_limit=10):
 
     return {
         "batches": {
+            "scheduled": batch_counts.get(BATCH_SCHEDULED, 0),
             "queued": batch_counts.get(BATCH_QUEUED, 0),
             "running": batch_counts.get(BATCH_RUNNING, 0),
             "completed": batch_counts.get(BATCH_COMPLETED, 0),

@@ -23,8 +23,22 @@
                 <option value="email">Email</option>
             </select>
         </div>
-        <button class="btn btn-success" formaction="{{ url_for('distribution.send', run_id=run.id) }}"><i class="bi bi-send-check"></i>Send payslips</button>
+        <div>
+            <label class="form-label mb-1">Schedule (GMT, optional)</label>
+            <input type="datetime-local" class="form-control form-control-sm" name="scheduled_for">
+        </div>
+        <button class="btn btn-success" formaction="{{ url_for('distribution.send', run_id=run.id) }}"><i class="bi bi-send-check"></i>Send now</button>
+        <button class="btn btn-outline-primary" formaction="{{ url_for('distribution.schedule', run_id=run.id) }}"><i class="bi bi-calendar-event"></i>Schedule</button>
         <button class="btn btn-outline-warning" formaction="{{ url_for('distribution.resend_failed', run_id=run.id) }}"><i class="bi bi-arrow-repeat"></i>Resend failed</button>
+    </form>
+    {% elif scheduled %}
+    <span class="badge text-bg-primary"><i class="bi bi-calendar-event"></i> Scheduled for {{ batch.scheduled_for.strftime('%Y-%m-%d %H:%M') }} GMT{% if seconds_until_scheduled and seconds_until_scheduled > 0 %} · in {{ seconds_until_scheduled|duration }}{% endif %}</span>
+    <form method="post" action="{{ url_for('distribution.reschedule', run_id=run.id) }}" class="d-flex gap-2 align-items-end">
+        <div>
+            <label class="form-label mb-1">Reschedule (GMT)</label>
+            <input type="datetime-local" class="form-control form-control-sm" name="scheduled_for" value="{{ batch.scheduled_for.strftime('%Y-%m-%dT%H:%M') }}">
+        </div>
+        <button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-pencil"></i>Update time</button>
     </form>
     {% elif sendable and in_flight %}
     <span class="badge text-bg-info"><i class="bi bi-hourglass-split"></i> Distribution in progress…</span>
@@ -32,7 +46,7 @@
     {% if cancellable %}
     <button class="btn btn-outline-danger btn-sm"
             hx-post="{{ url_for('distribution.cancel', run_id=run.id) }}"
-            hx-confirm="Cancel this distribution? Any queued send and pending retries will be stopped. Already-sent payslips are unaffected."
+            hx-confirm="Cancel this distribution? Any scheduled or queued send and pending retries will be stopped. Already-sent payslips are unaffected."
             data-confirm-danger="1">
         <i class="bi bi-x-circle"></i>Cancel distribution
     </button>

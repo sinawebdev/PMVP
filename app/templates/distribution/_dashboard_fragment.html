@@ -45,6 +45,7 @@
             <div class="panel-header"><h2><i class="bi bi-collection"></i>Batches</h2><span>{{ b.total }} total</span></div>
             <table class="table table-sm align-middle">
                 <tbody>
+                    <tr><td><span class="badge text-bg-primary">Scheduled</span></td><td class="text-end"><strong>{{ b.scheduled }}</strong></td></tr>
                     <tr><td><span class="badge text-bg-secondary">Queued</span></td><td class="text-end"><strong>{{ b.queued }}</strong></td></tr>
                     <tr><td><span class="badge text-bg-info">Running</span></td><td class="text-end"><strong>{{ b.running }}</strong></td></tr>
                     <tr><td><span class="badge text-bg-success">Completed</span></td><td class="text-end"><strong>{{ b.completed }}</strong></td></tr>

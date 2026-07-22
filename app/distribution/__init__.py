@@ -6,6 +6,7 @@ reuses its models, auth, audit, and Jinja/Bootstrap UI.
 """
 import os
 import uuid
+from datetime import datetime, timezone
 
 from flask import (
     Blueprint,
@@ -35,7 +36,12 @@ from app.payroll_status import SENDABLE_STATUSES
 from app.pdf_service import generate_payslip_pdf
 
 from .idempotency import replay_or_run
-from .queue import cancel_distribution, cancel_flash_message, enqueue_distribution
+from .queue import (
+    cancel_distribution,
+    cancel_flash_message,
+    enqueue_distribution,
+    reschedule_distribution,
+)
 from .service import resolve_channel
 from .tokens import verify_payslip_token
 
@@ -154,6 +160,13 @@ def _run_status_context(run):
         for r in rows
     )
     batch_active = batch is not None and batch.status in ("queued", "running")
+    scheduled = batch is not None and batch.status == "scheduled"
+    seconds_until = None
+    if scheduled and batch.scheduled_for is not None:
+        target = batch.scheduled_for
+        if target.tzinfo is None:
+            target = target.replace(tzinfo=timezone.utc)
+        seconds_until = int((target - datetime.now(timezone.utc)).total_seconds())
     return {
         "run": run,
         "rows": rows,
@@ -162,10 +175,17 @@ def _run_status_context(run):
         "sent_count": sent,
         "failed_count": failed,
         "batch": batch,
-        "in_flight": batch_active or pending_retry,
+        "in_flight": batch_active or pending_retry or scheduled,
+        # Drives live polling — a far-future scheduled batch changes nothing
+        # second-to-second, so it does not poll (only active/retrying does).
+        "live": batch_active or pending_retry,
+        "scheduled": scheduled,
+        "seconds_until_scheduled": seconds_until,
         # Cancellable == there is not-yet-sent work to stop and no send is
         # actively running (a running batch is never cancelled mid-flight).
-        "cancellable": (batch is not None and batch.status == "queued") or pending_retry,
+        "cancellable": scheduled
+        or (batch is not None and batch.status == "queued")
+        or pending_retry,
     }
 
 
@@ -247,6 +267,61 @@ def cancel(run_id):
     result = cancel_distribution(run, current_user)
     flash(*cancel_flash_message(result))
     return _hx_redirect(url_for("distribution.run_status", run_id=run.id))
+
+
+def _parse_schedule(value):
+    """A datetime-local form value -> aware UTC datetime. Ghana runs on GMT
+    year-round (no DST), so the operator's wall clock IS UTC — we interpret the
+    naive input as UTC, which is unambiguous and DST-safe. None on blank/bad."""
+    value = (value or "").strip()
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+@distribution_bp.route("/run/<int:run_id>/schedule", methods=["POST"])
+@role_required(*PAYROLL_ROLES)
+def schedule(run_id):
+    run = db.get_or_404(PayrollRun, run_id)
+    if run.status not in SENDABLE_STATUSES:
+        flash("Payslips can only be distributed after the payroll run is approved.", "warning")
+        return redirect(url_for("distribution.run_status", run_id=run.id))
+    channel = request.form.get("channel", CHANNEL_AUTO)
+    if channel not in VALID_SEND_CHANNELS:
+        flash(f"Unknown channel: {channel}", "danger")
+        return redirect(url_for("distribution.run_status", run_id=run.id))
+    when = _parse_schedule(request.form.get("scheduled_for"))
+    if when is None or when <= datetime.now(timezone.utc):
+        flash("Pick a valid future date and time to schedule the distribution.", "warning")
+        return redirect(url_for("distribution.run_status", run_id=run.id))
+    summary = enqueue_distribution(run, channel, False, current_user, scheduled_for=when)
+    if summary.get("already_in_progress"):
+        flash("A distribution is already scheduled or in progress for this run.", "warning")
+    else:
+        flash(
+            f"Distribution scheduled for {when.strftime('%Y-%m-%d %H:%M')} GMT "
+            f"({summary['total']} payslip(s)).",
+            "success",
+        )
+    return redirect(url_for("distribution.run_status", run_id=run.id))
+
+
+@distribution_bp.route("/run/<int:run_id>/reschedule", methods=["POST"])
+@role_required(*PAYROLL_ROLES)
+def reschedule(run_id):
+    run = db.get_or_404(PayrollRun, run_id)
+    when = _parse_schedule(request.form.get("scheduled_for"))
+    result = reschedule_distribution(run, when, current_user)
+    if result["ok"]:
+        flash(f"Distribution rescheduled to {when.strftime('%Y-%m-%d %H:%M')} GMT.", "success")
+    elif result["reason"] == "not_future":
+        flash("Pick a valid future date and time.", "warning")
+    else:
+        flash("There is no scheduled distribution to change for this run.", "warning")
+    return redirect(url_for("distribution.run_status", run_id=run.id))
 
 
 @distribution_bp.route("/item/<int:item_id>/preferred-channel", methods=["POST"])
