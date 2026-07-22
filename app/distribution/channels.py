@@ -9,14 +9,32 @@ Ported from the standalone payslip distribution system; adapted to Chrisnat's Fl
 """
 import base64
 import json as _json
+import re
 import smtplib
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from email.message import EmailMessage
+from email.utils import formataddr
 
 from flask import current_app
+
+# Pragmatic email check — enough to reject obviously-bad addresses (missing @,
+# spaces, no dot in domain) before we bother the SMTP server, not full RFC 5322.
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def is_valid_email(address):
+    """True if `address` looks like a deliverable email address."""
+    return bool(address) and _EMAIL_RE.match(address.strip()) is not None
+
+
+@dataclass
+class Attachment:
+    filename: str
+    content: bytes
+    mimetype: str = "application/pdf"
 
 
 @dataclass
@@ -26,6 +44,7 @@ class OutboundMessage:
     subject: str
     body_text: str
     body_html: str | None = None
+    attachments: list = field(default_factory=list)
 
 
 @dataclass
@@ -143,15 +162,43 @@ class CloudWhatsAppSender(Sender):
 # --- Email -----------------------------------------------------------------
 
 
+def _from_header(cfg):
+    """The From header, optionally with a configured display name."""
+    address = cfg.get("DEFAULT_FROM_EMAIL")
+    name = cfg.get("EMAIL_SENDER_NAME")
+    return formataddr((name, address)) if name and address else address
+
+
+def _attach_all(mime, attachments):
+    """Attach validated attachments to a MIME message. Oversized/empty ones are
+    skipped with a warning rather than blocking the email (validation happens in
+    the service layer; this is a defensive second check)."""
+    max_bytes = current_app.config.get("EMAIL_MAX_ATTACHMENT_BYTES", 5 * 1024 * 1024)
+    for att in attachments or []:
+        content = att.content or b""
+        if not content or len(content) > max_bytes:
+            current_app.logger.warning(
+                "[email] skipping attachment %s (%d bytes, cap %d)",
+                att.filename, len(content), max_bytes,
+            )
+            continue
+        maintype, _, subtype = att.mimetype.partition("/")
+        mime.add_attachment(
+            content, maintype=maintype or "application",
+            subtype=subtype or "octet-stream", filename=att.filename,
+        )
+
+
 class ConsoleEmailSender(Sender):
     provider = "console-email"
 
     def send(self, message):
+        if not is_valid_email(message.recipient):
+            return SendResult(False, self.provider, f"invalid recipient email: {message.recipient!r}")
+        extra = f" +{len(message.attachments)} attachment(s)" if message.attachments else ""
         current_app.logger.info(
-            "[console-email] to=%s subject=%r\n%s",
-            message.recipient,
-            message.subject,
-            message.body_text,
+            "[console-email] to=%s subject=%r%s\n%s",
+            message.recipient, message.subject, extra, message.body_text,
         )
         return SendResult(ok=True, provider=self.provider)
 
@@ -164,13 +211,24 @@ class SmtpEmailSender(Sender):
         host = cfg.get("SMTP_HOST")
         if not host:
             return SendResult(False, self.provider, "SMTP_HOST not set")
+        # Validate the recipient before opening a connection — a clear, cheap
+        # failure instead of an opaque SMTP rejection.
+        if not is_valid_email(message.recipient):
+            current_app.logger.warning("[email] invalid recipient %r", message.recipient)
+            return SendResult(False, self.provider, f"invalid recipient email: {message.recipient!r}")
+
         mime = EmailMessage()
         mime["Subject"] = message.subject
-        mime["From"] = cfg.get("DEFAULT_FROM_EMAIL")
+        mime["From"] = _from_header(cfg)
         mime["To"] = message.recipient
+        reply_to = cfg.get("EMAIL_REPLY_TO")
+        if reply_to:
+            mime["Reply-To"] = reply_to
         mime.set_content(message.body_text)
         if message.body_html:
             mime.add_alternative(message.body_html, subtype="html")
+        _attach_all(mime, message.attachments)
+
         try:
             with smtplib.SMTP(host, cfg.get("SMTP_PORT", 587), timeout=30) as smtp:
                 if cfg.get("SMTP_USE_TLS", True):
@@ -179,9 +237,17 @@ class SmtpEmailSender(Sender):
                 if username:
                     smtp.login(username, cfg.get("SMTP_PASSWORD") or "")
                 smtp.send_message(mime)
-            return SendResult(True, self.provider)
-        except Exception as exc:
-            return SendResult(False, self.provider, str(exc))
+        except smtplib.SMTPAuthenticationError as exc:
+            current_app.logger.warning("[email] SMTP auth failed: %s", exc)
+            return SendResult(False, self.provider, "SMTP authentication failed")
+        except smtplib.SMTPRecipientsRefused:
+            current_app.logger.warning("[email] recipient refused: %s", message.recipient)
+            return SendResult(False, self.provider, f"recipient refused: {message.recipient}")
+        except (smtplib.SMTPException, OSError) as exc:
+            current_app.logger.warning("[email] send failed to %s: %s", message.recipient, exc)
+            return SendResult(False, self.provider, f"{type(exc).__name__}: {exc}")
+        current_app.logger.info("[email] sent to %s via %s", message.recipient, self.provider)
+        return SendResult(True, self.provider)
 
 
 def get_sender(channel: str) -> Sender:

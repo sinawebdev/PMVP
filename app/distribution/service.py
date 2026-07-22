@@ -158,11 +158,48 @@ def _latest_delivery(item, channel):
     )
 
 
+def _payslip_pdf_attachment(item):
+    """Build a validated PDF attachment for an email payslip, or None. Never
+    raises: a generation/validation failure logs and falls back to link-only, so
+    a bad attachment never blocks the email (Phase 3, Slice 9)."""
+    from .channels import Attachment
+
+    try:
+        from app.pdf_service import generate_payslip_pdf, payslip_filename
+
+        path = generate_payslip_pdf(item, current_app.config["EXPORT_FOLDER"])
+        with open(path, "rb") as fh:
+            content = fh.read()
+        max_bytes = current_app.config.get("EMAIL_MAX_ATTACHMENT_BYTES", 5 * 1024 * 1024)
+        if not content or len(content) > max_bytes:
+            current_app.logger.warning(
+                "[email] payslip PDF for item %s failed validation (%d bytes) — sending link only",
+                item.id, len(content),
+            )
+            return None
+        try:
+            filename = payslip_filename(item)
+        except Exception:  # noqa: BLE001 - filename helper is best-effort
+            filename = f"payslip-{item.id}.pdf"
+        return Attachment(filename=filename, content=content, mimetype="application/pdf")
+    except Exception as exc:  # noqa: BLE001 - never let attachment build abort a send
+        current_app.logger.warning(
+            "[email] could not attach payslip PDF for item %s: %s — sending link only",
+            item.id, exc,
+        )
+        return None
+
+
 def _build_message(channel, item, run, client, recipient):
     link = public_payslip_url(item.id)
     if channel == CHANNEL_EMAIL:
         subject, text, html = render_payslip_email(item, run, client, link=link)
-        return OutboundMessage(channel, recipient, subject, text, html)
+        attachments = []
+        if current_app.config.get("EMAIL_ATTACH_PAYSLIP_PDF"):
+            attachment = _payslip_pdf_attachment(item)
+            if attachment is not None:
+                attachments.append(attachment)
+        return OutboundMessage(channel, recipient, subject, text, html, attachments=attachments)
     text = render_payslip_text(item, run, client, link=link)
     return OutboundMessage(channel, recipient, f"Payslip {run.month} {run.year}".strip(), text)
 

@@ -202,6 +202,23 @@ def create_app():
     app.config["WHATSAPP_BASE_URL"] = os.getenv("WHATSAPP_BASE_URL", "https://graph.facebook.com")
     app.config["EMAIL_BACKEND"] = os.getenv("EMAIL_BACKEND", "console")        # console|smtp
     app.config["DEFAULT_FROM_EMAIL"] = os.getenv("DEFAULT_FROM_EMAIL", "payroll@chrisnat.local")
+    # Optional sender display name and reply-to (Phase 3, Slice 9). Both optional
+    # so existing config keeps working: with neither set, From is the bare
+    # DEFAULT_FROM_EMAIL and no Reply-To header is added.
+    app.config["EMAIL_SENDER_NAME"] = os.getenv("EMAIL_SENDER_NAME", app.config["APP_NAME"])
+    app.config["EMAIL_REPLY_TO"] = os.getenv("EMAIL_REPLY_TO")
+    # Accent colour for the branded email header/button.
+    app.config["EMAIL_BRAND_COLOR"] = os.getenv("EMAIL_BRAND_COLOR", "#0F766E")
+    # Optionally attach the payslip PDF to the email (off by default — v1 sends a
+    # tokenized link). When on, the attachment is validated (exists, non-empty,
+    # under the size cap) and silently skipped if it fails, so a bad attachment
+    # never blocks the email.
+    app.config["EMAIL_ATTACH_PAYSLIP_PDF"] = (
+        os.getenv("EMAIL_ATTACH_PAYSLIP_PDF", "false").lower() == "true"
+    )
+    app.config["EMAIL_MAX_ATTACHMENT_BYTES"] = int(
+        os.getenv("EMAIL_MAX_ATTACHMENT_BYTES", str(5 * 1024 * 1024))
+    )
     app.config["SMTP_HOST"] = os.getenv("SMTP_HOST")
     app.config["SMTP_PORT"] = int(os.getenv("SMTP_PORT", "587"))
     app.config["SMTP_USERNAME"] = os.getenv("SMTP_USERNAME")
