@@ -119,6 +119,7 @@ _EVENT_LABELS = {
     "run.risk_accepted": "Payroll run auto-accepted",
     "run.hold_released": "Payroll run released",
     "payslips.distributed": "Payslips distributed",
+    "distribution.cancelled": "Distribution cancelled",
 }
 
 

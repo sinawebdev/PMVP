@@ -38,7 +38,11 @@ from app import db
 from app.audit import record_audit
 from app.events import platform_admins, record_event
 from app.distribution.idempotency import replay_or_run
-from app.distribution.queue import enqueue_distribution
+from app.distribution.queue import (
+    cancel_distribution,
+    cancel_flash_message,
+    enqueue_distribution,
+)
 from app.distribution.service import resolve_channel
 from app.excel_utils import allowed_excel_file, export_import_error_report, mapping_conflicts
 from app.models import (
@@ -609,6 +613,7 @@ def _distribute_context(run):
         "failed_count": failed,
         "batch": batch,
         "in_flight": batch_active or pending_retry,
+        "cancellable": (batch is not None and batch.status == "queued") or pending_retry,
     }
 
 
@@ -676,6 +681,19 @@ def distribute_send(run_id):
 def distribute_resend(run_id):
     run = tenant_get_or_404(PayrollRun, run_id)
     return _do_client_send(run, only_failed=True)
+
+
+@client_bp.route("/runs/<int:run_id>/distribute/cancel", methods=["POST"])
+@tenant_role_required(CLIENT_ADMIN)
+def distribute_cancel(run_id):
+    run = tenant_get_or_404(PayrollRun, run_id)  # 404 if another tenant's run
+    result = cancel_distribution(run, current_user)
+    flash(*cancel_flash_message(result))
+    if request.headers.get("HX-Request"):
+        resp = current_app.make_response("")
+        resp.headers["HX-Redirect"] = url_for("client.distribute", run_id=run.id)
+        return resp
+    return redirect(url_for("client.distribute", run_id=run.id))
 
 
 @client_bp.route("/runs/<int:run_id>/payslips.zip")

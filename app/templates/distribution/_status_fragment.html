@@ -89,6 +89,7 @@
                     <td>{{ d.recipient if d else "—" }}</td>
                     <td>
                         {% if d and d.status == "sent" %}<span class="badge text-bg-success">sent</span>
+                        {% elif d and d.status == "cancelled" %}<span class="badge text-bg-dark">cancelled</span>
                         {% elif d and d.status == "failed" %}
                             {% set rs = delivery_retry_state(d) %}
                             {% if rs.final %}<span class="badge text-bg-danger" title="{{ d.error }}">failed · final</span>

@@ -20,10 +20,12 @@ from flask import current_app
 from app import db
 from app.audit import record_audit
 from app.models import (
+    BATCH_CANCELLED,
     BATCH_COMPLETED,
     BATCH_FAILED,
     BATCH_QUEUED,
     BATCH_RUNNING,
+    DELIVERY_CANCELLED,
     DELIVERY_FAILED,
     DistributionBatch,
     PayrollRun,
@@ -92,6 +94,95 @@ def enqueue_distribution(run, channel, only_failed, actor):
         "only_failed": only_failed,
         "already_in_progress": False,
     }
+
+
+def cancel_distribution(run, actor):
+    """Cancel a run's not-yet-sent distribution work: a queued batch (before the
+    worker claims it) and any pending automatic retries. Returns a summary.
+
+    Guarantees:
+      * An actively *running* batch is never cancelled — the operation is refused
+        (blocked=True) so a send in progress is never interrupted mid-flight.
+      * Already-`sent` deliveries are never touched.
+      * Cancelled deliveries leave the retry pool (status flips to cancelled), so
+        the worker's retry sweep skips them.
+
+    Stages audit + a domain event; commits once."""
+    running = DistributionBatch.query.filter_by(
+        payroll_run_id=run.id, status=BATCH_RUNNING
+    ).first()
+    if running is not None:
+        return {"cancelled_batch": False, "cancelled_retries": 0, "blocked": True}
+
+    now = datetime.now(timezone.utc)
+    queued = DistributionBatch.query.filter_by(
+        payroll_run_id=run.id, status=BATCH_QUEUED
+    ).first()
+    cancelled_batch = queued is not None
+    if cancelled_batch:
+        queued.status = BATCH_CANCELLED
+        queued.finished_at = now
+
+    pending_retries = PayslipDelivery.query.filter(
+        PayslipDelivery.payroll_run_id == run.id,
+        PayslipDelivery.status == DELIVERY_FAILED,
+        PayslipDelivery.next_retry_at.isnot(None),
+    ).all()
+    for delivery in pending_retries:
+        delivery.status = DELIVERY_CANCELLED
+        delivery.next_retry_at = None
+
+    if cancelled_batch or pending_retries:
+        record_audit(
+            "Distribution cancelled",
+            run,
+            f"queued send cancelled={cancelled_batch}, "
+            f"pending retries stopped={len(pending_retries)}.",
+        )
+        from app.events import record_event
+
+        record_event(
+            "distribution.cancelled",
+            summary=(
+                f"{run.month} {run.year}: distribution cancelled "
+                f"({'queued send stopped, ' if cancelled_batch else ''}"
+                f"{len(pending_retries)} pending retr"
+                f"{'y' if len(pending_retries) == 1 else 'ies'} stopped)."
+            ),
+            subject=run,
+            client_company_id=run.client_company_id,
+            level="warning",
+        )
+    db.session.commit()
+    return {
+        "cancelled_batch": cancelled_batch,
+        "cancelled_retries": len(pending_retries),
+        "blocked": False,
+    }
+
+
+def cancel_flash_message(result):
+    """(message, category) for a cancel_distribution() result — shared by the
+    operator and client cancel routes so the wording never drifts."""
+    if result["blocked"]:
+        return (
+            "This distribution is already sending and can't be cancelled — "
+            "wait for it to finish.",
+            "warning",
+        )
+    if not result["cancelled_batch"] and not result["cancelled_retries"]:
+        return ("Nothing to cancel — no queued send or pending retries for this run.", "info")
+    parts = []
+    if result["cancelled_batch"]:
+        parts.append("queued send cancelled")
+    if result["cancelled_retries"]:
+        n = result["cancelled_retries"]
+        parts.append(f"{n} pending retr{'y' if n == 1 else 'ies'} stopped")
+    return (
+        "Distribution cancelled: " + ", ".join(parts)
+        + ". Already-sent payslips are unaffected.",
+        "success",
+    )
 
 
 def claim_next_batch():

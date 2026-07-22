@@ -35,7 +35,7 @@ from app.payroll_status import SENDABLE_STATUSES
 from app.pdf_service import generate_payslip_pdf
 
 from .idempotency import replay_or_run
-from .queue import enqueue_distribution
+from .queue import cancel_distribution, cancel_flash_message, enqueue_distribution
 from .service import resolve_channel
 from .tokens import verify_payslip_token
 
@@ -117,6 +117,9 @@ def _run_status_context(run):
         "failed_count": failed,
         "batch": batch,
         "in_flight": batch_active or pending_retry,
+        # Cancellable == there is not-yet-sent work to stop and no send is
+        # actively running (a running batch is never cancelled mid-flight).
+        "cancellable": (batch is not None and batch.status == "queued") or pending_retry,
     }
 
 
@@ -177,6 +180,27 @@ def send(run_id):
 @role_required(*PAYROLL_ROLES)
 def resend_failed(run_id):
     return _do_send(run_id, only_failed=True)
+
+
+def _hx_redirect(url):
+    """Reload the page after a mutating action. For an htmx request this returns
+    an HX-Redirect (htmx does a full navigation, so blocks outside the swapped
+    fragment — e.g. the send controls in the header — refresh too); otherwise a
+    normal redirect."""
+    if request.headers.get("HX-Request"):
+        resp = current_app.make_response("")
+        resp.headers["HX-Redirect"] = url
+        return resp
+    return redirect(url)
+
+
+@distribution_bp.route("/run/<int:run_id>/cancel", methods=["POST"])
+@role_required(*PAYROLL_ROLES)
+def cancel(run_id):
+    run = db.get_or_404(PayrollRun, run_id)
+    result = cancel_distribution(run, current_user)
+    flash(*cancel_flash_message(result))
+    return _hx_redirect(url_for("distribution.run_status", run_id=run.id))
 
 
 @distribution_bp.route("/item/<int:item_id>/preferred-channel", methods=["POST"])

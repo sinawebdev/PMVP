@@ -29,6 +29,14 @@
     {% elif sendable and in_flight %}
     <span class="badge text-bg-info"><i class="bi bi-hourglass-split"></i> Distribution in progress…</span>
     {% endif %}
+    {% if cancellable %}
+    <button class="btn btn-outline-danger btn-sm"
+            hx-post="{{ url_for('distribution.cancel', run_id=run.id) }}"
+            hx-confirm="Cancel this distribution? Any queued send and pending retries will be stopped. Already-sent payslips are unaffected."
+            data-confirm-danger="1">
+        <i class="bi bi-x-circle"></i>Cancel distribution
+    </button>
+    {% endif %}
 {% endblock %}
 {% block content %}
 {% include "distribution/_status_fragment.html" %}

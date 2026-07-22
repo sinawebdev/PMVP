@@ -43,6 +43,7 @@
         <td class="muted">{{ r.suggested|capitalize }}</td>
         <td>
           {% if r.delivery and r.delivery.status == 'sent' %}<span class="badge ok">Sent</span>
+          {% elif r.delivery and r.delivery.status == 'cancelled' %}<span class="badge">Cancelled</span>
           {% elif r.delivery and r.delivery.status == 'failed' %}
             {% set rs = delivery_retry_state(r.delivery) %}
             {% if rs.final %}<span class="badge warn" title="{{ r.delivery.error }}">Failed · final</span>

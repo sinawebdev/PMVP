@@ -23,6 +23,11 @@
       <p class="sub">Sending payslips to workers is limited to a company administrator. You can still download payslips above.</p>
     {% elif in_flight %}
       <p class="sub"><span class="badge">In progress</span> A distribution is already running for this run — see the status below.</p>
+      {% if cancellable %}
+      <form method="post" action="{{ url_for('client.distribute_cancel', run_id=run.id) }}" onsubmit="return confirm('Cancel this distribution? Any queued send and pending retries will be stopped. Already-sent payslips are unaffected.');">
+        <button class="btn" type="submit">Cancel distribution</button>
+      </form>
+      {% endif %}
     {% else %}
       <p class="sub">Send each worker a link to their own payslip over SMS, WhatsApp, or email. Delivery is logged per worker below; already-sent workers are skipped, so it is safe to run again.</p>
       <form method="post" action="{{ url_for('client.distribute_send', run_id=run.id) }}" class="formrow">

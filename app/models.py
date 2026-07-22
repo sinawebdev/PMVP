@@ -449,6 +449,9 @@ class Notification(db.Model):
 DELIVERY_PENDING = "pending"
 DELIVERY_SENT = "sent"
 DELIVERY_FAILED = "failed"
+# An operator cancelled this delivery before it was (re)sent. Terminal: the
+# worker never touches a cancelled delivery again (Phase 3 Slice 5).
+DELIVERY_CANCELLED = "cancelled"
 
 CHANNEL_SMS = "sms"
 CHANNEL_WHATSAPP = "whatsapp"
