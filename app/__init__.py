@@ -89,6 +89,14 @@ def create_app():
     )
     app.config["IS_PRODUCTION"] = is_production
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
+    # --- Product identity (single config seam) ---
+    # De-hardcodes the product name so a rebrand is a config change, not a
+    # cross-template sweep. Defaults reproduce today's chrome byte-for-byte.
+    app.config["APP_NAME"] = os.getenv("APP_NAME", "Chrisnat Payroll MVP")
+    app.config["APP_BRAND_NAME"] = os.getenv("APP_BRAND_NAME", "Chrisnat")
+    app.config["APP_SHORT_NAME"] = os.getenv("APP_SHORT_NAME", "Payroll MVP")
+    app.config["APP_BRAND_MARK"] = os.getenv("APP_BRAND_MARK", "CN")
+    app.config["SERVICE_SLUG"] = os.getenv("SERVICE_SLUG", "chrisnat-payroll-mvp")
     app.config["SQLALCHEMY_DATABASE_URI"] = resolve_database_uri(
         os.path.join(app.instance_path, "chrisnat_payroll.db")
     )
@@ -225,6 +233,17 @@ def create_app():
     app.register_blueprint(raw_engine_bp)
     app.register_blueprint(oversight_bp)
     app.register_blueprint(notifications_bp)
+
+    @app.context_processor
+    def inject_app_identity():
+        # Product-name strings for templates (title, brand). Config-sourced so a
+        # rebrand never requires touching a template.
+        return {
+            "app_name": app.config["APP_NAME"],
+            "app_brand_name": app.config["APP_BRAND_NAME"],
+            "app_short_name": app.config["APP_SHORT_NAME"],
+            "app_brand_mark": app.config["APP_BRAND_MARK"],
+        }
 
     @app.context_processor
     def inject_notification_count():

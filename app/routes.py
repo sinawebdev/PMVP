@@ -42,7 +42,10 @@ def index():
 
 @main_bp.route("/health")
 def health():
-    return {"status": "ok", "service": "chrisnat-payroll-mvp"}
+    return {
+        "status": "ok",
+        "service": current_app.config.get("SERVICE_SLUG", "chrisnat-payroll-mvp"),
+    }
 
 
 @main_bp.route("/db-health")
