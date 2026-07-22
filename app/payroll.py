@@ -26,7 +26,11 @@ from app.permissions import (
     DELETE_ROLES,
     EDIT_FIGURES_ROLES,
     MARK_PROCESSED_ROLES,
+    PAYROLL_ROLES,
     SUBMIT_APPROVAL_ROLES,
+    can_approve_run,
+    can_distribute_run,
+    can_reject_run,
 )
 from app.tenancy import platform_required
 from app.excel_utils import (
@@ -1484,14 +1488,30 @@ def submit_for_approval(run_id):
     return redirect(url_for("payroll.detail", run_id=run_id))
 
 
-@payroll_bp.route("/runs/<int:run_id>/approve", methods=["POST"])
-@role_required(*APPROVAL_ROLES)
-def approve(run_id):
-    payroll_run = db.get_or_404(PayrollRun, run_id)
+def _approve_run(payroll_run):
+    """Mutate ``payroll_run`` into Approved + record the audit entry. Does not
+    commit — the caller owns the transaction, so a single-run approval and a
+    bulk approval both commit exactly once regardless of how many runs moved."""
     payroll_run.status = APPROVED
     payroll_run.approved_by = current_user.id
     payroll_run.approved_at = datetime.now(timezone.utc)
     record_audit("Payroll approval", payroll_run, "Payroll approved (single-stage approval).")
+
+
+def _reject_run(payroll_run, notes=None):
+    """Mutate ``payroll_run`` into Rejected + record the audit entry. Does not
+    commit; see :func:`_approve_run`."""
+    payroll_run.status = REJECTED
+    payroll_run.rejected_at = datetime.now(timezone.utc)
+    payroll_run.notes = notes or payroll_run.notes
+    record_audit("Payroll rejection", payroll_run, payroll_run.notes or "Payroll rejected.")
+
+
+@payroll_bp.route("/runs/<int:run_id>/approve", methods=["POST"])
+@role_required(*APPROVAL_ROLES)
+def approve(run_id):
+    payroll_run = db.get_or_404(PayrollRun, run_id)
+    _approve_run(payroll_run)
     db.session.commit()
     flash("Payroll approved.", "success")
     return redirect(url_for("payroll.detail", run_id=run_id))
@@ -1501,13 +1521,139 @@ def approve(run_id):
 @role_required(*APPROVAL_ROLES)
 def reject(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
-    payroll_run.status = REJECTED
-    payroll_run.rejected_at = datetime.now(timezone.utc)
-    payroll_run.notes = request.form.get("notes") or payroll_run.notes
-    record_audit("Payroll rejection", payroll_run, payroll_run.notes or "Payroll rejected.")
+    _reject_run(payroll_run, request.form.get("notes"))
     db.session.commit()
     flash("Payroll rejected.", "warning")
     return redirect(url_for("payroll.detail", run_id=run_id))
+
+
+# --- Bulk actions (Phase 2) --------------------------------------------------
+# Bulk approve/reject/distribute apply the SAME per-run predicate
+# (can_approve_run / can_reject_run / can_distribute_run) and the SAME mutation
+# helpers (_approve_run / _reject_run / distribute_run) that back the
+# single-run routes above — a bulk action can never do anything to a run that
+# clicking its own button one at a time wouldn't have allowed. A run that
+# fails the predicate is skipped and reported, never silently dropped or
+# forced through.
+
+
+def _bulk_apply(run_ids, predicate, action, verb):
+    """Apply ``action(run)`` to every run in ``run_ids`` that passes
+    ``predicate(current_user.role, run)``. Duplicate/invalid ids are ignored.
+
+    Returns ``(done, skipped)`` where ``done`` is a list of
+    ``(run, action_result)`` pairs and ``skipped`` is a list of human-readable
+    reasons (missing run, or ineligible in its current status)."""
+    done, skipped, seen = [], [], set()
+    for raw_id in run_ids:
+        try:
+            run_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if run_id in seen:
+            continue
+        seen.add(run_id)
+        run = db.session.get(PayrollRun, run_id)
+        if run is None:
+            skipped.append(f"Run #{run_id}: not found")
+            continue
+        if not predicate(current_user.role, run):
+            label = f"{run.month} {run.year}"
+            if run.client_company:
+                label += f" ({run.client_company.name})"
+            skipped.append(f"{label}: not eligible to {verb} in its current state ({run.status})")
+            continue
+        done.append((run, action(run)))
+    return done, skipped
+
+
+def _bulk_redirect_target():
+    """Send the operator back to the same filtered runs list they bulk-acted
+    from, preserving the client/status filter carried as hidden form fields."""
+    return url_for(
+        "payroll.runs",
+        status=request.form.get("status") or None,
+        client_id=request.form.get("client_id") or None,
+    )
+
+
+# Imperative verb (used in the per-run skip reason built by _bulk_apply) ->
+# past tense (used in the summary flash below). Spelled out rather than
+# suffixed, since "reject" -> "rejected" isn't a plain "+d".
+_PAST_TENSE = {"approve": "approved", "reject": "rejected", "distribute": "distributed"}
+
+
+def _flash_skipped(skipped, verb):
+    if not skipped:
+        return
+    shown = "; ".join(skipped[:8])
+    more = f" (+{len(skipped) - 8} more)" if len(skipped) > 8 else ""
+    flash(
+        f"{len(skipped)} run(s) could not be {_PAST_TENSE[verb]} — {shown}{more}",
+        "warning",
+    )
+
+
+@payroll_bp.route("/runs/bulk/approve", methods=["POST"])
+@role_required(*APPROVAL_ROLES)
+def bulk_approve():
+    done, skipped = _bulk_apply(
+        request.form.getlist("run_ids"), can_approve_run, _approve_run, "approve"
+    )
+    db.session.commit()
+    if done:
+        flash(f"Bulk approve: {len(done)} run(s) approved.", "success")
+    elif not skipped:
+        flash("No runs selected for bulk approve.", "warning")
+    _flash_skipped(skipped, "approve")
+    return redirect(_bulk_redirect_target())
+
+
+@payroll_bp.route("/runs/bulk/reject", methods=["POST"])
+@role_required(*APPROVAL_ROLES)
+def bulk_reject():
+    notes = request.form.get("notes")
+    done, skipped = _bulk_apply(
+        request.form.getlist("run_ids"),
+        can_reject_run,
+        lambda run: _reject_run(run, notes),
+        "reject",
+    )
+    db.session.commit()
+    if done:
+        flash(f"Bulk reject: {len(done)} run(s) rejected.", "warning")
+    elif not skipped:
+        flash("No runs selected for bulk reject.", "warning")
+    _flash_skipped(skipped, "reject")
+    return redirect(_bulk_redirect_target())
+
+
+@payroll_bp.route("/runs/bulk/distribute", methods=["POST"])
+@role_required(*PAYROLL_ROLES)
+def bulk_distribute():
+    from app.distribution.service import distribute_run
+    from app.models import CHANNEL_AUTO
+
+    done, skipped = _bulk_apply(
+        request.form.getlist("run_ids"),
+        can_distribute_run,
+        lambda run: distribute_run(run, channel=CHANNEL_AUTO, only_failed=False),
+        "distribute",
+    )
+    db.session.commit()
+    if done:
+        sent = sum(result["sent"] for _run, result in done)
+        failed = sum(result["failed"] for _run, result in done)
+        already_sent = sum(result["skipped"] for _run, result in done)
+        flash(
+            f"Bulk distribute: {len(done)} run(s) processed — {sent} payslip(s) sent, "
+            f"{failed} failed, {already_sent} already sent/skipped.",
+            "success" if not failed else "warning",
+        )
+    elif not skipped:
+        flash("No runs selected for bulk distribute.", "warning")
+    _flash_skipped(skipped, "distribute")
+    return redirect(_bulk_redirect_target())
 
 
 @payroll_bp.route("/runs/<int:run_id>/mark-paid", methods=["POST"])

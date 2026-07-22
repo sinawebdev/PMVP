@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% import "macros/lifecycle.html" as lc %}
+{% set role = current_user.role %}
+{% set bulk_visible = can_bulk_approve_reject(role) or can_operate_payroll(role) %}
 {% block title %}Payroll Runs · Chrisnat Payroll{% endblock %}
 {% block page_title %}Payroll Runs{% endblock %}
 {% block page_intro %}Monitor every company-specific payroll run, including worker totals, source Excel files, review status, approvals, and export actions.{% endblock %}
@@ -241,30 +243,88 @@ function rawTemplate(ev) {
         <label class="visually-hidden" for="runs-filter">Filter payroll runs</label>
         <input id="runs-filter" class="form-control" type="search" placeholder="Filter runs by client, month, or status…" data-table-filter="runs-table">
     </div>
-    <div class="excel-grid-wrap">
-        <table id="runs-table" class="table table-sm align-middle excel-grid">
-            <thead><tr><th scope="col">Payroll Month</th><th scope="col">Client Company</th><th scope="col">Total Workers</th><th scope="col">Gross Pay</th><th scope="col">Deductions</th><th scope="col">Net Pay</th><th scope="col">Status</th><th scope="col">Uploaded File</th><th scope="col">Actions</th></tr></thead>
-            <tbody>
-            {% for run in payroll_runs %}
-                <tr>
-                    <td>{{ run.month }} {{ run.year }}</td>
-                    <td>{{ run.client_company.name if run.client_company else "" }}</td>
-                    <td>{{ run.total_workers }}</td>
-                    <td>{{ run.total_gross_pay|cedis }}</td>
-                    <td>{{ run.total_deductions|cedis }}</td>
-                    <td>{{ run.total_net_pay|cedis }}</td>
-                    <td>
-                        {{ lc.status_pill(run.status) }}
-                        {{ lc.progress_stepper(run_progress(run, run.id in distributed_ids), compact=true) }}
-                    </td>
-                    <td>{{ run.source_filename }}</td>
-                    <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.detail', run_id=run.id) }}">View</a></td>
-                </tr>
-            {% else %}
-                <tr><td colspan="9" class="text-muted">No payroll runs yet.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <form method="post" id="bulk-actions-form" action="{{ url_for('payroll.bulk_approve') }}">
+        <input type="hidden" name="status" value="{{ status_filter }}">
+        <input type="hidden" name="client_id" value="{{ selected_client.id if selected_client else '' }}">
+        {% if bulk_visible %}
+        <div class="toolbar bulk-actions-toolbar d-flex flex-wrap align-items-center gap-2 mb-2">
+            <span class="small text-muted" id="bulk-selected-count">0 selected</span>
+            {% if can_bulk_approve_reject(role) %}
+            <button type="submit" formaction="{{ url_for('payroll.bulk_approve') }}" class="btn btn-sm btn-success" data-bulk-action-btn disabled><i class="bi bi-patch-check"></i>Bulk Approve</button>
+            <button type="submit" formaction="{{ url_for('payroll.bulk_reject') }}" class="btn btn-sm btn-outline-danger" data-bulk-action-btn disabled onclick="return bulkConfirm('reject')"><i class="bi bi-x-octagon"></i>Bulk Reject</button>
+            <input type="text" name="notes" class="form-control form-control-sm" style="max-width: 220px;" placeholder="Rejection note (optional, applies to all)">
+            {% endif %}
+            {% if can_operate_payroll(role) %}
+            <button type="submit" formaction="{{ url_for('payroll.bulk_distribute') }}" class="btn btn-sm btn-primary" data-bulk-action-btn disabled onclick="return bulkConfirm('distribute')"><i class="bi bi-send-check"></i>Bulk Distribute</button>
+            {% endif %}
+        </div>
+        <p class="mini-note mb-2"><i class="bi bi-info-circle"></i> Bulk actions only apply to selected runs currently eligible for that action (matching status); anything else is skipped and reported after.</p>
+        {% endif %}
+        <div class="excel-grid-wrap">
+            <table id="runs-table" class="table table-sm align-middle excel-grid">
+                <thead><tr>
+                    {% if bulk_visible %}<th scope="col"><input type="checkbox" id="select-all-runs" aria-label="Select all runs"></th>{% endif %}
+                    <th scope="col">Payroll Month</th><th scope="col">Client Company</th><th scope="col">Total Workers</th><th scope="col">Gross Pay</th><th scope="col">Deductions</th><th scope="col">Net Pay</th><th scope="col">Status</th><th scope="col">Uploaded File</th><th scope="col">Actions</th></tr></thead>
+                <tbody>
+                {% for run in payroll_runs %}
+                    <tr>
+                        {% if bulk_visible %}
+                        <td><input type="checkbox" name="run_ids" value="{{ run.id }}" class="run-select-checkbox" aria-label="Select {{ run.month }} {{ run.year }} {{ run.client_company.name if run.client_company else '' }}"></td>
+                        {% endif %}
+                        <td>{{ run.month }} {{ run.year }}</td>
+                        <td>{{ run.client_company.name if run.client_company else "" }}</td>
+                        <td>{{ run.total_workers }}</td>
+                        <td>{{ run.total_gross_pay|cedis }}</td>
+                        <td>{{ run.total_deductions|cedis }}</td>
+                        <td>{{ run.total_net_pay|cedis }}</td>
+                        <td>
+                            {{ lc.status_pill(run.status) }}
+                            {{ lc.progress_stepper(run_progress(run, run.id in distributed_ids), compact=true) }}
+                        </td>
+                        <td>{{ run.source_filename }}</td>
+                        <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.detail', run_id=run.id) }}">View</a></td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="{{ 10 if bulk_visible else 9 }}" class="text-muted">No payroll runs yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </form>
 </section>
+<script>
+(function () {
+    var form = document.getElementById('bulk-actions-form');
+    if (!form) return;
+    var selectAll = document.getElementById('select-all-runs');
+    var countEl = document.getElementById('bulk-selected-count');
+    var buttons = form.querySelectorAll('[data-bulk-action-btn]');
+
+    function checkboxes() { return form.querySelectorAll('.run-select-checkbox'); }
+
+    function refresh() {
+        var checked = form.querySelectorAll('.run-select-checkbox:checked').length;
+        if (countEl) countEl.textContent = checked + ' selected';
+        buttons.forEach(function (btn) { btn.disabled = checked === 0; });
+        if (selectAll) selectAll.checked = checked > 0 && checked === checkboxes().length;
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function () {
+            checkboxes().forEach(function (cb) { cb.checked = selectAll.checked; });
+            refresh();
+        });
+    }
+    form.addEventListener('change', function (e) {
+        if (e.target.classList.contains('run-select-checkbox')) refresh();
+    });
+    refresh();
+})();
+
+function bulkConfirm(action) {
+    var checked = document.querySelectorAll('.run-select-checkbox:checked').length;
+    var verb = action === 'reject' ? 'Reject' : 'Distribute payslips for';
+    return confirm(verb + ' ' + checked + ' selected payroll run(s)?');
+}
+</script>
 {% endblock %}

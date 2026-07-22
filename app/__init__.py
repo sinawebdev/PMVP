@@ -211,6 +211,7 @@ def create_app():
     # (app/permissions.py) for nav/action gating, replacing inline role lists.
     from app.permissions import (
         can_approve_run,
+        can_bulk_approve_reject,
         can_calculate_run,
         can_delete_run,
         can_distribute_run,
@@ -242,6 +243,7 @@ def create_app():
         can_submit_run_for_approval=can_submit_run_for_approval,
         can_approve_run=can_approve_run,
         can_reject_run=can_reject_run,
+        can_bulk_approve_reject=can_bulk_approve_reject,
         can_mark_run_processed=can_mark_run_processed,
         can_distribute_run=can_distribute_run,
         can_delete_run=can_delete_run,

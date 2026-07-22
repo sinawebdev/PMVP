@@ -130,6 +130,13 @@ def can_submit_run_for_approval(role, run):
     return _in(role, SUBMIT_APPROVAL_ROLES) and run.status == DRAFT
 
 
+def can_bulk_approve_reject(role):
+    """May see the bulk approve/reject controls on the runs list (role-only —
+    each selected run's actual eligibility is still checked per-row by
+    can_approve_run/can_reject_run when the bulk action runs)."""
+    return _in(role, APPROVAL_ROLES)
+
+
 def can_approve_run(role, run):
     """May approve a run awaiting sign-off (Draft or Pending Approval)."""
     return _in(role, APPROVAL_ROLES) and run.status in PENDING_STATUSES
