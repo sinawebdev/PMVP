@@ -16,22 +16,88 @@
       warnings — before anything is created. Nothing is submitted until you confirm.
       Raw-hours workbooks are prepared by Chrisnat, not here.
     </p>
-    <form method="post" action="{{ url_for('client.run_upload') }}" enctype="multipart/form-data">
+    <form id="upload-form" method="post" action="{{ url_for('client.run_upload') }}" enctype="multipart/form-data">
       <div class="formgrid">
         <div>
           <label for="month">Payroll month</label>
-          <input id="month" name="month" value="{{ current_month }}" />
+          <select id="month" name="month">
+            {% for m in ["January","February","March","April","May","June","July","August","September","October","November","December"] %}
+            <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
         </div>
         <div>
           <label for="year">Year</label>
-          <input id="year" name="year" value="{{ current_year }}" />
+          <input id="year" name="year" type="number" min="2000" max="2100" step="1" value="{{ current_year }}" required />
         </div>
       </div>
       <label for="payroll_file">Payroll workbook</label>
       <input id="payroll_file" name="payroll_file" type="file" accept=".xlsx,.xls,.csv" required />
+      <div id="upload-status" class="upload-status" hidden aria-live="polite">
+        <progress id="upload-progress" max="100" value="0"></progress>
+        <span id="upload-status-text" class="sub"></span>
+      </div>
       <div class="form-foot">
-        <button class="btn primary" type="submit">Upload &amp; preview</button>
+        <button id="upload-submit" class="btn primary" type="submit">Upload &amp; preview</button>
       </div>
     </form>
   </div>
+
+  {# Progressive enhancement: real upload progress via XHR, with a graceful
+     fall-back to a normal form POST when unsupported or on a network error. #}
+  <script>
+  (function () {
+    var form = document.getElementById("upload-form");
+    if (!form || !window.FormData || !window.XMLHttpRequest) return;
+    var fileInput = document.getElementById("payroll_file");
+    var submitBtn = document.getElementById("upload-submit");
+    var statusBox = document.getElementById("upload-status");
+    var bar = document.getElementById("upload-progress");
+    var statusText = document.getElementById("upload-status-text");
+    var allowed = /\.(xlsx|xls|csv)$/i;
+
+    form.addEventListener("submit", function (e) {
+      var file = fileInput.files && fileInput.files[0];
+      if (!file) return; // let the native 'required' handle an empty field
+      if (!allowed.test(file.name)) {
+        e.preventDefault();
+        statusBox.hidden = false;
+        bar.hidden = true;
+        statusText.textContent = "Only .xlsx, .xls or .csv files are supported.";
+        return;
+      }
+      e.preventDefault();
+      submitBtn.disabled = true;
+      statusBox.hidden = false;
+      bar.hidden = false;
+      bar.value = 0;
+      statusText.textContent = "Uploading…";
+
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", form.action, true);
+      xhr.upload.addEventListener("progress", function (ev) {
+        if (!ev.lengthComputable) return;
+        var pct = Math.round((ev.loaded / ev.total) * 100);
+        bar.value = pct;
+        statusText.textContent = pct < 100 ? "Uploading… " + pct + "%" : "Checking your workbook…";
+      });
+      xhr.addEventListener("load", function () {
+        // Success -> the server redirected us to the preview (a different URL).
+        if (xhr.responseURL && xhr.responseURL.indexOf("/imports/") !== -1) {
+          window.location = xhr.responseURL;
+          return;
+        }
+        // Otherwise the form re-rendered inline with an error — show it.
+        document.open();
+        document.write(xhr.responseText);
+        document.close();
+      });
+      xhr.addEventListener("error", function () {
+        submitBtn.disabled = false; // network hiccup — fall back to a normal POST
+        form.submit();
+      });
+      xhr.send(new FormData(form));
+    });
+  })();
+  </script>
 {% endblock %}

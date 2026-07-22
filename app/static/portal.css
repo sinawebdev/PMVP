@@ -370,8 +370,22 @@ button:focus-visible {
 
 .portal-nav a:focus-visible { outline-color: var(--gold); }
 
+/* Upload progress (client import) */
+.upload-status {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin: .75rem 0 .25rem;
+}
+.upload-status progress {
+    width: 12rem;
+    height: .55rem;
+}
+.upload-status[hidden] { display: none; }
+
 @media (max-width: 640px) {
     .portal-header { padding: 12px 16px; }
     .portal-main { padding: 20px 16px 44px; }
     th, td { white-space: normal; }
+    .upload-status progress { width: 100%; }
 }

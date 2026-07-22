@@ -243,6 +243,13 @@ class ClientRunUploadTestCase(unittest.TestCase):
         html = self.client.get("/company").get_data(as_text=True)
         self.assertIn("in progress", html)
 
+    def test_upload_form_has_progress_and_month_select(self):
+        self._login("admin@msc.demo")
+        html = self.client.get("/company/runs/upload").get_data(as_text=True)
+        self.assertIn('id="upload-progress"', html)
+        self.assertIn('<select id="month"', html)
+        self.assertIn('name="payroll_file"', html)
+
 
 if __name__ == "__main__":
     unittest.main()
