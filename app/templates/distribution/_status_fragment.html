@@ -51,6 +51,8 @@
     {% endif %}
     {% if batch.status in ("queued", "running") %}
     <div class="mini-note mt-3"><i class="bi bi-info-circle"></i> A worker is processing this batch — this page updates automatically.</div>
+    {% elif in_flight %}
+    <div class="mini-note mt-3"><i class="bi bi-arrow-repeat"></i> Some deliveries failed and are scheduled for automatic retry — this page updates automatically as they are re-attempted.</div>
     {% elif batch.status in ("completed", "failed") %}
     <div class="mini-note mt-3"><i class="bi bi-arrow-clockwise"></i> Refresh the page to send again.</div>
     {% endif %}
@@ -87,7 +89,11 @@
                     <td>{{ d.recipient if d else "—" }}</td>
                     <td>
                         {% if d and d.status == "sent" %}<span class="badge text-bg-success">sent</span>
-                        {% elif d and d.status == "failed" %}<span class="badge text-bg-danger" title="{{ d.error }}">failed</span>
+                        {% elif d and d.status == "failed" %}
+                            {% set rs = delivery_retry_state(d) %}
+                            {% if rs.final %}<span class="badge text-bg-danger" title="{{ d.error }}">failed · final</span>
+                            {% elif rs.will_retry %}<span class="badge text-bg-warning" title="{{ d.error }}">failed · {{ rs.remaining }} retr{{ 'y' if rs.remaining == 1 else 'ies' }} left{% if d.next_retry_at %} · next {{ d.next_retry_at.strftime('%H:%M') }}{% endif %}</span>
+                            {% else %}<span class="badge text-bg-danger" title="{{ d.error }}">failed</span>{% endif %}
                         {% elif d %}<span class="badge text-bg-warning">{{ d.status }}</span>
                         {% elif in_flight %}<span class="badge text-bg-info">queued</span>
                         {% else %}<span class="badge text-bg-light">not sent</span>{% endif %}

@@ -76,6 +76,14 @@ def _run_status_context(run):
     sent = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "sent")
     failed = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "failed")
     batch = _latest_batch(run.id)
+    # A pending automatic retry (a failed delivery still scheduled) keeps the page
+    # live even after the batch itself reached a terminal state, so the operator
+    # watches recovery happen.
+    pending_retry = any(
+        r["delivery"] and r["delivery"].status == "failed" and r["delivery"].next_retry_at
+        for r in rows
+    )
+    batch_active = batch is not None and batch.status in ("queued", "running")
     return {
         "run": run,
         "rows": rows,
@@ -84,7 +92,7 @@ def _run_status_context(run):
         "sent_count": sent,
         "failed_count": failed,
         "batch": batch,
-        "in_flight": batch is not None and batch.status in ("queued", "running"),
+        "in_flight": batch_active or pending_retry,
     }
 
 

@@ -212,6 +212,17 @@ def create_app():
         os.getenv("DISTRIBUTION_WORKER_INLINE", "true" if is_production else "false").lower()
         == "true"
     )
+    # Retry policy (Phase 3, Slice 3). MAX_ATTEMPTS caps *automatic* retries of a
+    # failed delivery (the first send counts as attempt 1); once reached the
+    # delivery is a final failure. Automatic retries back off exponentially:
+    # BACKOFF_SECONDS * 2**(attempts-1). A manual "resend failed" is the operator
+    # override and is not bounded by MAX_ATTEMPTS.
+    app.config["DISTRIBUTION_MAX_ATTEMPTS"] = int(
+        os.getenv("DISTRIBUTION_MAX_ATTEMPTS", "3")
+    )
+    app.config["DISTRIBUTION_RETRY_BACKOFF_SECONDS"] = int(
+        os.getenv("DISTRIBUTION_RETRY_BACKOFF_SECONDS", "60")
+    )
 
     os.makedirs(app.instance_path, exist_ok=True)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
@@ -243,8 +254,12 @@ def create_app():
     )
 
     from app.payroll_status import run_progress, status_badge_class
+    from app.distribution.service import retry_state as delivery_retry_state
 
     app.jinja_env.globals.update(
+        # Per-delivery retry position (attempts, retries remaining, final-failure)
+        # for the distribution status tables — one source of truth, Phase 3 Slice 3.
+        delivery_retry_state=delivery_retry_state,
         # Lifecycle progress (presentation) — a status-derived stepper + status
         # pill, reused across the operator dashboard, runs list, and run detail.
         run_progress=run_progress,

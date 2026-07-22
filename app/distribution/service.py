@@ -4,7 +4,9 @@ Mirrors the standalone distribution system's send_period(): one bad recipient be
 recorded `failed` PayslipDelivery, never an exception that aborts the run. Already-`sent`
 items are skipped so re-running is safe; only_failed re-attempts just the failures.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+from flask import current_app
 
 from app import db
 from app.audit import record_audit
@@ -15,6 +17,8 @@ from app.models import (
     DELIVERY_FAILED,
     DELIVERY_SENT,
     Employee,
+    PayrollItem,
+    PayrollRun,
     PayslipDelivery,
 )
 from app.raw_import import normalise_emp_id
@@ -22,6 +26,60 @@ from app.raw_import import normalise_emp_id
 from .channels import OutboundMessage, get_sender
 from .render import render_payslip_email, render_payslip_text
 from .tokens import public_payslip_url
+
+
+def _retry_config():
+    """(max_attempts, backoff_base_seconds) — falls back to sane defaults outside
+    an app context (defensive; the worker and routes always have one)."""
+    try:
+        return (
+            int(current_app.config.get("DISTRIBUTION_MAX_ATTEMPTS", 3)),
+            int(current_app.config.get("DISTRIBUTION_RETRY_BACKOFF_SECONDS", 60)),
+        )
+    except RuntimeError:  # no app context
+        return 3, 60
+
+
+def _mark_sent(delivery, provider):
+    delivery.status = DELIVERY_SENT
+    delivery.provider = provider
+    delivery.error = None
+    delivery.sent_at = datetime.now(timezone.utc)
+    delivery.next_retry_at = None
+
+
+def _mark_failed(delivery, error, *, provider=None, max_attempts=None, backoff_base=None):
+    """Record a failed attempt and schedule the next automatic retry — unless the
+    retry limit is reached, in which case next_retry_at is left NULL (final
+    failure). `delivery.attempts` must already be incremented by the caller."""
+    if max_attempts is None or backoff_base is None:
+        max_attempts, backoff_base = _retry_config()
+    delivery.status = DELIVERY_FAILED
+    delivery.error = error
+    delivery.provider = provider
+    attempts = delivery.attempts or 1
+    if attempts < max_attempts:
+        delay = backoff_base * (2 ** (attempts - 1))
+        delivery.next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=delay)
+    else:
+        delivery.next_retry_at = None
+
+
+def retry_state(delivery):
+    """UI-facing view of a delivery's retry position: how many attempts so far,
+    how many automatic retries remain, and whether it is a final failure."""
+    max_attempts, _ = _retry_config()
+    attempts = delivery.attempts or 0
+    is_failed = delivery.status == DELIVERY_FAILED
+    return {
+        "attempts": attempts,
+        "max_attempts": max_attempts,
+        "remaining": max(0, max_attempts - attempts) if is_failed else 0,
+        # No retry scheduled on a failed delivery == the limit is spent.
+        "final": is_failed and delivery.next_retry_at is None,
+        "will_retry": is_failed and delivery.next_retry_at is not None,
+        "next_retry_at": delivery.next_retry_at,
+    }
 
 
 def get_distribution_contact(client_company_id, employee_id_str):
@@ -109,10 +167,39 @@ def _build_message(channel, item, run, client, recipient):
     return OutboundMessage(channel, recipient, f"Payslip {run.month} {run.year}".strip(), text)
 
 
+def _attempt_send(delivery, item, run, client, ch, sender, max_attempts, backoff_base):
+    """Send one payslip for `delivery` and record the outcome (attempt count,
+    status, error, retry schedule). The single place a delivery attempt is made,
+    reused by both the batch send loop and the automatic-retry path. Returns True
+    on success. Does NOT commit."""
+    recipient = _contact_for(ch, item)
+    delivery.channel = ch
+    delivery.recipient = recipient
+    delivery.attempts = (delivery.attempts or 0) + 1
+
+    if not recipient:
+        _mark_failed(
+            delivery, f"no contact on roster for {ch}",
+            provider=None, max_attempts=max_attempts, backoff_base=backoff_base,
+        )
+        return False
+
+    result = sender.send(_build_message(ch, item, run, client, recipient))
+    if result.ok:
+        _mark_sent(delivery, result.provider)
+        return True
+    _mark_failed(
+        delivery, result.error,
+        provider=result.provider, max_attempts=max_attempts, backoff_base=backoff_base,
+    )
+    return False
+
+
 def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False):
     """Render + send every payslip in `run`. Returns a summary dict. Commits once."""
     client = run.client_company
     auto = channel == CHANNEL_AUTO
+    max_attempts, backoff_base = _retry_config()
     senders = {}
 
     def sender_for(ch):
@@ -142,29 +229,10 @@ def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False):
             if existing is None:
                 db.session.add(delivery)
 
-        recipient = _contact_for(ch, item)
-        delivery.channel = ch
-        delivery.recipient = recipient
-        delivery.attempts = (delivery.attempts or 0) + 1
-
-        if not recipient:
-            delivery.status = DELIVERY_FAILED
-            delivery.error = f"no contact on roster for {ch}"
-            delivery.provider = None
-            summary["failed"] += 1
-            summary["failed_workers"].append(item.staff_id or str(item.id))
-            continue
-
-        result = sender_for(ch).send(_build_message(ch, item, run, client, recipient))
-        delivery.provider = result.provider
-        if result.ok:
-            delivery.status = DELIVERY_SENT
-            delivery.error = None
-            delivery.sent_at = datetime.now(timezone.utc)
+        if _attempt_send(delivery, item, run, client, ch, sender_for(ch),
+                         max_attempts, backoff_base):
             summary["sent"] += 1
         else:
-            delivery.status = DELIVERY_FAILED
-            delivery.error = result.error
             summary["failed"] += 1
             summary["failed_workers"].append(item.staff_id or str(item.id))
 
@@ -176,3 +244,20 @@ def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False):
     )
     db.session.commit()
     return summary
+
+
+def retry_delivery(delivery):
+    """Re-attempt a single failed delivery in place (no new row, same channel).
+    Reuses the roster contact fresh, so a fixed roster is picked up. Does NOT
+    commit — the caller (the retry sweep) owns the transaction."""
+    if delivery.status == DELIVERY_SENT:
+        return False  # never resend a success
+    item = db.session.get(PayrollItem, delivery.payroll_item_id)
+    run = db.session.get(PayrollRun, delivery.payroll_run_id)
+    if item is None or run is None:
+        return False
+    max_attempts, backoff_base = _retry_config()
+    return _attempt_send(
+        delivery, item, run, run.client_company, delivery.channel,
+        get_sender(delivery.channel), max_attempts, backoff_base,
+    )

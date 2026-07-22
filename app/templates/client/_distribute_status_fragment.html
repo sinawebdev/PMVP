@@ -34,7 +34,7 @@
 {% if rows %}
 <div class="panel">
   <table>
-    <thead><tr><th>Staff ID</th><th>Name</th><th>Suggested</th><th>Status</th><th>Channel</th><th>When</th><th>Detail</th></tr></thead>
+    <thead><tr><th>Staff ID</th><th>Name</th><th>Suggested</th><th>Status</th><th>Attempts</th><th>Channel</th><th>When</th><th>Detail</th></tr></thead>
     <tbody>
       {% for r in rows %}
       <tr>
@@ -43,10 +43,15 @@
         <td class="muted">{{ r.suggested|capitalize }}</td>
         <td>
           {% if r.delivery and r.delivery.status == 'sent' %}<span class="badge ok">Sent</span>
-          {% elif r.delivery and r.delivery.status == 'failed' %}<span class="badge warn">Failed</span>
+          {% elif r.delivery and r.delivery.status == 'failed' %}
+            {% set rs = delivery_retry_state(r.delivery) %}
+            {% if rs.final %}<span class="badge warn" title="{{ r.delivery.error }}">Failed · final</span>
+            {% elif rs.will_retry %}<span class="badge warn" title="{{ r.delivery.error }}">Failed · {{ rs.remaining }} left</span>
+            {% else %}<span class="badge warn" title="{{ r.delivery.error }}">Failed</span>{% endif %}
           {% elif in_flight %}<span class="badge">Queued</span>
           {% else %}<span class="badge">Not sent</span>{% endif %}
         </td>
+        <td class="muted nums">{{ r.delivery.attempts if r.delivery else 0 }}</td>
         <td class="muted">{{ r.delivery.channel if r.delivery else '—' }}</td>
         <td class="muted nums">{{ r.delivery.sent_at.strftime('%Y-%m-%d %H:%M') if r.delivery and r.delivery.sent_at else '—' }}</td>
         <td class="muted">{{ r.delivery.error if r.delivery and r.delivery.error else '' }}</td>

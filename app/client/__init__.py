@@ -593,6 +593,13 @@ def _distribute_context(run):
     sent = sum(1 for r in rows if r["delivery"] and r["delivery"].status == DELIVERY_SENT)
     failed = sum(1 for r in rows if r["delivery"] and r["delivery"].status == DELIVERY_FAILED)
     batch = _latest_batch(run.id)
+    # A pending automatic retry keeps the page live even after the batch reached a
+    # terminal state, so the operator watches recovery happen.
+    pending_retry = any(
+        r["delivery"] and r["delivery"].status == DELIVERY_FAILED and r["delivery"].next_retry_at
+        for r in rows
+    )
+    batch_active = batch is not None and batch.status in ("queued", "running")
     return {
         "run": run,
         "rows": rows,
@@ -601,7 +608,7 @@ def _distribute_context(run):
         "sent_count": sent,
         "failed_count": failed,
         "batch": batch,
-        "in_flight": batch is not None and batch.status in ("queued", "running"),
+        "in_flight": batch_active or pending_retry,
     }
 
 

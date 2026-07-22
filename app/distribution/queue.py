@@ -18,17 +18,20 @@ from datetime import datetime, timezone
 from flask import current_app
 
 from app import db
+from app.audit import record_audit
 from app.models import (
     BATCH_COMPLETED,
     BATCH_FAILED,
     BATCH_QUEUED,
     BATCH_RUNNING,
+    DELIVERY_FAILED,
     DistributionBatch,
     PayrollRun,
+    PayslipDelivery,
     User,
 )
 
-from .service import distribute_run
+from .service import distribute_run, retry_delivery
 
 
 def _in_flight_batch(run_id):
@@ -154,14 +157,60 @@ def process_all_queued():
         processed.append(process_batch(batch))
 
 
+def _as_aware(dt):
+    """Treat a stored naive datetime as UTC (SQLite drops tzinfo on write)."""
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def process_due_retries():
+    """Automatically re-attempt every failed delivery whose backoff has elapsed
+    and whose retry limit is not yet spent (next_retry_at is set == retries
+    remain). Returns the deliveries attempted. Groups by run so one audit entry
+    is written per run, then commits once.
+
+    Runs in the worker (no request context) and so intentionally spans tenants,
+    exactly like the batch processor — tenant isolation gates *user* queries, not
+    the platform worker."""
+    candidates = PayslipDelivery.query.filter(
+        PayslipDelivery.status == DELIVERY_FAILED,
+        PayslipDelivery.next_retry_at.isnot(None),
+    ).all()
+    now = datetime.now(timezone.utc)
+    due = [d for d in candidates if _as_aware(d.next_retry_at) <= now]
+    if not due:
+        return []
+
+    by_run = {}
+    for delivery in due:
+        by_run.setdefault(delivery.payroll_run_id, []).append(delivery)
+
+    processed = []
+    for run_id, deliveries in by_run.items():
+        run = db.session.get(PayrollRun, run_id)
+        recovered = sum(1 for d in deliveries if retry_delivery(d))
+        processed.extend(deliveries)
+        record_audit(
+            "Payslip delivery auto-retry",
+            run,
+            f"retried {len(deliveries)}, recovered {recovered}.",
+        )
+    db.session.commit()
+    return processed
+
+
 def run_worker_loop(poll_interval=3, stop_event=None):
-    """Poll the queue forever, processing batches as they appear.
+    """Poll the queue forever, processing queued batches and due retries as they
+    appear.
 
     `stop_event` (a threading.Event) lets a caller ask the loop to exit between
     polls; without one the loop runs until the process is killed.
     """
     while stop_event is None or not stop_event.is_set():
-        if not process_all_queued():
+        did_work = bool(process_all_queued())
+        did_work = bool(process_due_retries()) or did_work
+        if not did_work:
             if stop_event is not None:
                 stop_event.wait(poll_interval)
             else:

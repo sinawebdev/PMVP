@@ -474,6 +474,10 @@ class PayslipDelivery(db.Model):
     error = db.Column(db.String(512))
     attempts = db.Column(db.Integer, nullable=False, default=0)
     sent_at = db.Column(db.DateTime)
+    # When set (and in the past), an automatic retry of this failed delivery is
+    # due. Cleared on success; left NULL once the retry limit is exhausted, which
+    # is how "final failure" is distinguished from "will retry" (Phase 3 Slice 3).
+    next_retry_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=utc_now)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
