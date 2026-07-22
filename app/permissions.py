@@ -7,8 +7,10 @@ Previously these role lists were duplicated inline across templates (the
 ``@role_required("admin", "md", ...)`` tuples). Centralising them here means the
 navigation a user sees and the routes they may hit can never drift apart.
 
-Membership matches the pre-refactor lists **exactly** — this is de-duplication,
-not a policy change. Two behaviours are deliberately left untouched:
+Membership matched the pre-refactor lists exactly at introduction (pure
+de-duplication); the one deliberate policy change since is granting
+``chrisnat_admin`` full operator access (confirmed with Sina) — it joins every
+group below. Two legacy behaviours are deliberately left untouched:
 
   * The ``md`` role additionally passes *every* ``role_required`` check via a
     special case in :func:`app.auth.role_required`. That is independent of these
@@ -17,21 +19,26 @@ not a policy change. Two behaviours are deliberately left untouched:
     :func:`app.tenancy.tenant_role_required`; this module is operator-plane only.
 """
 
-from app.roles import normalise_role
+from app.roles import CHRISNAT_ADMIN, normalise_role
+
+# ``chrisnat_admin`` is the SaaS-era platform superuser: it joins every operator
+# capability group here (drives nav), and app.auth.role_required passes it on
+# every operator route (mirroring ``md``). Legacy operator roles are unchanged.
 
 # Full payroll operations: upload, process, view payslips, distribute.
-PAYROLL_ROLES = frozenset({"admin", "md", "payroll_officer", "accounts_officer"})
+PAYROLL_ROLES = frozenset(
+    {"admin", "md", "payroll_officer", "accounts_officer", CHRISNAT_ADMIN}
+)
 
 # Employee-roster maintenance. Historically excludes ``md`` from the decorator
-# list; ``md`` still reaches these *routes* via role_required's md special-case,
-# so dropping it here changes nothing.
-REP_ROLES = frozenset({"admin", "payroll_officer", "accounts_officer"})
+# list; ``md`` still reaches these *routes* via role_required's md special-case.
+REP_ROLES = frozenset({"admin", "payroll_officer", "accounts_officer", CHRISNAT_ADMIN})
 
 # Oversight of expenses + the audit trail.
-AUDIT_ROLES = frozenset({"admin", "md"})
+AUDIT_ROLES = frozenset({"admin", "md", CHRISNAT_ADMIN})
 
 # Statutory-rate administration.
-STATUTORY_ROLES = frozenset({"admin"})
+STATUTORY_ROLES = frozenset({"admin", CHRISNAT_ADMIN})
 
 
 def _in(role, group):

@@ -4,8 +4,14 @@ from flask import Blueprint, flash, redirect, render_template, request, session,
 from flask_login import current_user, login_required, login_user, logout_user
 
 from app.models import User
+from app.roles import CHRISNAT_ADMIN
 
 auth_bp = Blueprint("auth", __name__)
+
+# Operator superusers: any role_required check passes for these. ``md`` is the
+# legacy bureau superuser; ``chrisnat_admin`` is the SaaS-era platform admin,
+# granted full operator access (confirmed with Sina).
+OPERATOR_SUPERUSERS = ("md", CHRISNAT_ADMIN)
 
 
 def role_required(*roles):
@@ -22,7 +28,7 @@ def role_required(*roles):
             if current_user.role == "client_user" and "client_user" not in roles:
                 flash("Client portal access is archived while the payroll MVP is stabilized.", "warning")
                 return redirect(url_for("main.dashboard"))
-            if str(current_user.role).lower() == "md":
+            if str(current_user.role).lower() in OPERATOR_SUPERUSERS:
                 return view(*args, **kwargs)
             has_direct_role = current_user.role in roles
             if not has_direct_role:
