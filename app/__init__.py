@@ -241,6 +241,11 @@ def create_app():
     app.config["DISTRIBUTION_RETRY_BACKOFF_SECONDS"] = int(
         os.getenv("DISTRIBUTION_RETRY_BACKOFF_SECONDS", "60")
     )
+    # Above this delivery failure rate (0..1) a completed batch also alerts
+    # platform admins, not just the initiator (Phase 3, Slice 8).
+    app.config["DISTRIBUTION_FAILURE_ALERT_RATE"] = float(
+        os.getenv("DISTRIBUTION_FAILURE_ALERT_RATE", "0.5")
+    )
 
     os.makedirs(app.instance_path, exist_ok=True)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
@@ -402,11 +407,11 @@ def create_app():
         (or alongside) the in-process thread, and set DISTRIBUTION_WORKER_INLINE=false
         on the web dyno so only this process sends.
         """
-        from app.distribution.queue import run_worker_loop
+        from app.distribution.queue import run_worker
 
         print("Distribution worker started — polling for queued batches.")
         try:
-            run_worker_loop(poll_interval=app.config["DISTRIBUTION_WORKER_POLL_INTERVAL"])
+            run_worker(poll_interval=app.config["DISTRIBUTION_WORKER_POLL_INTERVAL"])
         except KeyboardInterrupt:
             print("Distribution worker stopped.")
 
@@ -427,11 +432,11 @@ def _start_inline_distribution_worker(app):
     Guarded by the caller against Werkzeug's debug-reloader parent process, so this
     starts exactly once per running app instance.
     """
-    from app.distribution.queue import run_worker_loop
+    from app.distribution.queue import run_worker
 
     def _target():
         with app.app_context():
-            run_worker_loop(poll_interval=app.config["DISTRIBUTION_WORKER_POLL_INTERVAL"])
+            run_worker(poll_interval=app.config["DISTRIBUTION_WORKER_POLL_INTERVAL"])
 
     threading.Thread(target=_target, name="distribution-worker", daemon=True).start()
 

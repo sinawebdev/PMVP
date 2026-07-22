@@ -120,6 +120,13 @@ _EVENT_LABELS = {
     "run.hold_released": "Payroll run released",
     "payslips.distributed": "Payslips distributed",
     "distribution.cancelled": "Distribution cancelled",
+    "distribution.completed": "Distribution completed",
+    "distribution.partial": "Distribution partially completed",
+    "distribution.failed": "Distribution failed",
+    "distribution.batch_failed": "Distribution batch failed",
+    "distribution.retry_exhausted": "Payslip retries exhausted",
+    "distribution.scheduled_started": "Scheduled distribution started",
+    "distribution.worker_stopped": "Distribution worker stopped",
 }
 
 

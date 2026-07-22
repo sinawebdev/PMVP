@@ -24,6 +24,9 @@
           <td class="text-muted small">{{ n.event.client_company.name if n.event and n.event.client_company else '—' }}</td>
           <td class="text-muted small">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '—' }}</td>
           <td class="text-end">
+            {% if n.event and n.event.subject_type == 'PayrollRun' and n.event.subject_id and n.event.event_type.startswith('distribution') %}
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('distribution.run_status', run_id=n.event.subject_id) }}"><i class="bi bi-box-arrow-up-right"></i>View</a>
+            {% endif %}
             {% if not n.read_at %}
             <form method="post" action="{{ url_for('notifications.mark_read', note_id=n.id) }}">
               <button class="btn btn-sm btn-outline-primary" type="submit">Mark read</button>
