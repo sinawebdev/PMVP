@@ -1498,15 +1498,16 @@ def mark_paid(run_id):
 # app/payroll_status.py alongside the other lifecycle status groupings and is
 # re-exported into this module via the import above, so the delete route, the
 # can_delete_run predicate, and this blocker check share one source of truth.
-def payroll_run_delete_blockers(payroll_run):
-    """Why this run may NOT be hard-deleted, as human-readable reasons.
-    Empty list means deletion is allowed."""
+def payroll_run_record_blockers(payroll_run):
+    """Record-level reasons a run may NOT be purged: real downstream financial
+    artifacts (a payment voucher, remittances, already-sent payslips, linked
+    expenses) that must never be silently destroyed. Independent of run status —
+    these hold whether the run is a Draft or Approved. Empty list => safe to purge.
+
+    Split out of :func:`payroll_run_delete_blockers` so the client-plane replace
+    flow can relax the *status* gate (a client may replace their own non-closed
+    run) while still honouring these hard, money-record blockers."""
     blockers = []
-    if payroll_run.status not in DELETABLE_STATUSES:
-        blockers.append(
-            f"run status is {payroll_run.status} "
-            "(only Draft or Rejected runs can be deleted)"
-        )
     if payroll_run.voucher:
         blockers.append(
             f"a payment voucher exists ({payroll_run.voucher.voucher_number})"
@@ -1529,22 +1530,32 @@ def payroll_run_delete_blockers(payroll_run):
     return blockers
 
 
-def hard_delete_payroll_run(payroll_run):
-    """Irreversibly delete a payroll run and its dependent rows.
+def payroll_run_delete_blockers(payroll_run):
+    """Why this run may NOT be hard-deleted (the operator delete gate), as
+    human-readable reasons. The status gate (only Draft/Previewed/Rejected) plus
+    the record-level blockers. Empty list means deletion is allowed. Behaviour is
+    unchanged from before the record/status split — status reason stays first."""
+    blockers = []
+    if payroll_run.status not in DELETABLE_STATUSES:
+        blockers.append(
+            f"run status is {payroll_run.status} "
+            "(only Draft or Rejected runs can be deleted)"
+        )
+    blockers.extend(payroll_run_record_blockers(payroll_run))
+    return blockers
 
-    Returns ``(True, None)`` or ``(False, reason)``. Does NOT commit — the
-    caller owns the transaction so callers like the replace-existing flow can
-    delete-and-recreate atomically.
+
+def purge_payroll_run(payroll_run):
+    """Irreversibly delete a run and its dependent rows. The caller MUST have
+    already checked the appropriate blockers (operator delete gate, or the
+    client replace gate). Does NOT commit — the caller owns the transaction so a
+    delete-and-recreate replace is atomic.
 
     Order matters: PayslipDelivery, RawPayEntry and RawUploadArchive carry
     non-nullable FKs to payroll_run with no DB-side cascade, so they go first;
     ImportBatch rows for the run are removed too (these are the "Previewed"
     leftovers this feature exists to clean up). PayrollItem rows are handled by
     the relationship's own delete-orphan cascade — no extra code."""
-    blockers = payroll_run_delete_blockers(payroll_run)
-    if blockers:
-        return False, "; ".join(blockers)
-
     client = payroll_run.client_company
     record_audit(
         "Payroll run hard-deleted",
@@ -1566,6 +1577,17 @@ def hard_delete_payroll_run(payroll_run):
     RawUploadArchive.query.filter_by(payroll_run_id=payroll_run.id).delete()
     ImportBatch.query.filter_by(payroll_run_id=payroll_run.id).delete()
     db.session.delete(payroll_run)  # PayrollItems cascade via the relationship
+
+
+def hard_delete_payroll_run(payroll_run):
+    """Operator hard delete: refuse if the delete gate blocks (status + record
+    blockers), otherwise purge. Returns ``(True, None)`` or ``(False, reason)``.
+    Does NOT commit — the caller owns the transaction so the replace-existing
+    flow can delete-and-recreate atomically."""
+    blockers = payroll_run_delete_blockers(payroll_run)
+    if blockers:
+        return False, "; ".join(blockers)
+    purge_payroll_run(payroll_run)
     return True, None
 
 
