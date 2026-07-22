@@ -20,6 +20,14 @@ from flask_login import current_user, login_required
 from app import db
 from app.audit import record_audit
 from app.auth import role_required
+from app.permissions import (
+    APPROVAL_ROLES,
+    CALCULATE_ROLES,
+    DELETE_ROLES,
+    EDIT_FIGURES_ROLES,
+    MARK_PROCESSED_ROLES,
+    SUBMIT_APPROVAL_ROLES,
+)
 from app.tenancy import platform_required
 from app.excel_utils import (
     allowed_excel_file,
@@ -53,6 +61,7 @@ from app.models import (
 )
 from app.payroll_status import (
     APPROVED,
+    DELETABLE_STATUSES,
     DRAFT,
     PENDING_APPROVAL,
     PENDING_STATUSES,
@@ -1096,18 +1105,18 @@ def create_or_update_employee_from_import(
 def detail(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
 
+    # The delete button (and every other lifecycle action) is gated by the
+    # can_*_run predicates in app/permissions.py, exposed as Jinja globals — the
+    # template no longer needs the status set passed in, and the predicate and
+    # the delete route share DELETABLE_STATUSES so they can't drift apart.
     return render_template(
         "payroll_detail.html",
         payroll_run=payroll_run,
-        # Drive the delete button off the same set the backend gate uses, so the
-        # two can't silently drift apart again (a hardcoded "Draft" in the
-        # template is exactly how the button went missing for Rejected runs).
-        deletable_statuses=DELETABLE_STATUSES,
     )
 
 
 @payroll_bp.route("/runs/<int:run_id>/calculate", methods=["POST"])
-@role_required("admin")
+@role_required(*CALCULATE_ROLES)
 def calculate(run_id):
     """Compute statutory pay for a run in code — no rep ever types a tax or
     SSF figure. Dispatches on upload_type: 'raw' builds PayrollItems from the
@@ -1238,7 +1247,7 @@ EDITABLE_ITEM_FIELDS = (
 
 
 @payroll_bp.route("/runs/<int:run_id>/items/edit", methods=["GET", "POST"])
-@role_required("admin", "payroll_officer")
+@role_required(*EDIT_FIGURES_ROLES)
 def edit_items(run_id):
     """Grid editing of a run's raw input figures without a full re-upload.
 
@@ -1437,7 +1446,7 @@ def wage_rates(client_id):
 # submit-md-approval writing reviewed_by/reviewed_at) is retired; the columns
 # remain in the schema but are no longer written.
 @payroll_bp.route("/runs/<int:run_id>/submit-for-approval", methods=["POST"])
-@role_required("admin", "accounts_officer")
+@role_required(*SUBMIT_APPROVAL_ROLES)
 def submit_for_approval(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     payroll_run.status = PENDING_APPROVAL
@@ -1448,7 +1457,7 @@ def submit_for_approval(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/approve", methods=["POST"])
-@role_required("admin", "md")
+@role_required(*APPROVAL_ROLES)
 def approve(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     payroll_run.status = APPROVED
@@ -1461,7 +1470,7 @@ def approve(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/reject", methods=["POST"])
-@role_required("admin", "md")
+@role_required(*APPROVAL_ROLES)
 def reject(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     payroll_run.status = REJECTED
@@ -1474,7 +1483,7 @@ def reject(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/mark-paid", methods=["POST"])
-@role_required("admin", "accounts_officer")
+@role_required(*MARK_PROCESSED_ROLES)
 def mark_paid(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     payroll_run.status = PROCESSED
@@ -1485,13 +1494,10 @@ def mark_paid(run_id):
 
 
 # Hard delete is deliberately narrow: only runs that never moved money or
-# reached a worker qualify. Draft/Previewed are pre-approval; Rejected is a
-# terminal dead-end that (per the approval workflow) can never have produced a
-# voucher, remittance, or sent payslip — so it is exactly as safe to delete as
-# a Draft, and reuploading over it should replace it.
-DELETABLE_STATUSES = {DRAFT, "Previewed", REJECTED}
-
-
+# reached a worker qualify. The status gate (DELETABLE_STATUSES) now lives in
+# app/payroll_status.py alongside the other lifecycle status groupings and is
+# re-exported into this module via the import above, so the delete route, the
+# can_delete_run predicate, and this blocker check share one source of truth.
 def payroll_run_delete_blockers(payroll_run):
     """Why this run may NOT be hard-deleted, as human-readable reasons.
     Empty list means deletion is allowed."""
@@ -1564,10 +1570,10 @@ def hard_delete_payroll_run(payroll_run):
 
 
 # Deletion is more sensitive than export: it destroys payroll history, so it
-# is restricted to admin and MD. accounts_officer/payroll_officer keep their
-# export access but cannot erase runs.
+# is restricted to admin and MD (see DELETE_ROLES in app/permissions.py).
+# accounts_officer/payroll_officer keep their export access but cannot erase runs.
 @payroll_bp.route("/runs/<int:run_id>/delete", methods=["POST"])
-@role_required("admin", "md")
+@role_required(*DELETE_ROLES)
 def delete_run(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     label = (

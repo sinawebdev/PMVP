@@ -31,3 +31,11 @@ SENDABLE_STATUSES = {APPROVED, PROCESSED}
 
 # Validators previous-run lookup (runs considered finalized for comparison).
 CLOSED_STATUSES = (APPROVED, PROCESSED)
+
+# Hard-delete gate: the only statuses a run may be permanently deleted from.
+# Draft/Previewed are pre-approval; Rejected is a terminal dead-end that (per
+# the approval workflow) can never have produced a voucher, remittance, or sent
+# payslip — so it is exactly as safe to delete as a Draft, and reuploading over
+# it should replace it. The delete route layers additional record-level blockers
+# (voucher/remittance/linked expenses) on top of this in app/payroll.py.
+DELETABLE_STATUSES = {DRAFT, "Previewed", REJECTED}

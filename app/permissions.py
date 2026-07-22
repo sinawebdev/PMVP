@@ -19,6 +19,12 @@ group below. Two legacy behaviours are deliberately left untouched:
     :func:`app.tenancy.tenant_role_required`; this module is operator-plane only.
 """
 
+from app.payroll_status import (
+    APPROVED,
+    DELETABLE_STATUSES,
+    DRAFT,
+    PENDING_STATUSES,
+)
 from app.roles import CHRISNAT_ADMIN, normalise_role
 
 # ``chrisnat_admin`` is the SaaS-era platform superuser: it joins every operator
@@ -63,3 +69,84 @@ def can_view_audit(role):
 def can_manage_statutory(role):
     """May administer statutory rates."""
     return _in(role, STATUTORY_ROLES)
+
+
+# --- Payroll-run lifecycle authorization -------------------------------------
+# Each transition of a PayrollRun is gated by a "who" (a role group below) AND a
+# "when" (which run statuses permit it). Both used to live inline as
+# ``current_user.role in [...] and payroll_run.status in [...]`` expressions
+# scattered across payroll_detail.html, with the role halves duplicated again in
+# each route's ``@role_required(...)`` tuple. The predicates here are the single
+# source of truth for both the button a user sees and the route they may hit, so
+# the two can never drift apart.
+#
+# Membership mirrors the pre-refactor template role lists exactly, plus
+# ``chrisnat_admin`` — which already passed every one of these routes via
+# app.auth.role_required's superuser bypass, so it can perform the action; adding
+# it here just lets it SEE the corresponding button (completing the "full
+# operator access" policy). ``md`` likewise passes every route via that bypass,
+# but is listed explicitly wherever it is a first-class actor (approval, delete,
+# …) so the template shows it the button without relying on the bypass.
+
+# Recalculate statutory pay (Calculate Pay) — admin only, historically.
+CALCULATE_ROLES = frozenset({"admin", CHRISNAT_ADMIN})
+
+# Open the raw-figures grid (Edit Figures). Row edits are further gated to Draft
+# inside the route; the grid is viewable read-only at any status.
+EDIT_FIGURES_ROLES = frozenset({"admin", "payroll_officer", CHRISNAT_ADMIN})
+
+# Move a Draft run to Pending Approval (Submit for Approval).
+SUBMIT_APPROVAL_ROLES = frozenset({"admin", "accounts_officer", CHRISNAT_ADMIN})
+
+# Approve or reject a run awaiting sign-off.
+APPROVAL_ROLES = frozenset({"admin", "md", CHRISNAT_ADMIN})
+
+# Close an approved run (Mark Processed).
+MARK_PROCESSED_ROLES = frozenset(
+    {"admin", "accounts_officer", "md", CHRISNAT_ADMIN}
+)
+
+# Hard-delete a run. Deliberately narrower than export: destroying payroll
+# history is admin/MD only (see the delete route).
+DELETE_ROLES = frozenset({"admin", "md", CHRISNAT_ADMIN})
+
+
+def can_calculate_run(role, run):
+    """May run Calculate Pay — only while the run is still open (Draft or
+    Pending Approval); a closed/rejected run's figures are frozen."""
+    return _in(role, CALCULATE_ROLES) and run.status in PENDING_STATUSES
+
+
+def can_edit_run_figures(role):
+    """May open the raw-figures grid. Status-independent (the grid is read-only
+    once the run leaves Draft, enforced in the route), so button visibility is
+    role-only — matching the pre-refactor template."""
+    return _in(role, EDIT_FIGURES_ROLES)
+
+
+def can_submit_run_for_approval(role, run):
+    """May submit a Draft run for approval."""
+    return _in(role, SUBMIT_APPROVAL_ROLES) and run.status == DRAFT
+
+
+def can_approve_run(role, run):
+    """May approve a run awaiting sign-off (Draft or Pending Approval)."""
+    return _in(role, APPROVAL_ROLES) and run.status in PENDING_STATUSES
+
+
+def can_reject_run(role, run):
+    """May reject a run awaiting sign-off (Draft or Pending Approval)."""
+    return _in(role, APPROVAL_ROLES) and run.status in PENDING_STATUSES
+
+
+def can_mark_run_processed(role, run):
+    """May mark an Approved run as Processed (accounts closes the run)."""
+    return _in(role, MARK_PROCESSED_ROLES) and run.status == APPROVED
+
+
+def can_delete_run(role, run):
+    """May hard-delete a run. Role AND status must both allow it; the delete
+    route additionally checks record-level blockers (voucher, remittances, sent
+    payslips, linked expenses) that this predicate does not — it gates the
+    button, not the irreversible action."""
+    return _in(role, DELETE_ROLES) and run.status in DELETABLE_STATUSES

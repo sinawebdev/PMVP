@@ -210,9 +210,16 @@ def create_app():
     # Operator capability predicates as template globals — one source of truth
     # (app/permissions.py) for nav/action gating, replacing inline role lists.
     from app.permissions import (
+        can_approve_run,
+        can_calculate_run,
+        can_delete_run,
+        can_edit_run_figures,
         can_manage_statutory,
         can_maintain_roster,
+        can_mark_run_processed,
         can_operate_payroll,
+        can_reject_run,
+        can_submit_run_for_approval,
         can_view_audit,
     )
 
@@ -221,6 +228,15 @@ def create_app():
         can_maintain_roster=can_maintain_roster,
         can_view_audit=can_view_audit,
         can_manage_statutory=can_manage_statutory,
+        # Payroll-run lifecycle gates (role x run-status), used by
+        # payroll_detail.html in place of inline role/status expressions.
+        can_calculate_run=can_calculate_run,
+        can_edit_run_figures=can_edit_run_figures,
+        can_submit_run_for_approval=can_submit_run_for_approval,
+        can_approve_run=can_approve_run,
+        can_reject_run=can_reject_run,
+        can_mark_run_processed=can_mark_run_processed,
+        can_delete_run=can_delete_run,
     )
 
     from app.audit import audit_bp

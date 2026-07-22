@@ -26,6 +26,10 @@
         <div class="col-md-3"><strong>On Leave / Unknown</strong><p>{{ payroll_run.on_leave_workers or 0 }} / {{ payroll_run.unknown_status_workers or 0 }}</p></div>
     </div>
     <div class="d-flex flex-wrap gap-2 mt-2">
+        {# Lifecycle action gating (role x run-status) lives in app/permissions.py —
+           see can_*_run below — so these buttons and the routes they hit share one
+           source of truth. #}
+        {% set role = current_user.role %}
         {% if payroll_run.risk_status %}
             <span class="badge {{ 'bg-warning text-dark' if payroll_run.risk_status == 'held' else 'bg-success' }}" title="{{ payroll_run.risk_reasons or '' }}">
                 Risk gate: {{ 'Held' if payroll_run.risk_status == 'held' else 'Auto-accepted' }}
@@ -37,23 +41,25 @@
         {% if payroll_run.status == "Held" %}
             <form method="post" action="{{ url_for('oversight.release_hold', run_id=payroll_run.id) }}"><button class="btn btn-outline-success"><i class="bi bi-unlock"></i>Release Hold</button></form>
         {% endif %}
-        {% if current_user.role == "admin" and payroll_run.status in ["Draft", "Pending Approval"] %}
+        {% if can_calculate_run(role, payroll_run) %}
             <form method="post" action="{{ url_for('payroll.calculate', run_id=payroll_run.id) }}"><button class="btn btn-outline-primary"><i class="bi bi-calculator"></i>Calculate Pay</button></form>
         {% endif %}
-        {% if current_user.role in ["admin", "payroll_officer"] %}
+        {% if can_edit_run_figures(role) %}
             <a class="btn btn-outline-primary" href="{{ url_for('payroll.edit_items', run_id=payroll_run.id) }}"><i class="bi bi-pencil-square"></i>Edit Figures</a>
         {% endif %}
         {% if current_user.role == "admin" and payroll_run.upload_type == 'raw' and payroll_run.client_company %}
             <a class="btn btn-outline-secondary" href="{{ url_for('payroll.wage_rates', client_id=payroll_run.client_company_id) }}"><i class="bi bi-cash"></i>Wage Rates</a>
         {% endif %}
-        {% if current_user.role in ["admin", "accounts_officer"] and payroll_run.status == "Draft" %}
+        {% if can_submit_run_for_approval(role, payroll_run) %}
             <form method="post" action="{{ url_for('payroll.submit_for_approval', run_id=payroll_run.id) }}"><button class="btn btn-primary"><i class="bi bi-clipboard-check"></i>Submit for Approval</button></form>
         {% endif %}
-        {% if current_user.role in ["admin", "md"] and payroll_run.status in ["Draft", "Pending Approval"] %}
+        {% if can_approve_run(role, payroll_run) %}
             <form method="post" action="{{ url_for('payroll.approve', run_id=payroll_run.id) }}"><button class="btn btn-success"><i class="bi bi-patch-check"></i>Approve Payroll</button></form>
+        {% endif %}
+        {% if can_reject_run(role, payroll_run) %}
             <form method="post" action="{{ url_for('payroll.reject', run_id=payroll_run.id) }}"><button class="btn btn-outline-danger"><i class="bi bi-x-octagon"></i>Reject Payroll</button></form>
         {% endif %}
-        {% if current_user.role in ["admin", "accounts_officer", "md"] and payroll_run.status == "Approved" %}
+        {% if can_mark_run_processed(role, payroll_run) %}
             <form method="post" action="{{ url_for('payroll.mark_paid', run_id=payroll_run.id) }}"><button class="btn btn-warning"><i class="bi bi-check2-circle"></i>Mark Processed</button></form>
         {% endif %}
         {% if current_user.role in ["admin", "md", "payroll_officer", "accounts_officer"] and payroll_run.status in ["Approved", "Paid"] %}
@@ -68,7 +74,7 @@
         {% if current_user.role == "admin" and payroll_run.upload_type == 'raw' %}
             <a class="btn btn-outline-primary" href="{{ url_for('raw_engine.run_exports', run_id=payroll_run.id) }}"><i class="bi bi-box-seam"></i>Generate Raw Exports (ZIP)</a>
         {% endif %}
-        {% if current_user.role in ["admin", "md"] and payroll_run.status in deletable_statuses %}
+        {% if can_delete_run(role, payroll_run) %}
             <form method="post" action="{{ url_for('payroll.delete_run', run_id=payroll_run.id) }}"
                   onsubmit="return confirm('PERMANENTLY delete the {{ payroll_run.client_company.name if payroll_run.client_company else '' }} {{ payroll_run.month }} {{ payroll_run.year }} payroll run and all {{ payroll_run.total_workers or 0 }} worker rows?\n\nThis is a HARD delete — there is no undo and no recycle bin. Only an audit log entry will remain.');">
                 <button class="btn btn-danger"><i class="bi bi-trash3"></i>Delete Run</button>
