@@ -224,5 +224,25 @@ class ClientRunUploadTestCase(unittest.TestCase):
         self.assertIsNone(batch.payroll_run_id)  # draft not consumed
 
 
+    # --- history / resumable drafts -----------------------------------------
+    def test_draft_appears_in_runs_list_until_confirmed(self):
+        self._login("admin@msc.demo")
+        self._upload()
+        draft = self._latest_draft()
+        html = self.client.get("/company/runs").get_data(as_text=True)
+        self.assertIn("In-progress imports", html)
+        self.assertIn("payroll.xlsx", html)
+        # Once confirmed it's a run, not an in-progress draft.
+        self.client.post(f"/company/imports/{draft.id}/confirm")
+        html2 = self.client.get("/company/runs").get_data(as_text=True)
+        self.assertNotIn("In-progress imports", html2)
+
+    def test_dashboard_nudges_in_progress_import(self):
+        self._login("admin@msc.demo")
+        self._upload()
+        html = self.client.get("/company").get_data(as_text=True)
+        self.assertIn("in progress", html)
+
+
 if __name__ == "__main__":
     unittest.main()

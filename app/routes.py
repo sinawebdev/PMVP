@@ -244,6 +244,14 @@ def company_dashboard():
     runs = tenant_query(PayrollRun).order_by(PayrollRun.created_at.desc()).all()
     pending_runs = sum(1 for run in runs if run.status in PENDING_STATUSES)
 
+    from app.models import ImportBatch
+
+    draft_count = (
+        tenant_query(ImportBatch)
+        .filter(ImportBatch.payroll_run_id.is_(None), ImportBatch.status == "Draft")
+        .count()
+    )
+
     return render_template(
         "client/dashboard.html",
         company=company,
@@ -251,6 +259,7 @@ def company_dashboard():
         active_employee_count=active_employee_count,
         run_count=len(runs),
         pending_runs=pending_runs,
+        draft_count=draft_count,
         recent_runs=runs[:8],
     )
 

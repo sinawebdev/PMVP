@@ -12,6 +12,13 @@
     <div class="card stat-card"><span class="n">{{ pending_runs }}</span><span class="l">Runs awaiting review</span></div>
   </div>
 
+  {% if draft_count %}
+  <div class="flash info" role="status">
+    You have {{ draft_count }} import{{ "" if draft_count == 1 else "s" }} in progress.
+    <a href="{{ url_for('client.runs') }}">Resume {{ "it" if draft_count == 1 else "them" }} →</a>
+  </div>
+  {% endif %}
+
   <div class="toolbar">
     <h2>Recent payroll runs</h2>
     <a class="btn" href="{{ url_for('client.runs') }}">View all</a>

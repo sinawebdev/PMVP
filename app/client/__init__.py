@@ -214,7 +214,15 @@ def _save_employee(employee, company):
 @tenant_required
 def runs():
     rows = tenant_query(PayrollRun).order_by(PayrollRun.created_at.desc()).all()
-    return render_template("client/runs.html", company=_company(), runs=rows)
+    # In-progress import drafts (uploaded but not yet confirmed) are resumable —
+    # the client can pick one back up (preview) or discard it.
+    drafts = (
+        tenant_query(ImportBatch)
+        .filter(ImportBatch.payroll_run_id.is_(None), ImportBatch.status == "Draft")
+        .order_by(ImportBatch.uploaded_at.desc())
+        .all()
+    )
+    return render_template("client/runs.html", company=_company(), runs=rows, drafts=drafts)
 
 
 @client_bp.route("/runs/<int:run_id>")

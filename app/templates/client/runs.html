@@ -8,6 +8,32 @@
     </div>
     <a class="btn primary" href="{{ url_for('client.run_upload') }}">Upload payroll</a>
   </div>
+
+  {% if drafts %}
+  <div class="toolbar"><h2>In-progress imports</h2></div>
+  <div class="panel">
+    <table>
+      <thead><tr><th>Period</th><th>File</th><th class="right">Workers</th><th class="right">Net (as uploaded)</th><th></th></tr></thead>
+      <tbody>
+        {% for d in drafts %}
+        <tr>
+          <td>{{ d.payroll_month }} {{ d.payroll_year }}</td>
+          <td>{{ d.original_filename }}</td>
+          <td class="right nums">{{ d.total_workers }}</td>
+          <td class="right nums">{{ d.net_total | cedis }}</td>
+          <td class="right actions">
+            <a class="btn sm" href="{{ url_for('client.import_preview', import_id=d.id) }}">Resume</a>
+            <form method="post" action="{{ url_for('client.import_discard', import_id=d.id) }}" class="inline">
+              <button class="btn sm" type="submit">Discard</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
   {% if runs %}
   <div class="panel">
     <table>
