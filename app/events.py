@@ -17,7 +17,7 @@ from flask import has_request_context
 from flask_login import current_user
 
 from app import db
-from app.models import DomainEvent, Notification, User
+from app.models import AuditTrail, DomainEvent, Notification, User
 from app.roles import PLATFORM_ROLES, TENANT_ROLES
 
 
@@ -124,3 +124,47 @@ _EVENT_LABELS = {
 
 def event_type_label(event_type):
     return _EVENT_LABELS.get(event_type, event_type.replace(".", " ").replace("_", " ").title())
+
+
+def run_activity(run):
+    """A run's merged, most-recent-first activity + approval timeline.
+
+    Combines the two existing sources — AuditTrail entries recorded against the
+    run (submit / approve / reject / process / edits) and DomainEvents about it
+    (risk held/accepted/released, payslips distributed) — into one uniform list
+    of ``{at, actor, title, detail, kind}`` dicts. Read-only; no new model."""
+    items = []
+    audits = (
+        AuditTrail.query.filter_by(
+            related_record_type="PayrollRun", related_record_id=run.id
+        )
+        .order_by(AuditTrail.created_at.desc())
+        .all()
+    )
+    for entry in audits:
+        items.append(
+            {
+                "at": entry.created_at,
+                "actor": entry.user.name if entry.user else "System",
+                "title": entry.action,
+                "detail": entry.notes or "",
+                "kind": "audit",
+            }
+        )
+    events = (
+        DomainEvent.query.filter_by(subject_type="PayrollRun", subject_id=run.id)
+        .order_by(DomainEvent.created_at.desc())
+        .all()
+    )
+    for event in events:
+        items.append(
+            {
+                "at": event.created_at,
+                "actor": event.actor.name if event.actor else "System",
+                "title": event_type_label(event.event_type),
+                "detail": event.summary or "",
+                "kind": "event",
+            }
+        )
+    items.sort(key=lambda item: item["at"].timestamp() if item["at"] else 0.0, reverse=True)
+    return items

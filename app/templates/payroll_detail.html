@@ -1,8 +1,13 @@
 {% extends "base.html" %}
+{% import "macros/lifecycle.html" as lc %}
 {% block title %}Payroll Detail · Chrisnat Payroll{% endblock %}
 {% block page_title %}Payroll Detail{% endblock %}
 {% block page_intro %}Review totals, imported worker counts, duplicates, statutory figures, and row-level warnings before exporting or approving payroll.{% endblock %}
 {% block content %}
+<section class="panel mb-3">
+    <div class="panel-header"><h2><i class="bi bi-signpost-split"></i>Payroll Progress</h2>{{ lc.status_pill(payroll_run.status) }}</div>
+    {{ lc.progress_stepper(run_progress(payroll_run, run_distributed)) }}
+</section>
 <section class="stats-grid">
     <div class="stat-card"><i class="bi bi-building stat-icon"></i><span>Client Company</span><strong>{{ payroll_run.client_company.name if payroll_run.client_company else "" }}</strong></div>
     <div class="stat-card"><i class="bi bi-calendar2-week stat-icon"></i><span>Payroll Month</span><strong>{{ payroll_run.month }} {{ payroll_run.year }}</strong></div>
@@ -81,6 +86,25 @@
             </form>
         {% endif %}
     </div>
+</section>
+
+<section class="panel mt-3">
+    <div class="panel-header"><h2><i class="bi bi-clock-history"></i>Activity &amp; Approval Timeline</h2><span>{{ activity|length }} event{{ "" if activity|length == 1 else "s" }}</span></div>
+    {% if activity %}
+    <ol class="activity-timeline">
+        {% for a in activity %}
+        <li class="activity-item activity-item--{{ a.kind }}">
+            <div class="activity-head">
+                <strong>{{ a.title }}</strong>
+                <span class="activity-meta">{{ a.actor }}{% if a.at %} · {{ a.at.strftime('%Y-%m-%d %H:%M') }}{% endif %}</span>
+            </div>
+            {% if a.detail %}<div class="activity-detail">{{ a.detail }}</div>{% endif %}
+        </li>
+        {% endfor %}
+    </ol>
+    {% else %}
+    <p class="text-muted mb-0">No recorded activity yet.</p>
+    {% endif %}
 </section>
 
 {% if payroll_run.upload_type == 'raw' and payroll_run.items|length == 0 %}

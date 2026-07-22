@@ -1244,3 +1244,41 @@ body {
     .lc-step--done .lc-label { color: #d8e7e2; }
     .lc-step--current .lc-label { color: #edf4f1; }
 }
+
+/* --- Activity & approval timeline (Phase 2) ------------------------------ */
+.activity-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 18px;
+    border-left: 2px solid #d7e0dc;
+}
+.activity-timeline .activity-item {
+    position: relative;
+    padding: 0 0 14px 6px;
+}
+.activity-timeline .activity-item::before {
+    content: "";
+    position: absolute;
+    left: -25px;
+    top: 3px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--brand, #2f8f6b);
+    border: 2px solid #fff;
+}
+.activity-item--event::before { background: #b8863b; }
+.activity-timeline .activity-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: baseline;
+}
+.activity-timeline .activity-meta { color: #6b7b76; font-size: 12px; white-space: nowrap; }
+.activity-timeline .activity-detail { color: #4a5a55; font-size: 13px; margin-top: 2px; }
+@media (prefers-color-scheme: dark) {
+    .activity-timeline { border-left-color: #33524a; }
+    .activity-timeline .activity-detail { color: #a9c6bf; }
+    .activity-timeline .activity-item::before { border-color: #16241f; }
+}
