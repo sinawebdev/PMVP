@@ -23,7 +23,7 @@ from app.models import (
     User,
 )
 
-from app.payroll_status import PENDING_STATUSES
+from app.payroll_status import HELD, PENDING_STATUSES, PROCESSED
 
 main_bp = Blueprint("main", __name__)
 
@@ -187,6 +187,36 @@ def dashboard():
     )
     delivery_rate = round(payslips_delivered / payslips_total * 100) if payslips_total else 0
 
+    # Phase 2: held payrolls (risk gate) and recently completed runs, plus the
+    # 'distributed' signal for the stepper — all reusing existing state.
+    held_filter = or_(PayrollRun.risk_status == "held", PayrollRun.status == HELD)
+    held_count = PayrollRun.query.filter(held_filter).count()
+    held_runs = (
+        PayrollRun.query.filter(held_filter)
+        .order_by(PayrollRun.created_at.desc())
+        .limit(8)
+        .all()
+    )
+    recent_runs = (
+        PayrollRun.query.filter_by(month=selected_month, year=selected_year)
+        .order_by(PayrollRun.created_at.desc())
+        .limit(8)
+        .all()
+    )
+    recently_completed = (
+        PayrollRun.query.filter_by(status=PROCESSED)
+        .order_by(PayrollRun.created_at.desc())
+        .limit(6)
+        .all()
+    )
+    from app.payroll import distributed_run_ids
+
+    dashboard_distributed_ids = distributed_run_ids(
+        [run.id for run in recent_runs]
+        + [run.id for run in held_runs]
+        + [run.id for run in recently_completed]
+    )
+
     return render_template(
         "dashboard.html",
         total_employees=Employee.query.count(),
@@ -201,10 +231,11 @@ def dashboard():
             run.total_ssnit + run.total_ssnit_employer for run in current_runs
         ),
         total_expenses=sum(expense.amount for expense in Expense.query.all()),
-        recent_runs=PayrollRun.query.filter_by(month=selected_month, year=selected_year)
-        .order_by(PayrollRun.created_at.desc())
-        .limit(8)
-        .all(),
+        recent_runs=recent_runs,
+        held_runs=held_runs,
+        held_count=held_count,
+        recently_completed=recently_completed,
+        distributed_ids=dashboard_distributed_ids,
         warning_count=warning_count,
         delivery_rate=delivery_rate,
         payslips_delivered=payslips_delivered,

@@ -1,10 +1,12 @@
 {% extends "base.html" %}
+{% import "macros/lifecycle.html" as lc %}
 {% block title %}Dashboard · Chrisnat Payroll{% endblock %}
 {% block page_title %}MD Dashboard{% endblock %}
 {% block page_intro %}A management view of client company payroll costs, pending approvals, statutory totals, expense exposure, and warning signals for {{ selected_month }} {{ selected_year }}.{% endblock %}
 {% block page_actions %}
 <a class="btn btn-light btn-sm" href="{{ url_for('payroll.runs') }}"><i class="bi bi-file-earmark-arrow-up"></i>Create Payroll Run</a>
 <a class="btn btn-outline-light btn-sm" href="{{ url_for('payroll.runs', status='needs_approval') }}"><i class="bi bi-check2-square"></i>Review Approvals</a>
+<a class="btn btn-outline-light btn-sm" href="{{ url_for('oversight.risk_queue') }}"><i class="bi bi-shield-exclamation"></i>Risk Queue{% if held_count %} ({{ held_count }}){% endif %}</a>
 {% endblock %}
 {% block header_visual %}
 <div class="dashboard-signal" aria-label="Dashboard period summary">
@@ -45,6 +47,7 @@
     <div class="stat-card"><i class="bi bi-buildings stat-icon"></i><span>Client Companies</span><strong>{{ total_clients }}</strong></div>
     <div class="stat-card"><i class="bi bi-cash-coin stat-icon"></i><span>Current Payroll</span><strong>{{ current_month_total|cedis }}</strong></div>
     <a class="stat-card stat-link" href="{{ url_for('payroll.runs', status='needs_approval') }}"><i class="bi bi-hourglass-split stat-icon"></i><span>Pending Approvals</span><strong>{{ pending_approvals }}</strong></a>
+    <a class="stat-card stat-link" href="{{ url_for('oversight.risk_queue') }}" title="Payrolls held by the risk gate for review"><i class="bi bi-shield-exclamation stat-icon"></i><span>Held Payrolls</span><strong>{{ held_count }}</strong></a>
     <div class="stat-card"><i class="bi bi-receipt-cutoff stat-icon"></i><span>PAYE Total</span><strong>{{ paye_total|cedis }}</strong></div>
     <div class="stat-card" title="Combined employee (5.5%) + employer (13%) SSF — the amount remitted to SSNIT."><i class="bi bi-shield-check stat-icon"></i><span>SSNIT Payable</span><strong>{{ ssnit_total|cedis }}</strong></div>
     <div class="stat-card"><i class="bi bi-exclamation-triangle stat-icon"></i><span>Validation Warnings</span><strong>{{ warning_count }}</strong></div>
@@ -100,24 +103,61 @@
                 <span><i class="bi bi-hourglass-split"></i>Pending approvals</span>
                 <strong>{{ pending_approvals }}</strong>
             </a>
+            <a class="action-row" href="{{ url_for('oversight.risk_queue') }}">
+                <span><i class="bi bi-shield-exclamation"></i>Held for risk review</span>
+                <strong>{{ held_count }}</strong>
+            </a>
             <a class="action-row" href="{{ url_for('payroll.runs') }}">
                 <span><i class="bi bi-exclamation-triangle"></i>Validation warnings</span>
                 <strong>{{ warning_count }}</strong>
             </a>
         </section>
-        <section class="panel">
+        {% if held_runs %}
+        <section class="panel mb-4">
+            <div class="panel-header"><h2><i class="bi bi-shield-exclamation"></i>Held for Risk Review</h2><a class="badge text-bg-warning text-decoration-none" href="{{ url_for('oversight.risk_queue') }}">{{ held_count }} held</a></div>
+            <div class="list-group list-group-flush">
+                {% for run in held_runs %}
+                    <a class="list-group-item list-group-item-action" href="{{ url_for('payroll.detail', run_id=run.id) }}">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong>{{ run.client_company.name if run.client_company else "No Client" }}</strong>
+                            {{ lc.status_pill(run.status) }}
+                        </div>
+                        <small>{{ run.month }} {{ run.year }} | {{ run.total_net_pay|cedis }}{% if run.risk_reasons %} · {{ run.risk_reasons }}{% endif %}</small>
+                    </a>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+        <section class="panel mb-4">
             <div class="panel-header"><h2><i class="bi bi-clock-history"></i>Recent Payroll Runs</h2></div>
             <div class="list-group list-group-flush">
                 {% for run in recent_runs %}
                     <a class="list-group-item list-group-item-action" href="{{ url_for('payroll.detail', run_id=run.id) }}">
-                        <div class="d-flex justify-content-between">
+                        <div class="d-flex justify-content-between align-items-center">
                             <strong>{{ run.client_company.name if run.client_company else "No Client" }}</strong>
-                            <span class="badge text-bg-secondary">{{ run.status }}</span>
+                            {{ lc.status_pill(run.status) }}
+                        </div>
+                        <small>{{ run.month }} {{ run.year }} | {{ run.total_net_pay|cedis }}</small>
+                        {{ lc.progress_stepper(run_progress(run, run.id in distributed_ids), compact=true) }}
+                    </a>
+                {% else %}
+                    <p class="text-muted mb-0">No payroll runs yet.</p>
+                {% endfor %}
+            </div>
+        </section>
+        <section class="panel">
+            <div class="panel-header"><h2><i class="bi bi-check2-circle"></i>Recently Completed</h2></div>
+            <div class="list-group list-group-flush">
+                {% for run in recently_completed %}
+                    <a class="list-group-item list-group-item-action" href="{{ url_for('payroll.detail', run_id=run.id) }}">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong>{{ run.client_company.name if run.client_company else "No Client" }}</strong>
+                            {% if run.id in distributed_ids %}<span class="badge text-bg-primary">Distributed</span>{% else %}{{ lc.status_pill(run.status) }}{% endif %}
                         </div>
                         <small>{{ run.month }} {{ run.year }} | {{ run.total_net_pay|cedis }}</small>
                     </a>
                 {% else %}
-                    <p class="text-muted mb-0">No payroll runs yet.</p>
+                    <p class="text-muted mb-0">No completed runs yet.</p>
                 {% endfor %}
             </div>
         </section>

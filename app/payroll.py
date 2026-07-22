@@ -158,7 +158,7 @@ def has_duplicate_payroll(client_id, month, year):
     )
 
 
-def _distributed_run_ids(run_ids):
+def distributed_run_ids(run_ids):
     """Set of run ids that have at least one SENT payslip — the 'Distributed'
     lifecycle signal. One query for the whole page (N+1-free) so the runs list
     can render each run's progress stepper without a per-row lookup."""
@@ -540,7 +540,7 @@ def runs():
         query = query.filter(PayrollRun.status == status_filter)
     payroll_runs = query.order_by(PayrollRun.created_at.desc()).all()
     clients = ClientCompany.query.filter_by(status="Active").order_by(ClientCompany.name).all()
-    distributed_ids = _distributed_run_ids([run.id for run in payroll_runs])
+    distributed_ids = distributed_run_ids([run.id for run in payroll_runs])
     return render_template(
         "payroll_runs.html",
         payroll_runs=payroll_runs,
