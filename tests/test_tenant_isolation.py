@@ -22,7 +22,7 @@ os.environ["PERSISTENCE_REQUIRED"] = "false"
 from flask_login import login_user  # noqa: E402
 from werkzeug.exceptions import NotFound  # noqa: E402
 
-from app import create_app  # noqa: E402
+from app import create_app, db  # noqa: E402
 from app.models import Employee, PayrollItem, PayrollRun, User  # noqa: E402
 from app.tenancy import owns_object, tenant_get_or_404  # noqa: E402
 
@@ -120,6 +120,35 @@ class TenantIsolationTestCase(unittest.TestCase):
             ]:
                 with self.assertRaises(NotFound):
                     tenant_get_or_404(model, ident)
+
+    # --- write level: a mutation endpoint is isolated too (Phase 5) --------
+    def test_tenant_user_cannot_write_another_tenants_resource(self):
+        # A POST that mutates, not just a GET: a Stellar user deactivating an MSC
+        # employee is denied (404) and the employee is left untouched — proving no
+        # write leaks across tenants.
+        self.msc_emp.status = "Active"
+        db.session.commit()
+        self._login("admin@stellar.demo")
+        resp = self.client.post(
+            f"/company/employees/{self.msc_emp.id}/deactivate"
+        )
+        self.assertEqual(resp.status_code, 404)
+        db.session.refresh(self.msc_emp)
+        self.assertEqual(self.msc_emp.status, "Active")  # unchanged
+
+    def test_tenant_user_can_write_own_resource(self):
+        # Positive control: the same endpoint works on the caller's own employee,
+        # so the isolation above is denial, not a broken route.
+        own = Employee.query.filter_by(
+            client_company_id=self.stellar_user.client_company_id, status="Active"
+        ).first()
+        if own is None:
+            self.skipTest("no active Stellar employee seeded")
+        self._login("admin@stellar.demo")
+        resp = self.client.post(f"/company/employees/{own.id}/deactivate")
+        self.assertIn(resp.status_code, (302, 200))
+        db.session.refresh(own)
+        self.assertEqual(own.status, "Inactive")
 
 
 if __name__ == "__main__":
