@@ -41,25 +41,13 @@ def _parse_date(value, *, end=False):
     return datetime.combine(d, moment, tzinfo=timezone.utc)
 
 
-def search_deliveries(filters, page=1):
-    """Return a Flask-SQLAlchemy Pagination of PayslipDelivery rows matching
-    `filters` (a dict of raw request args), newest activity first.
-
-    Efficient: a single joined query with eager-loaded relationships (no N+1),
-    paginated in the database."""
-    query = (
-        PayslipDelivery.query.join(
-            PayrollItem, PayslipDelivery.payroll_item_id == PayrollItem.id
-        )
-        .join(PayrollRun, PayslipDelivery.payroll_run_id == PayrollRun.id)
-        .options(
-            joinedload(PayslipDelivery.payroll_item),
-            joinedload(PayslipDelivery.payroll_run).joinedload(PayrollRun.client_company),
-            joinedload(PayslipDelivery.distribution_batch).joinedload(
-                DistributionBatch.initiated_by
-            ),
-        )
-    )
+def filtered_delivery_query(filters):
+    """A PayslipDelivery query (joined to item + run) with every `filters` clause
+    applied, but no ordering, eager-loading, or pagination. Shared by the history
+    list, analytics, and exports so they always agree on what a filter means."""
+    query = PayslipDelivery.query.join(
+        PayrollItem, PayslipDelivery.payroll_item_id == PayrollItem.id
+    ).join(PayrollRun, PayslipDelivery.payroll_run_id == PayrollRun.id)
 
     company_id = filters.get("company_id")
     if company_id:
@@ -102,8 +90,41 @@ def search_deliveries(filters, page=1):
     if date_to:
         query = query.filter(PayslipDelivery.updated_at <= date_to)
 
-    query = query.order_by(PayslipDelivery.updated_at.desc(), PayslipDelivery.id.desc())
+    return query
+
+
+def search_deliveries(filters, page=1):
+    """A Flask-SQLAlchemy Pagination of PayslipDelivery rows matching `filters`,
+    newest activity first, with relationships eager-loaded (no N+1)."""
+    query = (
+        filtered_delivery_query(filters)
+        .options(
+            joinedload(PayslipDelivery.payroll_item),
+            joinedload(PayslipDelivery.payroll_run).joinedload(PayrollRun.client_company),
+            joinedload(PayslipDelivery.distribution_batch).joinedload(
+                DistributionBatch.initiated_by
+            ),
+        )
+        .order_by(PayslipDelivery.updated_at.desc(), PayslipDelivery.id.desc())
+    )
     return query.paginate(page=page, per_page=PER_PAGE, error_out=False)
+
+
+def export_rows(filters, limit=50000):
+    """Filtered deliveries as fully-loaded rows for CSV/XLSX export (capped)."""
+    return (
+        filtered_delivery_query(filters)
+        .options(
+            joinedload(PayslipDelivery.payroll_item),
+            joinedload(PayslipDelivery.payroll_run).joinedload(PayrollRun.client_company),
+            joinedload(PayslipDelivery.distribution_batch).joinedload(
+                DistributionBatch.initiated_by
+            ),
+        )
+        .order_by(PayslipDelivery.updated_at.desc(), PayslipDelivery.id.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 def filter_options():

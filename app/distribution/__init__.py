@@ -99,6 +99,46 @@ def history():
     )
 
 
+@distribution_bp.route("/analytics")
+@role_required(*PAYROLL_ROLES)
+def analytics():
+    from .analytics import delivery_analytics
+    from .history import filter_options
+
+    return render_template(
+        "distribution/analytics.html",
+        stats=delivery_analytics(request.args),
+        options=filter_options(),
+        filters=request.args,
+    )
+
+
+@distribution_bp.route("/history/export.csv")
+@role_required(*PAYROLL_ROLES)
+def history_export_csv():
+    from .analytics import export_deliveries_csv
+
+    data, filename = export_deliveries_csv(request.args)
+    return current_app.response_class(
+        data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@distribution_bp.route("/history/export.xlsx")
+@role_required(*PAYROLL_ROLES)
+def history_export_xlsx():
+    from .analytics import export_deliveries_xlsx
+
+    data, filename = export_deliveries_xlsx(request.args)
+    return current_app.response_class(
+        data,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @distribution_bp.route("/batch/<int:batch_id>")
 @role_required(*PAYROLL_ROLES)
 def batch_detail(batch_id):
