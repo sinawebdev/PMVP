@@ -96,7 +96,7 @@
                     <td>{% if d %}<span class="badge text-bg-light">{{ d.channel }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
                     <td>{{ d.recipient if d else "—" }}</td>
                     <td>
-                        {% if d and d.status == "sent" %}<span class="badge text-bg-success">sent</span>
+                        {% if d and d.status == "sent" %}<span class="badge text-bg-success">sent</span>{% if d.provider_status in ("delivered", "read") %} <span class="badge text-bg-success" title="Confirmed by provider{% if d.delivered_at %} at {{ d.delivered_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}"><i class="bi bi-check2-all"></i>{{ d.provider_status }}</span>{% endif %}
                         {% elif d and d.status == "cancelled" %}<span class="badge text-bg-dark">cancelled</span>
                         {% elif d and d.status == "failed" %}
                             {% set rs = delivery_retry_state(d) %}

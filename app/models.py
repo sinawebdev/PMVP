@@ -480,6 +480,12 @@ class PayslipDelivery(db.Model):
     recipient = db.Column(db.String(120))
     status = db.Column(db.String(16), nullable=False, default=DELIVERY_PENDING)
     provider = db.Column(db.String(64))
+    # Provider's own message id + async delivery-receipt status (Phase 4, Slice 4).
+    # `status` above is our send outcome (accepted by the provider); these capture
+    # the later handset confirmation the provider posts back via webhook.
+    provider_message_id = db.Column(db.String(128), index=True)
+    provider_status = db.Column(db.String(32))
+    delivered_at = db.Column(db.DateTime)
     error = db.Column(db.String(512))
     attempts = db.Column(db.Integer, nullable=False, default=0)
     sent_at = db.Column(db.DateTime)

@@ -52,6 +52,29 @@ class SendResult:
     ok: bool
     provider: str
     error: str | None = None
+    message_id: str | None = None
+
+
+def _extract_message_id(body):
+    """Best-effort provider message id from a JSON response body. Handles the
+    common shapes: Meta WhatsApp {"messages":[{"id":...}]} and Hubtel-style
+    {"messageId"|"MessageId"|"id":...} (possibly nested under "data")."""
+    try:
+        data = _json.loads(body) if isinstance(body, str) else body
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    messages = data.get("messages")
+    if isinstance(messages, list) and messages and isinstance(messages[0], dict):
+        mid = messages[0].get("id")
+        if mid:
+            return str(mid)
+    for container in (data, data.get("data") if isinstance(data.get("data"), dict) else {}):
+        for key in ("messageId", "MessageId", "message_id", "id", "Id"):
+            if container.get(key):
+                return str(container[key])
+    return None
 
 
 def _http_post(url, *, headers=None, json=None, timeout=30):
@@ -112,7 +135,7 @@ class HubtelSmsSender(Sender):
         except Exception as exc:
             return SendResult(False, self.provider, str(exc))
         if 200 <= status < 300:
-            return SendResult(True, self.provider)
+            return SendResult(True, self.provider, message_id=_extract_message_id(body))
         if status == 429:
             return SendResult(False, self.provider, "rate limited by provider (HTTP 429)")
         return SendResult(False, self.provider, f"hubtel HTTP {status}: {body[:200]}")
@@ -157,7 +180,7 @@ class CloudWhatsAppSender(Sender):
         except Exception as exc:
             return SendResult(False, self.provider, str(exc))
         if 200 <= status < 300:
-            return SendResult(True, self.provider)
+            return SendResult(True, self.provider, message_id=_extract_message_id(body))
         if status == 429:
             return SendResult(False, self.provider, "rate limited by provider (HTTP 429)")
         return SendResult(False, self.provider, f"whatsapp HTTP {status}: {body[:200]}")

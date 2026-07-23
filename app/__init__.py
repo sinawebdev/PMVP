@@ -203,6 +203,13 @@ def create_app():
     app.config["WHATSAPP_PHONE_NUMBER_ID"] = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
     app.config["WHATSAPP_API_VERSION"] = os.getenv("WHATSAPP_API_VERSION", "v21.0")
     app.config["WHATSAPP_BASE_URL"] = os.getenv("WHATSAPP_BASE_URL", "https://graph.facebook.com")
+    # Delivery-receipt webhooks (Phase 4, Slice 4). Endpoints stay disabled (404)
+    # until their secret/token is set, so an unconfigured deployment can't be
+    # spoofed. Meta: verify token for the subscription handshake + optional app
+    # secret for X-Hub-Signature-256. Hubtel: a shared secret on the callback URL.
+    app.config["WHATSAPP_VERIFY_TOKEN"] = os.getenv("WHATSAPP_VERIFY_TOKEN")
+    app.config["WHATSAPP_APP_SECRET"] = os.getenv("WHATSAPP_APP_SECRET")
+    app.config["HUBTEL_WEBHOOK_SECRET"] = os.getenv("HUBTEL_WEBHOOK_SECRET")
     app.config["EMAIL_BACKEND"] = os.getenv("EMAIL_BACKEND", "console")        # console|smtp
     app.config["DEFAULT_FROM_EMAIL"] = os.getenv("DEFAULT_FROM_EMAIL", "payroll@chrisnat.local")
     # Optional sender display name and reply-to (Phase 3, Slice 9). Both optional
@@ -339,6 +346,7 @@ def create_app():
     from app.auth import auth_bp
     from app.client import client_bp
     from app.distribution import distribution_bp, payslip_link_bp
+    from app.distribution.webhooks import distribution_webhooks_bp
     from app.employees import employees_bp
     from app.notifications import notifications_bp
     from app.oversight import oversight_bp
@@ -356,6 +364,7 @@ def create_app():
     app.register_blueprint(payslip_bp)
     app.register_blueprint(distribution_bp)
     app.register_blueprint(payslip_link_bp)
+    app.register_blueprint(distribution_webhooks_bp)
     app.register_blueprint(employees_bp)
     app.register_blueprint(statutory_bp)
     app.register_blueprint(raw_engine_bp)

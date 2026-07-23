@@ -49,12 +49,17 @@ def _retry_config():
         return 3, 60
 
 
-def _mark_sent(delivery, provider):
+def _mark_sent(delivery, provider, message_id=None):
     delivery.status = DELIVERY_SENT
     delivery.provider = provider
     delivery.error = None
     delivery.sent_at = datetime.now(timezone.utc)
     delivery.next_retry_at = None
+    if message_id:
+        delivery.provider_message_id = message_id
+        # A fresh send supersedes any prior receipt state.
+        delivery.provider_status = None
+        delivery.delivered_at = None
 
 
 def _mark_failed(delivery, error, *, provider=None, max_attempts=None, backoff_base=None):
@@ -220,7 +225,7 @@ def _attempt_send(delivery, item, run, client, ch, sender, max_attempts, backoff
     throttle(ch)
     result = sender.send(_build_message(ch, item, run, client, recipient))
     if result.ok:
-        _mark_sent(delivery, result.provider)
+        _mark_sent(delivery, result.provider, message_id=result.message_id)
         return True
     _mark_failed(
         delivery, result.error,
