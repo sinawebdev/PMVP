@@ -12,6 +12,7 @@ token rides in the cookie).
 import io
 import json
 import os
+import time
 import uuid
 import zipfile
 
@@ -75,12 +76,43 @@ def _cleanup(token):
             pass
 
 
+# Abandoned preview files (a preview that was staged but never confirmed) have no
+# expiry of their own; sweep them opportunistically on each new upload so they do
+# not accumulate on disk. A day is comfortably longer than any real preview session.
+STAGING_MAX_AGE_SECONDS = 24 * 3600
+
+
+def _sweep_stale_staging(max_age_seconds=STAGING_MAX_AGE_SECONDS):
+    """Best-effort removal of stale ``rawweb_*`` staging files. Never raises —
+    a cleanup failure must never block an upload."""
+    folder = current_app.config.get("IMPORT_SESSION_FOLDER")
+    if not folder or not os.path.isdir(folder):
+        return 0
+    cutoff = time.time() - max_age_seconds
+    removed = 0
+    try:
+        for name in os.listdir(folder):
+            if not name.startswith("rawweb_"):
+                continue
+            path = os.path.join(folder, name)
+            try:
+                if os.path.getmtime(path) < cutoff:
+                    os.remove(path)
+                    removed += 1
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return removed
+
+
 # ── Upload: branch seed vs thin, stage a preview ──────────────────────────────
 
 
 @raw_engine_bp.route("/upload", methods=["POST"])
 @role_required("admin")
 def upload():
+    _sweep_stale_staging()  # opportunistically clear abandoned preview files
     client_id = request.form.get("client_company_id")
     month = (request.form.get("month") or "").strip()
     year = (request.form.get("year") or "").strip()
@@ -219,47 +251,60 @@ def confirm():
         content = handle.read()
 
     client_id = meta["client_company_id"]
-    run = PayrollRun(
-        client_company_id=client_id,
-        month=meta["month"],
-        year=int(meta["year"]),
-        status=DRAFT,
-        upload_type="raw",
-        created_by=getattr(current_user, "id", None),
-        source_filename=meta.get("filename"),
-        import_type="Raw Data Upload",
-    )
-    db.session.add(run)
-    db.session.flush()  # assign run.id for the archive FK
-    rate = statutory_rate_for_run(run)
+    # Persist the run, its seed/thin context, the archived workbook bytes AND the
+    # computed items in ONE transaction (commit=False on the store calls, a single
+    # commit at the end). A failure anywhere rolls the whole thing back, so a raw
+    # run can never be left committed in Draft with zero items (or without its
+    # source workbook). Staged files are kept on failure so the admin can retry.
+    try:
+        run = PayrollRun(
+            client_company_id=client_id,
+            month=meta["month"],
+            year=int(meta["year"]),
+            status=DRAFT,
+            upload_type="raw",
+            created_by=getattr(current_user, "id", None),
+            source_filename=meta.get("filename"),
+            import_type="Raw Data Upload",
+        )
+        db.session.add(run)
+        db.session.flush()  # assign run.id for the archive FK
+        rate = statutory_rate_for_run(run)
 
-    if meta["mode"] == "seed":
-        context = parse_rich_workbook(bin_path, client_id, source_filename=meta.get("filename"))
-        # Persist context + archive the workbook bytes in ONE transaction — a
-        # preservation failure rolls the whole seed (and this run) back.
-        persist_seed(run=run, context=context, source_bytes=content,
-                     source_filename=meta.get("filename"))
-        payslips = compute_seed_month(context, rate)
-        write_payroll_items(run, payslips)
-        summary = {"seeded_employees": len(context.employees),
-                   "computed_workers": len(payslips)}
-    else:  # thin
-        inputs, _warn = parse_thin_workbook(bin_path)
-        result = join_and_compute(inputs, run, rate)
-        write_payroll_items(run, result.payslips)
-        archive_upload(run, meta.get("filename"), content, kind="thin")
+        if meta["mode"] == "seed":
+            context = parse_rich_workbook(bin_path, client_id, source_filename=meta.get("filename"))
+            persist_seed(run=run, context=context, source_bytes=content,
+                         source_filename=meta.get("filename"), commit=False)
+            payslips = compute_seed_month(context, rate)
+            write_payroll_items(run, payslips, commit=False)
+            summary = {"seeded_employees": len(context.employees),
+                       "computed_workers": len(payslips)}
+        else:  # thin
+            inputs, _warn = parse_thin_workbook(bin_path)
+            result = join_and_compute(inputs, run, rate)
+            write_payroll_items(run, result.payslips, commit=False)
+            archive_upload(run, meta.get("filename"), content, kind="thin")
+            summary = {"computed_workers": len(result.payslips),
+                       "blocked": result.blocked}
+
         db.session.commit()
-        summary = {"computed_workers": len(result.payslips),
-                   "blocked": result.blocked}
+        run_id = run.id
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Raw engine confirm failed (token %s)", token)
+        return jsonify({
+            "error": "Could not save this upload — nothing was written. "
+                     "Please try again."
+        }), 500
 
     _cleanup(token)
     session.pop("raw_web_token", None)
     return jsonify({
         "status": "committed",
-        "run_id": run.id,
+        "run_id": run_id,
         "mode": meta["mode"],
         "summary": summary,
-        "redirect": url_for("payroll.detail", run_id=run.id),
+        "redirect": url_for("payroll.detail", run_id=run_id),
     })
 
 

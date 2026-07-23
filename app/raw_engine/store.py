@@ -46,6 +46,7 @@ def persist_seed(
     run=None,
     source_bytes=None,
     source_filename=None,
+    commit=True,
 ) -> SeedResult:
     """Write ``context`` to the database in a single transaction and return a
     :class:`SeedResult`. Rolls back and re-raises on any error.
@@ -56,6 +57,10 @@ def persist_seed(
     seeded context can never exist without its source workbook. ``source_path`` +
     ``preserve`` remains the best-effort file-copy fallback for library callers
     without a run.
+
+    ``commit=False`` flushes but leaves the commit (and rollback-on-error) to the
+    caller, so the web confirm path can persist the run, its seed and its computed
+    items in one atomic transaction — never a committed run with no items.
     """
     result = SeedResult()
     try:
@@ -86,10 +91,14 @@ def persist_seed(
             f"{result.employees_updated} updated, {result.rate_profiles_written} "
             f"rate rows, {result.icu_members} ICU members.",
         )
-        db.session.commit()
+        if commit:
+            db.session.commit()
+        else:
+            db.session.flush()
         return result
     except Exception:
-        db.session.rollback()
+        if commit:
+            db.session.rollback()
         raise
 
 
@@ -177,13 +186,16 @@ def _upsert_employee(client_company_id, emp, existing, result):
         result.rate_profiles_written += 1
 
 
-def write_payroll_items(run, payslips):
+def write_payroll_items(run, payslips, commit=True):
     """Persist computed payslips to PayrollItem for ``run`` (reused store, so
     distribution/payslip/export code is unchanged). Idempotent: replaces the
     run's existing items and recomputes the run aggregate totals. Runs in a
     single transaction.
 
     ``payslips``: ``{staff_id: Payslip}``.
+
+    ``commit=False`` flushes but defers the commit (and rollback-on-error) to the
+    caller, so the web confirm path can persist the run and its items atomically.
     """
     try:
         roster = {
@@ -242,10 +254,14 @@ def write_payroll_items(run, payslips):
             f"{run.total_gross_pay:.2f}, PAYE {run.total_paye:.2f}, net "
             f"{run.total_net_pay:.2f}.",
         )
-        db.session.commit()
+        if commit:
+            db.session.commit()
+        else:
+            db.session.flush()
         return count
     except Exception:
-        db.session.rollback()
+        if commit:
+            db.session.rollback()
         raise
 
 

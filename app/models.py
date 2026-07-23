@@ -557,6 +557,12 @@ class DistributionBatch(db.Model):
     created_at = db.Column(db.DateTime, default=utc_now, index=True)
     started_at = db.Column(db.DateTime)
     finished_at = db.Column(db.DateTime)
+    # Worker recovery (Phase 5). The worker name that claimed the batch (for the
+    # dashboard/audit trail) and how many times a stuck `running` batch has been
+    # requeued after its worker died mid-send. Capped so a poison batch fails
+    # instead of looping forever. Both additive; NULL/0 on every existing row.
+    claimed_by_worker = db.Column(db.String(120))
+    reclaim_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
 
     payroll_run = db.relationship("PayrollRun")
     client_company = db.relationship("ClientCompany")

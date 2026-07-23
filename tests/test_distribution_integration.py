@@ -121,7 +121,7 @@ class WorkerLoopIntegrationTestCase(unittest.TestCase):
     def test_run_worker_notifies_on_unexpected_crash(self):
         original = queue_mod.process_all_queued
 
-        def boom():
+        def boom(*_args, **_kwargs):
             raise RuntimeError("kaboom")
 
         queue_mod.process_all_queued = boom

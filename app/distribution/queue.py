@@ -15,7 +15,7 @@ never run more than one worker concurrently.
 import os
 import socket
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import current_app
 from sqlalchemy import func
@@ -288,8 +288,11 @@ def cancel_flash_message(result):
     )
 
 
-def claim_next_batch():
-    """Claim the oldest queued batch, marking it running. None if the queue is empty."""
+def claim_next_batch(worker_name=None):
+    """Claim the oldest queued batch, marking it running. None if the queue is empty.
+
+    Stamps the claiming worker's name so a stuck `running` batch can be attributed
+    (and recovered — see reclaim_stale_batches) if that worker later dies."""
     query = DistributionBatch.query.filter_by(status=BATCH_QUEUED).order_by(
         DistributionBatch.created_at.asc()
     )
@@ -300,8 +303,64 @@ def claim_next_batch():
         return None
     batch.status = BATCH_RUNNING
     batch.started_at = datetime.now(timezone.utc)
+    batch.claimed_by_worker = worker_name or default_worker_name()
     db.session.commit()
     return batch
+
+
+def reclaim_stale_batches():
+    """Recover batches stuck in `running` because the worker that claimed them died
+    mid-send (crash, OOM, deploy kill) before committing a terminal status.
+
+    A running batch whose `started_at` is older than DISTRIBUTION_BATCH_STALE_SECONDS
+    is requeued so a worker retries it — A1's per-item delivery durability makes the
+    retry idempotent (already-sent payslips are skipped, never re-sent). A batch
+    reclaimed more than DISTRIBUTION_BATCH_MAX_RECLAIMS times is failed instead of
+    looping forever (a poison batch). Returns the batches acted on.
+
+    Keys on batch age rather than the worker heartbeat because a live worker does
+    not heartbeat while inside a long send; the stale window is configured well
+    above the longest plausible batch runtime so a busy worker is never reclaimed."""
+    stale_seconds = current_app.config.get("DISTRIBUTION_BATCH_STALE_SECONDS", 900)
+    max_reclaims = current_app.config.get("DISTRIBUTION_BATCH_MAX_RECLAIMS", 3)
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=stale_seconds)
+    running = DistributionBatch.query.filter_by(status=BATCH_RUNNING).all()
+    acted = []
+    for batch in running:
+        started = as_aware(batch.started_at)
+        if started is None or started > cutoff:
+            continue  # still within its expected runtime — leave it alone
+        run = db.session.get(PayrollRun, batch.payroll_run_id)
+        worker = batch.claimed_by_worker or "?"
+        if (batch.reclaim_count or 0) >= max_reclaims:
+            from .notify import notify_batch_failed
+
+            batch.status = BATCH_FAILED
+            batch.error = (
+                f"Abandoned by worker '{worker}' and exceeded "
+                f"{max_reclaims} reclaim attempts."
+            )[:512]
+            batch.finished_at = datetime.now(timezone.utc)
+            record_audit(
+                "Distribution batch abandoned",
+                run,
+                f"Batch {batch.id} failed after {max_reclaims} stale reclaims.",
+            )
+            notify_batch_failed(batch, run, batch.error)
+        else:
+            batch.reclaim_count = (batch.reclaim_count or 0) + 1
+            batch.status = BATCH_QUEUED
+            batch.started_at = None
+            record_audit(
+                "Distribution batch reclaimed",
+                run,
+                f"Batch {batch.id} was stuck running (worker '{worker}' presumed "
+                f"dead); requeued (reclaim {batch.reclaim_count}).",
+            )
+        acted.append(batch)
+    if acted:
+        db.session.commit()
+    return acted
 
 
 def _notify_platform_of_client_distribution(batch, run, summary):
@@ -359,12 +418,12 @@ def process_batch(batch):
     return batch
 
 
-def process_all_queued():
+def process_all_queued(worker_name=None):
     """Claim and process every currently queued batch, then return. No polling loop —
     used by tests and by the worker loop's inner step."""
     processed = []
     while True:
-        batch = claim_next_batch()
+        batch = claim_next_batch(worker_name)
         if batch is None:
             return processed
         processed.append(process_batch(batch))
@@ -397,8 +456,16 @@ def process_due_retries():
     processed = []
     for run_id, deliveries in by_run.items():
         run = db.session.get(PayrollRun, run_id)
-        recovered = sum(1 for d in deliveries if retry_delivery(d))
-        processed.extend(deliveries)
+        recovered = 0
+        for delivery in deliveries:
+            if retry_delivery(delivery):
+                recovered += 1
+            # Persist each retry outcome before the next attempt — same
+            # crash-safety reason as the batch send loop: a mid-sweep crash must
+            # not lose a delivery we just re-sent, or the next sweep resends it
+            # (a duplicate).
+            db.session.commit()
+            processed.append(delivery)
         record_audit(
             "Payslip delivery auto-retry",
             run,
@@ -417,16 +484,20 @@ def process_due_retries():
                 else None
             )
             notify_retry_exhausted(run, batch, len(exhausted))
-    db.session.commit()
+        db.session.commit()  # persist the audit row + exhausted-notification state
     return processed
 
 
-def drain_once():
-    """Run one full pass — activate due schedules, process the queue, run due
-    retries — then return. For a cron-style deployment (`distribution-worker
-    --once`) or tests. Returns True if anything was processed."""
+def drain_once(worker_name=None):
+    """Run one full pass — activate due schedules, recover stuck batches, process
+    the queue, run due retries — then return. For a cron-style deployment
+    (`distribution-worker --once`) or tests. Returns True if anything was processed.
+
+    Reclaim runs before the queue pass so a batch requeued this tick is picked up
+    in the same drain."""
     activate_due_scheduled()
-    did = bool(process_all_queued())
+    reclaim_stale_batches()
+    did = bool(process_all_queued(worker_name))
     did = bool(process_due_retries()) or did
     return did
 
@@ -445,7 +516,7 @@ def run_worker_loop(poll_interval=3, stop_event=None, worker_name=None):
     worker_name = worker_name or default_worker_name()
     while stop_event is None or not stop_event.is_set():
         record_heartbeat(worker_name, WORKER_STATUS_RUNNING)
-        did_work = drain_once()
+        did_work = drain_once(worker_name)
         maybe_check_sla()  # throttled internally; alerts on new breaches
         if not did_work:
             if stop_event is not None:

@@ -240,7 +240,8 @@ def _attempt_send(delivery, item, run, client, ch, sender, max_attempts, backoff
 
 
 def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False, batch_id=None):
-    """Render + send every payslip in `run`. Returns a summary dict. Commits once.
+    """Render + send every payslip in `run`. Returns a summary dict. Commits each
+    delivery as it is sent (durability — see the loop), then commits the audit row.
 
     `batch_id` (the DistributionBatch driving this send) is stamped onto every
     delivery touched, so history can attribute a delivery to the initiating
@@ -257,7 +258,10 @@ def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False, batch_id=None):
 
     summary = {"total": 0, "sent": 0, "failed": 0, "skipped": 0, "failed_workers": []}
 
-    for item in run.items:
+    # Materialise the roster up front: we commit inside the loop (expiring the
+    # session), so a live iterator over the lazy `run.items` collection would be
+    # invalidated mid-flight.
+    for item in list(run.items):
         summary["total"] += 1
         ch = resolve_channel(item) if auto else channel
         existing = _latest_delivery(item, ch)
@@ -279,12 +283,23 @@ def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False, batch_id=None):
 
         if batch_id is not None:
             delivery.distribution_batch_id = batch_id
-        if _attempt_send(delivery, item, run, client, ch, sender_for(ch),
-                         max_attempts, backoff_base):
+        staff_ref = item.staff_id or str(item.id)
+        sent = _attempt_send(delivery, item, run, client, ch, sender_for(ch),
+                             max_attempts, backoff_base)
+        # Persist THIS delivery's outcome before moving on. A worker crash later
+        # in the loop must never discard a payslip already sent to a real
+        # recipient — otherwise the skip-if-sent guard above cannot see it and a
+        # re-run (or a stale-batch reclaim) resends it, delivering a duplicate.
+        # Per-item durability is what makes re-processing idempotent. (Residual:
+        # a crash in the brief window between the provider call and this commit
+        # re-sends that one item on retry — inherent to at-least-once delivery
+        # over providers that expose no idempotency key.)
+        db.session.commit()
+        if sent:
             summary["sent"] += 1
         else:
             summary["failed"] += 1
-            summary["failed_workers"].append(item.staff_id or str(item.id))
+            summary["failed_workers"].append(staff_ref)
 
     record_audit(
         "Payslips distributed" if not only_failed else "Failed payslips resent",

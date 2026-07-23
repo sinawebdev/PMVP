@@ -268,6 +268,17 @@ def create_app():
     app.config["DISTRIBUTION_RETRY_BACKOFF_SECONDS"] = int(
         os.getenv("DISTRIBUTION_RETRY_BACKOFF_SECONDS", "60")
     )
+    # Stuck-batch recovery (Phase 5). A batch left in `running` because its worker
+    # died mid-send is requeued once its started_at is older than STALE_SECONDS
+    # (set comfortably above the longest plausible batch runtime so a live, busy
+    # worker is never falsely reclaimed). A batch reclaimed more than MAX_RECLAIMS
+    # times is failed instead of looping forever.
+    app.config["DISTRIBUTION_BATCH_STALE_SECONDS"] = int(
+        os.getenv("DISTRIBUTION_BATCH_STALE_SECONDS", "900")
+    )
+    app.config["DISTRIBUTION_BATCH_MAX_RECLAIMS"] = int(
+        os.getenv("DISTRIBUTION_BATCH_MAX_RECLAIMS", "3")
+    )
     # Above this delivery failure rate (0..1) a completed batch also alerts
     # platform admins, not just the initiator (Phase 3, Slice 8).
     app.config["DISTRIBUTION_FAILURE_ALERT_RATE"] = float(
