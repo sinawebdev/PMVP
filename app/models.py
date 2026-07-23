@@ -36,6 +36,13 @@ class ClientCompany(db.Model):
     location = db.Column(db.String(120))
     service_type = db.Column(db.String(120))
     status = db.Column(db.String(20), nullable=False, default="Active")
+    # Per-tenant branding pack for payslip emails (Phase 4, Slice 5). Each NULL
+    # falls back to the global product/email config, so unset tenants are
+    # unchanged.
+    brand_name = db.Column(db.String(120))
+    brand_color = db.Column(db.String(16))
+    email_from_name = db.Column(db.String(120))
+    email_reply_to = db.Column(db.String(160))
     created_at = db.Column(db.DateTime, default=utc_now)
 
     employees = db.relationship("Employee", back_populates="client_company")

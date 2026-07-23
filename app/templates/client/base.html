@@ -27,6 +27,9 @@
       <a href="{{ url_for('client.statutory') }}" {% if ep == 'client.statutory' %}aria-current="page"{% endif %}>Statutory</a>
       <a href="{{ url_for('client.expenses') }}" {% if ep == 'client.expenses' %}aria-current="page"{% endif %}>Expenses</a>
       <a href="{{ url_for('client.audit') }}" {% if ep == 'client.audit' %}aria-current="page"{% endif %}>Audit</a>
+      {% if (current_user.role or '')|lower == 'client_admin' %}
+      <a href="{{ url_for('client.branding') }}" {% if ep == 'client.branding' %}aria-current="page"{% endif %}>Branding</a>
+      {% endif %}
       <a href="{{ url_for('notifications.inbox') }}" {% if ep and ep.startswith('notifications.') %}aria-current="page"{% endif %}>Notifications{% if notif_unread %} <span class="badge warn">{{ notif_unread }}</span>{% endif %}</a>
       <a class="logout-link" href="{{ url_for('auth.logout') }}">Log out</a>
     </nav>

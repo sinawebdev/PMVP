@@ -1,0 +1,65 @@
+{% extends "client/base.html" %}
+{% block title %}Branding — {{ company.name }}{% endblock %}
+{% block body %}
+  <div class="toolbar">
+    <div class="page-head">
+      <h1>Payslip email branding</h1>
+      <p class="sub">Brand the payslip emails your workers receive. Leave a field blank to use the platform default.</p>
+    </div>
+  </div>
+
+  <div class="card form stack">
+    <form method="post" action="{{ url_for('client.branding') }}" class="stack">
+      <div>
+        <label for="brand_name">Brand name</label>
+        <input id="brand_name" name="brand_name" value="{{ company.brand_name or '' }}" placeholder="{{ company.name }}" maxlength="120">
+        <small class="sub">Shown in the email header and footer.</small>
+      </div>
+      <div>
+        <label for="brand_color">Accent colour (hex)</label>
+        <input id="brand_color" name="brand_color" value="{{ company.brand_color or '' }}" placeholder="#0F766E" maxlength="16">
+        <small class="sub">The header band and button colour, e.g. <code>#0F766E</code>.</small>
+      </div>
+      <div>
+        <label for="email_from_name">Email sender name</label>
+        <input id="email_from_name" name="email_from_name" value="{{ company.email_from_name or '' }}" placeholder="Payroll" maxlength="120">
+        <small class="sub">The “From” display name (the sending address is set by your provider).</small>
+      </div>
+      <div>
+        <label for="email_reply_to">Reply-to address</label>
+        <input id="email_reply_to" name="email_reply_to" value="{{ company.email_reply_to or '' }}" placeholder="payroll@yourcompany.com" maxlength="160">
+        <small class="sub">Where worker replies go (optional).</small>
+      </div>
+      <button class="btn primary" type="submit">Save branding</button>
+    </form>
+  </div>
+
+  <h2>Preview</h2>
+  <div class="card">
+    <div id="brand-preview" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;max-width:480px;">
+      <div id="brand-preview-header" style="padding:12px 16px;color:#fff;font-weight:bold;background:{{ company.brand_color or '#0F766E' }};">
+        <span id="brand-preview-name">{{ company.brand_name or company.name }}</span>
+      </div>
+      <div style="padding:16px;">
+        <p style="margin:0 0 8px;">Hello Ama Mensah,</p>
+        <p style="margin:0;">Here is your June 2026 payslip breakdown from {{ company.name }}.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var name = document.getElementById('brand_name');
+      var color = document.getElementById('brand_color');
+      var pName = document.getElementById('brand-preview-name');
+      var pHeader = document.getElementById('brand-preview-header');
+      var fallbackName = {{ (company.name)|tojson }};
+      function sync() {
+        pName.textContent = (name.value || fallbackName);
+        if (/^#[0-9A-Fa-f]{6}$/.test(color.value)) pHeader.style.background = color.value;
+      }
+      name.addEventListener('input', sync);
+      color.addEventListener('input', sync);
+    })();
+  </script>
+{% endblock %}

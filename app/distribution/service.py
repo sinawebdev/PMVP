@@ -197,7 +197,12 @@ def _build_message(channel, item, run, client, recipient):
             attachment = _payslip_pdf_attachment(item)
             if attachment is not None:
                 attachments.append(attachment)
-        return OutboundMessage(channel, recipient, subject, text, html, attachments=attachments)
+        # Tenant branding pack: per-message From name / Reply-To (fall back to config).
+        return OutboundMessage(
+            channel, recipient, subject, text, html, attachments=attachments,
+            from_name=getattr(client, "email_from_name", None) if client else None,
+            reply_to=getattr(client, "email_reply_to", None) if client else None,
+        )
     text = render_payslip_text(item, run, client, link=link)
     return OutboundMessage(channel, recipient, f"Payslip {run.month} {run.year}".strip(), text)
 

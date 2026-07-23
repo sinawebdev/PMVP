@@ -45,6 +45,10 @@ class OutboundMessage:
     body_text: str
     body_html: str | None = None
     attachments: list = field(default_factory=list)
+    # Per-message From display name / Reply-To (a tenant branding pack overriding
+    # the global config); None falls back to config.
+    from_name: str | None = None
+    reply_to: str | None = None
 
 
 @dataclass
@@ -189,10 +193,11 @@ class CloudWhatsAppSender(Sender):
 # --- Email -----------------------------------------------------------------
 
 
-def _from_header(cfg):
-    """The From header, optionally with a configured display name."""
+def _from_header(cfg, from_name=None):
+    """The From header. A per-message from_name (a tenant branding pack) wins over
+    the global EMAIL_SENDER_NAME; the address is always DEFAULT_FROM_EMAIL."""
     address = cfg.get("DEFAULT_FROM_EMAIL")
-    name = cfg.get("EMAIL_SENDER_NAME")
+    name = from_name or cfg.get("EMAIL_SENDER_NAME")
     return formataddr((name, address)) if name and address else address
 
 
@@ -246,9 +251,9 @@ class SmtpEmailSender(Sender):
 
         mime = EmailMessage()
         mime["Subject"] = message.subject
-        mime["From"] = _from_header(cfg)
+        mime["From"] = _from_header(cfg, message.from_name)
         mime["To"] = message.recipient
-        reply_to = cfg.get("EMAIL_REPLY_TO")
+        reply_to = message.reply_to or cfg.get("EMAIL_REPLY_TO")
         if reply_to:
             mime["Reply-To"] = reply_to
         mime.set_content(message.body_text)

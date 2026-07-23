@@ -54,18 +54,20 @@ def render_payslip_text(item, run, client, link=None) -> str:
     return "\n".join(lines)
 
 
-def _brand():
-    """(brand name, accent colour) from config, so email branding follows the
-    product identity seam without hardcoding. Safe outside an app context."""
+def _brand(client=None):
+    """(brand name, accent colour) for the email — the tenant's branding pack when
+    set, otherwise the global product config. Safe outside an app context."""
+    name = getattr(client, "brand_name", None) if client else None
+    color = getattr(client, "brand_color", None) if client else None
     try:
         from flask import current_app
 
-        return (
-            current_app.config.get("APP_BRAND_NAME", "Chrisnat"),
-            current_app.config.get("EMAIL_BRAND_COLOR", "#0F766E"),
-        )
+        name = name or current_app.config.get("APP_BRAND_NAME", "Chrisnat")
+        color = color or current_app.config.get("EMAIL_BRAND_COLOR", "#0F766E")
     except Exception:  # noqa: BLE001 - no app context (e.g. pure-unit render tests)
-        return "Chrisnat", "#0F766E"
+        name = name or "Chrisnat"
+        color = color or "#0F766E"
+    return name, color
 
 
 def render_payslip_email(item, run, client, link=None):
@@ -75,7 +77,7 @@ def render_payslip_email(item, run, client, link=None):
     email clients render reliably), branded with the product/company identity and
     with a plain-text ``body_text`` fallback for text-only clients."""
     org = client.name if client else "Chrisnat"
-    brand, accent = _brand()
+    brand, accent = _brand(client)
     period = _period(run)
     subject = f"Your {period} payslip — {org}"
     body_text = render_payslip_text(item, run, client, link=link)

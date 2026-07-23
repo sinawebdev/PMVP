@@ -18,6 +18,7 @@ Statutory rates are global and view-only for clients.
 import io
 import json
 import os
+import re
 import uuid
 import zipfile
 from datetime import date, datetime, timezone
@@ -681,6 +682,34 @@ def distribute_send(run_id):
 def distribute_resend(run_id):
     run = tenant_get_or_404(PayrollRun, run_id)
     return _do_client_send(run, only_failed=True)
+
+
+@client_bp.route("/branding", methods=["GET", "POST"])
+@tenant_role_required(CLIENT_ADMIN)
+def branding():
+    """A client_admin edits their tenant's payslip-email branding pack. Each field
+    is optional and falls back to the platform default when blank."""
+    from app.distribution.channels import is_valid_email
+
+    company = _company()
+    if request.method == "POST":
+        color = (request.form.get("brand_color") or "").strip() or None
+        if color and not re.match(r"^#[0-9A-Fa-f]{6}$", color):
+            flash("Brand colour must be a hex value like #0F766E.", "warning")
+            return redirect(url_for("client.branding"))
+        reply_to = (request.form.get("email_reply_to") or "").strip() or None
+        if reply_to and not is_valid_email(reply_to):
+            flash("Reply-to must be a valid email address.", "warning")
+            return redirect(url_for("client.branding"))
+        company.brand_name = (request.form.get("brand_name") or "").strip() or None
+        company.brand_color = color
+        company.email_from_name = (request.form.get("email_from_name") or "").strip() or None
+        company.email_reply_to = reply_to
+        record_audit("Branding updated", company, "Updated payslip-email branding pack.")
+        db.session.commit()
+        flash("Branding saved. New payslip emails will use it.", "success")
+        return redirect(url_for("client.branding"))
+    return render_template("client/branding.html", company=company)
 
 
 @client_bp.route("/runs/<int:run_id>/distribute/cancel", methods=["POST"])
