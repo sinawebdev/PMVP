@@ -26,6 +26,23 @@
     {% if w.status == "stalled" %}
     <div class="mini-note mt-3 text-danger"><i class="bi bi-exclamation-triangle"></i> Work is queued but nothing has been processed recently — check the distribution worker is running.</div>
     {% endif %}
+    {% if stats.workers %}
+    <div class="excel-grid-wrap mt-3">
+        <table class="table table-sm align-middle">
+            <thead><tr><th>Worker</th><th>Host / PID</th><th>Status</th><th>Last poll</th></tr></thead>
+            <tbody>
+            {% for hb in stats.workers %}
+                <tr>
+                    <td>{{ hb.worker_name }}</td>
+                    <td class="text-muted">{{ hb.host or "—" }}{% if hb.pid %} · {{ hb.pid }}{% endif %}</td>
+                    <td>{% if hb.status == "running" %}<span class="badge text-bg-success">running</span>{% else %}<span class="badge text-bg-secondary">stopped</span>{% endif %}</td>
+                    <td class="nums">{{ hb.last_poll_at.strftime("%Y-%m-%d %H:%M:%S") if hb.last_poll_at else "—" }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
 </section>
 
 <section class="stats-grid">

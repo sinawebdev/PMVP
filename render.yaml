@@ -37,3 +37,29 @@ services:
         value: "false"
       - key: SEED_ARCHIVED_FEATURES
         value: "false"
+      # Distribution worker (Phase 4). Default: the web process runs the worker on
+      # an in-process thread (free-plan friendly; the queue lives in Postgres and
+      # survives restarts). To split it onto its own service, set this to "false"
+      # here and enable the `worker` service below (needs a paid Background Worker).
+      - key: DISTRIBUTION_WORKER_INLINE
+        value: "true"
+
+  # --- Optional dedicated distribution worker (Phase 4) --------------------
+  # Uncomment to run sending on its own process. Requires a paid Render
+  # Background Worker; also flip DISTRIBUTION_WORKER_INLINE to "false" on `web`.
+  # - type: worker
+  #   name: chrisnat-distribution-worker
+  #   runtime: python
+  #   buildCommand: pip install -r requirements.txt
+  #   startCommand: flask --app run:app distribution-worker
+  #   envVars:
+  #     - key: FLASK_APP
+  #       value: run.py
+  #     - key: DATABASE_URL
+  #       sync: false
+  #     - key: AUTO_INIT_DB
+  #       value: "false"
+  #     - key: PERSISTENCE_REQUIRED
+  #       value: "true"
+  #     - key: DISTRIBUTION_WORKER_NAME
+  #       value: render-worker

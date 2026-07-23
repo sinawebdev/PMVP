@@ -38,11 +38,35 @@ services:
       # DATABASE_URL unset for SQLite) into the container.
       SKIP_DOTENV:      "true"
       PERSISTENCE_REQUIRED: "true"
+      # Split the distribution worker onto its own container (below), mirroring a
+      # production web/worker split, so the web process does not also send.
+      DISTRIBUTION_WORKER_INLINE: "false"
     ports:
       - "5000:5000"
     volumes:
       - .:/app          # live-reload: code changes apply without rebuild
     command: flask run --host=0.0.0.0 --port=5000
+
+  # Dedicated distribution worker (Phase 4) — the same image, running the queue
+  # worker instead of the web server. Handles SIGTERM for a graceful shutdown.
+  worker:
+    build: .
+    container_name: chrisnat_worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      FLASK_APP:        "run.py"
+      DATABASE_URL:     "postgresql://chrisnat:chrisnat_dev@db:5432/chrisnat"
+      SECRET_KEY:       "change-this-in-production"
+      SKIP_DOTENV:      "true"
+      PERSISTENCE_REQUIRED: "true"
+      AUTO_INIT_DB:     "false"
+      DISTRIBUTION_WORKER_NAME: "compose-worker"
+    volumes:
+      - .:/app
+    command: flask --app run:app distribution-worker
 
 volumes:
   pgdata:

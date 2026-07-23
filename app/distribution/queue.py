@@ -12,10 +12,13 @@ just skips a batch the first has already claimed rather than double-sending.
 SQLite (used in tests) has no row locking, which is fine there since tests
 never run more than one worker concurrently.
 """
+import os
+import socket
 import time
 from datetime import datetime, timezone
 
 from flask import current_app
+from sqlalchemy import func
 
 from app import db
 from app.audit import record_audit
@@ -29,7 +32,10 @@ from app.models import (
     BATCH_SCHEDULED,
     DELIVERY_CANCELLED,
     DELIVERY_FAILED,
+    WORKER_STATUS_RUNNING,
+    WORKER_STATUS_STOPPED,
     DistributionBatch,
+    DistributionWorkerHeartbeat,
     PayrollRun,
     PayslipDelivery,
     User,
@@ -37,27 +43,49 @@ from app.models import (
 
 from .service import as_aware, distribute_run, retry_delivery
 
-# Worker heartbeat: the inline worker (same process as the web app) publishes the
-# timestamp of its most recent poll into the app so the monitoring dashboard can
-# show a live worker health signal. Stored on the Flask app (not a module global)
-# so it is scoped to one app instance — correct in production (one process shares
-# the app) and leak-free across tests (each builds a fresh app). An external
-# `flask distribution-worker` process has its own app and won't populate the web
-# app's value; the dashboard falls back to the most recent processing timestamp.
-_HEARTBEAT_KEY = "_DISTRIBUTION_WORKER_LAST_POLL"
+
+def default_worker_name():
+    """A stable name for the worker process, so its heartbeat row is upserted
+    (not duplicated) across restarts. Overridable per process via env."""
+    return os.getenv("DISTRIBUTION_WORKER_NAME") or f"{socket.gethostname()}"
 
 
-def _publish_heartbeat():
-    current_app.config[_HEARTBEAT_KEY] = datetime.now(timezone.utc)
+def record_heartbeat(worker_name, status=WORKER_STATUS_RUNNING):
+    """Upsert this worker's liveness row. Commits on its own (called at the top of
+    a poll, before any batch work is staged)."""
+    now = datetime.now(timezone.utc)
+    hb = DistributionWorkerHeartbeat.query.filter_by(worker_name=worker_name).first()
+    if hb is None:
+        hb = DistributionWorkerHeartbeat(worker_name=worker_name, started_at=now)
+        db.session.add(hb)
+    hb.status = status
+    hb.host = socket.gethostname()
+    hb.pid = os.getpid()
+    hb.last_poll_at = now
+    db.session.commit()
 
 
 def worker_last_poll():
-    """The most recent time the in-process worker loop polled, or None if no
-    inline worker is running in this process."""
+    """The most recent poll time across all worker processes (inline or external),
+    or None if no worker has ever run. Read by the monitoring dashboard."""
     try:
-        return current_app.config.get(_HEARTBEAT_KEY)
-    except RuntimeError:  # no app context
+        return db.session.query(func.max(DistributionWorkerHeartbeat.last_poll_at)).scalar()
+    except Exception:  # noqa: BLE001 - dashboard must never raise on a missing table
+        db.session.rollback()
         return None
+
+
+def worker_statuses():
+    """Every known worker's heartbeat row, freshest first — for the dashboard."""
+    try:
+        return (
+            DistributionWorkerHeartbeat.query.order_by(
+                DistributionWorkerHeartbeat.last_poll_at.desc()
+            ).all()
+        )
+    except Exception:  # noqa: BLE001
+        db.session.rollback()
+        return []
 
 
 def _in_flight_batch(run_id):
@@ -393,18 +421,29 @@ def process_due_retries():
     return processed
 
 
-def run_worker_loop(poll_interval=3, stop_event=None):
+def drain_once():
+    """Run one full pass — activate due schedules, process the queue, run due
+    retries — then return. For a cron-style deployment (`distribution-worker
+    --once`) or tests. Returns True if anything was processed."""
+    activate_due_scheduled()
+    did = bool(process_all_queued())
+    did = bool(process_due_retries()) or did
+    return did
+
+
+def run_worker_loop(poll_interval=3, stop_event=None, worker_name=None):
     """Poll the queue forever, processing queued batches and due retries as they
     appear.
 
     `stop_event` (a threading.Event) lets a caller ask the loop to exit between
-    polls; without one the loop runs until the process is killed.
+    polls (a graceful shutdown on SIGTERM); without one the loop runs until the
+    process is killed. Each poll upserts this worker's heartbeat so the dashboard
+    can see it — inline or a separate process.
     """
+    worker_name = worker_name or default_worker_name()
     while stop_event is None or not stop_event.is_set():
-        _publish_heartbeat()
-        activate_due_scheduled()  # scheduled -> queued when due
-        did_work = bool(process_all_queued())
-        did_work = bool(process_due_retries()) or did_work
+        record_heartbeat(worker_name, WORKER_STATUS_RUNNING)
+        did_work = drain_once()
         if not did_work:
             if stop_event is not None:
                 stop_event.wait(poll_interval)
@@ -412,15 +451,16 @@ def run_worker_loop(poll_interval=3, stop_event=None):
                 time.sleep(poll_interval)
 
 
-def run_worker(poll_interval=3, stop_event=None):
+def run_worker(poll_interval=3, stop_event=None, worker_name=None):
     """The worker entrypoint used in production: run_worker_loop wrapped so an
     unexpected crash alerts platform admins (Phase 3, Slice 8) before it
-    propagates. A clean stop (stop_event / KeyboardInterrupt) is not an error."""
-    from flask import current_app
-
+    propagates. A clean stop (stop_event / KeyboardInterrupt) is not an error and
+    marks the worker's heartbeat stopped so the dashboard reflects the shutdown."""
+    worker_name = worker_name or default_worker_name()
     try:
-        run_worker_loop(poll_interval=poll_interval, stop_event=stop_event)
+        run_worker_loop(poll_interval=poll_interval, stop_event=stop_event, worker_name=worker_name)
     except KeyboardInterrupt:
+        _mark_worker_stopped(worker_name)
         raise
     except Exception as exc:  # noqa: BLE001 - notify, log, then re-raise
         from .notify import notify_worker_stopped
@@ -433,3 +473,12 @@ def run_worker(poll_interval=3, stop_event=None):
             db.session.rollback()
         current_app.logger.exception("Distribution worker stopped unexpectedly.")
         raise
+    else:
+        _mark_worker_stopped(worker_name)
+
+
+def _mark_worker_stopped(worker_name):
+    try:
+        record_heartbeat(worker_name, WORKER_STATUS_STOPPED)
+    except Exception:  # noqa: BLE001 - a shutdown must not fail on bookkeeping
+        db.session.rollback()

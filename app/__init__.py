@@ -1,7 +1,10 @@
 import os
+import socket
 import threading
 import time
 from datetime import timedelta
+
+import click
 
 from dotenv import load_dotenv
 from flask import Flask, render_template
@@ -417,20 +420,47 @@ def create_app():
         print("Database initialized.")
 
     @app.cli.command("distribution-worker")
-    def distribution_worker_command():
-        """Run the payslip distribution queue worker in the foreground (Ctrl+C to stop).
+    @click.option("--once", is_flag=True, help="Process the queue once and exit (cron mode).")
+    def distribution_worker_command(once):
+        """Run the payslip distribution queue worker as a dedicated process.
 
-        For a deployment with a dedicated worker dyno/service — run this instead of
+        For a deployment with a dedicated worker service — run this instead of
         (or alongside) the in-process thread, and set DISTRIBUTION_WORKER_INLINE=false
-        on the web dyno so only this process sends.
+        on the web service so only this process sends. Handles SIGTERM/SIGINT for a
+        graceful shutdown (finishes the current poll, then exits), so a deploy
+        restart never interrupts a send mid-flight. With --once it does a single
+        drain and exits (for a cron/scheduled-job platform).
         """
-        from app.distribution.queue import run_worker
+        import signal
+        import threading
 
-        print("Distribution worker started — polling for queued batches.")
+        from app.distribution.queue import default_worker_name, drain_once, run_worker
+
+        if once:
+            processed = drain_once()
+            print(f"Distribution worker drained once ({'work done' if processed else 'idle'}).")
+            return
+
+        stop_event = threading.Event()
+
+        def _graceful(signum, _frame):
+            print(f"Received signal {signum} — shutting down after the current poll…")
+            stop_event.set()
+
+        signal.signal(signal.SIGTERM, _graceful)
+        signal.signal(signal.SIGINT, _graceful)
+
+        name = default_worker_name()
+        print(f"Distribution worker '{name}' started — polling for queued batches.")
         try:
-            run_worker(poll_interval=app.config["DISTRIBUTION_WORKER_POLL_INTERVAL"])
+            run_worker(
+                poll_interval=app.config["DISTRIBUTION_WORKER_POLL_INTERVAL"],
+                stop_event=stop_event,
+                worker_name=name,
+            )
         except KeyboardInterrupt:
-            print("Distribution worker stopped.")
+            pass
+        print("Distribution worker stopped.")
 
     if os.getenv("AUTO_INIT_DB", "true").lower() == "true":
         initialize_database(app)
@@ -451,9 +481,16 @@ def _start_inline_distribution_worker(app):
     """
     from app.distribution.queue import run_worker
 
+    # A distinct heartbeat name so an inline (web) worker and a separate worker
+    # process on the same host don't overwrite each other's heartbeat row.
+    inline_name = f"{socket.gethostname()}-web-inline"
+
     def _target():
         with app.app_context():
-            run_worker(poll_interval=app.config["DISTRIBUTION_WORKER_POLL_INTERVAL"])
+            run_worker(
+                poll_interval=app.config["DISTRIBUTION_WORKER_POLL_INTERVAL"],
+                worker_name=inline_name,
+            )
 
     threading.Thread(target=_target, name="distribution-worker", daemon=True).start()
 

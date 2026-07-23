@@ -1,3 +1,12 @@
+# This file configures the web service. By default the web process also runs the
+# distribution worker on an in-process thread (DISTRIBUTION_WORKER_INLINE defaults
+# to true in production), so no extra service is required.
+#
+# To split sending onto its own process (Phase 4): add a second Railway service
+# from this same repo with start command `flask --app run:app distribution-worker`
+# (the `worker` process type is defined in the Procfile), share DATABASE_URL, and
+# set DISTRIBUTION_WORKER_INLINE=false on this web service. The worker handles
+# SIGTERM for a graceful shutdown on redeploy.
 [build]
 builder = "NIXPACKS"
 

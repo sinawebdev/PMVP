@@ -114,7 +114,7 @@ def _worker_health(batch_counts, backlog, last_processed_at, worker_last_poll):
 
 def collect_dashboard_stats(recent_limit=10):
     """Every metric the monitoring dashboard needs, in one call."""
-    from app.distribution.queue import worker_last_poll  # avoid import cycle
+    from app.distribution.queue import worker_last_poll, worker_statuses  # avoid import cycle
 
     batch_counts = _status_counts(DistributionBatch)
     delivery_counts = _status_counts(PayslipDelivery)
@@ -200,4 +200,5 @@ def collect_dashboard_stats(recent_limit=10):
             batch_counts, backlog, last_processed_at, worker_last_poll()
         ),
         "worker_inline": bool(current_app.config.get("DISTRIBUTION_WORKER_INLINE")),
+        "workers": worker_statuses(),
     }

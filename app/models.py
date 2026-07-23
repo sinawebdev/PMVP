@@ -550,6 +550,25 @@ class DistributionBatch(db.Model):
     initiated_by = db.relationship("User")
 
 
+# Worker liveness (Phase 4 — deployment hardening). One row per named worker
+# process, upserted on every poll, so the monitoring dashboard can see an
+# external `flask distribution-worker` process (the in-process heartbeat was only
+# visible inside the web process). Platform-level operational data, not tenant
+# scoped.
+WORKER_STATUS_RUNNING = "running"
+WORKER_STATUS_STOPPED = "stopped"
+
+
+class DistributionWorkerHeartbeat(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    worker_name = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    host = db.Column(db.String(120))
+    pid = db.Column(db.Integer)
+    status = db.Column(db.String(16), nullable=False, default=WORKER_STATUS_RUNNING)
+    started_at = db.Column(db.DateTime, default=utc_now)
+    last_poll_at = db.Column(db.DateTime, default=utc_now, index=True)
+
+
 class IdempotencyKey(db.Model):
     """Stores the result of a mutating action keyed by a client-supplied nonce, so a
     retried/double-clicked "Send" replays the original response instead of re-sending."""
