@@ -218,5 +218,51 @@ class ConfirmTransactionAtomicityTests(unittest.TestCase):
         self.assertEqual(PayrollRun.query.count(), before)
 
 
+class StartupMapperConfigurationTests(unittest.TestCase):
+    """Regression: create_app() must fully configure ORM mappers at startup.
+
+    In production AUTO_INIT_DB is off (schema is owned by Alembic migrations), so
+    db.create_all() never runs at boot. If mapper configuration were left to the
+    first ORM query, gunicorn's worker threads plus the inline distribution
+    worker thread could race that lazy configuration and observe a relationship
+    property before its do_init() assigned `.strategy` — surfacing as
+    "AttributeError: strategy" during query compilation and 500-ing every ORM
+    page (/payroll/runs, /dashboard). create_app() must therefore call
+    configure_mappers() itself.
+
+    Checked in a fresh subprocess: mapper configuration is process-global and
+    sticky once any other test has triggered it, so only a clean interpreter can
+    prove create_app() does the configuring.
+    """
+
+    def test_mappers_configured_at_boot_without_create_all(self):
+        import subprocess
+        import sys
+
+        code = (
+            "import os;"
+            "os.environ.update(SKIP_DOTENV='true', DATABASE_URL='sqlite:///:memory:',"
+            " PERSISTENCE_REQUIRED='false', AUTO_INIT_DB='false',"
+            " DISTRIBUTION_WORKER_INLINE='false');"
+            "from app import create_app;"
+            "from sqlalchemy.orm import class_mapper;"
+            "from app.models import PayrollRun, DistributionBatch, PayslipDelivery;"
+            "create_app();"
+            "assert class_mapper(PayrollRun).configured, 'PayrollRun not configured at boot';"
+            "assert class_mapper(DistributionBatch).configured, 'DistributionBatch not configured at boot';"
+            "assert class_mapper(PayslipDelivery).configured, 'PayslipDelivery not configured at boot';"
+            "print('MAPPERS_CONFIGURED_OK')"
+        )
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("MAPPERS_CONFIGURED_OK", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

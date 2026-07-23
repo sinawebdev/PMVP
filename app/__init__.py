@@ -550,6 +550,24 @@ def create_app():
             pass
         print("Distribution worker stopped.")
 
+    # Configure all ORM mappers once, now, single-threaded — before the inline
+    # distribution-worker thread starts or the first web request is served.
+    #
+    # In production AUTO_INIT_DB is off (schema is owned by Alembic migrations),
+    # so db.create_all() never runs at boot and SQLAlchemy would otherwise
+    # configure its mappers lazily, on the first ORM query. Under gunicorn's
+    # worker threads plus the background distribution-worker thread, two threads
+    # then race that lazy configuration: one can observe a relationship property
+    # before its do_init() has assigned `.strategy`, which surfaces as
+    # "AttributeError: strategy" during query compilation and 500s every page
+    # that touches the ORM (seen on /payroll/runs and /dashboard). Forcing
+    # configuration here closes that race without changing any query or loader
+    # option — the Phase 5 eager loads stay exactly as they are.
+    from app import models as _models  # noqa: F401 - ensure all mappers registered
+    from sqlalchemy.orm import configure_mappers
+
+    configure_mappers()
+
     if os.getenv("AUTO_INIT_DB", "true").lower() == "true":
         initialize_database(app)
 
