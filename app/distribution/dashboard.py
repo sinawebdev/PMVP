@@ -201,4 +201,15 @@ def collect_dashboard_stats(recent_limit=10):
         ),
         "worker_inline": bool(current_app.config.get("DISTRIBUTION_WORKER_INLINE")),
         "workers": worker_statuses(),
+        "sla": _sla_snapshot(),
     }
+
+
+def _sla_snapshot():
+    from .sla import evaluate_sla
+
+    try:
+        return evaluate_sla()
+    except Exception:  # noqa: BLE001 - the dashboard must never fail on SLA eval
+        db.session.rollback()
+        return {"ok": True, "breaches": [], "thresholds": {}}

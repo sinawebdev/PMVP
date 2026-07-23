@@ -127,6 +127,7 @@ _EVENT_LABELS = {
     "distribution.retry_exhausted": "Payslip retries exhausted",
     "distribution.scheduled_started": "Scheduled distribution started",
     "distribution.worker_stopped": "Distribution worker stopped",
+    "distribution.sla_breach": "Distribution SLA breach",
 }
 
 

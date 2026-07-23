@@ -125,6 +125,32 @@ Every action preserves centralized permissions (`permissions.py` /
 schema additions are additive Alembic migrations. See `.env.example` for the
 `DISTRIBUTION_*` and `EMAIL_*` knobs.
 
+### Phase 4 — scale & operability
+
+- **Dedicated worker** — the queue worker runs inline in the web process by
+  default, or as its own process via `flask distribution-worker` (graceful
+  SIGTERM shutdown, `--once` cron mode). A DB heartbeat
+  (`distribution_worker_heartbeat`) makes an external worker visible on the
+  dashboard. See the Render/Railway/compose config and the deployment note below.
+- **Rate limiting** (`throttle.py`) — per-channel send-rate ceilings
+  (`RATE_LIMIT_{SMS,WHATSAPP,EMAIL}_PER_SEC`) pace sends within provider quotas; a
+  provider HTTP 429 is surfaced as a clear rate-limited failure.
+- **Analytics & exports** (`analytics.py`, `/distribution/analytics`) — success/
+  failure breakdown by channel and company, with CSV/XLSX export of the filtered
+  history.
+- **Delivery receipts** (`receipts.py`, `webhooks.py`) — the SMS/WhatsApp senders
+  capture the provider message id; provider callbacks
+  (`/distribution/webhooks/{whatsapp,hubtel}`, secret/token-verified, disabled
+  until configured) confirm handset delivery or flip an undelivered message back
+  to failed for retry.
+- **Tenant branding packs** — each `ClientCompany` can brand its payslip emails
+  (name, accent colour, sender name, reply-to), edited by a client_admin at
+  `/company/branding`; unset fields fall back to global config.
+- **SLA monitoring** (`sla.py`) — configurable thresholds (batch completion time,
+  recent failure rate, optional delivery-confirmation time); the worker checks on
+  a cadence and alerts platform admins on new breaches, and the dashboard shows
+  live SLA status.
+
 ## Local SQLite Setup
 
 ```bash

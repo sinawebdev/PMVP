@@ -283,6 +283,26 @@ def create_app():
     app.config["RATE_LIMIT_EMAIL_PER_SEC"] = float(
         os.getenv("RATE_LIMIT_EMAIL_PER_SEC", "0")
     )
+    # SLA thresholds + alerting (Phase 4, Slice 6). A batch not finished within
+    # SLA_BATCH_MINUTES of when it should run, or a failure rate over
+    # SLA_FAILURE_RATE across the recent window (with at least SLA_MIN_VOLUME
+    # deliveries), is a breach. SLA_DELIVERY_CONFIRM_HOURS (0 = off) breaches on
+    # sent messages with no delivery receipt after that long. The worker
+    # re-checks every SLA_CHECK_INTERVAL_SECONDS and alerts platform admins at
+    # most once per SLA_ALERT_COOLDOWN_SECONDS per breach type.
+    app.config["SLA_BATCH_MINUTES"] = int(os.getenv("SLA_BATCH_MINUTES", "30"))
+    app.config["SLA_FAILURE_RATE"] = float(os.getenv("SLA_FAILURE_RATE", "0.2"))
+    app.config["SLA_MIN_VOLUME"] = int(os.getenv("SLA_MIN_VOLUME", "20"))
+    app.config["SLA_WINDOW_HOURS"] = int(os.getenv("SLA_WINDOW_HOURS", "24"))
+    app.config["SLA_DELIVERY_CONFIRM_HOURS"] = int(
+        os.getenv("SLA_DELIVERY_CONFIRM_HOURS", "0")
+    )
+    app.config["SLA_CHECK_INTERVAL_SECONDS"] = int(
+        os.getenv("SLA_CHECK_INTERVAL_SECONDS", "300")
+    )
+    app.config["SLA_ALERT_COOLDOWN_SECONDS"] = int(
+        os.getenv("SLA_ALERT_COOLDOWN_SECONDS", "3600")
+    )
 
     os.makedirs(app.instance_path, exist_ok=True)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)

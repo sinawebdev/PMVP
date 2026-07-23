@@ -440,10 +440,13 @@ def run_worker_loop(poll_interval=3, stop_event=None, worker_name=None):
     process is killed. Each poll upserts this worker's heartbeat so the dashboard
     can see it — inline or a separate process.
     """
+    from .sla import maybe_check_sla
+
     worker_name = worker_name or default_worker_name()
     while stop_event is None or not stop_event.is_set():
         record_heartbeat(worker_name, WORKER_STATUS_RUNNING)
         did_work = drain_once()
+        maybe_check_sla()  # throttled internally; alerts on new breaches
         if not did_work:
             if stop_event is not None:
                 stop_event.wait(poll_interval)

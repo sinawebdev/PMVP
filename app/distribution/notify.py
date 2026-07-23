@@ -115,6 +115,19 @@ def notify_scheduled_started(batch, run):
     )
 
 
+def notify_sla_breach(breaches):
+    """One or more SLA thresholds are breached — alert platform admins. Stages a
+    DomainEvent + notifications; the caller commits."""
+    detail = "; ".join(b["detail"] for b in breaches)
+    record_event(
+        "distribution.sla_breach",
+        summary=f"Distribution SLA breach: {detail}.",
+        subject=None,
+        level="warning",
+        recipients=platform_admins(),
+    )
+
+
 def notify_worker_stopped(error):
     """The worker loop exited unexpectedly — alert platform admins. Stages a
     DomainEvent + notifications; the caller commits."""
