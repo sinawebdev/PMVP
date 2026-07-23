@@ -28,6 +28,15 @@ from .render import render_payslip_email, render_payslip_text
 from .tokens import public_payslip_url
 
 
+def as_aware(dt):
+    """Treat a stored naive datetime as UTC (SQLite drops tzinfo on write), so
+    comparisons against an aware ``datetime.now(timezone.utc)`` are correct on
+    both SQLite and PostgreSQL. The one place this normalisation lives."""
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def _retry_config():
     """(max_attempts, backoff_base_seconds) — falls back to sane defaults outside
     an app context (defensive; the worker and routes always have one)."""
@@ -80,22 +89,6 @@ def retry_state(delivery):
         "will_retry": is_failed and delivery.next_retry_at is not None,
         "next_retry_at": delivery.next_retry_at,
     }
-
-
-def get_distribution_contact(client_company_id, employee_id_str):
-    """Return ``{'email', 'phone', 'name'}`` for an employee.
-
-    Always reads from the client's active Employee roster — never from payroll upload
-    data. Inactive or unregistered employees yield no contact, so distribution skips
-    them rather than falling back to whatever was in the spreadsheet.
-    """
-    norm_id = normalise_emp_id(employee_id_str)
-    emp = Employee.query.filter_by(
-        client_company_id=client_company_id, staff_id=norm_id, status="Active"
-    ).first()
-    if not emp:
-        return {"email": None, "phone": None, "name": employee_id_str}
-    return {"email": emp.email, "phone": emp.phone, "name": emp.full_name}
 
 
 def _roster_employee(item):

@@ -514,10 +514,8 @@ BATCH_COMPLETED = "completed"
 BATCH_FAILED = "failed"
 BATCH_CANCELLED = "cancelled"
 
-# A batch that has reached a terminal state (no worker will touch it again).
-BATCH_TERMINAL_STATUSES = frozenset({BATCH_COMPLETED, BATCH_FAILED, BATCH_CANCELLED})
 # A batch with pending work that a new enqueue must not duplicate, and that an
-# operator may still cancel.
+# operator may still cancel (before it starts running).
 BATCH_PENDING_STATUSES = frozenset({BATCH_SCHEDULED, BATCH_QUEUED, BATCH_RUNNING})
 
 

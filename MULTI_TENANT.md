@@ -50,7 +50,7 @@ All scoping goes through one module so it can never be forgotten:
 
 - **Tenant-owned** (carry `client_company_id` directly): `User`, `Employee`,
   `EmployeeDeployment`, `PayrollRun`, `Expense`, `Proposal`, `ImportBatch`,
-  `WageRateProfile`, `DomainEvent`.
+  `WageRateProfile`, `DomainEvent`, `DistributionBatch`.
 - **Child-via-run** (no `client_company_id`; scoped by **joining through
   `payroll_run`**): `PayrollItem`, `PaymentVoucher`, `Remittance`,
   `PayslipDelivery`, `RawPayEntry`, `RawUploadArchive`. One documented strategy,

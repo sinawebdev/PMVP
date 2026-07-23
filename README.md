@@ -77,6 +77,54 @@ New tables (`payslip_delivery`, `idempotency_key`) and the `email`/`preferred_ch
 columns are created additively by `db.create_all()` + `ensure_phase2_schema()` on startup —
 no migration step, no data loss. Configure channels in `.env` (see `.env.example`).
 
+## Distribution: Reliable, Observable Delivery (Phase 3)
+
+Distribution is a **background queue**, not part of the HTTP request — a large or
+multi-run send never blocks a web worker. The subsystem lives entirely in
+`app/distribution/`:
+
+- **Queue + worker** (`queue.py`). Sending enqueues a `DistributionBatch`
+  (`scheduled` / `queued` / `running` / `completed` / `failed` / `cancelled`);
+  a worker claims the oldest `queued` batch (`SELECT … FOR UPDATE SKIP LOCKED`
+  on Postgres, so multiple workers are safe) and runs the existing
+  `distribute_run()`. The worker is an **in-process thread by default** (durable
+  because the queue is in the DB); a dedicated process can take over with
+  `flask distribution-worker` (set `DISTRIBUTION_WORKER_INLINE=false` on web).
+  Its single poll loop also activates due scheduled batches and runs due retries.
+- **Live status** — the operator run page and the client distribute page poll an
+  htmx fragment while a batch is active, showing per-worker progress; controls
+  hide while a send is in flight.
+- **Retries** (`service.py`). A failed delivery is auto-retried with exponential
+  backoff up to `DISTRIBUTION_MAX_ATTEMPTS`, then marked a **final failure**;
+  `next_retry_at` distinguishes "will retry" from "final". Manual **Resend
+  failed** is the uncapped operator override. Successful deliveries are never
+  re-sent; no attempt creates a duplicate row.
+- **Monitoring dashboard** (`dashboard.py`, `/distribution/dashboard`) — batch and
+  delivery stats, success/failure rates, backlog, throughput, running-batch
+  progress + ETA, and a worker-health signal (from the inline worker's heartbeat).
+- **Batch cancellation** (`cancel_distribution`) — stops a `scheduled`/`queued`
+  batch and any pending retries (new `cancelled` delivery state); a **running**
+  batch is never cancelled mid-flight; already-sent deliveries are untouched.
+- **Searchable history** (`history.py`, `/distribution/history`) — filter every
+  delivery by company, run, employee, status, channel, operator, and date, with a
+  per-batch detail page. Each delivery links to the batch that sent it.
+- **Scheduling** — pick a future date/time (interpreted as **GMT**; Ghana runs on
+  GMT year-round, so wall-clock == UTC); the worker activates it when due
+  (idempotently). Reschedule or cancel before it runs.
+- **Notifications** (`notify.py`) — completion / partial / failure, high failure
+  rate, retry exhaustion, scheduled start, and worker-stop events fan out through
+  the existing in-app notification inbox (`app.events.record_event`), and appear in
+  the run's activity timeline.
+- **Email** (`channels.py`, `render.py`) — branded HTML template with a plain-text
+  fallback, configurable sender name / reply-to, recipient validation, specific
+  error reporting, and validated optional PDF attachments. Providers stay behind
+  `get_sender()`, so the transport is swappable without touching business logic.
+
+Every action preserves centralized permissions (`permissions.py` /
+`tenant_role_required`), tenant isolation, audit logging, and domain events. All
+schema additions are additive Alembic migrations. See `.env.example` for the
+`DISTRIBUTION_*` and `EMAIL_*` knobs.
+
 ## Local SQLite Setup
 
 ```bash
@@ -124,6 +172,16 @@ Required environment variables:
 - `SEED_DEMO_DATA`: set `false` for real deployments. Set `true` only when you intentionally want demo employees, demo payroll, remittances, vouchers, and expenses.
 - `SEED_ARCHIVED_FEATURES`: keep `false` unless you intentionally want old Phase 2/3 demo data.
 - `AUTO_INIT_DB`: leave as `true` for MVP auto table creation/starter seed, or set `false` and run `flask --app run:app init-db` manually.
+
+**Distribution worker.** By default the web process also runs the distribution
+queue worker on an in-process background thread (`DISTRIBUTION_WORKER_INLINE`
+defaults to `true` in production), so no extra service is required — the queue
+lives in Postgres and survives restarts. To scale sending out to its own dyno,
+add a **Background Worker** service with start command
+`flask --app run:app distribution-worker` and set `DISTRIBUTION_WORKER_INLINE=false`
+on the web service so only the worker sends. The scheduled-distribution and retry
+sweeps run inside the same worker loop, so scheduling and auto-retry work with the
+inline worker out of the box.
 
 The app normalizes old-style `postgres://` URLs to `postgresql://` for SQLAlchemy. `db.create_all()` and additive schema checks are used for MVP-safe table setup; they do not wipe production data. Flask-Migrate is configured for the next production hardening step.
 

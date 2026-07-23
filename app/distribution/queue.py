@@ -35,20 +35,29 @@ from app.models import (
     User,
 )
 
-from .service import distribute_run, retry_delivery
+from .service import as_aware, distribute_run, retry_delivery
 
 # Worker heartbeat: the inline worker (same process as the web app) publishes the
-# timestamp of its most recent poll here, so the monitoring dashboard can show a
-# live worker health signal. An external `flask distribution-worker` process runs
-# in its own memory and won't populate this — the dashboard falls back to the
-# most recent processing timestamp in that case.
-_last_poll_at = None
+# timestamp of its most recent poll into the app so the monitoring dashboard can
+# show a live worker health signal. Stored on the Flask app (not a module global)
+# so it is scoped to one app instance — correct in production (one process shares
+# the app) and leak-free across tests (each builds a fresh app). An external
+# `flask distribution-worker` process has its own app and won't populate the web
+# app's value; the dashboard falls back to the most recent processing timestamp.
+_HEARTBEAT_KEY = "_DISTRIBUTION_WORKER_LAST_POLL"
+
+
+def _publish_heartbeat():
+    current_app.config[_HEARTBEAT_KEY] = datetime.now(timezone.utc)
 
 
 def worker_last_poll():
     """The most recent time the in-process worker loop polled, or None if no
     inline worker is running in this process."""
-    return _last_poll_at
+    try:
+        return current_app.config.get(_HEARTBEAT_KEY)
+    except RuntimeError:  # no app context
+        return None
 
 
 def _in_flight_batch(run_id):
@@ -80,7 +89,7 @@ def enqueue_distribution(run, channel, only_failed, actor, scheduled_for=None):
         }
 
     now = datetime.now(timezone.utc)
-    is_scheduled = scheduled_for is not None and _as_aware(scheduled_for) > now
+    is_scheduled = scheduled_for is not None and as_aware(scheduled_for) > now
     batch = DistributionBatch(
         payroll_run_id=run.id,
         client_company_id=run.client_company_id,
@@ -97,7 +106,7 @@ def enqueue_distribution(run, channel, only_failed, actor, scheduled_for=None):
         record_audit(
             "Distribution scheduled",
             run,
-            f"channel={channel} scheduled_for={_as_aware(scheduled_for).isoformat()}.",
+            f"channel={channel} scheduled_for={as_aware(scheduled_for).isoformat()}.",
         )
     db.session.commit()
     return {
@@ -120,13 +129,13 @@ def reschedule_distribution(run, new_time, actor):
     if batch is None:
         return {"ok": False, "reason": "no_scheduled_batch"}
     now = datetime.now(timezone.utc)
-    if new_time is None or _as_aware(new_time) <= now:
+    if new_time is None or as_aware(new_time) <= now:
         return {"ok": False, "reason": "not_future"}
     batch.scheduled_for = new_time
     record_audit(
         "Distribution rescheduled",
         run,
-        f"scheduled_for={_as_aware(new_time).isoformat()}.",
+        f"scheduled_for={as_aware(new_time).isoformat()}.",
     )
     db.session.commit()
     return {"ok": True, "batch_id": batch.id, "scheduled_for": batch.scheduled_for}
@@ -144,7 +153,7 @@ def activate_due_scheduled():
     from .notify import notify_scheduled_started
 
     now = datetime.now(timezone.utc)
-    due = [b for b in candidates if _as_aware(b.scheduled_for) <= now]
+    due = [b for b in candidates if as_aware(b.scheduled_for) <= now]
     for batch in due:
         batch.status = BATCH_QUEUED
         run = db.session.get(PayrollRun, batch.payroll_run_id)
@@ -152,7 +161,7 @@ def activate_due_scheduled():
             "Scheduled distribution activated",
             run,
             f"channel={batch.channel} was scheduled for "
-            f"{_as_aware(batch.scheduled_for).isoformat()}.",
+            f"{as_aware(batch.scheduled_for).isoformat()}.",
         )
         notify_scheduled_started(batch, run)
     if due:
@@ -333,13 +342,6 @@ def process_all_queued():
         processed.append(process_batch(batch))
 
 
-def _as_aware(dt):
-    """Treat a stored naive datetime as UTC (SQLite drops tzinfo on write)."""
-    if dt is not None and dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
-
-
 def process_due_retries():
     """Automatically re-attempt every failed delivery whose backoff has elapsed
     and whose retry limit is not yet spent (next_retry_at is set == retries
@@ -354,7 +356,7 @@ def process_due_retries():
         PayslipDelivery.next_retry_at.isnot(None),
     ).all()
     now = datetime.now(timezone.utc)
-    due = [d for d in candidates if _as_aware(d.next_retry_at) <= now]
+    due = [d for d in candidates if as_aware(d.next_retry_at) <= now]
     if not due:
         return []
 
@@ -398,9 +400,8 @@ def run_worker_loop(poll_interval=3, stop_event=None):
     `stop_event` (a threading.Event) lets a caller ask the loop to exit between
     polls; without one the loop runs until the process is killed.
     """
-    global _last_poll_at
     while stop_event is None or not stop_event.is_set():
-        _last_poll_at = datetime.now(timezone.utc)
+        _publish_heartbeat()
         activate_due_scheduled()  # scheduled -> queued when due
         did_work = bool(process_all_queued())
         did_work = bool(process_due_retries()) or did_work

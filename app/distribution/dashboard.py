@@ -15,6 +15,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from app import db
+from app.distribution.service import as_aware
 from app.models import (
     BATCH_CANCELLED,
     BATCH_COMPLETED,
@@ -28,13 +29,6 @@ from app.models import (
     DistributionBatch,
     PayslipDelivery,
 )
-
-
-def _as_aware(dt):
-    """Treat a stored naive datetime as UTC (SQLite drops tzinfo on write)."""
-    if dt is not None and dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
 
 
 def _status_counts(model):
@@ -52,7 +46,7 @@ def _running_batch_progress(batch):
     commits a batch's deliveries as a unit, a running batch's per-item progress
     isn't visible mid-run; we surface elapsed time and the expected total so the
     operator still sees it working, plus an ETA once any progress is measurable."""
-    started = _as_aware(batch.started_at)
+    started = as_aware(batch.started_at)
     now = datetime.now(timezone.utc)
     elapsed = (now - started).total_seconds() if started else 0
     done = (batch.sent_count or 0) + (batch.failed_count or 0)
@@ -80,8 +74,8 @@ def _throughput(completed_batches):
     total_seconds = 0.0
     durations = []
     for batch in completed_batches:
-        started = _as_aware(batch.started_at)
-        finished = _as_aware(batch.finished_at)
+        started = as_aware(batch.started_at)
+        finished = as_aware(batch.finished_at)
         if not started or not finished:
             continue
         duration = (finished - started).total_seconds()
@@ -101,7 +95,7 @@ def _worker_health(batch_counts, backlog, last_processed_at, worker_last_poll):
     the most recent processing timestamp. A backlog with stale activity is the
     stall signal."""
     now = datetime.now(timezone.utc)
-    heartbeat = _as_aware(worker_last_poll) or _as_aware(last_processed_at)
+    heartbeat = as_aware(worker_last_poll) or as_aware(last_processed_at)
     age = (now - heartbeat).total_seconds() if heartbeat else None
     has_backlog = (
         backlog["queued_batches"] > 0

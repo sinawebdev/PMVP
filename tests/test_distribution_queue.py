@@ -27,6 +27,7 @@ from app.models import (  # noqa: E402
     BATCH_QUEUED,
     BATCH_RUNNING,
     DistributionBatch,
+    DomainEvent,
     Notification,
     PayrollRun,
     PayslipDelivery,
@@ -138,11 +139,20 @@ class DistributionQueueTestCase(unittest.TestCase):
 
         self.assertGreater(Notification.query.count(), before)
 
-    def test_operator_initiated_batch_does_not_notify(self):
-        before = Notification.query.count()
+    def test_operator_initiated_batch_does_not_fire_the_client_event(self):
+        # An operator-initiated distribution never fires the tenant->platform
+        # payslips.distributed event (that is client-initiated only). The operator
+        # who initiated it IS notified of completion (Phase 3, Slice 8), but no
+        # cross-plane payslips.distributed event is created.
         enqueue_distribution(self.run, "auto", False, self.operator)
         process_all_queued()
-        self.assertEqual(Notification.query.count(), before)
+        self.assertEqual(
+            DomainEvent.query.filter_by(event_type="payslips.distributed").count(), 0
+        )
+        # The initiator got a completion notification.
+        self.assertTrue(
+            Notification.query.filter_by(user_id=self.operator.id).count() >= 1
+        )
 
 
 if __name__ == "__main__":

@@ -99,10 +99,19 @@ class EventFanoutTestCase(unittest.TestCase):
         event = DomainEvent.query.filter_by(event_type="payslips.distributed").first()
         self.assertIsNotNone(event)
         self.assertEqual(event.client_company_id, msc.client_company_id)
-        # Every platform admin got a notification; the client_admin did NOT.
+        # The payslips.distributed (tenant -> platform) event notifies platform
+        # admins, NOT the client_admin.
         chrisnat = User.query.filter_by(email="chrisnat.admin@chrisnat.local").first()
         self.assertGreaterEqual(len(self._notes_for(chrisnat)), 1)
-        self.assertEqual(len(self._notes_for(msc)), 0)
+        msc_notes_for_event = [
+            n for n in self._notes_for(msc) if n.event_id == event.id
+        ]
+        self.assertEqual(len(msc_notes_for_event), 0)
+        # The client_admin who initiated it IS notified of completion, though
+        # (Phase 3, Slice 8) — a separate distribution.completed event.
+        self.assertIsNotNone(
+            DomainEvent.query.filter_by(event_type="distribution.completed").first()
+        )
 
 
 class NotificationInboxTestCase(unittest.TestCase):

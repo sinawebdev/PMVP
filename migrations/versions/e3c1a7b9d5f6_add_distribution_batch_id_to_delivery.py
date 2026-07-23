@@ -39,9 +39,10 @@ def upgrade():
 
 
 def downgrade():
+    # Dropping the column removes its foreign key too — on PostgreSQL the column's
+    # own FK constraint is dropped with the column, and SQLite batch mode recreates
+    # the table without it. This avoids depending on the FK's constraint name
+    # (which differs between a migration-built and a create_all()-built schema).
     with op.batch_alter_table('payslip_delivery', schema=None) as batch_op:
-        batch_op.drop_constraint(
-            'fk_payslip_delivery_distribution_batch', type_='foreignkey'
-        )
         batch_op.drop_index('ix_payslip_delivery_distribution_batch_id')
         batch_op.drop_column('distribution_batch_id')
