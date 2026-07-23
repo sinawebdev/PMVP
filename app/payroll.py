@@ -4,6 +4,7 @@ import tempfile
 from datetime import datetime, timezone
 
 import pandas as pd
+from sqlalchemy.orm import joinedload
 
 from flask import (
     Blueprint,
@@ -521,6 +522,12 @@ def handle_payroll_upload(now):
     return redirect(url_for("payroll.preview", import_id=import_id))
 
 
+# The runs list is platform-operator facing and grows with clients x months, so
+# it is paginated. 50 keeps every realistic current dataset on one page while
+# capping an unbounded .all() as history accumulates.
+RUNS_PER_PAGE = 50
+
+
 @payroll_bp.route("/runs", methods=["GET", "POST"])
 @platform_required
 def runs():
@@ -542,12 +549,20 @@ def runs():
         query = query.filter(PayrollRun.status.in_(PENDING_STATUSES))
     elif status_filter:
         query = query.filter(PayrollRun.status == status_filter)
-    payroll_runs = query.order_by(PayrollRun.created_at.desc()).all()
+    page = request.args.get("page", 1, type=int)
+    # Eager-load client_company (rendered per row) to avoid an N+1 across the page.
+    pagination = (
+        query.options(joinedload(PayrollRun.client_company))
+        .order_by(PayrollRun.created_at.desc())
+        .paginate(page=page, per_page=RUNS_PER_PAGE, error_out=False)
+    )
+    payroll_runs = pagination.items
     clients = ClientCompany.query.filter_by(status="Active").order_by(ClientCompany.name).all()
     distributed_ids = distributed_run_ids([run.id for run in payroll_runs])
     return render_template(
         "payroll_runs.html",
         payroll_runs=payroll_runs,
+        pagination=pagination,
         selected_client=selected_client,
         status_filter=status_filter,
         clients=clients,
@@ -1550,6 +1565,10 @@ def _bulk_apply(run_ids, predicate, action, verb):
     ``(run, action_result)`` pairs and ``skipped`` is a list of human-readable
     reasons (missing run, or ineligible in its current status)."""
     done, skipped, seen = [], [], set()
+    # Normalise + dedupe the ids first (preserving order), then fetch every run in
+    # ONE query — previously this was a db.session.get() per id (an N+1). The
+    # client_company is eager-loaded because the skip-reason label reads it.
+    ordered_ids = []
     for raw_id in run_ids:
         try:
             run_id = int(raw_id)
@@ -1558,7 +1577,19 @@ def _bulk_apply(run_ids, predicate, action, verb):
         if run_id in seen:
             continue
         seen.add(run_id)
-        run = db.session.get(PayrollRun, run_id)
+        ordered_ids.append(run_id)
+
+    runs_by_id = {}
+    if ordered_ids:
+        rows = (
+            PayrollRun.query.options(joinedload(PayrollRun.client_company))
+            .filter(PayrollRun.id.in_(ordered_ids))
+            .all()
+        )
+        runs_by_id = {run.id: run for run in rows}
+
+    for run_id in ordered_ids:
+        run = runs_by_id.get(run_id)
         if run is None:
             skipped.append(f"Run #{run_id}: not found")
             continue

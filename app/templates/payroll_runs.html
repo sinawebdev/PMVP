@@ -290,6 +290,19 @@ function rawTemplate(ev) {
                 </tbody>
             </table>
         </div>
+        {% if pagination and pagination.pages > 1 %}
+        <nav aria-label="Payroll runs pages" class="mt-2">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                    <a class="page-link" href="{{ url_for('payroll.runs', page=pagination.prev_num, client_id=(selected_client.id if selected_client else None), status=(status_filter or None)) }}">Previous</a>
+                </li>
+                <li class="page-item disabled"><span class="page-link">Page {{ pagination.page }} of {{ pagination.pages }}</span></li>
+                <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                    <a class="page-link" href="{{ url_for('payroll.runs', page=pagination.next_num, client_id=(selected_client.id if selected_client else None), status=(status_filter or None)) }}">Next</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
     </form>
 </section>
 <script>

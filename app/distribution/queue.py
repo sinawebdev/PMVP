@@ -182,9 +182,16 @@ def activate_due_scheduled():
 
     now = datetime.now(timezone.utc)
     due = [b for b in candidates if as_aware(b.scheduled_for) <= now]
+    # Fetch the due batches' runs in one query rather than one get() per batch.
+    runs_by_id = {}
+    if due:
+        run_ids = {b.payroll_run_id for b in due}
+        runs_by_id = {
+            r.id: r for r in PayrollRun.query.filter(PayrollRun.id.in_(run_ids)).all()
+        }
     for batch in due:
         batch.status = BATCH_QUEUED
-        run = db.session.get(PayrollRun, batch.payroll_run_id)
+        run = runs_by_id.get(batch.payroll_run_id)
         record_audit(
             "Scheduled distribution activated",
             run,
