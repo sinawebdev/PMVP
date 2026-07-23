@@ -175,9 +175,9 @@ def create_app():
     )
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
     app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 16 * 1024 * 1024))
-    app.config["UPLOAD_FOLDER"] = os.path.abspath(
-        os.path.join(app.root_path, "..", "uploads")
-    )
+    # Standard uploads stream through tempfile and raw uploads stage in
+    # IMPORT_SESSION_FOLDER; there is no reader for a persistent UPLOAD_FOLDER, so
+    # it is not configured (removed dead config in Phase 5).
     app.config["EXPORT_FOLDER"] = os.path.abspath(
         os.path.join(app.root_path, "..", "exports")
     )
@@ -328,7 +328,6 @@ def create_app():
     )
 
     os.makedirs(app.instance_path, exist_ok=True)
-    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(app.config["EXPORT_FOLDER"], exist_ok=True)
     os.makedirs(app.config["IMPORT_SESSION_FOLDER"], exist_ok=True)
 
