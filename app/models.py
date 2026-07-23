@@ -200,7 +200,9 @@ class PayrollRun(db.Model):
 
 class PayrollItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    payroll_run_id = db.Column(db.Integer, db.ForeignKey("payroll_run.id"))
+    # Indexed: the whole app filters items by run (payslip render, distribution,
+    # exports, edit) — PayrollItem is the largest table and this FK was unindexed.
+    payroll_run_id = db.Column(db.Integer, db.ForeignKey("payroll_run.id"), index=True)
     employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"))
     staff_id = db.Column(db.String(60))
     full_name = db.Column(db.String(160))
@@ -470,6 +472,16 @@ DELIVERY_CHANNELS = (CHANNEL_SMS, CHANNEL_WHATSAPP, CHANNEL_EMAIL)
 
 
 class PayslipDelivery(db.Model):
+    # Composite indexes back two hot paths:
+    #  * the retry sweep runs every worker poll and filters
+    #    (status == failed AND next_retry_at IS NOT NULL) over the whole table;
+    #  * _latest_delivery looks a delivery up by (payroll_item_id, channel) once
+    #    per item during a send.
+    __table_args__ = (
+        db.Index("ix_payslip_delivery_status_next_retry", "status", "next_retry_at"),
+        db.Index("ix_payslip_delivery_item_channel", "payroll_item_id", "channel"),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     payroll_item_id = db.Column(
         db.Integer, db.ForeignKey("payroll_item.id"), nullable=False, index=True
@@ -533,6 +545,12 @@ BATCH_PENDING_STATUSES = frozenset({BATCH_SCHEDULED, BATCH_QUEUED, BATCH_RUNNING
 
 
 class DistributionBatch(db.Model):
+    # claim_next_batch filters status==queued and orders by created_at on every
+    # worker poll; a composite lets that filter+sort be served from one index.
+    __table_args__ = (
+        db.Index("ix_distribution_batch_status_created", "status", "created_at"),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     payroll_run_id = db.Column(
         db.Integer, db.ForeignKey("payroll_run.id"), nullable=False, index=True
