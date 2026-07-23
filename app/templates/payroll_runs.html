@@ -2,7 +2,7 @@
 {% import "macros/lifecycle.html" as lc %}
 {% set role = current_user.role %}
 {% set bulk_visible = can_bulk_approve_reject(role) or can_operate_payroll(role) %}
-{% block title %}Payroll Runs · Chrisnat Payroll{% endblock %}
+{% block title %}Payroll Runs · {{ app_name }}{% endblock %}
 {% block page_title %}Payroll Runs{% endblock %}
 {% block page_intro %}Monitor every company-specific payroll run, including worker totals, source Excel files, review status, approvals, and export actions.{% endblock %}
 {% block content %}

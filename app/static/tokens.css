@@ -1,12 +1,13 @@
 /* ---------------------------------------------------------------------------
-   PMVP design tokens — the single source of truth for colour, radius, shadow
-   and type. Loaded by BOTH shells:
+   Payrolla design tokens — the single source of truth for colour, radius,
+   shadow and type. Loaded by BOTH shells:
 
-     base.html        (Chrisnat internal app — Bootstrap + styles.css)
+     base.html        (Payrolla operator app — Bootstrap + styles.css)
      client/base.html (tenant company portal — portal.css, no Bootstrap)
 
-   Nothing in this file may reference a layout class. Tokens only. If a value
-   appears twice in a stylesheet, it belongs here instead.
+   Colour is derived from the Payrolla brand board (Deep Teal / Bright Teal /
+   Soft Teal). Nothing in this file may reference a layout class. Tokens only.
+   If a value appears twice in a stylesheet, it belongs here instead.
    --------------------------------------------------------------------------- */
 
 :root {
@@ -20,13 +21,26 @@
     --surface-alt: #f7fbfa;
     --shell: #f2f7f5;
 
-    /* Brand */
-    --brand: #0f766e;
-    --brand-dark: #115e59;
-    --brand-soft: #ccfbf1;
-    --brand-tint: #ecfdf5;
-    --gold: #facc15;
-    --gold-deep: #f59e0b;
+    /* Brand — Payrolla teal system (brand board: Deep Teal / Bright Teal /
+       Soft Teal). --brand carries white text at AA (~5.4:1); --brand-deep is
+       the dark surface tone; --brand-bright is the energetic accent. */
+    --brand: #0c6e62;          /* primary — buttons, links, focus */
+    --brand-dark: #0a544b;     /* hover / pressed */
+    --brand-deep: #0d4d4d;     /* Deep Teal — dark surfaces, headers, sidebar */
+    --brand-bright: #17c3b2;   /* Bright Teal — accents, glows, gradient end */
+    --brand-soft: #d6f3f1;     /* Soft Teal — soft fills, badges */
+    --brand-tint: #ecfbfa;     /* lightest wash — info surfaces */
+
+    /* Accent = Bright Teal, replacing the former gold. --gold/--gold-deep stay
+       as aliases so existing references recolour to the Payrolla accent without
+       a template sweep. */
+    --accent: #17c3b2;
+    --accent-deep: #0fa697;
+    --gold: var(--accent);
+    --gold-deep: var(--accent-deep);
+
+    /* Primary brand gradient (Deep Teal → Bright Teal) — logo tile, marks. */
+    --brand-gradient: linear-gradient(135deg, #0d4d4d 0%, #17c3b2 100%);
 
     /* Status */
     --green: #16a34a;
@@ -56,25 +70,35 @@
 /* The shell gradient is brand identity, not layout — both portals share it. */
 .brand-shell-bg {
     background:
-        radial-gradient(circle at top left, rgba(250, 204, 21, 0.16), transparent 28rem),
+        radial-gradient(circle at top left, rgba(23, 195, 178, 0.14), transparent 28rem),
         linear-gradient(135deg, var(--surface-alt) 0%, var(--shell) 52%, #eef7f2 100%);
     background-attachment: fixed;
 }
 
-/* Gold tile used as the brand mark everywhere: sidebar, portal header,
-   public payslip, error pages. One definition, one look. */
+/* The Payrolla "P" tile — the brand mark everywhere a compact logo is needed:
+   sidebar, portal header, public payslip, error pages. Teal gradient with a
+   white glyph. One definition, one look. */
 .brand-mark {
     align-items: center;
-    background: linear-gradient(135deg, var(--gold), var(--gold-deep));
-    border: 2px solid rgba(255, 255, 255, 0.45);
+    background: var(--brand-gradient);
+    border: 2px solid rgba(255, 255, 255, 0.5);
     border-radius: var(--radius);
-    box-shadow: 0 12px 28px rgba(250, 204, 21, 0.25);
-    color: #172033;
+    box-shadow: 0 12px 28px rgba(13, 77, 77, 0.28);
+    color: #ffffff;
     display: inline-flex;
-    font-weight: 900;
+    font-weight: 800;
     height: 46px;
     justify-content: center;
     width: 46px;
+}
+
+/* An <img> logo mark (SVG) sized to match .brand-mark, for surfaces that use
+   the real logo instead of the letter tile. */
+.brand-logo {
+    display: inline-block;
+    height: 46px;
+    width: 46px;
+    flex: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

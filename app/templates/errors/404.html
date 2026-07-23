@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Page not found · Chrisnat Payroll{% endblock %}
+{% block title %}Page not found · {{ app_name }}{% endblock %}
 {% block page_title %}Page not found{% endblock %}
 {% block page_intro %}That link led somewhere that doesn't exist. Nothing was changed.{% endblock %}
 
@@ -23,8 +23,8 @@
 <main class="error-page">
     <section class="error-card">
         <div class="brand justify-content-center mb-3">
-            <span class="brand-mark">CN</span>
-            <div><strong>Chrisnat Limited</strong><small>Payroll + Distribution</small></div>
+            <span class="brand-mark">{{ app_brand_mark }}</span>
+            <div><strong>{{ app_brand_name }}</strong><small>{{ app_short_name }}</small></div>
         </div>
         <div class="error-code">404</div>
         <h1>Page not found</h1>

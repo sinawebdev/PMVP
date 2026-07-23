@@ -267,7 +267,7 @@ def company_dashboard():
 
     company = db.session.get(ClientCompany, active_tenant_id())
     if company is None:  # tenant user whose company vanished — deny softly
-        flash("Your company profile is unavailable. Contact Chrisnat.", "warning")
+        flash(f"Your company profile is unavailable. Contact {current_app.config['APP_BRAND_NAME']}.", "warning")
         return redirect(url_for("auth.logout"))
 
     employee_count = tenant_query(Employee).count()

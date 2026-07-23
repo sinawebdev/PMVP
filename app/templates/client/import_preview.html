@@ -32,7 +32,7 @@
   {% if period_exists %}
     {% if replace_blocked %}
     <div class="flash warning" role="status">
-      A {{ payload.month }} {{ payload.year }} payroll already exists and can't be replaced here: {{ replace_blocked }}. Contact Chrisnat.
+      A {{ payload.month }} {{ payload.year }} payroll already exists and can't be replaced here: {{ replace_blocked }}. Contact {{ app_brand_name }}.
     </div>
     {% else %}
     <div class="flash info" role="status">

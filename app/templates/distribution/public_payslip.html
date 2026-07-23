@@ -42,9 +42,9 @@
 <div class="payslip-wrap">
     <div class="payslip-card">
         <div class="payslip-head">
-            <span class="brand-mark">CN</span>
+            <span class="brand-mark">{{ app_brand_mark }}</span>
             <div>
-                <div class="payslip-head-name">{{ client.name if client else "Chrisnat" }}</div>
+                <div class="payslip-head-name">{{ client.name if client else app_brand_name }}</div>
                 <div class="payslip-head-meta">Payslip · {{ run.month }} {{ run.year }}</div>
             </div>
         </div>
@@ -84,7 +84,7 @@
             <a class="download" href="{{ url_for('payslip_link.public_payslip_pdf', token=token) }}">Download PDF</a>
             <p class="foot">
                 This is your salary breakdown, not a payment confirmation.<br>
-                Sent securely by {{ client.name if client else "Chrisnat" }} via Chrisnat.
+                Sent securely by {{ client.name if client else app_brand_name }} via {{ app_brand_name }}.
             </p>
         </div>
     </div>

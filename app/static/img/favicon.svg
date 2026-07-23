@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Payrolla">
+  <defs>
+    <linearGradient id="payrolla-fav-p" x1="16" y1="12" x2="48" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5FE3D3"/>
+      <stop offset="1" stop-color="#17C3B2"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="#0D4D4D"/>
+  <path d="M23 34c0 10-2 15-8.5 18.5C18.4 48 18 42.5 23 38.5z" fill="#0A3A38"/>
+  <path d="M23 15.5h11a12 12 0 0 1 0 24H23" fill="none" stroke="url(#payrolla-fav-p)"
+        stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M23 15.5V46" fill="none" stroke="url(#payrolla-fav-p)" stroke-width="10" stroke-linecap="round"/>
+</svg>

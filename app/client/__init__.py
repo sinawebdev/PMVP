@@ -373,7 +373,7 @@ def run_upload():
         if looks_like_raw_hours(file_path):
             flash(
                 "That looks like a raw-hours workbook. Raw-hours runs are prepared "
-                "by Chrisnat — please upload a standard payroll workbook.",
+                f"by {current_app.config['APP_BRAND_NAME']} — please upload a standard payroll workbook.",
                 "warning",
             )
             return _form()
@@ -454,7 +454,7 @@ def import_confirm(import_id):
         if not ok:
             flash(
                 f"Cannot replace the existing {month} {year} payroll: {reason}. "
-                "Contact Chrisnat.",
+                f"Contact {current_app.config['APP_BRAND_NAME']}.",
                 "danger",
             )
             return redirect(url_for("client.import_preview", import_id=batch.id))
@@ -486,7 +486,7 @@ def import_confirm(import_id):
     db.session.commit()
     if verdict.held:
         flash(
-            f"{run.month} {run.year} payroll submitted and sent to Chrisnat for review.",
+            f"{run.month} {run.year} payroll submitted and sent to {current_app.config['APP_BRAND_NAME']} for review.",
             "success",
         )
     else:
@@ -664,7 +664,7 @@ def _do_client_send(run, only_failed):
         note = " (already queued)" if replayed else ""
         flash(
             f"Distribution queued{note}: {summary['total']} payslip(s) will be sent shortly. "
-            "Chrisnat oversight will be notified once it completes.",
+            f"{current_app.config['APP_BRAND_NAME']} oversight will be notified once it completes.",
             "success",
         )
     return redirect(url_for("client.distribute", run_id=run.id))

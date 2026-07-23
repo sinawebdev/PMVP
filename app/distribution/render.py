@@ -1,7 +1,7 @@
-"""Render a Chrisnat PayrollItem into a payslip breakdown message.
+"""Render a PayrollItem into a payslip breakdown message.
 
-This is the worker-facing salary *breakdown* (not a payment). We reuse Chrisnat's
-`format_ghana_cedis` so amounts read identically to the rest of the app.
+This is the worker-facing salary *breakdown* (not a payment). We reuse the app's
+`format_ghana_cedis` so amounts read identically to the rest of the product.
 """
 from html import escape
 
@@ -38,7 +38,7 @@ def render_payslip_text(item, run, client, link=None) -> str:
     When ``link`` is given, a tokenized no-login URL is appended so the worker can
     open the full payslip and download a PDF on their phone without signing in.
     """
-    org = client.name if client else "Chrisnat"
+    org = client.name if client else "Payrolla"
     earnings, deductions = _line_items(item)
     lines = [f"{org} payslip — {_period(run)}", f"{item.full_name}"]
     for label, amount in earnings:
@@ -62,11 +62,11 @@ def _brand(client=None):
     try:
         from flask import current_app
 
-        name = name or current_app.config.get("APP_BRAND_NAME", "Chrisnat")
-        color = color or current_app.config.get("EMAIL_BRAND_COLOR", "#0F766E")
+        name = name or current_app.config.get("APP_BRAND_NAME", "Payrolla")
+        color = color or current_app.config.get("EMAIL_BRAND_COLOR", "#0D4D4D")
     except Exception:  # noqa: BLE001 - no app context (e.g. pure-unit render tests)
-        name = name or "Chrisnat"
-        color = color or "#0F766E"
+        name = name or "Payrolla"
+        color = color or "#0D4D4D"
     return name, color
 
 
@@ -76,7 +76,7 @@ def render_payslip_email(item, run, client, link=None):
     The HTML is a self-contained, table-based, inline-styled document (the layout
     email clients render reliably), branded with the product/company identity and
     with a plain-text ``body_text`` fallback for text-only clients."""
-    org = client.name if client else "Chrisnat"
+    org = client.name if client else "Payrolla"
     brand, accent = _brand(client)
     period = _period(run)
     subject = f"Your {period} payslip — {org}"

@@ -5,8 +5,8 @@
       <stop offset="1" stop-color="#16a34a"/>
     </linearGradient>
     <linearGradient id="gold" x1="0" x2="1">
-      <stop offset="0" stop-color="#facc15"/>
-      <stop offset="1" stop-color="#f59e0b"/>
+      <stop offset="0" stop-color="#17c3b2"/>
+      <stop offset="1" stop-color="#0fa697"/>
     </linearGradient>
   </defs>
   <rect width="520" height="300" rx="26" fill="url(#bg)"/>
@@ -21,8 +21,8 @@
   <text x="238" y="107" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#1f2937">CN</text>
   <rect x="330" y="80" width="120" height="132" rx="18" fill="#ecfeff"/>
   <path d="M358 170c14-38 34-48 56-78" fill="none" stroke="#0f766e" stroke-width="12" stroke-linecap="round"/>
-  <circle cx="358" cy="170" r="14" fill="#facc15"/>
-  <circle cx="414" cy="92" r="14" fill="#facc15"/>
+  <circle cx="358" cy="170" r="14" fill="#17c3b2"/>
+  <circle cx="414" cy="92" r="14" fill="#17c3b2"/>
   <rect x="330" y="226" width="134" height="18" rx="9" fill="#ffffff" opacity=".75"/>
   <rect x="54" y="246" width="210" height="16" rx="8" fill="#ffffff" opacity=".45"/>
 </svg>

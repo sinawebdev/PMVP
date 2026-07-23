@@ -52,7 +52,7 @@ def assert_persistent_database_config(app):
     )
     if persistence_required and not os.getenv("DATABASE_URL"):
         raise RuntimeError(
-            "DATABASE_URL is required for deployed Chrisnat Payroll MVP persistence. "
+            "DATABASE_URL is required for deployed Payrolla persistence. "
             "Do not run production on local SQLite."
         )
     if persistence_required and str(database_uri).startswith("sqlite"):
@@ -115,13 +115,25 @@ def create_app():
     _INSECURE_SECRET_KEY = "dev-secret-change-me"
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", _INSECURE_SECRET_KEY)
     # --- Product identity (single config seam) ---
-    # De-hardcodes the product name so a rebrand is a config change, not a
-    # cross-template sweep. Defaults reproduce today's chrome byte-for-byte.
-    app.config["APP_NAME"] = os.getenv("APP_NAME", "Chrisnat Payroll MVP")
-    app.config["APP_BRAND_NAME"] = os.getenv("APP_BRAND_NAME", "Chrisnat")
-    app.config["APP_SHORT_NAME"] = os.getenv("APP_SHORT_NAME", "Payroll MVP")
-    app.config["APP_BRAND_MARK"] = os.getenv("APP_BRAND_MARK", "CN")
-    app.config["SERVICE_SLUG"] = os.getenv("SERVICE_SLUG", "chrisnat-payroll-mvp")
+    # De-hardcodes the product/company names so a rebrand or white-label is a
+    # config change, not a cross-template sweep. Every user-facing surface reads
+    # these (title, sidebar, login, emails, payslip PDF) via inject_app_identity.
+    #   APP_NAME       — full product name (browser title, marketing)
+    #   APP_BRAND_NAME — wordmark shown in-app (sidebar, email header)
+    #   APP_SHORT_NAME — subtitle under the wordmark
+    #   APP_BRAND_MARK — the single-glyph logo tile (the Payrolla "P")
+    #   APP_TAGLINE    — one-line product descriptor for login/landing/footer
+    #   COMPANY_NAME   — the company behind the product; legal/footer attribution
+    #                    only, never in nav/app chrome (Sinaforte stays quiet)
+    app.config["APP_NAME"] = os.getenv("APP_NAME", "Payrolla")
+    app.config["APP_BRAND_NAME"] = os.getenv("APP_BRAND_NAME", "Payrolla")
+    app.config["APP_SHORT_NAME"] = os.getenv("APP_SHORT_NAME", "Payroll & HR")
+    app.config["APP_BRAND_MARK"] = os.getenv("APP_BRAND_MARK", "P")
+    app.config["APP_TAGLINE"] = os.getenv(
+        "APP_TAGLINE", "Modern payroll, compliance & workforce management"
+    )
+    app.config["COMPANY_NAME"] = os.getenv("COMPANY_NAME", "Sinaforte Technologies")
+    app.config["SERVICE_SLUG"] = os.getenv("SERVICE_SLUG", "payrolla")
     app.config["SQLALCHEMY_DATABASE_URI"] = resolve_database_uri(
         os.path.join(app.instance_path, "chrisnat_payroll.db")
     )
@@ -223,14 +235,14 @@ def create_app():
     app.config["WHATSAPP_APP_SECRET"] = os.getenv("WHATSAPP_APP_SECRET")
     app.config["HUBTEL_WEBHOOK_SECRET"] = os.getenv("HUBTEL_WEBHOOK_SECRET")
     app.config["EMAIL_BACKEND"] = os.getenv("EMAIL_BACKEND", "console")        # console|smtp
-    app.config["DEFAULT_FROM_EMAIL"] = os.getenv("DEFAULT_FROM_EMAIL", "payroll@chrisnat.local")
+    app.config["DEFAULT_FROM_EMAIL"] = os.getenv("DEFAULT_FROM_EMAIL", "payroll@payrolla.app")
     # Optional sender display name and reply-to (Phase 3, Slice 9). Both optional
     # so existing config keeps working: with neither set, From is the bare
     # DEFAULT_FROM_EMAIL and no Reply-To header is added.
     app.config["EMAIL_SENDER_NAME"] = os.getenv("EMAIL_SENDER_NAME", app.config["APP_NAME"])
     app.config["EMAIL_REPLY_TO"] = os.getenv("EMAIL_REPLY_TO")
-    # Accent colour for the branded email header/button.
-    app.config["EMAIL_BRAND_COLOR"] = os.getenv("EMAIL_BRAND_COLOR", "#0F766E")
+    # Accent colour for the branded email header/button — Payrolla Deep Teal.
+    app.config["EMAIL_BRAND_COLOR"] = os.getenv("EMAIL_BRAND_COLOR", "#0D4D4D")
     # Optionally attach the payslip PDF to the email (off by default — v1 sends a
     # tokenized link). When on, the attachment is validated (exists, non-empty,
     # under the size cap) and silently skipped if it fails, so a bad attachment
@@ -428,13 +440,15 @@ def create_app():
 
     @app.context_processor
     def inject_app_identity():
-        # Product-name strings for templates (title, brand). Config-sourced so a
-        # rebrand never requires touching a template.
+        # Product-name strings for templates (title, brand, footer attribution).
+        # Config-sourced so a rebrand or white-label never touches a template.
         return {
             "app_name": app.config["APP_NAME"],
             "app_brand_name": app.config["APP_BRAND_NAME"],
             "app_short_name": app.config["APP_SHORT_NAME"],
             "app_brand_mark": app.config["APP_BRAND_MARK"],
+            "app_tagline": app.config["APP_TAGLINE"],
+            "company_name": app.config["COMPANY_NAME"],
         }
 
     @app.context_processor

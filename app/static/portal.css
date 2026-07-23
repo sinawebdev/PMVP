@@ -34,7 +34,7 @@ body {
 }
 
 .portal-header::after {
-    background: radial-gradient(circle at 12% 0%, rgba(250, 204, 21, 0.22), transparent 16rem);
+    background: radial-gradient(circle at 12% 0%, rgba(23, 195, 178, 0.22), transparent 16rem);
     content: "";
     inset: 0;
     pointer-events: none;
@@ -93,8 +93,8 @@ body {
 }
 
 .portal-nav a[aria-current="page"] {
-    background: rgba(250, 204, 21, 0.16);
-    border-color: rgba(250, 204, 21, 0.35);
+    background: rgba(23, 195, 178, 0.16);
+    border-color: rgba(23, 195, 178, 0.35);
     color: #fff;
     font-weight: 600;
 }
@@ -162,7 +162,7 @@ h2 { font-size: 17px; font-weight: 750; margin: 26px 0 12px; }
 }
 
 .stat-card::after {
-    background: linear-gradient(135deg, rgba(15, 118, 110, 0.16), rgba(250, 204, 21, 0.18));
+    background: linear-gradient(135deg, rgba(15, 118, 110, 0.16), rgba(23, 195, 178, 0.18));
     border-radius: var(--radius-pill);
     content: "";
     height: 80px;
@@ -368,7 +368,18 @@ button:focus-visible {
     outline-offset: 2px;
 }
 
-.portal-nav a:focus-visible { outline-color: var(--gold); }
+.portal-nav a:focus-visible { outline-color: var(--accent); }
+
+/* Quiet product attribution — the tenant portal is a Payrolla surface, so the
+   platform is present without competing with the company's own brand above. */
+.portal-foot {
+    text-align: center;
+    padding: 24px 16px 34px;
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: .02em;
+}
+.portal-foot strong { color: var(--brand); font-weight: 600; }
 
 /* Upload progress (client import) */
 .upload-status {

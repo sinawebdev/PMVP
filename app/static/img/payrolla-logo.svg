@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 232 64" role="img" aria-label="Payrolla">
+  <defs>
+    <linearGradient id="payrolla-teal-wm" x1="14" y1="10" x2="52" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17C3B2"/>
+      <stop offset="1" stop-color="#0D4D4D"/>
+    </linearGradient>
+  </defs>
+  <path d="M21 34c0 12-2.4 18-10.5 22.5C15.8 51 15 44 21 39z" fill="#0A3A38"/>
+  <path d="M21 12.5h12.5a13 13 0 0 1 0 26H21" fill="none" stroke="url(#payrolla-teal-wm)"
+        stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M21 12.5V47" fill="none" stroke="url(#payrolla-teal-wm)" stroke-width="11" stroke-linecap="round"/>
+  <text x="70" y="42" font-family="Satoshi, 'Poppins', 'Segoe UI', system-ui, -apple-system, sans-serif"
+        font-size="30" font-weight="700" letter-spacing="-0.5" fill="#0D4D4D">Payrolla</text>
+</svg>

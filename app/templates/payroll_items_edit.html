@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Edit Figures · Payroll Run · Chrisnat Payroll{% endblock %}
+{% block title %}Edit Figures · Payroll Run · {{ app_name }}{% endblock %}
 {% block page_title %}Edit Figures — {{ payroll_run.client_company.name if payroll_run.client_company else "Run" }} {{ payroll_run.month }} {{ payroll_run.year }}{% endblock %}
 {% block page_intro %}Correct raw input figures for a few employees without a full re-upload. Computed figures (gross, PAYE, SSNIT, net) only ever come from Calculate Pay — they cannot be typed in here.{% endblock %}
 {% block content %}

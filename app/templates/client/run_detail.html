@@ -6,7 +6,7 @@
       <h1>{{ run.month }} {{ run.year }} payroll</h1>
       <p class="sub">Status: <span class="badge">{{ run.status }}</span></p>
       {% if run.risk_status == 'held' and run.risk_reasons %}
-      <p class="sub">Held for Chrisnat review — {{ run.risk_reasons }}</p>
+      <p class="sub">Held for {{ app_brand_name }} review — {{ run.risk_reasons }}</p>
       {% endif %}
     </div>
     <div class="actions">

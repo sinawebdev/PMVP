@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "macros/lifecycle.html" as lc %}
 {% import "macros/breadcrumbs.html" as bc %}
-{% block title %}Payroll Detail · Chrisnat Payroll{% endblock %}
+{% block title %}Payroll Detail · {{ app_name }}{% endblock %}
 {% block page_title %}Payroll Detail{% endblock %}
 {% block page_intro %}Review totals, imported worker counts, duplicates, statutory figures, and row-level warnings before exporting or approving payroll.{% endblock %}
 {% block breadcrumbs %}
@@ -196,7 +196,7 @@
         <i class="bi bi-clock-history"></i>
         <span>This run was created from a <strong>raw hours upload</strong> (billable add-on) with
         {{ payroll_run.raw_entries|length }} imported line items. Gross pay has <strong>not</strong> been
-        calculated yet — a Chrisnat operator will process the hours into payroll items.</span>
+        calculated yet — a {{ app_brand_name }} operator will process the hours into payroll items.</span>
     </div>
 </section>
 {% endif %}

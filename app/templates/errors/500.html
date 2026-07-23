@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Something went wrong · Chrisnat Payroll{% endblock %}
+{% block title %}Something went wrong · {{ app_name }}{% endblock %}
 {% block page_title %}Something went wrong{% endblock %}
 {% block page_intro %}An unexpected error occurred on our side. The team has been notified.{% endblock %}
 
@@ -9,7 +9,7 @@
     <div class="empty-state">
         <i class="bi bi-cone-striped"></i>
         <p class="mb-1"><strong>Something went wrong on our end (500).</strong></p>
-        <p class="text-muted mb-3">Your last action may not have completed. Please try again in a moment — if it keeps happening, let the Chrisnat team know.</p>
+        <p class="text-muted mb-3">Your last action may not have completed. Please try again in a moment — if it keeps happening, let our team know.</p>
         <div class="d-flex gap-2">
             <a class="btn btn-sm btn-primary" href="{{ url_for('main.dashboard') }}"><i class="bi bi-speedometer2"></i>Return to Dashboard</a>
             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="history.back()"><i class="bi bi-arrow-left"></i>Back</button>
@@ -23,8 +23,8 @@
 <main class="error-page">
     <section class="error-card">
         <div class="brand justify-content-center mb-3">
-            <span class="brand-mark">CN</span>
-            <div><strong>Chrisnat Limited</strong><small>Payroll + Distribution</small></div>
+            <span class="brand-mark">{{ app_brand_mark }}</span>
+            <div><strong>{{ app_brand_name }}</strong><small>{{ app_short_name }}</small></div>
         </div>
         <div class="error-code">500</div>
         <h1>Something went wrong</h1>

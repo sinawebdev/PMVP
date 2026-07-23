@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Risk Queue · Chrisnat Payroll{% endblock %}
+{% block title %}Risk Queue · {{ app_name }}{% endblock %}
 {% block page_title %}Risk Review Queue{% endblock %}
-{% block page_intro %}Payroll runs the risk gate has held for Chrisnat review, across every client company. Open a run to see why it was held, then release it into the approval queue or reject it.{% endblock %}
+{% block page_intro %}Payroll runs the risk gate has held for {{ app_brand_name }} review, across every client company. Open a run to see why it was held, then release it into the approval queue or reject it.{% endblock %}
 {% block content %}
 {% if held_runs %}
 <div class="mini-note mb-3">

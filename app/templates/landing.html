@@ -1,22 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Chrisnat Payroll MVP{% endblock %}
+{% block title %}{{ app_name }} — {{ app_tagline }}{% endblock %}
 {% block public_content %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
   .lp-root{
-    --abyss:#052420;
-    --deep:#073b34;
-    --teal:#0d7a6e;
-    --teal-bright:#19b89f;
-    --teal-glow:rgba(25,184,159,.55);
-    --gold:#c9a24b;
-    --gold-bright:#e6c673;
-    --cream:#edf4f1;
-    --muted:#86aaa2;
-    --line:rgba(201,162,75,.28);
+    --abyss:#061e1b;
+    --deep:#0d4d4d;
+    --teal:#0f8a7d;
+    --teal-bright:#2fd4c3;
+    --teal-glow:rgba(23,195,178,.55);
+    /* The former gold accent is now Payrolla Bright Teal — the primary CTA /
+       highlight tone, kept a step brighter than --teal for hierarchy. */
+    --gold:#17c3b2;
+    --gold-bright:#5fe3d3;
+    --cream:#eaf6f4;
+    --muted:#93bcb4;
+    --line:rgba(23,195,178,.28);
     --card:rgba(255,255,255,.045);
     --card-brd:rgba(255,255,255,.09);
     --maxw:1180px;
@@ -26,7 +28,7 @@
   .lp-root{
     background:var(--abyss);
     color:var(--cream);
-    font-family:'Montserrat',system-ui,sans-serif;
+    font-family:'Plus Jakarta Sans',system-ui,sans-serif;
     -webkit-font-smoothing:antialiased;
     overflow-x:hidden;
     line-height:1.5;
@@ -39,7 +41,7 @@
   .lp-root .aurora span{position:absolute;border-radius:50%;filter:blur(90px);opacity:.55;mix-blend-mode:screen}
   .lp-root .aurora .a1{width:60vw;height:60vw;left:-12vw;top:-18vw;background:radial-gradient(circle,#0f8f7f,transparent 65%);animation:lp-drift1 22s ease-in-out infinite}
   .lp-root .aurora .a2{width:48vw;height:48vw;right:-10vw;top:8vh;background:radial-gradient(circle,#0c5e54,transparent 60%);animation:lp-drift2 28s ease-in-out infinite}
-  .lp-root .aurora .a3{width:42vw;height:42vw;left:25vw;bottom:-20vw;background:radial-gradient(circle,rgba(201,162,75,.5),transparent 62%);animation:lp-drift3 26s ease-in-out infinite}
+  .lp-root .aurora .a3{width:42vw;height:42vw;left:25vw;bottom:-20vw;background:radial-gradient(circle,rgba(23,195,178,.5),transparent 62%);animation:lp-drift3 26s ease-in-out infinite}
   @keyframes lp-drift1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(8vw,6vh) scale(1.12)}}
   @keyframes lp-drift2{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-7vw,5vh) scale(1.08)}}
   @keyframes lp-drift3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(5vw,-6vh) scale(1.15)}}
@@ -50,22 +52,22 @@
 
   /* ---------- fixed chrome ---------- */
   .lp-root .topbar{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:center;justify-content:space-between;
-    flex-wrap:wrap;gap:10px;padding:18px 34px;backdrop-filter:blur(6px);background:linear-gradient(180deg,rgba(5,36,32,.7),transparent)}
+    flex-wrap:wrap;gap:10px;padding:18px 34px;backdrop-filter:blur(6px);background:linear-gradient(180deg,rgba(6,30,27,.7),transparent)}
   .lp-root .login-link{position:relative;z-index:31}
   .lp-root .brand{display:flex;align-items:center;gap:12px}
-  .lp-root .cn{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,var(--gold),#9c842a);
-    display:grid;place-items:center;font-family:'Montserrat';font-weight:700;font-size:17px;color:#1a1305;
-    box-shadow:0 6px 20px rgba(201,162,75,.35)}
-  .lp-root .brand b{font-family:'Montserrat';font-weight:600;letter-spacing:.5px;font-size:16px}
+  .lp-root .cn{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,var(--gold),#0a5c53);
+    display:grid;place-items:center;font-family:'Plus Jakarta Sans';font-weight:700;font-size:17px;color:#06302b;
+    box-shadow:0 6px 20px rgba(23,195,178,.35)}
+  .lp-root .brand b{font-family:'Plus Jakarta Sans';font-weight:600;letter-spacing:.5px;font-size:16px}
   .lp-root .brand small{display:block;color:var(--muted);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;margin-top:1px}
   .lp-root .topbar-right{display:flex;align-items:center;gap:14px}
-  .lp-root .tag{font-family:'Montserrat';font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);
+  .lp-root .tag{font-family:'Plus Jakarta Sans';font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);
     border:1px solid var(--line);padding:7px 13px;border-radius:30px}
-  .lp-root .login-link{font-family:'Montserrat';font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;
+  .lp-root .login-link{font-family:'Plus Jakarta Sans';font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;
     display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border-radius:30px;
-    background:linear-gradient(135deg,var(--gold-bright),var(--gold));color:#1a1305;text-decoration:none;
-    box-shadow:0 6px 18px rgba(201,162,75,.3);transition:transform .3s,box-shadow .3s}
-  .lp-root .login-link:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(201,162,75,.45);color:#1a1305}
+    background:linear-gradient(135deg,var(--gold-bright),var(--gold));color:#06302b;text-decoration:none;
+    box-shadow:0 6px 18px rgba(23,195,178,.3);transition:transform .3s,box-shadow .3s}
+  .lp-root .login-link:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(23,195,178,.45);color:#06302b}
   .lp-root .progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:40;
     background:linear-gradient(90deg,var(--gold),var(--teal-bright));box-shadow:0 0 12px var(--teal-glow)}
 
@@ -76,18 +78,18 @@
   .lp-root .dots button:hover{border-color:var(--gold)}
   .lp-root .dots button.on{background:var(--gold);border-color:var(--gold);box-shadow:0 0 10px var(--gold);transform:scale(1.25)}
   .lp-root .dots button .lbl{position:absolute;right:20px;top:50%;transform:translateY(-50%);white-space:nowrap;
-    font-family:'Montserrat';font-size:11px;letter-spacing:.05em;color:var(--cream);opacity:0;pointer-events:none;transition:opacity .25s;
-    background:rgba(5,36,32,.85);padding:3px 9px;border-radius:6px;border:1px solid var(--card-brd)}
+    font-family:'Plus Jakarta Sans';font-size:11px;letter-spacing:.05em;color:var(--cream);opacity:0;pointer-events:none;transition:opacity .25s;
+    background:rgba(6,30,27,.85);padding:3px 9px;border-radius:6px;border:1px solid var(--card-brd)}
   .lp-root .dots button:hover .lbl{opacity:1}
 
   /* ---------- sections ---------- */
   .lp-root .deck{position:relative;z-index:5}
   .lp-root .sec{min-height:100vh;display:flex;flex-direction:column;justify-content:center;
     padding:118px 34px 80px;max-width:var(--maxw);margin:0 auto;position:relative}
-  .lp-root .eyebrow{font-family:'Montserrat';font-size:12px;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);
+  .lp-root .eyebrow{font-family:'Plus Jakarta Sans';font-size:12px;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);
     display:flex;align-items:center;gap:13px;margin-bottom:22px}
   .lp-root .eyebrow::before{content:"";width:34px;height:1px;background:var(--gold);display:inline-block}
-  .lp-root h1,.lp-root h2{font-family:'Montserrat',serif;font-weight:600;line-height:1.02;letter-spacing:-.02em}
+  .lp-root h1,.lp-root h2{font-family:'Plus Jakarta Sans',serif;font-weight:600;line-height:1.02;letter-spacing:-.02em}
   .lp-root h2{font-size:clamp(2rem,5vw,3.4rem);margin-bottom:18px}
   .lp-root .lead{font-size:clamp(1rem,1.6vw,1.18rem);color:var(--muted);max-width:620px;line-height:1.6}
 
@@ -98,8 +100,8 @@
 
   /* ================= HERO ================= */
   .lp-root #hero{justify-content:center}
-  .lp-root .hero-eyebrow{font-family:'Montserrat';font-size:13px;letter-spacing:.34em;text-transform:uppercase;color:var(--gold);margin-bottom:30px}
-  .lp-root .hero-title{font-family:'Montserrat',serif;font-weight:600;font-size:clamp(3.2rem,11vw,8.2rem);line-height:.94;letter-spacing:-.03em}
+  .lp-root .hero-eyebrow{font-family:'Plus Jakarta Sans';font-size:13px;letter-spacing:.34em;text-transform:uppercase;color:var(--gold);margin-bottom:30px}
+  .lp-root .hero-title{font-family:'Plus Jakarta Sans',serif;font-weight:600;font-size:clamp(3.2rem,11vw,8.2rem);line-height:.94;letter-spacing:-.03em}
   .lp-root .hero-title .w{display:inline-block;opacity:0;transform:translateY(40px) rotate(3deg);
     animation:lp-wordIn .9s cubic-bezier(.2,.8,.2,1) forwards}
   .lp-root .hero-title .w:nth-child(1){animation-delay:.25s}
@@ -110,20 +112,20 @@
     opacity:0;animation:lp-fadeUp 1s ease 1.1s forwards}
   .lp-root .hero-sub b{color:var(--teal-bright);font-weight:600}
   .lp-root .hero-chips{display:flex;gap:12px;flex-wrap:wrap;margin-top:34px;opacity:0;animation:lp-fadeUp 1s ease 1.35s forwards}
-  .lp-root .chip{font-family:'Montserrat';font-size:13px;letter-spacing:.04em;padding:10px 18px;border-radius:40px;
+  .lp-root .chip{font-family:'Plus Jakarta Sans';font-size:13px;letter-spacing:.04em;padding:10px 18px;border-radius:40px;
     border:1px solid var(--card-brd);background:var(--card);display:flex;align-items:center;gap:9px}
   .lp-root .chip i{color:var(--teal-bright)}
   .lp-root .chip.g i{color:var(--gold)}
   @keyframes lp-fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
   .lp-root .hero-cta{display:flex;gap:14px;flex-wrap:wrap;margin-top:32px;opacity:0;animation:lp-fadeUp 1s ease 1.5s forwards}
-  .lp-root .hbtn{font-family:'Montserrat';font-weight:600;font-size:.98rem;letter-spacing:.02em;padding:14px 28px;border-radius:40px;
+  .lp-root .hbtn{font-family:'Plus Jakarta Sans';font-weight:600;font-size:.98rem;letter-spacing:.02em;padding:14px 28px;border-radius:40px;
     display:inline-flex;align-items:center;gap:10px;text-decoration:none;transition:transform .3s,box-shadow .3s,border-color .3s}
-  .lp-root .hbtn.gold{background:linear-gradient(135deg,var(--gold-bright),var(--gold));color:#1a1305;box-shadow:0 10px 30px rgba(201,162,75,.35)}
-  .lp-root .hbtn.gold:hover{transform:translateY(-3px);box-shadow:0 16px 42px rgba(201,162,75,.5);color:#1a1305}
+  .lp-root .hbtn.gold{background:linear-gradient(135deg,var(--gold-bright),var(--gold));color:#06302b;box-shadow:0 10px 30px rgba(23,195,178,.35)}
+  .lp-root .hbtn.gold:hover{transform:translateY(-3px);box-shadow:0 16px 42px rgba(23,195,178,.5);color:#06302b}
   .lp-root .hbtn.ghost{border:1px solid var(--card-brd);background:var(--card);color:var(--cream)}
   .lp-root .hbtn.ghost:hover{border-color:var(--gold);transform:translateY(-3px);color:var(--cream)}
   .lp-root .scrollcue{position:absolute;bottom:34px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;
-    color:var(--muted);font-family:'Montserrat';font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--muted);font-family:'Plus Jakarta Sans';font-size:11px;letter-spacing:.2em;text-transform:uppercase;
     opacity:0;animation:lp-fadeUp 1s ease 1.9s forwards}
   .lp-root .scrollcue i{animation:lp-bob 1.6s ease-in-out infinite}
   @keyframes lp-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}}
@@ -139,9 +141,9 @@
     background:radial-gradient(circle,rgba(25,184,159,.12),transparent 70%)}
   .lp-root .pico{width:60px;height:60px;border-radius:16px;display:grid;place-items:center;font-size:24px;margin-bottom:22px;position:relative}
   .lp-root .pico.t{background:linear-gradient(135deg,var(--teal),#0a5e54);color:#fff}
-  .lp-root .pico.g{background:linear-gradient(135deg,var(--gold),#9c842a);color:#1a1305}
+  .lp-root .pico.g{background:linear-gradient(135deg,var(--gold),#0a5c53);color:#06302b}
   .lp-root .pico.d{background:linear-gradient(135deg,#0a4d45,#073b34);color:var(--teal-bright)}
-  .lp-root .pcard h3{font-family:'Montserrat';font-weight:600;font-size:1.32rem;margin-bottom:12px;line-height:1.15}
+  .lp-root .pcard h3{font-family:'Plus Jakarta Sans';font-weight:600;font-size:1.32rem;margin-bottom:12px;line-height:1.15}
   .lp-root .pcard p{color:var(--muted);font-size:.97rem;line-height:1.55}
 
   /* ================= PIPELINE (signature) ================= */
@@ -171,9 +173,9 @@
   .lp-root .node:nth-child(3) .ring{color:#5fd6a0}
   .lp-root .node:nth-child(4) .ring{color:var(--gold-bright);border-color:var(--gold)}
   .lp-root .node .ring .num{position:absolute;top:-8px;right:-8px;width:28px;height:28px;border-radius:50%;
-    background:var(--gold);color:#1a1305;font-family:'Montserrat';font-weight:700;font-size:13px;display:grid;place-items:center;
+    background:var(--gold);color:#06302b;font-family:'Plus Jakarta Sans';font-weight:700;font-size:13px;display:grid;place-items:center;
     box-shadow:0 4px 12px rgba(0,0,0,.3)}
-  .lp-root .node h4{font-family:'Montserrat';font-weight:600;font-size:1.18rem;margin:20px 0 8px}
+  .lp-root .node h4{font-family:'Plus Jakarta Sans';font-weight:600;font-size:1.18rem;margin:20px 0 8px}
   .lp-root .node p{color:var(--muted);font-size:.88rem;line-height:1.45;max-width:200px}
   .lp-root .pipe.in .node .txt{opacity:0;animation:lp-fadeUp .6s ease forwards}
   .lp-root .pipe.in .node:nth-child(1) .txt{animation-delay:.5s}
@@ -183,7 +185,7 @@
   .lp-root .channels{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:50px;opacity:0;transform:translateY(20px)}
   .lp-root .pipe.in ~ .channels{animation:lp-fadeUp .8s ease 2.5s forwards}
   .lp-root .chan{display:flex;align-items:center;gap:11px;padding:13px 22px;border-radius:14px;
-    border:1px solid var(--card-brd);background:var(--card);font-family:'Montserrat';font-size:.92rem}
+    border:1px solid var(--card-brd);background:var(--card);font-family:'Plus Jakarta Sans';font-size:.92rem}
   .lp-root .chan i{font-size:1.2rem}
   .lp-root .chan .ico-mail{color:var(--teal-bright)}
   .lp-root .chan .ico-wa{color:#4fd87a}
@@ -194,21 +196,21 @@
   .lp-root .proof-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:34px;margin-top:46px;align-items:start}
   .lp-root .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:30px}
   .lp-root .stat{background:var(--card);border:1px solid var(--card-brd);border-radius:16px;padding:24px}
-  .lp-root .stat .n{font-family:'Montserrat';font-weight:700;font-size:2.9rem;line-height:1;color:var(--gold-bright)}
+  .lp-root .stat .n{font-family:'Plus Jakarta Sans';font-weight:700;font-size:2.9rem;line-height:1;color:var(--gold-bright)}
   .lp-root .stat .n .suf{font-size:1.6rem;color:var(--teal-bright)}
   .lp-root .stat .l{color:var(--muted);font-size:.86rem;margin-top:8px;letter-spacing:.02em}
   .lp-root .modgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
   .lp-root .mod{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--card-brd);
     border-radius:13px;padding:15px 16px}
   .lp-root .mod i{color:var(--teal-bright);font-size:1.05rem;margin-top:2px}
-  .lp-root .mod b{font-family:'Montserrat';font-weight:600;font-size:.92rem;display:block}
+  .lp-root .mod b{font-family:'Plus Jakarta Sans';font-weight:600;font-size:.92rem;display:block}
   .lp-root .mod span{color:var(--muted);font-size:.78rem;line-height:1.35}
   .lp-root .clientbox{background:linear-gradient(160deg,rgba(13,122,110,.22),rgba(7,59,52,.4));
     border:1px solid var(--line);border-radius:22px;padding:28px}
-  .lp-root .clientbox h3{font-family:'Montserrat';font-weight:600;font-size:1.3rem;margin-bottom:6px}
+  .lp-root .clientbox h3{font-family:'Plus Jakarta Sans';font-weight:600;font-size:1.3rem;margin-bottom:6px}
   .lp-root .clientbox .sub{color:var(--muted);font-size:.84rem;margin-bottom:20px}
   .lp-root .clients{display:flex;flex-wrap:wrap;gap:9px}
-  .lp-root .clients span{font-family:'Montserrat';font-size:.82rem;padding:8px 14px;border-radius:30px;
+  .lp-root .clients span{font-family:'Plus Jakarta Sans';font-size:.82rem;padding:8px 14px;border-radius:30px;
     background:rgba(255,255,255,.05);border:1px solid var(--card-brd);transition:all .3s}
   .lp-root .clients span:hover{border-color:var(--gold);color:var(--gold-bright)}
   .lp-root .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#4fd87a;margin-right:7px;
@@ -229,13 +231,13 @@
   .lp-root .dcard.mail .dico{color:var(--teal-bright)}
   .lp-root .dcard.wa .dico{color:#5fe08a}
   .lp-root .dcard.sms .dico{color:var(--gold-bright)}
-  .lp-root .dcard h3{font-family:'Montserrat';font-weight:600;font-size:1.7rem;margin-bottom:4px}
+  .lp-root .dcard h3{font-family:'Plus Jakarta Sans';font-weight:600;font-size:1.7rem;margin-bottom:4px}
   .lp-root .dcard .role{font-style:italic;color:var(--cream);opacity:.85;font-size:.92rem;margin-bottom:16px}
   .lp-root .dcard p{color:rgba(237,244,241,.8);font-size:.93rem;line-height:1.55;margin-bottom:20px}
-  .lp-root .dcard .badge{font-family:'Montserrat';font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;
+  .lp-root .dcard .badge{font-family:'Plus Jakarta Sans';font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;
     padding:7px 14px;border-radius:30px;border:1px solid var(--line);color:var(--gold-bright);display:inline-block}
   .lp-root .auditbar{margin-top:24px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;
-    background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 22px;font-family:'Montserrat';font-size:.88rem}
+    background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 22px;font-family:'Plus Jakarta Sans';font-size:.88rem}
   .lp-root .auditbar .flow{display:flex;align-items:center;gap:9px;color:var(--muted)}
   .lp-root .auditbar .flow b{color:var(--teal-bright)}
   .lp-root .auditbar .flow i{font-size:.7rem;color:var(--gold)}
@@ -243,17 +245,17 @@
   /* ================= PARTNER ================= */
   .lp-root .partner-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:38px;margin-top:42px;align-items:center}
   .lp-root .partner-head{display:flex;align-items:center;gap:18px;margin-bottom:26px}
-  .lp-root .cn-lg{width:74px;height:74px;border-radius:18px;background:linear-gradient(135deg,var(--gold),#9c842a);
-    display:grid;place-items:center;font-family:'Montserrat';font-weight:700;font-size:28px;color:#1a1305;
-    box-shadow:0 10px 30px rgba(201,162,75,.35)}
-  .lp-root .partner-head h3{font-family:'Montserrat';font-weight:600;font-size:1.9rem}
+  .lp-root .cn-lg{width:74px;height:74px;border-radius:18px;background:linear-gradient(135deg,var(--gold),#0a5c53);
+    display:grid;place-items:center;font-family:'Plus Jakarta Sans';font-weight:700;font-size:28px;color:#06302b;
+    box-shadow:0 10px 30px rgba(23,195,178,.35)}
+  .lp-root .partner-head h3{font-family:'Plus Jakarta Sans';font-weight:600;font-size:1.9rem}
   .lp-root .partner-head .sub{color:var(--muted);font-style:italic;font-size:.95rem}
   .lp-root .plist{list-style:none;display:flex;flex-direction:column;gap:14px}
   .lp-root .plist li{display:flex;gap:13px;align-items:flex-start;font-size:1rem;color:var(--cream)}
   .lp-root .plist li i{color:var(--teal-bright);margin-top:4px;font-size:1.05rem}
   .lp-root .why{background:linear-gradient(160deg,rgba(13,122,110,.25),rgba(7,59,52,.45));
     border:1px solid var(--line);border-radius:22px;padding:30px}
-  .lp-root .why h4{font-family:'Montserrat';font-weight:600;font-size:1.25rem;color:var(--gold-bright);margin-bottom:20px;line-height:1.2}
+  .lp-root .why h4{font-family:'Plus Jakarta Sans';font-weight:600;font-size:1.25rem;color:var(--gold-bright);margin-bottom:20px;line-height:1.2}
   .lp-root .why ul{list-style:none;display:flex;flex-direction:column;gap:15px}
   .lp-root .why li{display:flex;gap:12px;align-items:center;font-size:.97rem}
   .lp-root .why li i{color:var(--gold);font-size:1rem}
@@ -266,8 +268,8 @@
   .lp-root .avatar{width:96px;height:96px;border-radius:50%;margin:0 auto 20px;display:grid;place-items:center;font-size:36px;color:#fff}
   .lp-root .avatar.a1{background:linear-gradient(135deg,#0a5e54,#073b34)}
   .lp-root .avatar.a2{background:linear-gradient(135deg,var(--teal),#0a5e54)}
-  .lp-root .avatar.a3{background:linear-gradient(135deg,var(--gold),#9c842a);color:#1a1305}
-  .lp-root .tcard h3{font-family:'Montserrat';font-weight:600;font-size:1.5rem}
+  .lp-root .avatar.a3{background:linear-gradient(135deg,var(--gold),#0a5c53);color:#06302b}
+  .lp-root .tcard h3{font-family:'Plus Jakarta Sans';font-weight:600;font-size:1.5rem}
   .lp-root .tcard .trole{color:var(--teal-bright);font-style:italic;font-size:.9rem;margin:4px 0 18px}
   .lp-root .tcard ul{list-style:none;display:flex;flex-direction:column;gap:9px;text-align:left}
   .lp-root .tcard li{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:.88rem}
@@ -277,11 +279,11 @@
   .lp-root .ctable{margin-top:42px;border:1px solid var(--card-brd);border-radius:18px;overflow:hidden}
   .lp-root .crow{display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr 1.5fr;align-items:center}
   .lp-root .crow > div{padding:15px 18px;font-size:.92rem}
-  .lp-root .crow.head > div{font-family:'Montserrat';font-weight:600;letter-spacing:.04em;background:rgba(255,255,255,.04)}
+  .lp-root .crow.head > div{font-family:'Plus Jakarta Sans';font-weight:600;letter-spacing:.04em;background:rgba(255,255,255,.04)}
   .lp-root .crow.head .us{background:linear-gradient(135deg,var(--teal),#0a5e54);color:#fff}
   .lp-root .crow:not(.head){border-top:1px solid var(--card-brd);opacity:0;transform:translateX(-18px)}
   .lp-root .crow:not(.head).in{opacity:1;transform:none;transition:opacity .6s,transform .6s;transition-delay:var(--d)}
-  .lp-root .crow .feat{color:var(--cream);font-family:'Montserrat';font-weight:500}
+  .lp-root .crow .feat{color:var(--cream);font-family:'Plus Jakarta Sans';font-weight:500}
   .lp-root .crow .us{background:rgba(13,122,110,.16);font-weight:600}
   .lp-root .yes{color:#4fd87a}.lp-root .no{color:#e87a7a;opacity:.7}.lp-root .part{color:var(--muted)}
   .lp-root .crow .us .yes{color:#6fe6a0}
@@ -296,13 +298,13 @@
   .lp-root .ptier.biz{background:linear-gradient(165deg,rgba(120,90,30,.4),rgba(50,38,10,.55));border:2px solid var(--gold)}
   .lp-root .ptier::after{content:"";position:absolute;width:180px;height:180px;border-radius:50%;right:-60px;top:-60px;
     background:radial-gradient(circle,rgba(255,255,255,.08),transparent 70%)}
-  .lp-root .popular{position:absolute;top:18px;right:18px;font-family:'Montserrat';font-size:.68rem;letter-spacing:.1em;
-    text-transform:uppercase;background:var(--teal-bright);color:#062420;padding:6px 12px;border-radius:30px;font-weight:600}
-  .lp-root .ptier h3{font-family:'Montserrat';font-weight:600;font-size:1.7rem;margin-bottom:6px}
+  .lp-root .popular{position:absolute;top:18px;right:18px;font-family:'Plus Jakarta Sans';font-size:.68rem;letter-spacing:.1em;
+    text-transform:uppercase;background:var(--teal-bright);color:#06302b;padding:6px 12px;border-radius:30px;font-weight:600}
+  .lp-root .ptier h3{font-family:'Plus Jakarta Sans';font-weight:600;font-size:1.7rem;margin-bottom:6px}
   .lp-root .ptier.biz h3{color:var(--gold-bright)}
-  .lp-root .ptier .amt{font-family:'Montserrat';font-weight:700;font-size:2.6rem;line-height:1;margin:8px 0 4px}
+  .lp-root .ptier .amt{font-family:'Plus Jakarta Sans';font-weight:700;font-size:2.6rem;line-height:1;margin:8px 0 4px}
   .lp-root .ptier .amt small{font-size:1rem;color:var(--muted);font-weight:400}
-  .lp-root .ptier .cur{font-family:'Montserrat';font-size:1.1rem;color:var(--teal-bright);vertical-align:super}
+  .lp-root .ptier .cur{font-family:'Plus Jakarta Sans';font-size:1.1rem;color:var(--teal-bright);vertical-align:super}
   .lp-root .ptier hr{border:none;border-top:1px solid rgba(255,255,255,.12);margin:22px 0}
   .lp-root .ptier ul{list-style:none;display:flex;flex-direction:column;gap:13px;flex:1}
   .lp-root .ptier li{display:flex;gap:11px;align-items:flex-start;font-size:.95rem;color:rgba(237,244,241,.9)}
@@ -312,16 +314,16 @@
   /* ================= CLOSE ================= */
   .lp-root #close{text-align:center;align-items:center}
   .lp-root #close .inner{max-width:860px;margin:0 auto}
-  .lp-root .close-cn{width:84px;height:84px;border-radius:20px;background:linear-gradient(135deg,var(--gold),#9c842a);
-    display:grid;place-items:center;font-family:'Montserrat';font-weight:700;font-size:32px;color:#1a1305;margin:0 auto 30px;
-    box-shadow:0 12px 36px rgba(201,162,75,.4)}
+  .lp-root .close-cn{width:84px;height:84px;border-radius:20px;background:linear-gradient(135deg,var(--gold),#0a5c53);
+    display:grid;place-items:center;font-family:'Plus Jakarta Sans';font-weight:700;font-size:32px;color:#06302b;margin:0 auto 30px;
+    box-shadow:0 12px 36px rgba(23,195,178,.4)}
   .lp-root #close h2{font-size:clamp(2.4rem,6vw,4.4rem)}
   .lp-root #close .lead{margin:18px auto 0}
   .lp-root .asks{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:46px;text-align:left}
   .lp-root .ask{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px;transition:transform .4s,border-color .4s}
   .lp-root .ask:hover{transform:translateY(-6px);border-color:var(--gold)}
   .lp-root .ask .ai{font-size:24px;color:var(--gold-bright);margin-bottom:14px}
-  .lp-root .ask h4{font-family:'Montserrat';font-weight:600;font-size:1.3rem;margin-bottom:8px}
+  .lp-root .ask h4{font-family:'Plus Jakarta Sans';font-weight:600;font-size:1.3rem;margin-bottom:8px}
   .lp-root .ask p{color:var(--muted);font-size:.92rem;line-height:1.5}
   .lp-root .close-cta{margin-top:46px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
   .lp-root .close-foot{margin-top:30px;color:var(--muted);font-size:13px;letter-spacing:.03em}
@@ -365,11 +367,11 @@
 <div class="progress" id="lp-prog"></div>
 <header class="topbar">
   <div class="brand">
-    <div class="cn">CNAT</div>
-    <div><b>Chrisnat</b><small>Payroll MVP</small></div>
+    <div class="cn">{{ app_brand_mark }}</div>
+    <div><b>{{ app_brand_name }}</b><small>{{ app_short_name }}</small></div>
   </div>
   <div class="topbar-right">
-    <a class="login-link" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-right-to-bracket"></i> Staff Login</a>
+    <a class="login-link" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-right-to-bracket"></i> Log in</a>
   </div>
 </header>
 
@@ -379,18 +381,19 @@
 
   <!-- HERO -->
   <section class="sec" id="hero" data-label="Intro">
+    <div class="hero-eyebrow">{{ app_brand_name }} · {{ app_short_name }}</div>
     <h1 class="hero-title"><span class="w">Calculated.</span> <span class="w">Delivered.</span> <span class="w">Proven.</span></h1>
-    <p class="hero-sub">A working payroll system for Ghanaian businesses — now delivering every payslip by <b>Email</b>, <b>WhatsApp</b> &amp; <b>SMS</b>, with proof it reached the worker.</p>
+    <p class="hero-sub"><b>{{ app_brand_name }}</b> is a modern payroll, compliance &amp; workforce platform — calculate accurately, then deliver every payslip by <b>Email</b>, <b>WhatsApp</b> &amp; <b>SMS</b>, with proof it reached the worker.</p>
     <div class="hero-chips">
-      <span class="chip"><i class="fa-solid fa-bolt"></i> Live MVP in production</span>
-      <span class="chip g"><i class="fa-solid fa-handshake"></i> Backed by Chrisnat Limited</span>
-      <span class="chip"><i class="fa-solid fa-location-dot"></i> Built for Ghana</span>
+      <span class="chip"><i class="fa-solid fa-calculator"></i> Payroll, PAYE &amp; SSNIT built in</span>
+      <span class="chip g"><i class="fa-solid fa-tower-broadcast"></i> Multi-channel payslip delivery</span>
+      <span class="chip"><i class="fa-solid fa-shield-halved"></i> Audit trail &amp; approvals</span>
     </div>
     <div class="hero-cta">
-      <a class="hbtn gold" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-right-to-bracket"></i> Staff Login</a>
+      <a class="hbtn gold" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-right-to-bracket"></i> Log in to {{ app_brand_name }}</a>
       <a class="hbtn ghost" href="#pipeline"><i class="fa-solid fa-play"></i> See how it works</a>
     </div>
-    <div class="meta-foot">Sinawebdesigns &nbsp;·&nbsp; In partnership with Chrisnat Limited</div>
+    <div class="meta-foot">{{ app_tagline }}</div>
     <div class="scrollcue"><span>Scroll</span><i class="fa-solid fa-chevron-down"></i></div>
   </section>
 
@@ -454,35 +457,34 @@
   </section>
 
   <!-- PROOF -->
-  <section class="sec" id="proof" data-label="What We've Built">
-    <div class="eyebrow rv">What We've Built</div>
-    <h2 class="rv" style="--d:60ms">This isn't a concept. It's running.</h2>
-    <p class="lead rv" style="--d:120ms">The Chrisnat Payroll MVP is live and deployed today, managing real payroll for real Ghanaian companies. We're funding the layer on top — not building from zero.</p>
+  <section class="sec" id="proof" data-label="What's Inside">
+    <div class="eyebrow rv">What's Inside</div>
+    <h2 class="rv" style="--d:60ms">Everything you need to run payroll.</h2>
+    <p class="lead rv" style="--d:120ms">{{ app_brand_name }} brings the full cycle — companies, employees, runs, approvals, payslips and delivery — into one platform, with the audit trail and controls a real payroll team needs.</p>
 
     <div class="proof-grid">
       <div class="rv" style="--d:160ms">
         <div class="stats" id="lp-stats">
-          <div class="stat"><div class="n" data-to="6">0</div><div class="l">Client companies onboarded</div></div>
-          <div class="stat"><div class="n" data-to="10">0</div><div class="l">Employees in the system</div></div>
-          <div class="stat"><div class="n" data-to="3">0</div><div class="l">Channels for every payslip</div></div>
-          <div class="stat"><div class="n" data-to="100"><span></span></div><div class="l">Delivery status tracked, per channel</div></div>
+          <div class="stat"><div class="n" data-to="3">0</div><div class="l">Payslip delivery channels — Email, WhatsApp &amp; SMS</div></div>
+          <div class="stat"><div class="n" data-to="100"><span></span></div><div class="l">Deliveries tracked, per channel</div></div>
+          <div class="stat"><div class="n" data-to="6">0</div><div class="l">Modules, one connected platform</div></div>
+          <div class="stat"><div class="n" data-to="2">0</div><div class="l">Approval steps before any payout</div></div>
         </div>
         <div class="modgrid">
-          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>MD Dashboard</b><span>Payroll cost, approvals, PAYE &amp; SSNIT at a glance</span></div></div>
-          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Client Companies</b><span>Every client managed in one place</span></div></div>
+          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Live dashboard</b><span>Payroll cost, approvals, PAYE &amp; SSNIT at a glance</span></div></div>
+          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Companies</b><span>Every company managed in one place</span></div></div>
           <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Employees</b><span>Records linked to each company</span></div></div>
-          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Payroll Runs</b><span>Excel upload → validate → calculate</span></div></div>
+          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Payroll runs</b><span>Upload → validate → calculate</span></div></div>
           <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Payslips</b><span>Generated per employee, per run</span></div></div>
-          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Audit</b><span>Expense tracking &amp; full action trail</span></div></div>
+          <div class="mod"><i class="fa-solid fa-circle-check"></i><div><b>Audit trail</b><span>Expense tracking &amp; full action history</span></div></div>
         </div>
       </div>
       <div class="clientbox rv" style="--d:280ms">
-        <h3><span class="live-dot"></span>Live in the system</h3>
-        <div class="sub">Companies already managed through the Chrisnat MVP</div>
+        <h3><span class="live-dot"></span>Built for real payroll teams</h3>
+        <div class="sub">From a handful of staff to hundreds — across one company or many</div>
         <div class="clients">
-          <span>MSC Ghana Ltd</span><span>MEDLOG</span><span>ACS</span><span>MTG</span>
-          <span>Stellar Log</span><span>Stella Travels</span><span>Hull Blyth</span>
-          <span>Grimaldi Ghana</span><span>Portmarine Ltd</span><span>Multipurpose Terminal</span>
+          <span>SMEs</span><span>Outsourcing firms</span><span>Logistics &amp; ports</span><span>Multi-company groups</span>
+          <span>HR teams</span><span>Finance teams</span><span>Payroll bureaus</span><span>Compliance leads</span>
         </div>
       </div>
     </div>
@@ -490,9 +492,9 @@
 
   <!-- DISTRIBUTION -->
   <section class="sec" id="dist" data-label="Distribution">
-    <div class="eyebrow rv">The New Layer</div>
+    <div class="eyebrow rv">Payslip Delivery</div>
     <h2 class="rv" style="--d:60ms">The piece nobody else ships.</h2>
-    <p class="lead rv" style="--d:120ms">Payroll software calculates. We calculate <em>and</em> deliver <em>and</em> prove it arrived — the transparency layer between the business and the worker.</p>
+    <p class="lead rv" style="--d:120ms">Most payroll software just calculates. {{ app_brand_name }} calculates <em>and</em> delivers <em>and</em> proves it arrived — the transparency layer between the business and the worker.</p>
 
     <div class="dist-grid">
       <div class="dcard mail rv" style="--d:180ms">
@@ -521,54 +523,29 @@
     </div>
   </section>
 
-  <!-- PARTNER -->
-  <section class="sec" id="partner" data-label="Partner">
-    <div class="eyebrow rv">Strategic Partner</div>
-    <h2 class="rv" style="--d:60ms">We built their system. Now they back ours.</h2>
+  <!-- COMPLIANCE -->
+  <section class="sec" id="compliance" data-label="Compliance">
+    <div class="eyebrow rv">Control &amp; Compliance</div>
+    <h2 class="rv" style="--d:60ms">Built for accuracy and accountability.</h2>
+    <p class="lead rv" style="--d:120ms">{{ app_brand_name }} keeps statutory rates current, gates risky runs, and records who did what — so payroll is right, approved, and defensible.</p>
 
     <div class="partner-grid">
-      <div class="rv" style="--d:140ms">
-        <div class="partner-head">
-          <div class="cn-lg">CN</div>
-          <div>
-            <h3>Chrisnat Limited</h3>
-            <div class="sub">Payroll consultancy · Ghana</div>
-          </div>
-        </div>
-        <ul class="plist">
-          <li><i class="fa-solid fa-circle-check"></i> An established payroll consultancy managing payroll for multiple Ghanaian companies.</li>
-          <li><i class="fa-solid fa-circle-check"></i> We built their MVP — we understand their workflow from the inside out.</li>
-          <li><i class="fa-solid fa-circle-check"></i> Chrisnat validates every payroll the system produces before it goes out the door.</li>
-          <li><i class="fa-solid fa-circle-check"></i> A compliance backstop: if the system slips, Chrisnat catches it before a worker does.</li>
-          <li><i class="fa-solid fa-circle-check"></i> Their client base becomes our first market — warm introductions, not cold calls.</li>
+      <div class="why rv" style="--d:140ms">
+        <h4>Statutory, done for you</h4>
+        <ul>
+          <li><i class="fa-solid fa-diamond"></i> PAYE bands &amp; SSNIT rates built in</li>
+          <li><i class="fa-solid fa-diamond"></i> Versioned rates with effective dates</li>
+          <li><i class="fa-solid fa-diamond"></i> Overtime &amp; bonus concessions applied</li>
+          <li><i class="fa-solid fa-diamond"></i> Payslips reconcile to the cedi</li>
         </ul>
       </div>
       <div class="why rv" style="--d:280ms">
-        <h4>Why this partnership matters</h4>
+        <h4>Approvals &amp; audit</h4>
         <ul>
-          <li><i class="fa-solid fa-diamond"></i> Tech + domain expertise in one room</li>
-          <li><i class="fa-solid fa-diamond"></i> Built-in market access from day one</li>
-          <li><i class="fa-solid fa-diamond"></i> A human compliance backstop</li>
-          <li><i class="fa-solid fa-diamond"></i> Instant credibility with clients</li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
-  <!-- TEAM -->
-  <section class="sec" id="team" data-label="Team">
-    <div class="eyebrow rv">The Team</div>
-    <h2 class="rv" style="--d:60ms">Builders who ship.</h2>
-    <div class="team-grid">
-      <div class="tcard rv" style="--d:160ms">
-        <div class="avatar a1"><i class="fa-solid fa-user-tie"></i></div>
-        <h3>Sina</h3>
-        <div class="trole">Founder &amp; Lead Engineer</div>
-        <ul>
-          <li><i class="fa-solid fa-diamond"></i> Python / Flask backend</li>
-          <li><i class="fa-solid fa-diamond"></i> React + Tailwind frontend</li>
-          <li><i class="fa-solid fa-diamond"></i> PostgreSQL &amp; API design</li>
-          <li><i class="fa-solid fa-diamond"></i> Railway / Cloudflare deploys</li>
+          <li><i class="fa-solid fa-diamond"></i> Maker-checker approval before payout</li>
+          <li><i class="fa-solid fa-diamond"></i> Risk gate holds unusual runs for review</li>
+          <li><i class="fa-solid fa-diamond"></i> Full action trail on every change</li>
+          <li><i class="fa-solid fa-diamond"></i> Role-based access, per company</li>
         </ul>
       </div>
     </div>
@@ -578,7 +555,7 @@
   <section class="sec" id="compete" data-label="Competition">
     <div class="eyebrow rv">Competitive Landscape</div>
     <h2 class="rv" style="--d:60ms">What we do that they don't.</h2>
-    <p class="lead rv" style="--d:120ms">Incumbents calculate payroll. None of them deliver across channels, prove receipt, and carry a human backstop. We're the only column that does all four.</p>
+    <p class="lead rv" style="--d:120ms">Most tools stop at calculation. {{ app_brand_name }} also delivers every payslip across channels, proves receipt, and keeps an approval-and-audit trail — the whole column, not just the top of it.</p>
 
     <div class="ctable" id="lp-ctable">
       <div class="crow head">
@@ -586,7 +563,7 @@
         <div>Akatua+</div>
         <div class="c-wp">Workpay</div>
         <div class="c-ot">Others</div>
-        <div class="us">Chrisnat MVP</div>
+        <div class="us">{{ app_brand_name }}</div>
       </div>
       <div class="crow"><div class="feat">Payroll calculation</div><div class="yes">✓</div><div class="c-wp yes">✓</div><div class="c-ot yes">✓</div><div class="us"><span class="yes">✓</span></div></div>
       <div class="crow"><div class="feat">Excel ingestion</div><div class="yes">✓</div><div class="c-wp part">Partial</div><div class="c-ot yes">✓</div><div class="us"><span class="yes">✓ Validated</span></div></div>
@@ -595,7 +572,7 @@
       <div class="crow"><div class="feat">SMS notification</div><div class="no">✕</div><div class="c-wp part">Partial</div><div class="c-ot no">✕</div><div class="us"><span class="yes">✓</span></div></div>
       <div class="crow"><div class="feat">Per-channel delivery audit</div><div class="no">✕</div><div class="c-wp no">✕</div><div class="c-ot no">✕</div><div class="us"><span class="yes">✓</span></div></div>
       <div class="crow"><div class="feat">Ghana PAYE / SSNIT built-in</div><div class="yes">✓</div><div class="c-wp yes">✓</div><div class="c-ot part">Varies</div><div class="us"><span class="yes">✓</span></div></div>
-      <div class="crow"><div class="feat">Human consultancy backup</div><div class="no">✕</div><div class="c-wp no">✕</div><div class="c-ot no">✕</div><div class="us"><span class="yes">✓ Chrisnat</span></div></div>
+      <div class="crow"><div class="feat">Approvals &amp; audit trail</div><div class="part">Partial</div><div class="c-wp part">Partial</div><div class="c-ot no">✕</div><div class="us"><span class="yes">✓ Built in</span></div></div>
     </div>
   </section>
 
@@ -636,41 +613,41 @@
         <ul>
           <li><i class="fa-solid fa-check"></i> Unlimited employees</li>
           <li><i class="fa-solid fa-check"></i> All channels + API access</li>
-          <li><i class="fa-solid fa-check"></i> Chrisnat compliance review</li>
+          <li><i class="fa-solid fa-check"></i> Compliance review &amp; priority SLA</li>
           <li><i class="fa-solid fa-check"></i> Dedicated onboarding</li>
         </ul>
       </div>
     </div>
-    <div class="pfoot rv" style="--d:480ms">+ Per-SMS fees passed through &nbsp;·&nbsp; Annual plans at 20% off &nbsp;·&nbsp; Chrisnat partner pricing available</div>
+    <div class="pfoot rv" style="--d:480ms">+ Per-SMS fees passed through &nbsp;·&nbsp; Annual plans at 20% off &nbsp;·&nbsp; Volume discounts available</div>
   </section>
 
   <!-- CLOSE -->
-  <section class="sec" id="close" data-label="Let's Talk">
+  <section class="sec" id="close" data-label="Get Started">
     <div class="inner">
-      <div class="close-cn rv">CNAT</div>
-      <h2 class="rv" style="--d:80ms">Let's build this together.</h2>
-      <p class="lead rv" style="--d:160ms">A working system, a real partnership, and a clear gap in the market. We're looking for the right investors to take it to every SME in Ghana.</p>
+      <div class="close-cn rv">{{ app_brand_mark }}</div>
+      <h2 class="rv" style="--d:80ms">Run payroll the modern way.</h2>
+      <p class="lead rv" style="--d:160ms">Bring payroll, compliance, and payslip delivery into one platform your team and your workers can trust — every run calculated, delivered, and proven.</p>
       <div class="asks">
         <div class="ask rv" style="--d:240ms">
-          <div class="ai"><i class="fa-solid fa-seedling"></i></div>
-          <h4>Seed investment</h4>
-          <p>Complete the distribution build and integrate the SMS &amp; WhatsApp APIs.</p>
+          <div class="ai"><i class="fa-solid fa-layer-group"></i></div>
+          <h4>One platform</h4>
+          <p>Companies, employees, runs, payslips and delivery — connected end to end.</p>
         </div>
         <div class="ask rv" style="--d:340ms">
-          <div class="ai"><i class="fa-solid fa-flask"></i></div>
-          <h4>Beta clients</h4>
-          <p>Three to five SMEs ready to pilot the distribution feature in Q1.</p>
+          <div class="ai"><i class="fa-solid fa-tower-broadcast"></i></div>
+          <h4>Reach every worker</h4>
+          <p>Email, WhatsApp &amp; SMS, each with per-channel delivery proof.</p>
         </div>
         <div class="ask rv" style="--d:440ms">
-          <div class="ai"><i class="fa-solid fa-network-wired"></i></div>
-          <h4>Network</h4>
-          <p>Introductions to HR firms and payroll consultancies across Ghana.</p>
+          <div class="ai"><i class="fa-solid fa-shield-halved"></i></div>
+          <h4>Audit-ready</h4>
+          <p>Approvals, a risk gate, and a full action trail on every change.</p>
         </div>
       </div>
       <div class="close-cta rv" style="--d:520ms">
-        <a class="hbtn gold" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-right-to-bracket"></i> Staff Login</a>
+        <a class="hbtn gold" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-right-to-bracket"></i> Log in to {{ app_brand_name }}</a>
       </div>
-      <div class="close-foot rv" style="--d:560ms">Sinawebdesigns &nbsp;·&nbsp; In partnership with Chrisnat Limited</div>
+      <div class="close-foot rv" style="--d:560ms">© 2026 {{ app_brand_name }}. Built by {{ company_name }}.</div>
     </div>
   </section>
 

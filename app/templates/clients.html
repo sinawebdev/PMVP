@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Client Companies · Chrisnat Payroll{% endblock %}
+{% block title %}Client Companies · {{ app_name }}{% endblock %}
 {% block page_title %}Client Companies{% endblock %}
-{% block page_intro %}Maintain the client companies Chrisnat serves, then attach employees and payroll imports to the right business before review or approval begins.{% endblock %}
+{% block page_intro %}Maintain the client companies {{ app_brand_name }} serves, then attach employees and payroll imports to the right business before review or approval begins.{% endblock %}
 {% block content %}
 <div class="toolbar">
     <a class="btn btn-primary" href="{{ url_for('main.add_client') }}"><i class="bi bi-building-add"></i>Add Client Company</a>

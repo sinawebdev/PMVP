@@ -54,8 +54,8 @@ class BrandingRenderTestCase(unittest.TestCase):
         run = _Obj(month="June", year=2026)
         plain = _Obj(name="MSC Ghana Ltd", brand_name=None, brand_color=None)
         _, _, html = render_payslip_email(_item(), run, plain, link="https://x/p/t")
-        # Default accent from config.
-        self.assertIn("#0F766E", html)
+        # Default accent from config (Payrolla Deep Teal).
+        self.assertIn("#0D4D4D", html)
 
 
 class BrandingSenderTestCase(unittest.TestCase):
