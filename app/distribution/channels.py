@@ -30,6 +30,15 @@ def is_valid_email(address):
     return bool(address) and _EMAIL_RE.match(address.strip()) is not None
 
 
+def _header_safe(value):
+    """Strip CR/LF from a value bound for an email header, defusing header
+    injection: a newline smuggled into a Subject or sender/reply name could inject
+    extra headers (BCC, etc.). None-safe; leaves normal text untouched."""
+    if value is None:
+        return value
+    return str(value).replace("\r", " ").replace("\n", " ")
+
+
 @dataclass
 class Attachment:
     filename: str
@@ -197,7 +206,7 @@ def _from_header(cfg, from_name=None):
     """The From header. A per-message from_name (a tenant branding pack) wins over
     the global EMAIL_SENDER_NAME; the address is always DEFAULT_FROM_EMAIL."""
     address = cfg.get("DEFAULT_FROM_EMAIL")
-    name = from_name or cfg.get("EMAIL_SENDER_NAME")
+    name = _header_safe(from_name or cfg.get("EMAIL_SENDER_NAME"))
     return formataddr((name, address)) if name and address else address
 
 
@@ -250,10 +259,10 @@ class SmtpEmailSender(Sender):
             return SendResult(False, self.provider, f"invalid recipient email: {message.recipient!r}")
 
         mime = EmailMessage()
-        mime["Subject"] = message.subject
+        mime["Subject"] = _header_safe(message.subject)
         mime["From"] = _from_header(cfg, message.from_name)
         mime["To"] = message.recipient
-        reply_to = message.reply_to or cfg.get("EMAIL_REPLY_TO")
+        reply_to = _header_safe(message.reply_to or cfg.get("EMAIL_REPLY_TO"))
         if reply_to:
             mime["Reply-To"] = reply_to
         mime.set_content(message.body_text)

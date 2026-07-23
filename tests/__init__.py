@@ -11,3 +11,7 @@ import os
 
 os.environ["SKIP_DOTENV"] = "true"
 os.environ.setdefault("PERSISTENCE_REQUIRED", "false")
+# The suite posts to routes directly without rendering a token, so disable CSRF
+# enforcement here (production leaves WTF_CSRF_ENABLED at its true default). A
+# dedicated test re-enables it to prove enforcement.
+os.environ.setdefault("WTF_CSRF_ENABLED", "false")

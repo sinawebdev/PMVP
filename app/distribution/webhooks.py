@@ -20,12 +20,17 @@ distribution_webhooks_bp = Blueprint(
 
 
 def _verify_meta_signature(raw_body):
-    """Verify Meta's X-Hub-Signature-256 (HMAC-SHA256 of the raw body with the
-    app secret). Returns True when it matches, False otherwise. If no app secret
-    is configured, signature checking is skipped (the verify token still gates)."""
+    """Verify Meta's X-Hub-Signature-256 (HMAC-SHA256 of the raw body with the app
+    secret). Returns True only on a match.
+
+    Fails CLOSED when no app secret is configured: a callback mutates delivery
+    state from external input, so without a secret to verify it against it cannot
+    be trusted. An enabled webhook must set WHATSAPP_APP_SECRET (the GET verify
+    handshake still works on the verify token alone, but the POST callback does
+    not)."""
     secret = current_app.config.get("WHATSAPP_APP_SECRET")
     if not secret:
-        return True
+        return False
     header = request.headers.get("X-Hub-Signature-256", "")
     if not header.startswith("sha256="):
         return False

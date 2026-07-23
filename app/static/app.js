@@ -8,10 +8,65 @@
  *                                        which htmx re-emits as a `showToast` event.
  *   3. Ad-hoc client-side calls        -> chrisnatToast(type, msg) directly.
  *
- * There is no CSRF layer in this app (no Flask-WTF), so htmx posts need no token.
+ * CSRF (Flask-WTF): every mutating request must carry the session token rendered
+ * into <meta name="csrf-token">. The block below attaches it to htmx requests and
+ * fetch() as an X-CSRFToken header, and injects a hidden csrf_token field into
+ * classic form POSTs — so no per-form template edits are needed.
  */
 (function () {
   "use strict";
+
+  // --- CSRF -----------------------------------------------------------------
+  function csrfToken() {
+    var m = document.querySelector('meta[name="csrf-token"]');
+    return m ? m.getAttribute("content") : "";
+  }
+
+  // htmx: header on every request it issues.
+  document.addEventListener("htmx:configRequest", function (evt) {
+    var t = csrfToken();
+    if (t && evt.detail && evt.detail.headers) evt.detail.headers["X-CSRFToken"] = t;
+  });
+
+  // fetch: attach the header to mutating requests (leave GET/HEAD alone).
+  var _origFetch = window.fetch;
+  if (typeof _origFetch === "function") {
+    window.fetch = function (input, init) {
+      init = init || {};
+      var method = (init.method
+        || (input && typeof input !== "string" && input.method)
+        || "GET").toUpperCase();
+      var t = csrfToken();
+      if (t && method !== "GET" && method !== "HEAD") {
+        var headers = new Headers(
+          init.headers || (input && typeof input !== "string" && input.headers) || {}
+        );
+        if (!headers.has("X-CSRFToken")) headers.set("X-CSRFToken", t);
+        init.headers = headers;
+      }
+      return _origFetch.call(this, input, init);
+    };
+  }
+
+  // Classic (non-htmx) form POSTs: inject a hidden csrf_token so a normal submit
+  // carries the token. htmx forms use the header above; having both is harmless.
+  function injectCsrf(form) {
+    if (!form || form.tagName !== "FORM") return;
+    if ((form.getAttribute("method") || "get").toLowerCase() === "get") return;
+    if (form.querySelector('input[name="csrf_token"]')) return;
+    var t = csrfToken();
+    if (!t) return;
+    var input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "csrf_token";
+    input.value = t;
+    form.appendChild(input);
+  }
+  document.addEventListener("submit", function (e) { injectCsrf(e.target); }, true);
+  document.addEventListener("htmx:afterSwap", function () {
+    document.querySelectorAll("form").forEach(injectCsrf);
+  });
+  function injectAllForms() { document.querySelectorAll("form").forEach(injectCsrf); }
 
   var VALID = { success: 1, danger: 1, info: 1, warning: 1 };
   var ICONS = {
@@ -255,8 +310,12 @@
   });
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", drainFlashes);
+    document.addEventListener("DOMContentLoaded", function () {
+      drainFlashes();
+      injectAllForms();
+    });
   } else {
     drainFlashes();
+    injectAllForms();
   }
 })();

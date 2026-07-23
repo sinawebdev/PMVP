@@ -10,10 +10,12 @@ from dotenv import load_dotenv
 from flask import Flask, render_template
 from flask_login import LoginManager
 from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
 
 db = SQLAlchemy()
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
+csrf = CSRFProtect()
 
 from flask_migrate import Migrate
 
@@ -110,7 +112,8 @@ def create_app():
         or os.getenv("FLASK_ENV") == "production"
     )
     app.config["IS_PRODUCTION"] = is_production
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
+    _INSECURE_SECRET_KEY = "dev-secret-change-me"
+    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", _INSECURE_SECRET_KEY)
     # --- Product identity (single config seam) ---
     # De-hardcodes the product name so a rebrand is a config change, not a
     # cross-template sweep. Defaults reproduce today's chrome byte-for-byte.
@@ -123,6 +126,15 @@ def create_app():
         os.path.join(app.instance_path, "chrisnat_payroll.db")
     )
     assert_persistent_database_config(app)
+    # Never sign production sessions with the shared dev fallback: anyone who knows
+    # it could forge a session cookie for any user. Refuse to boot in production
+    # without a real SECRET_KEY (the fallback stays for local/tests). Ordered after
+    # the persistence check so the DATABASE_URL failure still surfaces first.
+    if is_production and app.config["SECRET_KEY"] == _INSECURE_SECRET_KEY:
+        raise RuntimeError(
+            "SECRET_KEY must be set to a strong random value in production — "
+            "refusing to start with the insecure development fallback."
+        )
     database_type = database_type_label(app.config["SQLALCHEMY_DATABASE_URI"])
     app.config["DATABASE_TYPE_LABEL"] = database_type
 
@@ -323,6 +335,16 @@ def create_app():
     db.init_app(app)
     login_manager.init_app(app)
     migrate.init_app(app, db)
+    # Global CSRF protection (Flask-WTF). Every mutating request must carry a
+    # session-bound token — in a hidden form field (auto-injected client-side) or
+    # the X-CSRFToken header (htmx / fetch). Disabled only for the test suite
+    # (WTF_CSRF_ENABLED=false, set in tests/__init__.py); the provider webhooks are
+    # exempted below because they authenticate via HMAC/shared secret, not a
+    # browser session.
+    app.config["WTF_CSRF_ENABLED"] = (
+        os.getenv("WTF_CSRF_ENABLED", "true").lower() == "true"
+    )
+    csrf.init_app(app)
     app.jinja_env.filters["cedis"] = format_ghana_cedis
     app.jinja_env.filters["role_label"] = format_role_label
     app.jinja_env.filters["duration"] = format_duration
@@ -396,6 +418,9 @@ def create_app():
     app.register_blueprint(distribution_bp)
     app.register_blueprint(payslip_link_bp)
     app.register_blueprint(distribution_webhooks_bp)
+    # Provider callbacks authenticate via HMAC signature / shared secret and carry
+    # no browser session, so CSRF does not apply (and providers can't send a token).
+    csrf.exempt(distribution_webhooks_bp)
     app.register_blueprint(employees_bp)
     app.register_blueprint(statutory_bp)
     app.register_blueprint(raw_engine_bp)

@@ -173,11 +173,27 @@ class WebhookRouteTestCase(unittest.TestCase):
         )
         self.assertEqual(bad.status_code, 403)
 
-    def test_whatsapp_callback_updates_delivery(self):
-        self.app.config["WHATSAPP_VERIFY_TOKEN"] = "verify-me"  # no app secret -> no signature needed
+    def test_whatsapp_callback_rejected_without_app_secret(self):
+        # Enabled (verify token set) but no app secret -> the POST callback fails
+        # closed (can't be spoofed), even though the GET handshake still works.
+        self.app.config["WHATSAPP_VERIFY_TOKEN"] = "verify-me"
+        self.app.config["WHATSAPP_APP_SECRET"] = None
         payload = {"entry": [{"changes": [{"value": {"statuses": [
             {"id": "wamid.HOOK", "status": "delivered"}]}}]}]}
         resp = self.http.post("/distribution/webhooks/whatsapp", json=payload)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_whatsapp_callback_updates_delivery_when_signed(self):
+        self.app.config["WHATSAPP_VERIFY_TOKEN"] = "verify-me"
+        self.app.config["WHATSAPP_APP_SECRET"] = "s3cr3t"
+        payload = {"entry": [{"changes": [{"value": {"statuses": [
+            {"id": "wamid.HOOK", "status": "delivered"}]}}]}]}
+        raw = json.dumps(payload).encode()
+        sig = hmac.new(b"s3cr3t", raw, hashlib.sha256).hexdigest()
+        resp = self.http.post(
+            "/distribution/webhooks/whatsapp", data=raw, content_type="application/json",
+            headers={"X-Hub-Signature-256": f"sha256={sig}"},
+        )
         self.assertEqual(resp.status_code, 200)
         db.session.refresh(self.delivery)
         self.assertEqual(self.delivery.provider_status, "delivered")
