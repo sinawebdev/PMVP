@@ -654,10 +654,28 @@ body {
 }
 
 .btn-primary {
-    --bs-btn-bg: var(--brand);
-    --bs-btn-border-color: var(--brand);
-    --bs-btn-hover-bg: var(--brand-dark);
-    --bs-btn-hover-border-color: var(--brand-dark);
+    --bs-btn-bg: var(--brand-deep);
+    --bs-btn-border-color: var(--brand-deep);
+    --bs-btn-hover-bg: #0a3d3d;
+    --bs-btn-hover-border-color: #0a3d3d;
+    --bs-btn-active-bg: #0a3d3d;
+    --bs-btn-active-border-color: #0a3d3d;
+}
+
+/* Bright-teal accent action — the vivid end of the palette for high-emphasis,
+   non-primary CTAs (e.g. "Distribute payslips"). Dark ink keeps it AA on the
+   bright fill. */
+.btn-accent {
+    --bs-btn-bg: var(--brand-bright);
+    --bs-btn-border-color: var(--brand-bright);
+    --bs-btn-color: #06302b;
+    --bs-btn-hover-bg: #3ad6c6;
+    --bs-btn-hover-border-color: #3ad6c6;
+    --bs-btn-hover-color: #06302b;
+    --bs-btn-active-bg: #3ad6c6;
+    --bs-btn-active-border-color: #3ad6c6;
+    --bs-btn-active-color: #06302b;
+    font-weight: 600;
 }
 
 .btn-success {

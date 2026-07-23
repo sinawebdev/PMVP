@@ -55,9 +55,9 @@
     flex-wrap:wrap;gap:10px;padding:18px 34px;backdrop-filter:blur(6px);background:linear-gradient(180deg,rgba(6,30,27,.7),transparent)}
   .lp-root .login-link{position:relative;z-index:31}
   .lp-root .brand{display:flex;align-items:center;gap:12px}
-  .lp-root .cn{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,var(--gold),#0a5c53);
-    display:grid;place-items:center;font-family:'Plus Jakarta Sans';font-weight:700;font-size:17px;color:#06302b;
-    box-shadow:0 6px 20px rgba(23,195,178,.35)}
+  .lp-root .cn{width:44px;height:44px;border-radius:12px;background:#fff;
+    display:grid;place-items:center;box-shadow:0 8px 22px rgba(0,0,0,.28)}
+  .lp-root .cn img{width:30px;height:30px;display:block}
   .lp-root .brand b{font-family:'Plus Jakarta Sans';font-weight:600;letter-spacing:.5px;font-size:16px}
   .lp-root .brand small{display:block;color:var(--muted);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;margin-top:1px}
   .lp-root .topbar-right{display:flex;align-items:center;gap:14px}
@@ -314,9 +314,9 @@
   /* ================= CLOSE ================= */
   .lp-root #close{text-align:center;align-items:center}
   .lp-root #close .inner{max-width:860px;margin:0 auto}
-  .lp-root .close-cn{width:84px;height:84px;border-radius:20px;background:linear-gradient(135deg,var(--gold),#0a5c53);
-    display:grid;place-items:center;font-family:'Plus Jakarta Sans';font-weight:700;font-size:32px;color:#06302b;margin:0 auto 30px;
-    box-shadow:0 12px 36px rgba(23,195,178,.4)}
+  .lp-root .close-cn{width:84px;height:84px;border-radius:22px;background:#fff;
+    display:grid;place-items:center;margin:0 auto 30px;box-shadow:0 16px 40px rgba(0,0,0,.35)}
+  .lp-root .close-cn img{width:58px;height:58px;display:block}
   .lp-root #close h2{font-size:clamp(2.4rem,6vw,4.4rem)}
   .lp-root #close .lead{margin:18px auto 0}
   .lp-root .asks{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:46px;text-align:left}
@@ -367,7 +367,7 @@
 <div class="progress" id="lp-prog"></div>
 <header class="topbar">
   <div class="brand">
-    <div class="cn">{{ app_brand_mark }}</div>
+    <div class="cn"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="{{ app_brand_name }}"></div>
     <div><b>{{ app_brand_name }}</b><small>{{ app_short_name }}</small></div>
   </div>
   <div class="topbar-right">
@@ -624,7 +624,7 @@
   <!-- CLOSE -->
   <section class="sec" id="close" data-label="Get Started">
     <div class="inner">
-      <div class="close-cn rv">{{ app_brand_mark }}</div>
+      <div class="close-cn rv"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="{{ app_brand_name }}"></div>
       <h2 class="rv" style="--d:80ms">Run payroll the modern way.</h2>
       <p class="lead rv" style="--d:160ms">Bring payroll, compliance, and payslip delivery into one platform your team and your workers can trust — every run calculated, delivered, and proven.</p>
       <div class="asks">

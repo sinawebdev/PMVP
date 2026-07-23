@@ -75,30 +75,30 @@
     background-attachment: fixed;
 }
 
-/* The Payrolla "P" tile — the brand mark everywhere a compact logo is needed:
-   sidebar, portal header, public payslip, error pages. Teal gradient with a
-   white glyph. One definition, one look. */
+/* The Payrolla brand mark — a white app-icon tile that holds the real logo SVG
+   (or, as a fallback, the "P" glyph in deep teal). White reads cleanly on the
+   deep-teal sidebar, the dark login/error cards, and light surfaces alike, and
+   matches the brand board's white-background lockup. One definition, one look:
+   sidebar, portal header, public payslip, error pages. */
 .brand-mark {
     align-items: center;
-    background: var(--brand-gradient);
-    border: 2px solid rgba(255, 255, 255, 0.5);
-    border-radius: var(--radius);
-    box-shadow: 0 12px 28px rgba(13, 77, 77, 0.28);
-    color: #ffffff;
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    box-shadow: 0 8px 22px rgba(13, 77, 77, 0.22);
+    color: var(--brand-deep);
     display: inline-flex;
+    flex: none;
+    font-size: 1.4rem;
     font-weight: 800;
     height: 46px;
     justify-content: center;
     width: 46px;
 }
-
-/* An <img> logo mark (SVG) sized to match .brand-mark, for surfaces that use
-   the real logo instead of the letter tile. */
-.brand-logo {
-    display: inline-block;
-    height: 46px;
-    width: 46px;
-    flex: none;
+.brand-mark img {
+    display: block;
+    height: 32px;
+    width: 32px;
 }
 
 @media (prefers-reduced-motion: reduce) {

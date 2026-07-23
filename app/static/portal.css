@@ -246,12 +246,12 @@ tr.is-unread { font-weight: 600; }
 .btn:hover { border-color: var(--brand); color: var(--brand); }
 
 .btn.primary {
-    background: var(--brand);
-    border-color: var(--brand);
+    background: var(--brand-deep);
+    border-color: var(--brand-deep);
     color: #fff;
 }
 
-.btn.primary:hover { background: var(--brand-dark); border-color: var(--brand-dark); color: #fff; }
+.btn.primary:hover { background: #0a3d3d; border-color: #0a3d3d; color: #fff; }
 
 .btn.sm { font-size: 13px; padding: 5px 11px; }
 

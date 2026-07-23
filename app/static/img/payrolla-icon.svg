@@ -1,15 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Payrolla logo">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Payrolla logo">
   <defs>
-    <linearGradient id="payrolla-teal" x1="14" y1="10" x2="52" y2="56" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#17C3B2"/>
-      <stop offset="1" stop-color="#0D4D4D"/>
+    <linearGradient id="pl-p" x1="36" y1="22" x2="96" y2="104" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#31D6C2"/>
+      <stop offset=".52" stop-color="#17C3B2"/>
+      <stop offset="1" stop-color="#0E7064"/>
+    </linearGradient>
+    <linearGradient id="pl-fold" x1="14" y1="80" x2="42" y2="114" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#12655C"/>
+      <stop offset="1" stop-color="#0A3B39"/>
     </linearGradient>
   </defs>
-  <!-- Folded ribbon tail (deeper teal) reads behind the stem base -->
-  <path d="M21 34c0 12-2.4 18-10.5 22.5C15.8 51 15 44 21 39z" fill="#0A3A38"/>
-  <!-- Bowl of the P -->
-  <path d="M21 12.5h12.5a13 13 0 0 1 0 26H21" fill="none" stroke="url(#payrolla-teal)"
-        stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- Stem of the P -->
-  <path d="M21 12.5V47" fill="none" stroke="url(#payrolla-teal)" stroke-width="11" stroke-linecap="round"/>
+  <!-- folded ribbon tail — the deep-teal underside curling from the stem base -->
+  <path d="M35 70c1 19-6 31-23 39 11-12 9-25 17-32 2-2 4-4 6-7z" fill="url(#pl-fold)"/>
+  <!-- bold rounded "P": bowl + stem -->
+  <g fill="none" stroke="url(#pl-p)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M43 26h17a20 20 0 0 1 0 40H43"/>
+    <path d="M43 26v66"/>
+  </g>
 </svg>
