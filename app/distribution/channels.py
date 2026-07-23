@@ -113,6 +113,8 @@ class HubtelSmsSender(Sender):
             return SendResult(False, self.provider, str(exc))
         if 200 <= status < 300:
             return SendResult(True, self.provider)
+        if status == 429:
+            return SendResult(False, self.provider, "rate limited by provider (HTTP 429)")
         return SendResult(False, self.provider, f"hubtel HTTP {status}: {body[:200]}")
 
 
@@ -156,6 +158,8 @@ class CloudWhatsAppSender(Sender):
             return SendResult(False, self.provider, str(exc))
         if 200 <= status < 300:
             return SendResult(True, self.provider)
+        if status == 429:
+            return SendResult(False, self.provider, "rate limited by provider (HTTP 429)")
         return SendResult(False, self.provider, f"whatsapp HTTP {status}: {body[:200]}")
 
 

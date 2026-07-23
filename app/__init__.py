@@ -266,6 +266,16 @@ def create_app():
     app.config["DISTRIBUTION_FAILURE_ALERT_RATE"] = float(
         os.getenv("DISTRIBUTION_FAILURE_ALERT_RATE", "0.5")
     )
+    # Per-channel send-rate ceilings (sends per second; 0 = unlimited). Paces
+    # outbound sends to stay within provider quotas (Phase 4, Slice 2). Set these
+    # at (provider limit / number of worker processes).
+    app.config["RATE_LIMIT_SMS_PER_SEC"] = float(os.getenv("RATE_LIMIT_SMS_PER_SEC", "0"))
+    app.config["RATE_LIMIT_WHATSAPP_PER_SEC"] = float(
+        os.getenv("RATE_LIMIT_WHATSAPP_PER_SEC", "0")
+    )
+    app.config["RATE_LIMIT_EMAIL_PER_SEC"] = float(
+        os.getenv("RATE_LIMIT_EMAIL_PER_SEC", "0")
+    )
 
     os.makedirs(app.instance_path, exist_ok=True)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)

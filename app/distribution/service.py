@@ -214,6 +214,10 @@ def _attempt_send(delivery, item, run, client, ch, sender, max_attempts, backoff
         )
         return False
 
+    # Pace sends to the channel/provider's configured rate before the real call.
+    from .throttle import throttle
+
+    throttle(ch)
     result = sender.send(_build_message(ch, item, run, client, recipient))
     if result.ok:
         _mark_sent(delivery, result.provider)
