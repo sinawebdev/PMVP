@@ -51,6 +51,47 @@ class CsrfEnforcementTests(unittest.TestCase):
         )
         self.assertNotEqual(resp.status_code, 400, "valid header token should pass CSRF")
 
+    def test_client_plane_enforces_and_accepts_csrf(self):
+        """Regression (the reported bug): a client-portal POST is CSRF-protected
+        AND the client shell renders a token the browser can send. Without a token
+        a client upload is a 400; with the rendered token it clears CSRF and
+        reaches the route. Guards against the client base losing the csrf-token
+        meta / app.js wiring that the operator base carries."""
+        from app.models import User
+
+        with self.app.app_context():
+            uid = User.query.filter_by(email="admin@msc.demo").first().id
+        # Seed a logged-in session directly. The real /login POST calls
+        # session.clear(); combined with the test client's cookie jar that drops
+        # the pre-login token, so seeding the session lets us exercise genuine
+        # CSRF enforcement on an authenticated client page without that quirk.
+        with self.client.session_transaction() as sess:
+            sess["_user_id"] = str(uid)
+            sess["_fresh"] = True
+
+        html = self.client.get("/company/runs/upload").get_data(as_text=True)
+        m = re.search(r'name="csrf-token" content="([^"]+)"', html)
+        self.assertIsNotNone(m, "client shell must render the csrf-token meta")
+        token = m.group(1)
+
+        # No token -> rejected by CSRF (the exact failure the user reported).
+        no_tok = self.client.post(
+            "/company/runs/raw/upload", data={"month": "March", "year": "2024"}
+        )
+        self.assertEqual(no_tok.status_code, 400)
+        self.assertIn("CSRF", no_tok.get_data(as_text=True))
+
+        # With the rendered token -> clears CSRF and reaches the route's own
+        # validation (its 400 "No file provided", NOT a CSRF failure).
+        with_tok = self.client.post(
+            "/company/runs/raw/upload",
+            data={"month": "March", "year": "2024"},
+            headers={"X-CSRFToken": token},
+        )
+        body = with_tok.get_data(as_text=True)
+        self.assertNotIn("CSRF", body)
+        self.assertIn("No file provided", body)
+
     def test_provider_webhook_is_csrf_exempt(self):
         # Configured webhook: a POST with no CSRF token must not be blocked by CSRF
         # (it is gated by signature instead -> 403, never a 400 CSRF failure).

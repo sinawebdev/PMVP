@@ -4,47 +4,91 @@
   <div class="toolbar">
     <div class="page-head">
       <h1>Upload payroll</h1>
-      <p class="sub">Prepare a new run for {{ company.name }}.</p>
+      <p class="sub">Prepare a new run for {{ company.name }}. Choose the workflow that matches your workbook.</p>
     </div>
     <a class="btn" href="{{ url_for('client.runs') }}">Back to runs</a>
   </div>
 
-  <div class="card form narrow">
-    <p class="sub">
-      Upload a standard payroll workbook (.xlsx, .xls, or .csv) with your workers'
-      figures. You'll get a <strong>preview</strong> — totals, field mapping and any
-      warnings — before anything is created. Nothing is submitted until you confirm.
-      Raw-hours workbooks are prepared by {{ app_brand_name }}, not here.
-    </p>
-    <form id="upload-form" method="post" action="{{ url_for('client.run_upload') }}" enctype="multipart/form-data">
+  {% set months = ["January","February","March","April","May","June","July","August","September","October","November","December"] %}
+
+  <div class="upload-choice" role="tablist" aria-label="Upload type">
+    <button class="upload-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="pane-standard" data-target="pane-standard">Standard Payroll Upload</button>
+    <button class="upload-tab" type="button" role="tab" aria-selected="false" aria-controls="pane-raw" data-target="pane-raw">Raw Hours Upload</button>
+  </div>
+
+  {# --- Standard payroll upload ------------------------------------------- #}
+  <section id="pane-standard" class="upload-pane" role="tabpanel" aria-label="Standard Payroll Upload">
+    <div class="card form narrow">
+      <p class="sub">
+        Upload a standard payroll workbook (.xlsx, .xls, or .csv) with your workers'
+        figures. You'll get a <strong>preview</strong> — totals, field mapping and any
+        warnings — before anything is created. Nothing is submitted until you confirm.
+      </p>
+      <form id="upload-form" method="post" action="{{ url_for('client.run_upload') }}" enctype="multipart/form-data">
+        <div class="formgrid">
+          <div>
+            <label for="month">Payroll month</label>
+            <select id="month" name="month">
+              {% for m in months %}
+              <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label for="year">Year</label>
+            <input id="year" name="year" type="number" min="2000" max="2100" step="1" value="{{ current_year }}" required />
+          </div>
+        </div>
+        <label for="payroll_file">Payroll workbook</label>
+        <input id="payroll_file" name="payroll_file" type="file" accept=".xlsx,.xls,.csv" required />
+        <div id="upload-status" class="upload-status" hidden aria-live="polite">
+          <progress id="upload-progress" max="100" value="0"></progress>
+          <span id="upload-status-text" class="sub"></span>
+        </div>
+        <div class="form-foot">
+          <button id="upload-submit" class="btn primary" type="submit">Upload &amp; preview</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  {# --- Raw hours upload -------------------------------------------------- #}
+  <section id="pane-raw" class="upload-pane" role="tabpanel" aria-label="Raw Hours Upload" hidden>
+    <div class="card form narrow">
+      <p class="sub">
+        Raw-hours payroll from your hourly workbook (.xlsx). Your <strong>first</strong> upload
+        sets up rates from the rich RAW DATA workbook; after that, upload the monthly
+        template each period. You'll get a <strong>preview</strong> before anything is created —
+        nothing is submitted until you confirm.
+      </p>
       <div class="formgrid">
         <div>
-          <label for="month">Payroll month</label>
-          <select id="month" name="month">
-            {% for m in ["January","February","March","April","May","June","July","August","September","October","November","December"] %}
+          <label for="raw_month">Payroll month</label>
+          <select id="raw_month" name="month">
+            {% for m in months %}
             <option value="{{ m }}" {% if m == current_month %}selected{% endif %}>{{ m }}</option>
             {% endfor %}
           </select>
         </div>
         <div>
-          <label for="year">Year</label>
-          <input id="year" name="year" type="number" min="2000" max="2100" step="1" value="{{ current_year }}" required />
+          <label for="raw_year">Year</label>
+          <input id="raw_year" name="year" type="number" min="2000" max="2100" step="1" value="{{ current_year }}" />
         </div>
       </div>
-      <label for="payroll_file">Payroll workbook</label>
-      <input id="payroll_file" name="payroll_file" type="file" accept=".xlsx,.xls,.csv" required />
-      <div id="upload-status" class="upload-status" hidden aria-live="polite">
-        <progress id="upload-progress" max="100" value="0"></progress>
-        <span id="upload-status-text" class="sub"></span>
+      <label for="raw_file">Raw / monthly workbook (.xlsx)</label>
+      <input id="raw_file" type="file" accept=".xlsx" />
+      <div class="form-foot actions">
+        <button id="raw_submit" class="btn primary" type="button">Upload &amp; preview</button>
+        <a class="btn" id="raw_template_link" href="#">Monthly template</a>
       </div>
-      <div class="form-foot">
-        <button id="upload-submit" class="btn primary" type="submit">Upload &amp; preview</button>
-      </div>
-    </form>
-  </div>
+      <div id="raw_result" aria-live="polite"></div>
+    </div>
+  </section>
 
-  {# Progressive enhancement: real upload progress via XHR, with a graceful
-     fall-back to a normal form POST when unsupported or on a network error. #}
+  {# Progressive enhancement: real upload progress via XHR for the STANDARD form,
+     with a graceful fall-back to a normal form POST when unsupported or on a
+     network error. The hidden csrf_token field app.js injects rides along in the
+     FormData, so the XHR POST is CSRF-valid. #}
   <script>
   (function () {
     var form = document.getElementById("upload-form");
@@ -97,6 +141,129 @@
         form.submit();
       });
       xhr.send(new FormData(form));
+    });
+  })();
+  </script>
+
+  {# Raw-hours flow: fetch-based preview -> confirm. app.js patches window.fetch to
+     attach the X-CSRFToken header on these POSTs, so no per-request token wiring
+     is needed here. #}
+  <script>
+  (function () {
+    var RAW_UPLOAD = "{{ url_for('client.raw_upload') }}";
+    var RAW_CONFIRM = "{{ url_for('client.raw_confirm') }}";
+    var RAW_TEMPLATE = "{{ url_for('client.raw_template') }}";
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
+
+    var out = document.getElementById("raw_result");
+    var submitBtn = document.getElementById("raw_submit");
+
+    function flash(kind, html) { out.innerHTML = '<div class="flash ' + kind + '">' + html + "</div>"; }
+
+    function showPane(id) {
+      document.querySelectorAll(".upload-pane").forEach(function (p) { p.hidden = p.id !== id; });
+      document.querySelectorAll(".upload-tab").forEach(function (t) {
+        var on = t.getAttribute("data-target") === id;
+        t.classList.toggle("is-active", on);
+        t.setAttribute("aria-selected", on ? "true" : "false");
+      });
+    }
+    window.__uploadShowPane = showPane; // used by the "switch to Standard" hint
+    document.querySelectorAll(".upload-tab").forEach(function (t) {
+      t.addEventListener("click", function () { showPane(t.getAttribute("data-target")); });
+    });
+
+    function renderPreview(d) {
+      var p = d.preview || {};
+      var rows = [];
+      if (d.mode === "seed") {
+        rows.push(["Employees", p.employees]);
+        rows.push(["Hourly", p.hourly]);
+        rows.push(["Salaried", p.salaried]);
+        rows.push(["ICU members", p.icu_members]);
+      } else {
+        rows.push(["Rows in template", p.employees]);
+        rows.push(["Matched to roster", p.matched]);
+      }
+      var html = '<div class="flash info"><strong>' + esc((d.mode === "seed" ? "Set-up" : "Monthly") ) +
+        '</strong> preview for ' + esc(d.client_name) + " (" + esc(d.period) + ")</div>";
+      html += '<div class="panel"><table><tbody>';
+      rows.forEach(function (r) {
+        html += "<tr><td>" + esc(r[0]) + '</td><td class="right nums">' + esc(r[1] == null ? "—" : r[1]) + "</td></tr>";
+      });
+      html += "</tbody></table></div>";
+
+      var blocked = p.blocked || [];
+      if (blocked.length) {
+        html += '<div class="flash warning">' + blocked.length +
+          " staff ID(s) not on your roster will be skipped: " + esc(blocked.join(", ")) + "</div>";
+      }
+      var warnings = p.warnings || [];
+      if (warnings.length) {
+        html += '<div class="flash warning"><strong>Warnings</strong><ul>';
+        warnings.forEach(function (w) { html += "<li>" + esc(w) + "</li>"; });
+        html += "</ul></div>";
+      }
+      html += '<div class="form-foot actions"><button class="btn primary" type="button" id="raw_confirm_btn">' +
+        "Confirm &amp; create run</button></div>";
+      out.innerHTML = html;
+      document.getElementById("raw_confirm_btn").addEventListener("click", function () { rawConfirm(d.token); });
+    }
+
+    function rawUpload() {
+      var fileInput = document.getElementById("raw_file");
+      var file = fileInput.files && fileInput.files[0];
+      if (!file) { flash("warning", "Choose a workbook first."); return; }
+      submitBtn.disabled = true;
+      out.innerHTML = '<p class="sub">Uploading &amp; checking your workbook…</p>';
+      var fd = new FormData();
+      fd.append("month", document.getElementById("raw_month").value);
+      fd.append("year", document.getElementById("raw_year").value);
+      fd.append("file", file);
+      fetch(RAW_UPLOAD, { method: "POST", body: fd })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          submitBtn.disabled = false;
+          if (!res.ok) {
+            var extra = "";
+            if (res.d.wrong_tab === "standard") {
+              extra = ' <button class="btn sm" type="button" onclick="__uploadShowPane(\'pane-standard\')">Switch to Standard</button>';
+            }
+            flash("danger", esc(res.d.error || "Upload failed.") + extra);
+            return;
+          }
+          renderPreview(res.d);
+        })
+        .catch(function () {
+          submitBtn.disabled = false;
+          flash("danger", "Upload failed — please try again.");
+        });
+    }
+
+    function rawConfirm(token) {
+      out.innerHTML = '<p class="sub">Creating your run…</p>';
+      var fd = new FormData();
+      fd.append("token", token);
+      fetch(RAW_CONFIRM, { method: "POST", body: fd })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok) { flash("danger", esc(res.d.error || "Confirm failed.")); return; }
+          window.location = res.d.redirect;
+        })
+        .catch(function () { flash("danger", "Confirm failed — please try again."); });
+    }
+
+    submitBtn.addEventListener("click", rawUpload);
+    document.getElementById("raw_template_link").addEventListener("click", function (ev) {
+      ev.preventDefault();
+      var m = encodeURIComponent(document.getElementById("raw_month").value);
+      var y = encodeURIComponent(document.getElementById("raw_year").value);
+      window.location = RAW_TEMPLATE + "?month=" + m + "&year=" + y;
     });
   })();
   </script>

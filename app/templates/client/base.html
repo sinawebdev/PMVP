@@ -3,6 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {# Session-bound CSRF token; app.js attaches it to every mutating request
+     (hidden form field + X-CSRFToken header for htmx/fetch). Same wiring as the
+     operator shell (base.html) — without it every client POST fails CSRF. #}
+  <meta name="csrf-token" content="{{ csrf_token() }}" />
   <title>{% block title %}{{ company.name }}{% endblock %} — Company Portal</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}" />
   {# Shared tokens first, then the portal layer. No Bootstrap here on purpose —
@@ -12,38 +16,60 @@
 </head>
 <body class="brand-shell-bg">
   <a class="skip-link" href="#main-content">Skip to content</a>
-  <header class="portal-header">
-    <div class="portal-brand">
-      <span class="brand-mark">{{ company.name[:2] | upper }}</span>
-      <div class="portal-brand-copy">
-        <strong>{{ company.name }}</strong>
-        <small>Company portal · {{ current_user.name }}</small>
+  <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="primary-nav" aria-expanded="false">☰</button>
+  <div class="nav-backdrop"></div>
+  <div class="portal-shell">
+    <aside class="portal-sidebar" id="primary-nav">
+      <div class="portal-brand">
+        <span class="brand-mark">{{ company.name[:2] | upper }}</span>
+        <div class="portal-brand-copy">
+          <strong>{{ company.name }}</strong>
+          <small>Company portal · {{ current_user.name }}</small>
+        </div>
       </div>
-    </div>
-    <nav class="portal-nav" aria-label="Company portal">
-      {% set ep = request.endpoint %}
-      <a href="{{ url_for('main.company_dashboard') }}" {% if ep == 'main.company_dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
-      <a href="{{ url_for('client.employees') }}" {% if ep and ep.startswith('client.employee') %}aria-current="page"{% endif %}>Employees</a>
-      <a href="{{ url_for('client.runs') }}" {% if ep in ('client.runs', 'client.run_detail', 'client.run_upload', 'client.distribute') %}aria-current="page"{% endif %}>Payroll</a>
-      <a href="{{ url_for('client.statutory') }}" {% if ep == 'client.statutory' %}aria-current="page"{% endif %}>Statutory</a>
-      <a href="{{ url_for('client.expenses') }}" {% if ep == 'client.expenses' %}aria-current="page"{% endif %}>Expenses</a>
-      <a href="{{ url_for('client.audit') }}" {% if ep == 'client.audit' %}aria-current="page"{% endif %}>Audit</a>
-      {% if (current_user.role or '')|lower == 'client_admin' %}
-      <a href="{{ url_for('client.branding') }}" {% if ep == 'client.branding' %}aria-current="page"{% endif %}>Branding</a>
-      {% endif %}
-      <a href="{{ url_for('notifications.inbox') }}" {% if ep and ep.startswith('notifications.') %}aria-current="page"{% endif %}>Notifications{% if notif_unread %} <span class="badge warn">{{ notif_unread }}</span>{% endif %}</a>
-      <a class="logout-link" href="{{ url_for('auth.logout') }}">Log out</a>
-    </nav>
-  </header>
-  <main id="main-content" class="portal-main" tabindex="-1">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% for category, message in messages %}
-        <div class="flash {{ category }}" role="status">{{ message }}</div>
-      {% endfor %}
-    {% endwith %}
-    {% block body %}{% endblock %}
-  </main>
-  <footer class="portal-foot">Powered by <strong>{{ app_brand_name }}</strong></footer>
+      <nav class="portal-nav" aria-label="Company portal">
+        {% set ep = request.endpoint %}
+        <a href="{{ url_for('main.company_dashboard') }}" {% if ep == 'main.company_dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
+        <a href="{{ url_for('client.employees') }}" {% if ep and ep.startswith('client.employee') %}aria-current="page"{% endif %}>Employees</a>
+        <a href="{{ url_for('client.runs') }}" {% if ep in ('client.runs', 'client.run_detail', 'client.run_upload', 'client.import_preview', 'client.distribute') %}aria-current="page"{% endif %}>Payroll</a>
+        <a href="{{ url_for('client.statutory') }}" {% if ep == 'client.statutory' %}aria-current="page"{% endif %}>Statutory</a>
+        <a href="{{ url_for('client.expenses') }}" {% if ep == 'client.expenses' %}aria-current="page"{% endif %}>Expenses</a>
+        <a href="{{ url_for('client.audit') }}" {% if ep == 'client.audit' %}aria-current="page"{% endif %}>Audit</a>
+        {% if (current_user.role or '')|lower == 'client_admin' %}
+        <a href="{{ url_for('client.branding') }}" {% if ep == 'client.branding' %}aria-current="page"{% endif %}>Branding</a>
+        {% endif %}
+        <a href="{{ url_for('notifications.inbox') }}" {% if ep and ep.startswith('notifications.') %}aria-current="page"{% endif %}>Notifications{% if notif_unread %} <span class="badge warn">{{ notif_unread }}</span>{% endif %}</a>
+        <a class="logout-link" href="{{ url_for('auth.logout') }}">Log out</a>
+      </nav>
+      <div class="portal-sidebar-foot">Powered by <strong>{{ app_brand_name }}</strong></div>
+    </aside>
+    <main id="main-content" class="portal-main" tabindex="-1">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}" role="status">{{ message }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block body %}{% endblock %}
+    </main>
+  </div>
   <script src="{{ url_for('static', filename='vendor/htmx.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  <script>
+  (function () {
+    // Mobile navigation drawer — mirrors the operator shell (base.html).
+    var toggle = document.querySelector('.nav-toggle');
+    var nav = document.getElementById('primary-nav');
+    var backdrop = document.querySelector('.nav-backdrop');
+    function setOpen(open) {
+      if (!nav) return;
+      nav.classList.toggle('open', open);
+      if (backdrop) backdrop.classList.toggle('show', open);
+      if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    if (toggle) toggle.addEventListener('click', function () { setOpen(!nav.classList.contains('open')); });
+    if (backdrop) backdrop.addEventListener('click', function () { setOpen(false); });
+    if (nav) nav.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { setOpen(false); }); });
+  })();
+  </script>
 </body>
 </html>

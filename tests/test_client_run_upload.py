@@ -250,6 +250,44 @@ class ClientRunUploadTestCase(unittest.TestCase):
         self.assertIn('<select id="month"', html)
         self.assertIn('name="payroll_file"', html)
 
+    def test_upload_page_offers_standard_and_raw_choices(self):
+        """Regression: the client upload page must expose BOTH workflows, render
+        inside the shared left-sidebar shell, and carry the CSRF token wiring
+        (meta + app.js) the whole app relies on. The missing wiring is what broke
+        client uploads with 'The CSRF token is missing.'"""
+        self._login("admin@msc.demo")
+        html = self.client.get("/company/runs/upload").get_data(as_text=True)
+        # Both upload workflows are offered (the operator page exposes both too).
+        self.assertIn("Standard Payroll Upload", html)
+        self.assertIn("Raw Hours Upload", html)
+        self.assertIn("/company/runs/raw/upload", html)
+        # Shared design language: the left-sidebar shell, not the old top header.
+        self.assertIn("portal-sidebar", html)
+        self.assertIn("portal-shell", html)
+        # CSRF wiring on the client shell (the regression guard): a rendered token
+        # + app.js, which attaches it to every mutating request.
+        self.assertIn('name="csrf-token"', html)
+        self.assertIn("app.js", html)
+
+    def test_client_raw_routes_are_wired_and_tenant_guarded(self):
+        """The raw-hours client routes exist, are tenant-scoped, and reject a
+        platform user (tenant_role_required) rather than 404/redirecting away."""
+        # Platform user is bounced to the oversight console.
+        self._login("chrisnat.admin@chrisnat.local")
+        self.assertEqual(self.client.post("/company/runs/raw/upload").status_code, 302)
+        self.client.get("/logout")
+        # A tenant user reaches the route's own validation (JSON), proving it is
+        # wired and tenant-scoped (company is forced, never read from the form).
+        self._login("admin@msc.demo")
+        resp = self.client.post(
+            "/company/runs/raw/upload", data={"month": "March", "year": "2024"}
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("No file provided", resp.get_json()["error"])
+        # The monthly template is gated until the company is set up for raw-hours.
+        tmpl = self.client.get("/company/runs/raw/template")
+        self.assertEqual(tmpl.status_code, 404)
+
 
 if __name__ == "__main__":
     unittest.main()

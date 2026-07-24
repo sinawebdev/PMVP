@@ -372,8 +372,8 @@ def run_upload():
     try:
         if looks_like_raw_hours(file_path):
             flash(
-                "That looks like a raw-hours workbook. Raw-hours runs are prepared "
-                f"by {current_app.config['APP_BRAND_NAME']} — please upload a standard payroll workbook.",
+                "That looks like a raw-hours workbook. Use the Raw Hours Upload "
+                "option on this page instead of Standard Payroll Upload.",
                 "warning",
             )
             return _form()
@@ -741,3 +741,10 @@ def payslips_zip(run_id):
     return send_file(
         buffer, mimetype="application/zip", as_attachment=True, download_name=download_name
     )
+
+
+# Self-service Raw Hours Engine upload (seed → thin), tenant-scoped and
+# risk-gated. Imported last so its @client_bp routes attach once client_bp and
+# its helpers (_company) are defined above. Kept in its own module so this file
+# stays focused on the standard-payroll self-service surface.
+from app.client import raw as _raw  # noqa: E402,F401
