@@ -11,6 +11,7 @@
     </div>
     <div class="actions">
       <a class="btn primary" href="{{ url_for('client.distribute', run_id=run.id) }}">Distribute payslips</a>
+      <a class="btn" href="{{ url_for('client.run_reports', run_id=run.id) }}">Reports &amp; exports</a>
       <a class="btn" href="{{ url_for('client.runs') }}">Back to runs</a>
     </div>
   </div>

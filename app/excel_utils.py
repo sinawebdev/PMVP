@@ -1020,6 +1020,29 @@ def export_import_error_report(payload, export_folder):
     )
 
 
+def bank_listing_groups(payroll_run):
+    """Group a run's items by bank for the bank transfer listing.
+
+    Pure, side-effect-free data — the single source of truth for the bank
+    grouping, shared by :func:`export_bank_listing` (the Excel writer) and the
+    client-portal bank-listing preview, so the two can never drift. Returns
+    ``(groups, grand_total)`` where ``groups`` is a list of
+    ``{"bank": str, "items": [PayrollItem], "subtotal": float}`` ordered by bank
+    name (items ordered by employee name), matching the exported sheet exactly.
+    """
+    buckets = {}
+    for item in payroll_run.items:
+        bank = (item.bank_name or "").strip() or "NO BANK ON RECORD"
+        buckets.setdefault(bank, []).append(item)
+    groups = []
+    for bank in sorted(buckets):
+        items = sorted(buckets[bank], key=lambda i: (i.full_name or "").upper())
+        subtotal = round(sum(i.net_pay or 0 for i in items), 2)
+        groups.append({"bank": bank, "items": items, "subtotal": subtotal})
+    grand_total = round(sum(i.net_pay or 0 for i in payroll_run.items), 2)
+    return groups, grand_total
+
+
 def export_bank_listing(payroll_run, export_folder):
     """Bank transfer batch listing: employees grouped by bank, each row showing
     account number and net pay, with a subtotal per bank. Derived entirely from
@@ -1029,16 +1052,13 @@ def export_bank_listing(payroll_run, export_folder):
     title = f"{client_name} Bank Listing {payroll_run.month} {payroll_run.year}"
     workbook, sheet = create_workbook(title)
 
-    groups = {}
-    for item in payroll_run.items:
-        bank = (item.bank_name or "").strip() or "NO BANK ON RECORD"
-        groups.setdefault(bank, []).append(item)
+    groups, grand_total = bank_listing_groups(payroll_run)
 
     header_fill = PatternFill("solid", fgColor="D9EAF7")
     band_fill = PatternFill("solid", fgColor="052420")
     row_index = 5
-    for bank in sorted(groups):
-        items = sorted(groups[bank], key=lambda i: (i.full_name or "").upper())
+    for group in groups:
+        bank, items = group["bank"], group["items"]
         band = sheet.cell(row=row_index, column=1, value=bank)
         band.font = Font(bold=True, color="FFFFFF")
         band.fill = band_fill
@@ -1052,27 +1072,22 @@ def export_bank_listing(payroll_run, export_folder):
             cell.font = Font(bold=True)
             cell.fill = header_fill
         row_index += 1
-        subtotal = 0.0
         for item in items:
             sheet.cell(row=row_index, column=1, value=item.staff_id)
             sheet.cell(row=row_index, column=2, value=item.full_name)
             sheet.cell(row=row_index, column=3, value=item.bank_branch)
             sheet.cell(row=row_index, column=4, value=item.bank_account_number)
             sheet.cell(row=row_index, column=5, value=round(item.net_pay or 0, 2))
-            subtotal += item.net_pay or 0
             row_index += 1
         total_cell = sheet.cell(row=row_index, column=2, value=f"{bank} Total ({len(items)} workers)")
         total_cell.font = Font(bold=True)
-        amount_cell = sheet.cell(row=row_index, column=5, value=round(subtotal, 2))
+        amount_cell = sheet.cell(row=row_index, column=5, value=group["subtotal"])
         amount_cell.font = Font(bold=True)
         row_index += 2
 
     grand = sheet.cell(row=row_index, column=2, value="GRAND TOTAL")
     grand.font = Font(bold=True, size=12)
-    grand_amount = sheet.cell(
-        row=row_index, column=5,
-        value=round(sum(i.net_pay or 0 for i in payroll_run.items), 2),
-    )
+    grand_amount = sheet.cell(row=row_index, column=5, value=grand_total)
     grand_amount.font = Font(bold=True, size=12)
     for column_cells in sheet.columns:
         max_length = max(len(str(cell.value or "")) for cell in column_cells)

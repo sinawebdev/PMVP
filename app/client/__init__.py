@@ -748,3 +748,8 @@ def payslips_zip(run_id):
 # its helpers (_company) are defined above. Kept in its own module so this file
 # stays focused on the standard-payroll self-service surface.
 from app.client import raw as _raw  # noqa: E402,F401
+
+# Self-service reports & exports (payroll workbook, bank listing, GRA PAYE
+# schedule) — thin wrappers over the shared export engine, tenant-scoped and
+# gated on a completed run. Same import-at-the-bottom pattern as raw.
+from app.client import reports as _reports  # noqa: E402,F401

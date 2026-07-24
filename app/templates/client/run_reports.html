@@ -1,0 +1,95 @@
+{% extends "client/base.html" %}
+{% block title %}{{ run.month }} {{ run.year }} reports{% endblock %}
+{% block body %}
+  <div class="toolbar">
+    <div class="page-head">
+      <h1>Reports &amp; exports</h1>
+      <p class="sub">{{ run.month }} {{ run.year }} payroll · <span class="badge">{{ run.status }}</span></p>
+    </div>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('client.run_detail', run_id=run.id) }}">Back to run</a>
+    </div>
+  </div>
+
+  {% if not completed %}
+  <div class="flash warning" role="status">
+    Reports unlock once this run is approved. The figures below are a preview;
+    downloads become available after {{ app_brand_name }} approves the run.
+  </div>
+  {% endif %}
+
+  <div class="grid">
+    <div class="card stat-card"><span class="n">{{ run.total_workers }}</span><span class="l">Workers</span></div>
+    <div class="card stat-card"><span class="n">{{ run.total_gross_pay | cedis }}</span><span class="l">Gross</span></div>
+    <div class="card stat-card"><span class="n">{{ run.total_paye | cedis }}</span><span class="l">PAYE</span></div>
+    <div class="card stat-card"><span class="n">{{ run.total_net_pay | cedis }}</span><span class="l">Net pay</span></div>
+  </div>
+
+  {# --- Payroll workbook --------------------------------------------------- #}
+  <div class="toolbar">
+    <h2>Payroll export</h2>
+    {% if completed %}
+    <a class="btn primary" href="{{ url_for('client.download_payroll', run_id=run.id) }}">Download Excel</a>
+    {% else %}
+    <button class="btn" type="button" disabled>Download Excel</button>
+    {% endif %}
+  </div>
+  <p class="sub">The full payroll workbook — every worker's basic, allowances, gross,
+    PAYE, SSNIT, deductions and net pay, with run totals. The same workbook operators export.</p>
+
+  {# --- Bank listing (preview grouped by bank) ----------------------------- #}
+  <div class="toolbar">
+    <h2>Bank listing</h2>
+    {% if completed %}
+    <a class="btn primary" href="{{ url_for('client.download_bank_listing', run_id=run.id) }}">Download Excel</a>
+    {% else %}
+    <button class="btn" type="button" disabled>Download Excel</button>
+    {% endif %}
+  </div>
+  <p class="sub">Bank transfer batch listing — workers grouped by bank with a subtotal per bank.</p>
+  {% if bank_groups %}
+  <div class="panel">
+    <table>
+      <thead><tr><th>Bank</th><th class="right">Workers</th><th class="right">Subtotal (net)</th></tr></thead>
+      <tbody>
+        {% for group in bank_groups %}
+        <tr>
+          {# group['items'] via subscript — group.items would hit dict.items() #}
+          <td>{{ group['bank'] }}</td>
+          <td class="right nums">{{ group['items'] | length }}</td>
+          <td class="right nums">{{ group['subtotal'] | cedis }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><th>Grand total</th><th class="right nums">{{ run.total_workers }}</th><th class="right nums">{{ bank_grand_total | cedis }}</th></tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No payslip lines on this run yet.</div>
+  {% endif %}
+
+  {# --- GRA PAYE schedule -------------------------------------------------- #}
+  <div class="toolbar">
+    <h2>GRA PAYE schedule</h2>
+    {% if completed %}
+    <a class="btn primary" href="{{ url_for('client.download_gra_paye', run_id=run.id) }}">Download Excel</a>
+    {% else %}
+    <button class="btn" type="button" disabled>Download Excel</button>
+    {% endif %}
+  </div>
+  <p class="sub">The official GRA Employer's Monthly Tax Deductions Schedule (P.A.Y.E.)
+    for {{ run.month }} {{ run.year }} — the same statutory form and calculation engine operators use.</p>
+  <div class="panel">
+    <table>
+      <tbody>
+        <tr><td>Employees</td><td class="right nums">{{ run.total_workers }}</td></tr>
+        <tr><td>Total PAYE</td><td class="right nums">{{ run.total_paye | cedis }}</td></tr>
+        <tr><td>Total employee SSF</td><td class="right nums">{{ run.total_ssnit | cedis }}</td></tr>
+        {% if employer_tin %}<tr><td>Employer TIN</td><td class="right">{{ employer_tin }}</td></tr>{% endif %}
+        {% if tax_office %}<tr><td>Tax office</td><td class="right">{{ tax_office }}</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}
