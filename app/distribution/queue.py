@@ -371,7 +371,7 @@ def reclaim_stale_batches():
 
 
 def _notify_platform_of_client_distribution(batch, run, summary):
-    """Tenant-initiated distributions notify Chrisnat oversight (unchanged from the
+    """Tenant-initiated distributions notify platform oversight (unchanged from the
     previous synchronous behaviour, just deferred until the batch actually runs)."""
     initiator = (
         db.session.get(User, batch.initiated_by_user_id)

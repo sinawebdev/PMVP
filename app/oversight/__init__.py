@@ -1,4 +1,4 @@
-"""Chrisnat oversight — the risk-gate control plane (PMVP v1 Phase 5).
+"""Platform oversight — the risk-gate control plane (Payrolla Phase 5).
 
 Platform-only (``@platform_required``) routes for the operator who watches over
 every tenant's runs:
@@ -31,7 +31,7 @@ oversight_bp = Blueprint("oversight", __name__, url_prefix="/oversight")
 @oversight_bp.route("/risk")
 @platform_required
 def risk_queue():
-    """Every held run, newest first — the Chrisnat review queue."""
+    """Every held run, newest first — the platform review queue."""
     held_runs = (
         PayrollRun.query.filter(PayrollRun.status == HELD)
         .order_by(PayrollRun.risk_checked_at.desc(), PayrollRun.id.desc())
@@ -56,7 +56,7 @@ def risk_check(run_id):
     reasons = verdict.reasons_text() or "No rule tripped."
     record_audit("Risk gate evaluated", run, f"Verdict: {verdict.status}. {reasons}")
     # Append a domain event and notify the client's users so a hold is visible
-    # to the tenant, not just to Chrisnat.
+    # to the tenant, not just to the platform.
     record_event(
         "run.risk_held" if verdict.held else "run.risk_accepted",
         summary=f"{run.month} {run.year}: {reasons}",

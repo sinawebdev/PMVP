@@ -3,7 +3,7 @@
 Proves a tenant (client) user can never reach another tenant's data:
   * every oversight/operator route redirects a tenant user to /company (302),
     never 200-with-data;
-  * a platform (Chrisnat) user still gets those routes;
+  * a platform (operator) user still gets those routes;
   * the object helpers (owns_object / tenant_get_or_404) deny cross-tenant
     objects — direct-owned (Employee, PayrollRun) and child-via-run (PayrollItem)
     — returning 404, never the row.

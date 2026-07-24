@@ -1,6 +1,6 @@
 """Raw Hours Engine exports (Phase 5).
 
-Reproduces Chrisnat's operational outputs by **reusing the existing writers**
+Reproduces the operator's operational outputs by **reusing the existing writers**
 (`app.excel_utils`, `app.pdf_service`) wherever they already fit — wage sheet,
 GRA PAYE return, and payslip PDFs all run off the run's ``PayrollItem`` rows,
 which the raw engine already populates. This package adds only the pieces the

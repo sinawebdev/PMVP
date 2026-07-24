@@ -182,7 +182,6 @@ def _resolve_header(rows):
 
 def _read_row(row, colmap):
     record = ThinEmployeeInput(staff_id="")
-    seen_value = False
     for c, (role, detail) in colmap.items():
         value = row[c] if c < len(row) else None
         if role == "staff_id":
@@ -193,12 +192,10 @@ def _read_row(row, colmap):
             hrs = coerce_hours(value)
             if hrs:
                 record.hours[detail] = record.hours.get(detail, 0.0) + hrs
-                seen_value = True
         elif role == "adjustment":
             amount = coerce_rate(value)
             if amount:
                 setattr(record, detail, amount)
-                seen_value = True
     if not record.staff_id or record.staff_id == "NAN":
         return None  # blank / spacer / total row
     return record

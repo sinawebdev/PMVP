@@ -1,4 +1,4 @@
-# PMVP v1 — Tenant Scoping Audit (Phase 2)
+# Payrolla — Tenant Scoping Audit
 
 Every HTTP route and its DB access, classified by how tenant isolation is
 enforced. The guarantee: **a tenant (client) user can never read or write another
@@ -29,7 +29,7 @@ user's tenant.
 
 ## Route inventory
 
-Legend — Access: `platform` (Chrisnat only), `tenant` (own company, scoped),
+Legend — Access: `platform` (operator only), `tenant` (own company, scoped),
 `public`, `token`. Scoped?: how cross-tenant reads are prevented.
 
 ### `main` (`app/routes.py`)
@@ -54,8 +54,8 @@ Legend — Access: `platform` (Chrisnat only), `tenant` (own company, scoped),
 
 ### `employees` (`app/employees.py`)
 All routes `role_required(REP_ROLES)` or `role_required(admin, md)` → **platform**.
-Operator roster management; tenant users bounced. (Phase 3 adds tenant-scoped
-client-side employee CRUD for full self-service.)
+Operator roster management; tenant users bounced. Tenant-scoped, client-side
+employee CRUD lives on the `/company` plane (see the `client` section below).
 
 ### `payslip` (`app/payslip.py`)
 | Route | Guard | Access |
@@ -77,8 +77,8 @@ on them (read surface exposed in Phase 3). ✔ matches §4.
 `/audit`, `/audit/expenses` → `role_required(admin, md)` → **platform**.
 
 ### `oversight` (`app/oversight/__init__.py`) — risk-gate control plane (Phase 5)
-All routes `@platform_required` (tenant users → Company Dashboard). Chrisnat
-oversight *above* tenants, so it intentionally spans all clients. Scoring is in
+All routes `@platform_required` (tenant users → Company Dashboard). Platform
+oversight sits *above* tenants, so it intentionally spans all clients. Scoring is in
 `app/risk.py` (pure/deterministic; thresholds N=2, net-pay 15%, headcount 20%).
 | Route | Guard | Access | Notes |
 |---|---|---|---|
@@ -103,7 +103,7 @@ transitions (notifying the tenant's users) and the client distribution send
 
 ### `raw_engine` (`app/raw_engine/web.py`)
 All routes `role_required(admin)` → **platform** (billable raw-hours ingestion is
-a Chrisnat operator flow).
+a platform operator flow).
 
 ### `client` (`app/client/__init__.py`) — the tenant plane (Phase 3)
 All routes `@tenant_required` (platform users → oversight console) and scoped
@@ -125,11 +125,12 @@ id returns 404.
 
 ## Residual items (tracked, not leaks)
 
-- **Phase 3** will introduce *tenant-scoped* client routes (own employees, runs,
-  payslips). Those must use `tenant_query`/`tenant_get_or_404` — never bare
-  `Model.query` — so a cross-tenant id returns **404**, proven by
-  `tests/test_tenant_isolation.py`.
+- The tenant-scoped client plane (`/company`: own employees, runs, payslips) is
+  implemented and always goes through `tenant_query` / `tenant_get_or_404` —
+  never bare `Model.query` — so a cross-tenant id returns **404**, proven by
+  `tests/test_tenant_isolation.py` and `tests/test_client_interface.py`.
 - Bare `Model.query` still appears inside platform-only routes and helper
   functions; that is intentional (platform oversight spans tenants). It becomes a
   finding only if such a helper is ever called from a tenant-scoped route.
-- `inject_sidebar_clients` (context processor) is tenant-scoped (Phase 1).
+- `inject_sidebar_clients` (context processor) is tenant-scoped: a client user
+  only ever sees their own company in the sidebar.

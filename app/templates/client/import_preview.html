@@ -27,7 +27,7 @@
     <div class="card stat-card"><span class="n">{{ payload.import_summary.gross_total | cedis }}</span><span class="l">Gross (as uploaded)</span></div>
     <div class="card stat-card"><span class="n">{{ payload.import_summary.net_total | cedis }}</span><span class="l">Net (as uploaded)</span></div>
   </div>
-  <p class="sub muted">PAYE and SSNIT are recalculated by PMVP when you confirm — any statutory figures in the file are preview-only.</p>
+  <p class="sub muted">PAYE and SSNIT are recalculated by Payrolla when you confirm — any statutory figures in the file are preview-only.</p>
 
   {% if period_exists %}
     {% if replace_blocked %}

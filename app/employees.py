@@ -1,6 +1,6 @@
 """Employee roster module — the single source of truth for distribution contacts.
 
-Each client company has a roster of employees maintained exclusively by Chrisnat reps
+Each client company has a roster of employees maintained exclusively by operator reps
 inside the system. Contact details (email, phone) used when sending payslips always come
 from these records, never from uploaded payroll Excel files.
 
@@ -29,7 +29,6 @@ from flask import (
     session,
     url_for,
 )
-from flask_login import login_required
 
 from app import db
 from app.audit import record_audit
@@ -40,7 +39,7 @@ from app.raw_import import normalise_emp_id
 
 employees_bp = Blueprint("employees", __name__, url_prefix="/employees")
 
-# Chrisnat reps only — md is always allowed by role_required; client_user is blocked.
+# Operator reps only — md is always allowed by role_required; client_user is blocked.
 from app.permissions import REP_ROLES  # canonical operator capability group
 
 ACTIVE = "Active"
@@ -510,7 +509,7 @@ def bulk_import(client_id):
 @employees_bp.route("/clients/<int:client_id>/bulk-import/confirm", methods=["POST"])
 @role_required(*REP_ROLES)
 def bulk_import_confirm(client_id):
-    client = db.get_or_404(ClientCompany, client_id)
+    db.get_or_404(ClientCompany, client_id)  # 404 guard for an unknown client
     token = request.form.get("token") or session.get("emp_import_token")
     if not token or session.get("emp_import_token") != token:
         flash("Session mismatch — please re-upload the file.", "danger")

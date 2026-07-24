@@ -1,7 +1,7 @@
 """Payslip distribution blueprint.
 
 Delivers a payroll run's payslip breakdowns to workers over SMS / WhatsApp / email, with
-per-worker delivery tracking, resend-failed, and idempotent sends. Lives inside Chrisnat and
+per-worker delivery tracking, resend-failed, and idempotent sends. Lives inside the platform and
 reuses its models, auth, audit, and Jinja/Bootstrap UI.
 """
 import os

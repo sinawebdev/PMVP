@@ -698,11 +698,11 @@ body {
 
 /* Breadcrumb trail above the topbar (macros/breadcrumbs.html) — quiet by
    design, since the sidebar carries primary navigation. */
-.chrisnat-breadcrumb {
+.payrolla-breadcrumb {
     margin-bottom: 10px;
 }
 
-.chrisnat-breadcrumb .breadcrumb {
+.payrolla-breadcrumb .breadcrumb {
     align-items: center;
     display: flex;
     flex-wrap: wrap;
@@ -712,22 +712,22 @@ body {
     padding: 0;
 }
 
-.chrisnat-breadcrumb .breadcrumb-item + .breadcrumb-item::before {
+.payrolla-breadcrumb .breadcrumb-item + .breadcrumb-item::before {
     color: var(--muted);
     content: "/";
     padding: 0 8px;
 }
 
-.chrisnat-breadcrumb .breadcrumb-item a {
+.payrolla-breadcrumb .breadcrumb-item a {
     color: var(--brand-dark);
     text-decoration: none;
 }
 
-.chrisnat-breadcrumb .breadcrumb-item a:hover {
+.payrolla-breadcrumb .breadcrumb-item a:hover {
     text-decoration: underline;
 }
 
-.chrisnat-breadcrumb .breadcrumb-item.active {
+.payrolla-breadcrumb .breadcrumb-item.active {
     color: var(--muted);
 }
 

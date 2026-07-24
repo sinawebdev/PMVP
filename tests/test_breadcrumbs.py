@@ -50,7 +50,7 @@ class BreadcrumbsTestCase(unittest.TestCase):
         db.session.add(run)
         db.session.commit()
         html = self._get(f"/payroll/runs/{run.id}")
-        self.assertIn("chrisnat-breadcrumb", html)
+        self.assertIn("payrolla-breadcrumb", html)
         self.assertIn(f'href="/dashboard"', html)
         self.assertIn(f'href="/payroll/runs"', html)
         self.assertIn(f'href="/clients/{self.company.id}"', html)
@@ -66,12 +66,12 @@ class BreadcrumbsTestCase(unittest.TestCase):
         db.session.add(run)
         db.session.commit()
         html = self._get(f"/payroll/runs/{run.id}")
-        self.assertIn("chrisnat-breadcrumb", html)
+        self.assertIn("payrolla-breadcrumb", html)
         self.assertIn("August 2099", html)
 
     def test_client_detail_breadcrumb(self):
         html = self._get(f"/clients/{self.company.id}")
-        self.assertIn("chrisnat-breadcrumb", html)
+        self.assertIn("payrolla-breadcrumb", html)
         self.assertIn('href="/dashboard"', html)
         self.assertIn('href="/clients"', html)
         self.assertIn(
@@ -81,7 +81,7 @@ class BreadcrumbsTestCase(unittest.TestCase):
 
     def test_employee_roster_breadcrumb_links_back_to_client(self):
         html = self._get(f"/employees/clients/{self.company.id}/roster")
-        self.assertIn("chrisnat-breadcrumb", html)
+        self.assertIn("payrolla-breadcrumb", html)
         self.assertIn('href="/dashboard"', html)
         self.assertIn('href="/clients"', html)
         self.assertIn(f'href="/clients/{self.company.id}"', html)
@@ -98,7 +98,7 @@ class BreadcrumbsTestCase(unittest.TestCase):
         db.session.add(run)
         db.session.commit()
         html = self._get(f"/distribution/run/{run.id}")
-        self.assertIn("chrisnat-breadcrumb", html)
+        self.assertIn("payrolla-breadcrumb", html)
         self.assertIn('href="/dashboard"', html)
         self.assertIn('href="/payroll/runs"', html)
         self.assertIn(f'href="/clients/{self.company.id}"', html)
@@ -110,11 +110,11 @@ class BreadcrumbsTestCase(unittest.TestCase):
     def test_dashboard_has_no_breadcrumb(self):
         # Top-level pages reachable directly from the sidebar don't need one.
         html = self._get("/dashboard")
-        self.assertNotIn("chrisnat-breadcrumb", html)
+        self.assertNotIn("payrolla-breadcrumb", html)
 
     def test_payroll_runs_list_has_no_breadcrumb(self):
         html = self._get("/payroll/runs")
-        self.assertNotIn("chrisnat-breadcrumb", html)
+        self.assertNotIn("payrolla-breadcrumb", html)
 
 
 if __name__ == "__main__":

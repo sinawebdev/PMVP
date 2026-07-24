@@ -1,6 +1,6 @@
 """add risk gate fields to payroll_run
 
-PMVP v1 Phase 5 — persists the risk-gate verdict from app/risk.py on each run:
+Payrolla Phase 5 — persists the risk-gate verdict from app/risk.py on each run:
 risk_status ('held' | 'accepted' | NULL), the human-readable risk_reasons, and
 the risk_checked_at timestamp. Additive and nullable, so existing rows are
 unaffected until a run is scored.

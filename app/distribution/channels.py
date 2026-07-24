@@ -5,7 +5,7 @@ real backend, chosen by a *_BACKEND config value. Real senders POST via stdlib u
 add no new dependency, and any failure is returned as SendResult(ok=False) rather than
 raised, so one bad recipient never aborts a whole payroll run's distribution.
 
-Ported from the standalone payslip distribution system; adapted to Chrisnat's Flask config.
+Ported from the standalone payslip distribution system; adapted to the platform Flask config.
 """
 import base64
 import json as _json

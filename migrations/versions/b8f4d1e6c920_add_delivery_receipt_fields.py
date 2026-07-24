@@ -1,6 +1,6 @@
 """add delivery-receipt fields to payslip_delivery
 
-PMVP v1 Phase 4, Slice 4 — WhatsApp/SMS delivery receipts. Store the provider's
+Payrolla Phase 4, Slice 4 — WhatsApp/SMS delivery receipts. Store the provider's
 message id (to correlate an async callback), the provider-reported delivery
 status, and the delivered timestamp. Additive; existing rows keep NULL.
 

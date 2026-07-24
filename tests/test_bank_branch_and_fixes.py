@@ -235,7 +235,7 @@ class HeaderMisdetectionWarningTestCase(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_header_label_company_name_no_longer_warns(self):
-        # Company detection is retired (PMVP Investigation 02): the company is
+        # Company detection is retired: the company is
         # authoritative from the selected client, so a header-like string is
         # never surfaced as a company warning. Guards against reintroducing the
         # noisy "GH CARD" mismatch/heading warnings.

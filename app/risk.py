@@ -1,7 +1,7 @@
-"""Run risk gate — deterministic pre-approval checks (PMVP v1 Phase 5).
+"""Run risk gate — deterministic pre-approval checks (Payrolla Phase 5).
 
 When a payroll run is submitted, three rules decide whether it can auto-accept or
-must be **held for Chrisnat review**. A run tripping ANY rule is HELD; a run that
+must be **held for platform review**. A run tripping ANY rule is HELD; a run that
 trips none is AUTO-ACCEPTED. The rules are pure functions of the run and the
 client's previous *closed* run (Approved/Processed) — no side effects, no
 randomness — so the same run always yields the same verdict.

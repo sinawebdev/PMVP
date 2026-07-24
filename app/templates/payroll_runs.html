@@ -179,8 +179,8 @@ async function rawUpload() {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Uploading…';
     // Staged loader (C1): motion + reassuring copy over the panel while parsing.
-    var loader = window.chrisnatStagedLoader
-        ? window.chrisnatStagedLoader(document.getElementById('run-upload-overlay'))
+    var loader = window.payrollaStagedLoader
+        ? window.payrollaStagedLoader(document.getElementById('run-upload-overlay'))
         : { stop: function () {} };
     try {
         var r = await fetch('{{ url_for("raw_engine.upload") }}', {method: 'POST', body: fd});
@@ -214,8 +214,8 @@ async function rawConfirm(token) {
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving…';
     }
-    var loader = window.chrisnatStagedLoader
-        ? window.chrisnatStagedLoader(document.getElementById('run-upload-overlay'),
+    var loader = window.payrollaStagedLoader
+        ? window.payrollaStagedLoader(document.getElementById('run-upload-overlay'),
             {messages: ['Saving records…', 'Computing PAYE & SSNIT…', 'Finalizing…', 'Almost done…']})
         : { stop: function () {} };
     var fd = new FormData(); fd.append('token', token);

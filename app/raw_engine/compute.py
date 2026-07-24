@@ -17,7 +17,7 @@ workbook's own columns to the cent:
 Pure and side-effect free — no DB, no rounding surprises beyond the per-component
 2dp discipline shared with the standard engine.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from app.money import money
 from app.raw_engine.calc import (

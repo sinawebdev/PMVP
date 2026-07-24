@@ -193,14 +193,14 @@ def validate_payroll_rows(
     non_blank_count = sum(1 for row in mapped_rows if build_worker_key(row))
     if non_blank_count and missing_bank_count / non_blank_count >= 0.5:
         warnings.append("Majority of workers are missing bank account details.")
-    # PMVP computes PAYE and SSNIT itself when the run is confirmed
+    # Payrolla computes PAYE and SSNIT itself when the run is confirmed
     # (auto_calculate_on_confirm); any statutory figures in the file are
     # preview-only and never persist. So an upload with no PAYE/SSNIT is normal
     # for a salary-only sheet — inform, don't imply the client left something out.
     if sum(float(row.get("paye") or 0) for row in mapped_rows) <= 0:
-        warnings.append("No PAYE in the upload — PMVP will calculate it when the run is confirmed.")
+        warnings.append("No PAYE in the upload — Payrolla will calculate it when the run is confirmed.")
     if sum(float(row.get("ssnit") or 0) for row in mapped_rows) <= 0:
-        warnings.append("No SSNIT in the upload — PMVP will calculate it when the run is confirmed.")
+        warnings.append("No SSNIT in the upload — Payrolla will calculate it when the run is confirmed.")
 
     previous_run = (
         PayrollRun.query.filter(
@@ -263,7 +263,7 @@ def validate_single_row(row, employees_by_staff_id=None):
     if not bank_account_number and not momo_number:
         warnings.append("Missing bank and MoMo details.")
     if net_pay in (None, "") or row.get("_missing_original_net_pay"):
-        warnings.append("Net pay not provided; PMVP will calculate it on confirm.")
+        warnings.append("Net pay not provided; Payrolla will calculate it on confirm.")
     if float(row.get("net_pay") or 0) < 0:
         warnings.append("Negative net pay.")
     for field in ("basic_salary", "gross_pay", "paye", "ssnit", "tier_2_pension", "pf_fund_employee", "loan_deduction", "welfare_deduction", "iou_deduction", "other_deductions", "total_deductions", "net_pay"):
@@ -309,13 +309,13 @@ def validate_single_row(row, employees_by_staff_id=None):
     if abs(gross_pay - calculated_gross) > 1:
         warnings.append("Gross pay does not match allowance calculation.")
     if abs(float(row.get("net_pay") or 0) - expected_net_pay) > 1:
-        warnings.append("Uploaded net pay doesn't reconcile with its components; PMVP recalculates all figures on confirm.")
-    # PMVP derives PAYE/SSNIT on confirm, so an upload without them is expected
+        warnings.append("Uploaded net pay doesn't reconcile with its components; Payrolla recalculates all figures on confirm.")
+    # Payrolla derives PAYE/SSNIT on confirm, so an upload without them is expected
     # for salary-only sheets — phrase these as informational, not client errors.
     if not row.get("paye"):
-        warnings.append("PAYE not provided; PMVP will calculate it on confirm.")
+        warnings.append("PAYE not provided; Payrolla will calculate it on confirm.")
     if not row.get("ssnit"):
-        warnings.append("SSNIT not provided; PMVP will calculate it on confirm.")
+        warnings.append("SSNIT not provided; Payrolla will calculate it on confirm.")
     if "inactive" in status:
         warnings.append("Inactive worker appears in payroll.")
     if "terminated" in status:

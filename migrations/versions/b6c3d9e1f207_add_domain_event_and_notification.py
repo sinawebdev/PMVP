@@ -1,9 +1,9 @@
 """add domain_event and notification tables
 
-PMVP v1 Phase 6 — the append-only DomainEvent business-event log and the
+Payrolla Phase 6 — the append-only DomainEvent business-event log and the
 per-user Notification inbox (in-app fan-out of events). Both are new tables, so
 this is purely additive; create_all covers fresh/test DBs, this migration covers
-the live pmvp-v1 database.
+the live production database.
 
 Revision ID: b6c3d9e1f207
 Revises: a5f1c2e8b4d0

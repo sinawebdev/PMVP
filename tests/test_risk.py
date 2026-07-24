@@ -1,7 +1,7 @@
 """Phase 5 — run risk gate.
 
 Two layers: the pure engine (app/risk.py) against each of the three settled
-rules, and the Chrisnat oversight routes that persist the verdict and drive the
+rules, and the platform oversight routes that persist the verdict and drive the
 Held / Auto-Accepted / released lifecycle.
 """
 

@@ -1,6 +1,6 @@
 """add distribution_batch table
 
-PMVP v1 Phase 3, Slice 1 — the payslip distribution queue. A DistributionBatch
+Payrolla Phase 3, Slice 1 — the payslip distribution queue. A DistributionBatch
 is one queued "send"/"resend-failed" action for a run; a worker claims it and
 runs the existing distribute_run() against it instead of the request thread
 blocking on every network send. Purely additive.

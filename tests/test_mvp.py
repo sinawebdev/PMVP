@@ -609,11 +609,11 @@ class MvpTestCase(unittest.TestCase):
             executed.append(("connect", kwargs))
             return FakeConnection()
 
-        ensure_database_exists(connect, db_name="chrisnat_payroll")
+        ensure_database_exists(connect, db_name="payrolla")
 
         self.assertIn(("connect", {"dbname": "postgres"}), executed)
         self.assertIn(
-            ("CREATE DATABASE chrisnat_payroll", None),
+            ("CREATE DATABASE payrolla", None),
             executed,
         )
 

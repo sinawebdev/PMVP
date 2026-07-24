@@ -35,7 +35,6 @@ from app.models import (
     Employee,
     PayrollRun,
     RawUploadArchive,
-    WageRateProfile,
 )
 from app.payroll_calculations import statutory_rate_for_run
 from app.raw_engine.cleaning import normalise_emp_id
@@ -314,7 +313,7 @@ def confirm():
 @raw_engine_bp.route("/clients/<int:client_id>/template")
 @role_required("admin")
 def download_template(client_id):
-    client = db.get_or_404(ClientCompany, client_id)
+    db.get_or_404(ClientCompany, client_id)  # 404 guard for an unknown client
     if not company_is_seeded(client_id):
         abort(404, "Company is not seeded — no template to generate yet.")
     month = request.args.get("month") or "Month"

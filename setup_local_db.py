@@ -10,13 +10,13 @@ import psycopg2
 
 def postgres_connection_settings(database_url):
     if not database_url:
-        return "chrisnat_payroll", {"dbname": "postgres"}
+        return "payrolla", {"dbname": "postgres"}
 
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
 
     parsed_url = urlparse(database_url)
-    db_name = parsed_url.path.lstrip("/") or "chrisnat_payroll"
+    db_name = parsed_url.path.lstrip("/") or "payrolla"
     settings = {
         "dbname": "postgres",
         "user": parsed_url.username,
@@ -27,7 +27,7 @@ def postgres_connection_settings(database_url):
     return db_name, {key: value for key, value in settings.items() if value}
 
 
-def ensure_database_exists(connect, db_name="chrisnat_payroll", **connect_kwargs):
+def ensure_database_exists(connect, db_name="payrolla", **connect_kwargs):
     if not db_name.replace("_", "").isalnum():
         raise ValueError("Database name may only contain letters, numbers, and underscores.")
 

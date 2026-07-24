@@ -99,16 +99,3 @@ def build_column_map(ws, field_aliases=REQUIRED_INPUTS, mandatory=MANDATORY):
     if problems:
         raise HeaderError("Header resolution failed:\n  - " + "\n  - ".join(problems))
     return resolved
-
-
-# --- example wiring ------------------------------------------------------------
-# import openpyxl
-# ws = openpyxl.load_workbook(path, data_only=True)["RAW DATA"]
-# start = find_data_start(ws)                 # -> 12
-# cols  = build_column_map(ws)                # -> {'basic_salary': 3 (C), ...}  or HeaderError
-# for r in range(start, ws.max_row + 1):
-#     staff = ws.cell(r, cols['staff_id']).value
-#     if not staff or not STAFF_ID_RE.match(str(staff).strip()):
-#         continue                            # skip blank / total rows
-#     basic = ws.cell(r, cols['basic_salary']).value or 0
-#     ...                                     # feed INPUTS to compute_payroll_item()

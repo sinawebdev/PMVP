@@ -126,7 +126,7 @@ def parse_rich_workbook(source, client_company_id, source_filename=None) -> Seed
     # Locate the employee master-data columns by header, not fixed position
     # (Book1 and the DZ specimen shift them); raises HeaderError if the
     # payment-critical fields can't be found, so a shifted workbook fails loud
-    # instead of seeding a bank name into the SSNIT field (PMVP-05 Issue 3).
+    # instead of seeding a bank name into the SSNIT field.
     master_cols = resolve_master_columns(ws, name_row)
     # Lump-adjustment columns: header-anchored with a fixed-position fallback, so
     # a future column shift can't silently mis-read pay without changing the

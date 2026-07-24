@@ -1,14 +1,18 @@
-"""Role vocabulary for PMVP v1's two planes.
+"""Role vocabulary for Payrolla's two planes.
 
 Tenancy is determined by ``User.client_company_id`` — NULL means a platform
-(Chrisnat) user who operates the oversight/control plane above all tenants; a
+(operator) user who operates the oversight/control plane above all tenants; a
 non-NULL value means a tenant (client) user hard-scoped to that one company.
 Role strings determine *permissions within* a plane; the plane itself is always
 decided by ``client_company_id`` (never by the role string alone), so a
 misassigned role can never widen a tenant user's data horizon.
 """
 
-# --- Platform (Chrisnat) roles: client_company_id IS NULL --------------------
+# --- Platform (operator) roles: client_company_id IS NULL --------------------
+# The ``chrisnat_*`` string values are retained from the founding operator
+# (Chrisnat Limited). They are a stable, persisted role vocabulary — existing
+# users carry them in the database — so the strings are treated as identifiers,
+# not branding: renaming them is a data migration, deliberately deferred.
 CHRISNAT_ADMIN = "chrisnat_admin"
 CHRISNAT_REVIEWER = "chrisnat_reviewer"
 
@@ -39,7 +43,7 @@ def is_tenant_role(role):
 
 
 def is_platform_user(user):
-    """A platform (Chrisnat) user: authenticated and NOT bound to a tenant."""
+    """A platform (operator) user: authenticated and NOT bound to a tenant."""
     return bool(
         getattr(user, "is_authenticated", False)
         and getattr(user, "client_company_id", None) is None

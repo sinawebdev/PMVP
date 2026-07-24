@@ -1,12 +1,12 @@
 /*
- * Chrisnat Payroll — shared front-end behaviour.
+ * Payrolla — shared front-end behaviour.
  *
  * One mechanism for user feedback: auto-dismissing toasts. They are raised from
- * three places, all funnelled through chrisnatToast():
+ * three places, all funnelled through payrollaToast():
  *   1. Server-rendered Flask flashes  -> a JSON island (#flash-data) read on load.
  *   2. HTMX partial responses         -> an "HX-Trigger: {showToast: {...}}" header,
  *                                        which htmx re-emits as a `showToast` event.
- *   3. Ad-hoc client-side calls        -> chrisnatToast(type, msg) directly.
+ *   3. Ad-hoc client-side calls        -> payrollaToast(type, msg) directly.
  *
  * CSRF (Flask-WTF): every mutating request must carry the session token rendered
  * into <meta name="csrf-token">. The block below attaches it to htmx requests and
@@ -91,7 +91,7 @@
 
   // Public: raise a toast. `type` is a Flask flash category (success/danger/info/warning);
   // anything unknown falls back to "info". Auto-dismisses; hovering pauses the timer.
-  function chrisnatToast(type, message, timeoutMs) {
+  function payrollaToast(type, message, timeoutMs) {
     if (!message) return;
     type = VALID[type] ? type : "info";
     var life = typeof timeoutMs === "number" ? timeoutMs : 5000;
@@ -140,7 +140,7 @@
     if (life > 0) arm();
     return toast;
   }
-  window.chrisnatToast = chrisnatToast;
+  window.payrollaToast = payrollaToast;
 
   // 1. Drain server-rendered flashes on first paint.
   function drainFlashes() {
@@ -150,7 +150,7 @@
     try { pairs = JSON.parse(island.textContent || "[]"); } catch (e) { return; }
     (pairs || []).forEach(function (pair) {
       // Flask hands back [category, message]; bootstrap alert categories map 1:1.
-      chrisnatToast(pair[0], pair[1]);
+      payrollaToast(pair[0], pair[1]);
     });
     island.parentNode && island.parentNode.removeChild(island);
   }
@@ -162,14 +162,14 @@
     var d = evt.detail || {};
     // htmx wraps a single-value trigger as {value: ...} on older configs; accept both.
     var payload = d.msg || d.type ? d : (d.value || {});
-    chrisnatToast(payload.type, payload.msg);
+    payrollaToast(payload.type, payload.msg);
   }
 
   // ---------------------------------------------------------------------------
   // Styled confirm modal — replaces native confirm() (which froze the renderer).
   // Returns a Promise<boolean>. Escape / backdrop / Cancel resolve false.
   // ---------------------------------------------------------------------------
-  function chrisnatConfirm(question, opts) {
+  function payrollaConfirm(question, opts) {
     opts = opts || {};
     return new Promise(function (resolve) {
       var lastFocus = document.activeElement;
@@ -241,14 +241,14 @@
       document.addEventListener("keydown", onKey, true);
     });
   }
-  window.chrisnatConfirm = chrisnatConfirm;
+  window.payrollaConfirm = payrollaConfirm;
 
   // Route htmx's hx-confirm through the styled modal instead of window.confirm.
   document.body && document.body.addEventListener("htmx:confirm", function (evt) {
     if (!evt.detail || !evt.detail.question) return; // no hx-confirm on this element
     evt.preventDefault();
     var danger = evt.detail.elt && evt.detail.elt.getAttribute("data-confirm-danger") === "1";
-    chrisnatConfirm(evt.detail.question, { danger: danger }).then(function (ok) {
+    payrollaConfirm(evt.detail.question, { danger: danger }).then(function (ok) {
       if (ok) evt.detail.issueRequest(true);
     });
   });
@@ -277,7 +277,7 @@
     "Computing PAYE & SSNIT…",
     "Almost done…",
   ];
-  function chrisnatStagedLoader(container, opts) {
+  function payrollaStagedLoader(container, opts) {
     if (!container) return { stop: function () {} };
     opts = opts || {};
     var messages = opts.messages || UPLOAD_STAGES;
@@ -297,7 +297,7 @@
       },
     };
   }
-  window.chrisnatStagedLoader = chrisnatStagedLoader;
+  window.payrollaStagedLoader = payrollaStagedLoader;
 
   // Full-page forms opt in with data-staged-loader="<overlay id>". On submit the
   // overlay is shown and stays up until the page navigates — motion + copy the
@@ -306,7 +306,7 @@
     var form = e.target;
     if (!form || !form.matches || !form.matches("[data-staged-loader]")) return;
     if (form.matches("[hx-post],[hx-get],[hx-put],[hx-delete],[hx-patch]")) return;
-    chrisnatStagedLoader(document.getElementById(form.getAttribute("data-staged-loader")));
+    payrollaStagedLoader(document.getElementById(form.getAttribute("data-staged-loader")));
   });
 
   if (document.readyState === "loading") {

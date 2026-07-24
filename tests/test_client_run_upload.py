@@ -140,7 +140,7 @@ class ClientRunUploadTestCase(unittest.TestCase):
         db.session.refresh(batch)
         self.assertEqual(batch.status, "Imported")
         self.assertEqual(batch.payroll_run_id, run.id)
-        # Chrisnat oversight was notified (tenant -> platform).
+        # platform oversight was notified (tenant -> platform).
         event = DomainEvent.query.filter_by(
             event_type="run.risk_held", subject_id=run.id
         ).first()

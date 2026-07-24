@@ -1,6 +1,6 @@
 """add Phase 5 query-backed indexes
 
-PMVP v1 Phase 5 — indexes backed by observed query patterns, all additive:
+Payrolla Phase 5 — indexes backed by observed query patterns, all additive:
   * payroll_item.payroll_run_id — the largest table's run filter was unindexed
     (payslip render, distribution, exports, item edit all filter by run).
   * payslip_delivery(status, next_retry_at) — the retry sweep scans this predicate
