@@ -772,13 +772,17 @@ def safe_sheet_title(title):
     return cleaned or "Sheet"
 
 
-def create_workbook(report_title):
+def create_workbook(report_title, org_name="Chrisnat Limited"):
+    """Start a report workbook. ``org_name`` is the letterhead written to A1 —
+    defaults to the platform bureau for operator/cross-client reports; the client
+    portal passes the tenant's own company so a client's export carries THEIR
+    name, not the bureau's."""
     workbook = Workbook()
     sheet = workbook.active
     # Only the sheet tab name is constrained by Excel; the A2 header cell keeps
     # the original title (slash and all) so the report still reads correctly.
     sheet.title = safe_sheet_title(report_title)
-    sheet["A1"] = "Chrisnat Limited"
+    sheet["A1"] = org_name
     sheet["A1"].font = Font(bold=True, size=14)
     sheet["A2"] = report_title
     sheet["A2"].font = Font(bold=True)
@@ -828,10 +832,10 @@ def export_employees(employees, export_folder):
     return save_workbook(workbook, export_folder, "Chrisnat_Employee_List.xlsx")
 
 
-def export_payroll_run(payroll_run, export_folder):
+def export_payroll_run(payroll_run, export_folder, org_name=None):
     client_name = payroll_run.client_company.name if payroll_run.client_company else "Client"
     title = f"{client_name} Payroll {payroll_run.month} {payroll_run.year}"
-    workbook, sheet = create_workbook(title)
+    workbook, sheet = create_workbook(title, org_name=org_name or "Chrisnat Limited")
     headers = [
         "Staff ID",
         "Name",
@@ -1043,14 +1047,14 @@ def bank_listing_groups(payroll_run):
     return groups, grand_total
 
 
-def export_bank_listing(payroll_run, export_folder):
+def export_bank_listing(payroll_run, export_folder, org_name=None):
     """Bank transfer batch listing: employees grouped by bank, each row showing
     account number and net pay, with a subtotal per bank. Derived entirely from
     the run's items — replaces the per-bank tables maintained by hand in the
     source workbooks."""
     client_name = payroll_run.client_company.name if payroll_run.client_company else "Client"
     title = f"{client_name} Bank Listing {payroll_run.month} {payroll_run.year}"
-    workbook, sheet = create_workbook(title)
+    workbook, sheet = create_workbook(title, org_name=org_name or "Chrisnat Limited")
 
     groups, grand_total = bank_listing_groups(payroll_run)
 
@@ -1214,7 +1218,9 @@ def _gra_month_code(month, year):
     return f"{number:02d}/{year}" if number else f"{month} {year}"
 
 
-def _fill_gra_skeleton_workbook(payroll_run, employer_tin, tax_office):
+def _fill_gra_skeleton_workbook(
+    payroll_run, employer_tin, tax_office, employer_name="CHRISNAT LIMITED"
+):
     """Load the official GRA workbook and pour this run's already-computed
     figures into cells A-AB, one worker per row from row 18. GRA's own formula
     cells (I, M, O, S, U, V, W, Y, Z) are overwritten with the app's values, so
@@ -1230,7 +1236,7 @@ def _fill_gra_skeleton_workbook(payroll_run, employer_tin, tax_office):
     sheet = workbook.active
 
     # --- header block (write to the top-left cell of each merged range) ---
-    sheet["D9"] = "CHRISNAT LIMITED"                       # NAME OF EMPLOYER
+    sheet["D9"] = employer_name                            # NAME OF EMPLOYER
     sheet["D11"] = employer_tin or ""                      # EMPLOYER'S TIN
     sheet["U9"] = _gra_month_code(payroll_run.month, payroll_run.year)
     if tax_office:
@@ -1290,7 +1296,10 @@ def _fill_gra_skeleton_workbook(payroll_run, employer_tin, tax_office):
             "Y": m(item.overtime_tax),               # Overtime Tax
             "Z": m(item.paye),                       # Total Tax Payable to GRA
             "AA": "",                                # Severance Pay
-            "AB": item.warning_notes or "",          # Remarks
+            # Remarks stays blank: internal validation notes (warning_notes) are
+            # working-data for the payroll grid, NOT content for a statutory GRA
+            # filing. Left empty for the employer to hand-fill if needed.
+            "AB": "",                                # Remarks
         }
         for column, value in cells.items():
             sheet[f"{column}{row}"] = value          # overwrites GRA's 2022 formula
@@ -1304,44 +1313,55 @@ def _fill_gra_skeleton_workbook(payroll_run, employer_tin, tax_office):
     return workbook
 
 
-def export_gra_paye_schedule(payroll_run, export_folder, employer_tin="", tax_office=""):
+def export_gra_paye_schedule(
+    payroll_run, export_folder, employer_tin="", tax_office="", employer_name=None
+):
     """Employer's Monthly Tax Deductions Schedule (P.A.Y.E.) in the statutory
     GRA format. Primary path loads the official GRA template (byte-faithful form)
     and fills computed VALUES into A-AB. If the template asset is missing, it
-    falls back to the summary layout below so exports never hard-fail."""
+    falls back to the summary layout below so exports never hard-fail.
+
+    ``employer_name`` is the Name of Employer on the form — defaults to the
+    platform bureau for operator exports; the client portal passes the tenant's
+    own company so the filing names the client as employer, not the bureau."""
+    employer = employer_name or "CHRISNAT LIMITED"
     if GRA_TEMPLATE_PATH.exists():
         client_name = (
             payroll_run.client_company.name if payroll_run.client_company else "Client"
         )
-        workbook = _fill_gra_skeleton_workbook(payroll_run, employer_tin, tax_office)
+        workbook = _fill_gra_skeleton_workbook(
+            payroll_run, employer_tin, tax_office, employer
+        )
         filename = (
             f"{slug_filename(client_name)}_GRA_PAYE_Schedule_"
             f"{slug_filename(payroll_run.month)}_{payroll_run.year}.xlsx"
         )
         return save_workbook(workbook, export_folder, filename)
     return _export_gra_summary_layout(
-        payroll_run, export_folder, employer_tin, tax_office
+        payroll_run, export_folder, employer_tin, tax_office, employer
     )
 
 
-def _export_gra_summary_layout(payroll_run, export_folder, employer_tin="", tax_office=""):
+def _export_gra_summary_layout(
+    payroll_run, export_folder, employer_tin="", tax_office="", employer_name="CHRISNAT LIMITED"
+):
     """Fallback summary layout (used only when the GRA template asset is absent).
-    The employer of record is always CHRISNAT LIMITED — Chrisnat is the legal
-    employer regardless of the client site a worker is deployed to; the client
-    name appears only as deployment context. Columns with no backing data yet
-    (TIN where unset, Non-Resident, Secondary Employment, benefit elements,
-    Severance, Remark) are left blank for hand-filling in Excel."""
+    ``employer_name`` is the Name of Employer on the schedule (the bureau for
+    operator exports, the tenant's own company for client-portal exports).
+    Columns with no backing data yet (TIN where unset, Non-Resident, Secondary
+    Employment, benefit elements, Severance, Remark) are left blank for
+    hand-filling in Excel."""
     client_name = payroll_run.client_company.name if payroll_run.client_company else "Client"
     workbook, sheet = create_workbook(
-        f"GRA PAYE {payroll_run.month} {payroll_run.year}"
+        f"GRA PAYE {payroll_run.month} {payroll_run.year}", org_name=employer_name
     )
     sheet["A2"] = "EMPLOYER'S MONTHLY TAX DEDUCTIONS SCHEDULE (P.A.Y.E.)"
     sheet["A2"].font = Font(bold=True)
-    sheet["A4"] = "Name of Employer: CHRISNAT LIMITED"
+    sheet["A4"] = f"Name of Employer: {employer_name}"
     sheet["A4"].font = Font(bold=True)
     sheet["A5"] = f"Employer TIN: {employer_tin or ''}"
     sheet["A6"] = f"Tax Office (tick one): {format_tax_office_tickboxes(tax_office)}"
-    sheet["A7"] = f"Client / Deployment Site: {client_name}"
+    sheet["A7"] = f"Payroll for: {client_name}"
     sheet["A8"] = f"Month: {payroll_run.month} {payroll_run.year}"
 
     headers = [

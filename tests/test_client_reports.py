@@ -12,11 +12,14 @@ partitions the run's items faithfully.
 
 import os
 import unittest
+from io import BytesIO
 
 os.environ["SKIP_DOTENV"] = "true"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["SEED_DEMO_DATA"] = "true"
 os.environ["PERSISTENCE_REQUIRED"] = "false"
+
+from openpyxl import load_workbook  # noqa: E402
 
 from app import create_app, db  # noqa: E402
 from app.excel_utils import bank_listing_groups  # noqa: E402
@@ -49,6 +52,17 @@ class ClientReportsTestCase(unittest.TestCase):
             ).status_code,
             302,
         )
+
+    def _cell_text(self, resp):
+        """Every non-empty cell value across the downloaded workbook, as one blob."""
+        workbook = load_workbook(BytesIO(resp.data))
+        values = []
+        for sheet in workbook.worksheets:
+            for row in sheet.iter_rows():
+                for cell in row:
+                    if cell.value is not None:
+                        values.append(str(cell.value))
+        return "\n".join(values)
 
     # --- preview hub --------------------------------------------------------
     def test_reports_hub_renders_with_all_three_exports(self):
@@ -113,6 +127,40 @@ class ClientReportsTestCase(unittest.TestCase):
         resp = self.client.get(f"/company/runs/{self.run.id}/reports")
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.headers["Location"].endswith("/dashboard"))
+
+    # --- identity: a client's exports carry THEIR company, not the bureau ----
+    def test_client_exports_name_the_client_company_not_the_bureau(self):
+        self._login("admin@msc.demo")
+        company_name = self.run.client_company.name
+        for path in EXPORT_PATHS:
+            resp = self.client.get(f"/company/runs/{self.run.id}{path}")
+            self.assertEqual(resp.status_code, 200, path)
+            blob = self._cell_text(resp)
+            self.assertIn(company_name, blob, path)  # the client's own name is on it
+            # The platform bureau's name must NOT appear on a client's export.
+            self.assertNotIn("CHRISNAT LIMITED", blob, path)
+            self.assertNotIn("Chrisnat Limited", blob, path)
+
+    def test_client_gra_export_names_client_as_employer(self):
+        self._login("admin@msc.demo")
+        resp = self.client.get(f"/company/runs/{self.run.id}/export/gra-paye")
+        self.assertEqual(resp.status_code, 200)
+        # D9 is the GRA "Name of Employer" cell — it must be the client company.
+        sheet = load_workbook(BytesIO(resp.data)).active
+        self.assertEqual(sheet["D9"].value, self.run.client_company.name)
+
+    # --- a legal export must not leak internal working notes ----------------
+    def test_client_gra_export_omits_internal_remarks(self):
+        # Internal validation notes (warning_notes) are payroll-grid working data,
+        # never content for a statutory GRA filing.
+        sentinel = "INTERNAL-WARN-DO-NOT-FILE"
+        self.assertTrue(self.run.items, "seed run should have payroll items")
+        self.run.items[0].warning_notes = sentinel
+        db.session.commit()
+        self._login("admin@msc.demo")
+        resp = self.client.get(f"/company/runs/{self.run.id}/export/gra-paye")
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn(sentinel, self._cell_text(resp))
 
     # --- shared helper parity (no logic duplication) ------------------------
     def test_bank_listing_groups_partitions_items_faithfully(self):

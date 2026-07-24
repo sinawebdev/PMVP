@@ -84,11 +84,10 @@
   <div class="panel">
     <table>
       <tbody>
+        <tr><td>Employer</td><td class="right">{{ employer_name }}</td></tr>
         <tr><td>Employees</td><td class="right nums">{{ run.total_workers }}</td></tr>
         <tr><td>Total PAYE</td><td class="right nums">{{ run.total_paye | cedis }}</td></tr>
         <tr><td>Total employee SSF</td><td class="right nums">{{ run.total_ssnit | cedis }}</td></tr>
-        {% if employer_tin %}<tr><td>Employer TIN</td><td class="right">{{ employer_tin }}</td></tr>{% endif %}
-        {% if tax_office %}<tr><td>Tax office</td><td class="right">{{ tax_office }}</td></tr>{% endif %}
       </tbody>
     </table>
   </div>
