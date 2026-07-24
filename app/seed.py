@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime
 
 from app import db
 from app.models import (
@@ -18,7 +18,7 @@ def seed_default_data():
     seed_users()
     seed_clients()
     seed_statutory_rates()
-    # PMVP v1 tenancy: one Chrisnat platform admin + a client_admin for two demo
+    # Payrolla tenancy: one platform admin + a client_admin for two demo
     # tenants, so the two-tenant zero-cross-visibility story is testable from the
     # first boot. Runs after seed_clients() so the companies exist to bind to.
     seed_pmvp_tenancy()
@@ -31,7 +31,7 @@ def seed_default_data():
     db.session.commit()
 
 
-# The two seeded companies designated as PMVP v1 demo tenants (each gets a
+# The two seeded companies designated as Payrolla demo tenants (each gets a
 # client_admin login). They must already exist via seed_clients().
 PMVP_DEMO_TENANTS = [
     ("MSC Ghana Ltd", "MSC Admin", "admin@msc.demo"),
@@ -45,7 +45,7 @@ def seed_pmvp_tenancy():
     Idempotent: every user is guarded by an email-existence check, so re-running
     on an already-seeded DB is a no-op. Passwords are demo-only ("password123").
     """
-    # Platform (Chrisnat) oversight admin — client_company_id stays NULL.
+    # Platform (operator) oversight admin — client_company_id stays NULL.
     if not User.query.filter_by(email="chrisnat.admin@chrisnat.local").first():
         admin = User(
             name="Chrisnat Admin",

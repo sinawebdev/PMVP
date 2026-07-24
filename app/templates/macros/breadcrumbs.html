@@ -4,7 +4,7 @@
    order; the last item (or any item with href=None) renders as the current,
    unlinked page. #}
 {% macro trail(items) %}
-<nav aria-label="breadcrumb" class="chrisnat-breadcrumb">
+<nav aria-label="breadcrumb" class="payrolla-breadcrumb">
     <ol class="breadcrumb mb-0">
         {% for label, href in items %}
             {% if href and not loop.last %}

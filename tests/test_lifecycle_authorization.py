@@ -13,7 +13,7 @@ app/permissions.py. These tests pin:
      (the deliberate "full operator access" completion, confirmed with Sina).
   4. The rendered payroll_detail buttons match the predicates end-to-end.
 
-Runs on in-memory SQLite (never the pmvp-v1 Supabase DB).
+Runs on in-memory SQLite (never the production Supabase DB).
 """
 
 import os

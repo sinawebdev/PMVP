@@ -23,7 +23,6 @@ import openpyxl
 
 from app.models import WageRateProfile
 from app.raw_engine.mapping import (
-    NAME_HEADER_LABEL,
     RAW_DATA_SHEET,
     find_name_header_row,
     HeaderError,

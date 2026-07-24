@@ -1,392 +1,186 @@
-# Chrisnat Payroll MVP
+# Payrolla
 
-Phase 1 MVP for Chrisnat Limited Ghana. This Flask app bridges Excel payroll files into a simple review, approval, accounts, and export workflow. It uses SQLite locally by default and requires PostgreSQL through `DATABASE_URL` for Render/Railway deployments.
+**Payrolla — Payroll, HR, Compliance & Workforce Management Platform**
+_by Sinaforte Technologies._
 
-## PMVP v1 — Multi-Tenant SaaS
+Payrolla is a multi-tenant SaaS for running Ghanaian payroll end to end:
+import or capture hours, compute statutory figures (PAYE, SSNIT tier-1/tier-2,
+bonus tax), review and approve runs, generate payslips and statutory returns,
+and **push** each worker their payslip by SMS, WhatsApp, or email. Client
+companies self-serve on their own isolated plane; the platform operator runs an
+oversight/control plane above every tenant.
 
-This codebase is **PMVP v1**: the single-operator app above, evolved into a
-multi-tenant SaaS. Client companies log in to a `/company` plane and see only
-their own data; Chrisnat operates an oversight/control plane above every tenant.
-The payroll **engine is frozen and unchanged** — identical inputs still produce
-identical figures.
+- **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
+- **Multi-tenancy & isolation:** [MULTI_TENANT.md](MULTI_TENANT.md)
+- **Route-by-route scoping audit:** [AUDIT.md](AUDIT.md)
+- **Security model:** [SECURITY.md](SECURITY.md)
+- **Deployment:** [DEPLOYMENT.md](DEPLOYMENT.md)
+- **Contributing & local setup:** [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Release history:** [CHANGELOG.md](CHANGELOG.md)
 
-- **Multi-tenancy & isolation:** [MULTI_TENANT.md](MULTI_TENANT.md) (planes,
-  the `app/tenancy.py` choke point, per-table scoping, RLS stages).
-- **Route-by-route disposition:** [AUDIT.md](AUDIT.md).
+---
 
-Client plane (`/company`): dashboard, self-service employee CRUD, **payroll-run
-upload**, run/payslip views (single PDF + run ZIP), **payslip distribution**
-(console channels in v1), statutory (read-only), expenses, **audit**, and
-**notifications**. A client-submitted run is risk-gated (`Submitted → Held /
-Auto-Accepted`) with Chrisnat oversight (`/oversight/risk`); business events fan
-out to in-app notifications on both planes.
+## What Payrolla does
 
-## What This MVP Does
+Payrolla serves two audiences from one codebase, separated into **two planes**
+(see [MULTI_TENANT.md](MULTI_TENANT.md)):
 
-- Authenticates users with role-based access.
-- Manages client companies and employee records.
-- Imports `.xlsx`, `.xls`, and optional `.csv` payroll files for a selected client company.
-- Supports multi-sheet payroll workbooks and multi-client workbook previews.
-- Suggests smart column mappings from common Excel header names.
-- Counts unique workers without simply counting rows.
-- Shows validation warnings before creating a payroll run.
-- Creates company-specific payroll runs.
-- Allows payroll review, MD/Admin approval, and Excel export.
-- Generates downloadable individual employee payslip PDFs from payroll items.
-- Auto-prepares payment vouchers plus PAYE and SSNIT remittance records after approval.
-- Tracks simple operating expenses.
-- Adds imported payroll workers to the employee records section.
-- Provides a standalone Employee Database System for manual employee registration, profile management, status tracking, deployment tracking, search, and filtering.
-- Keeps audit trail, approval workflow, payroll reports, vouchers, remittances, and expenses in the active MVP.
+**Client companies** (the `/company` plane) self-serve:
 
-## Active MVP Boundary
+- Company dashboard scoped to their own data only.
+- Employee roster CRUD (self-service).
+- Payroll-run upload (Excel) or raw-hours capture, with pre-import validation.
+- Run and payslip views — individual PDF payslips and a whole-run ZIP.
+- **Payslip distribution** by SMS / WhatsApp / email, with per-worker delivery
+  tracking and retry.
+- Statutory rates (read-only), expenses, audit trail, and in-app notifications.
+- Per-company payslip branding packs (name, accent colour, sender, reply-to).
 
-The active application is intentionally payroll-focused:
+**The platform operator** (oversight/control plane) runs the bureau:
 
-- Dashboard
-- Client companies
-- Employee Database System
-- Payroll upload, preview, import, runs, approvals, exports, and payslip PDFs
-- Accounts dashboard, vouchers, remittances, and expenses
-- Reports
-- Audit trail
+- Cross-tenant dashboards, client management, and search.
+- The full operator payroll lifecycle (`Draft → Pending Approval → Approved →
+  Processed`), calculation, edits, approvals, exports, and payment vouchers.
+- The **risk gate** (`/oversight/risk`): every client-submitted run is scored
+  deterministically and either auto-accepted or **held** for review.
+- Statutory-rate administration, the audit trail, and the distribution
+  monitoring / analytics / SLA dashboards.
 
-Unfinished Phase 2/3 modules are not registered in the Flask app while the MVP is stabilized. Their code remains in the repository for later review, but routes such as `/operations-dashboard`, `/assignments`, `/attendance`, `/cleaning-jobs`, `/client-portal`, `/invoices`, `/goods-orders`, `/products`, and `/proposals` are not part of the active demo.
+### Two payroll engines
 
-## Payslip Distribution
+1. **Standard import engine** — reads `.xlsx` / `.xls` / `.csv` payroll
+   workbooks, resolves columns from common header names, counts unique workers,
+   validates, and creates a payroll run. Statutory figures are recomputed by
+   Payrolla on confirm (`app/payroll_calculations/`), so uploaded PAYE/SSNIT are
+   preview-only.
+2. **Raw Hours Engine** (`app/raw_engine/`) — for clients who submit hours only.
+   Seeds a per-client wage-rate context, ingests a thin hours upload, computes
+   gross → statutory → net, and produces the same operational outputs (wage
+   sheet, GRA PAYE return, bank listing, payslip PDFs).
 
-After a payroll run is **Approved**, Chrisnat can deliver each worker their salary
-*breakdown* (not a payment) by **SMS, WhatsApp, or email**, with per-worker delivery
-tracking and retry. Open a run and click **Distribute Payslips** (also reachable from the
-**Payslip** page and the **Payslip Delivery** sidebar link).
+The engines are **frozen and parity-pinned** (`tests/test_engine_parity.py`):
+identical inputs always produce identical figures.
 
-- **Channels** sit behind one interface (`app/distribution/`). Each has a **console** backend
-  (default — logs only, no credentials, no network) and a real backend chosen by a
-  `*_BACKEND` env: `hubtel` SMS, `cloud` WhatsApp (Meta), `smtp` email. So the whole flow is
-  runnable locally with zero credentials; nothing reaches real workers until a backend is set.
-- **Auto routing**: choose `auto` to send each worker on their preferred channel, falling
-  back to whichever contact they actually have (workers are reached by `momo_number`/`phone`,
-  so SMS/WhatsApp are primary; an optional `email` field was added for staff who have one).
-- **Delivery tracking**: every attempt is a `PayslipDelivery` row (sent/failed + provider +
-  attempts). A worker with no contact is recorded as `failed`, never a crash, and
-  **Resend failed** re-attempts only those.
-- **Idempotent**: a double-clicked/retried "Send" replays the original result — no
-  double-send. The action is written to the **Audit Trail**.
+---
 
-New tables (`payslip_delivery`, `idempotency_key`) and the `email`/`preferred_channel`
-columns are created additively by `db.create_all()` + `ensure_phase2_schema()` on startup —
-no migration step, no data loss. Configure channels in `.env` (see `.env.example`).
+## Tech stack
 
-## Distribution: Reliable, Observable Delivery (Phase 3)
+- **Python 3.11+**, **Flask 3** (blueprints, Jinja templates, server-rendered
+  HTML with htmx for partial updates).
+- **SQLAlchemy 2 / Flask-SQLAlchemy**, **Flask-Migrate / Alembic** for schema.
+- **Flask-Login** (auth), **Flask-WTF** (global CSRF).
+- **pandas / openpyxl / xlrd** (Excel), **reportlab** (payslip PDFs).
+- **PostgreSQL** in every deployed environment; **SQLite** only for local dev
+  and the test suite.
+- **gunicorn** in production; an in-process (or dedicated) background worker
+  drains the payslip distribution queue.
 
-Distribution is a **background queue**, not part of the HTTP request — a large or
-multi-run send never blocks a web worker. The subsystem lives entirely in
-`app/distribution/`:
+Exact pinned versions are in [requirements.txt](requirements.txt).
 
-- **Queue + worker** (`queue.py`). Sending enqueues a `DistributionBatch`
-  (`scheduled` / `queued` / `running` / `completed` / `failed` / `cancelled`);
-  a worker claims the oldest `queued` batch (`SELECT … FOR UPDATE SKIP LOCKED`
-  on Postgres, so multiple workers are safe) and runs the existing
-  `distribute_run()`. The worker is an **in-process thread by default** (durable
-  because the queue is in the DB); a dedicated process can take over with
-  `flask distribution-worker` (set `DISTRIBUTION_WORKER_INLINE=false` on web).
-  Its single poll loop also activates due scheduled batches and runs due retries.
-- **Live status** — the operator run page and the client distribute page poll an
-  htmx fragment while a batch is active, showing per-worker progress; controls
-  hide while a send is in flight.
-- **Retries** (`service.py`). A failed delivery is auto-retried with exponential
-  backoff up to `DISTRIBUTION_MAX_ATTEMPTS`, then marked a **final failure**;
-  `next_retry_at` distinguishes "will retry" from "final". Manual **Resend
-  failed** is the uncapped operator override. Successful deliveries are never
-  re-sent; no attempt creates a duplicate row.
-- **Monitoring dashboard** (`dashboard.py`, `/distribution/dashboard`) — batch and
-  delivery stats, success/failure rates, backlog, throughput, running-batch
-  progress + ETA, and a worker-health signal (from the inline worker's heartbeat).
-- **Batch cancellation** (`cancel_distribution`) — stops a `scheduled`/`queued`
-  batch and any pending retries (new `cancelled` delivery state); a **running**
-  batch is never cancelled mid-flight; already-sent deliveries are untouched.
-- **Searchable history** (`history.py`, `/distribution/history`) — filter every
-  delivery by company, run, employee, status, channel, operator, and date, with a
-  per-batch detail page. Each delivery links to the batch that sent it.
-- **Scheduling** — pick a future date/time (interpreted as **GMT**; Ghana runs on
-  GMT year-round, so wall-clock == UTC); the worker activates it when due
-  (idempotently). Reschedule or cancel before it runs.
-- **Notifications** (`notify.py`) — completion / partial / failure, high failure
-  rate, retry exhaustion, scheduled start, and worker-stop events fan out through
-  the existing in-app notification inbox (`app.events.record_event`), and appear in
-  the run's activity timeline.
-- **Email** (`channels.py`, `render.py`) — branded HTML template with a plain-text
-  fallback, configurable sender name / reply-to, recipient validation, specific
-  error reporting, and validated optional PDF attachments. Providers stay behind
-  `get_sender()`, so the transport is swappable without touching business logic.
+---
 
-Every action preserves centralized permissions (`permissions.py` /
-`tenant_role_required`), tenant isolation, audit logging, and domain events. All
-schema additions are additive Alembic migrations. See `.env.example` for the
-`DISTRIBUTION_*` and `EMAIL_*` knobs.
-
-### Phase 4 — scale & operability
-
-- **Dedicated worker** — the queue worker runs inline in the web process by
-  default, or as its own process via `flask distribution-worker` (graceful
-  SIGTERM shutdown, `--once` cron mode). A DB heartbeat
-  (`distribution_worker_heartbeat`) makes an external worker visible on the
-  dashboard. See the Render/Railway/compose config and the deployment note below.
-- **Rate limiting** (`throttle.py`) — per-channel send-rate ceilings
-  (`RATE_LIMIT_{SMS,WHATSAPP,EMAIL}_PER_SEC`) pace sends within provider quotas; a
-  provider HTTP 429 is surfaced as a clear rate-limited failure.
-- **Analytics & exports** (`analytics.py`, `/distribution/analytics`) — success/
-  failure breakdown by channel and company, with CSV/XLSX export of the filtered
-  history.
-- **Delivery receipts** (`receipts.py`, `webhooks.py`) — the SMS/WhatsApp senders
-  capture the provider message id; provider callbacks
-  (`/distribution/webhooks/{whatsapp,hubtel}`, secret/token-verified, disabled
-  until configured) confirm handset delivery or flip an undelivered message back
-  to failed for retry.
-- **Tenant branding packs** — each `ClientCompany` can brand its payslip emails
-  (name, accent colour, sender name, reply-to), edited by a client_admin at
-  `/company/branding`; unset fields fall back to global config.
-- **SLA monitoring** (`sla.py`) — configurable thresholds (batch completion time,
-  recent failure rate, optional delivery-confirmation time); the worker checks on
-  a cadence and alerts platform admins on new breaches, and the dashboard shows
-  live SLA status.
-
-## Local SQLite Setup
+## Quick start (local)
 
 ```bash
-cd chrisnat-payroll-mvp
 python -m venv .venv
-.venv\Scripts\activate
+.venv\Scripts\activate          # Windows;  source .venv/bin/activate on POSIX
 pip install -r requirements.txt
+copy .env.example .env          # cp on POSIX — then edit as needed
 python run.py
 ```
 
-Open `http://127.0.0.1:5000`.
-
-The app creates the SQLite database and seed data automatically on first run.
-
-To initialize explicitly:
+Open <http://127.0.0.1:5000>. On first run Payrolla creates the local SQLite
+database and seeds starter users and demo tenants automatically. To (re)initialise
+explicitly:
 
 ```bash
 flask --app run:app init-db
 ```
 
-Local `.env` example:
+A minimal local `.env`:
 
 ```env
 SECRET_KEY=change-this-for-local
 AUTO_INIT_DB=true
 PERSISTENCE_REQUIRED=false
+SEED_DEMO_DATA=true
 ```
 
-## Render Deployment
+For a Docker-based local stack (Postgres + web + distribution worker) see
+[DEPLOYMENT.md](DEPLOYMENT.md) and `docker-compose.yml` (`make up`).
 
-This repo includes `render.yaml`, `runtime.txt`, and a `Procfile`.
+### Default seed logins
 
-Render settings:
+Seeded only when `SEED_DEMO_DATA=true` (never in a real deployment). All use
+password `password123`:
 
-- Build command: `pip install -r requirements.txt`
-- Start command: `gunicorn run:app --bind 0.0.0.0:$PORT`
-- Health check: `/health`
-- Database: Render Postgres through `DATABASE_URL`
+| Plane | Role | Email |
+|---|---|---|
+| Platform | Admin | `admin@chrisnat.local` |
+| Platform | MD | `md@chrisnat.local` |
+| Platform | Payroll Officer | `payroll@chrisnat.local` |
+| Platform | Accounts Officer | `accounts@chrisnat.local` |
+| Tenant | Client user | `msc.client@chrisnat.local` |
 
-Required environment variables:
+> The `@chrisnat.local` demo domain and the `chrisnat_admin` platform role are
+> retained from the founding operator (Chrisnat Limited) and are treated as
+> stable identifiers, not product branding. See
+> [the branding note](#a-note-on-the-name) below.
 
-- `SECRET_KEY`: generated by Render or set manually.
-- `DATABASE_URL`: Render PostgreSQL internal connection string.
-- `PERSISTENCE_REQUIRED`: set `true` in deployed environments so the app fails if PostgreSQL is missing.
-- `SEED_DEMO_DATA`: set `false` for real deployments. Set `true` only when you intentionally want demo employees, demo payroll, remittances, vouchers, and expenses.
-- `SEED_ARCHIVED_FEATURES`: keep `false` unless you intentionally want old Phase 2/3 demo data.
-- `AUTO_INIT_DB`: leave as `true` for MVP auto table creation/starter seed, or set `false` and run `flask --app run:app init-db` manually.
+---
 
-**Distribution worker.** By default the web process also runs the distribution
-queue worker on an in-process background thread (`DISTRIBUTION_WORKER_INLINE`
-defaults to `true` in production), so no extra service is required — the queue
-lives in Postgres and survives restarts. To scale sending out to its own dyno,
-add a **Background Worker** service with start command
-`flask --app run:app distribution-worker` and set `DISTRIBUTION_WORKER_INLINE=false`
-on the web service so only the worker sends. The scheduled-distribution and retry
-sweeps run inside the same worker loop, so scheduling and auto-retry work with the
-inline worker out of the box.
+## Configuration
 
-The app normalizes old-style `postgres://` URLs to `postgresql://` for SQLAlchemy. `db.create_all()` and additive schema checks are used for MVP-safe table setup; they do not wipe production data. Flask-Migrate is configured for the next production hardening step.
+All configuration is environment-driven; see [.env.example](.env.example) for the
+full, commented list. Key groups:
 
-Render free web services have ephemeral filesystems. Uploaded payroll files are saved only temporarily during parsing, then the extracted preview data is stored in the database. Payroll details and exports are generated from database records, not from old uploaded Excel files.
+- **Core:** `SECRET_KEY`, `DATABASE_URL`, `AUTO_INIT_DB`, `PERSISTENCE_REQUIRED`,
+  `SESSION_COOKIE_SECURE`, `SEED_DEMO_DATA`.
+- **Product identity (branding seam):** `APP_NAME`, `APP_BRAND_NAME`,
+  `APP_SHORT_NAME`, `APP_BRAND_MARK`, `APP_TAGLINE`, `COMPANY_NAME`,
+  `SERVICE_SLUG`. Every user-facing surface (browser title, sidebar, login,
+  emails, payslip PDF) reads these, so a rebrand or white-label is a config
+  change, not a template sweep.
+- **Distribution channels:** `SMS_BACKEND`, `WHATSAPP_BACKEND`, `EMAIL_BACKEND`
+  (each defaults to `console` — logs only, no network) plus their credentials,
+  webhook secrets, rate limits, retry policy, and SLA thresholds.
+- **Statutory / payroll:** `RAW_BANK_WHITELIST`, `CHRISNAT_EMPLOYER_TIN`,
+  `CHRISNAT_TAX_OFFICE` (the employer's TIN and tax office printed on GRA
+  returns — employer configuration, not product identity).
 
-Important: do not use SQLite for the deployed Render app. SQLite/local files on Render can disappear because Render file storage is ephemeral.
+---
 
-## Render PostgreSQL Checklist
-
-1. Create a Render PostgreSQL database.
-2. Copy the Internal Database URL.
-3. Go to Render Web Service > Environment.
-4. Add `DATABASE_URL` with the internal PostgreSQL URL.
-5. Add `SECRET_KEY`.
-6. Set `SEED_DEMO_DATA=false` for live usage.
-7. Redeploy the web service.
-8. Open `/admin/db-health`.
-9. Confirm it says `PostgreSQL` and `DATABASE_URL Detected: Yes`.
-10. Upload payroll Excel.
-11. Restart the service.
-12. Confirm payroll records are still there.
-
-The `/admin/db-health` page is admin-only and shows record counts for users, clients, employees, payroll runs, payroll items, vouchers, remittances, expenses, and audit logs. It never displays the full database URL or password.
-
-## Default Login Details
-
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin | admin@chrisnat.local | password123 |
-| MD | md@chrisnat.local | password123 |
-| Payroll Officer | payroll@chrisnat.local | password123 |
-| Accounts Officer | accounts@chrisnat.local | password123 |
-
-## Railway Deployment
-
-This repo includes `railway.toml`. Create a Railway PostgreSQL service, connect it to the web service, and set:
-
-```env
-SECRET_KEY=your-secret
-DATABASE_URL=${{ Postgres.DATABASE_URL }}
-AUTO_INIT_DB=true
-PERSISTENCE_REQUIRED=true
-SEED_DEMO_DATA=false
-SEED_ARCHIVED_FEATURES=false
-SESSION_COOKIE_SECURE=true
-```
-
-Start command:
+## Testing
 
 ```bash
-gunicorn run:app --bind 0.0.0.0:$PORT
+.venv\Scripts\python.exe -m pytest -q
 ```
 
-After deploy, open `/admin/db-health` as Admin and confirm `PostgreSQL`.
+The suite (≈460 tests + subtests) runs against in-memory SQLite and covers the
+payroll engines, tenant isolation, permissions, the risk gate, the distribution
+subsystem, and the client and operator surfaces. It is the regression gate for
+every change — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Migration / Setup Commands
+---
 
-Local setup:
+## Deployment
 
-```bash
-cd chrisnat-payroll-mvp
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.example .env
-flask --app run:app init-db
-python run.py
-```
+Payrolla ships with Blueprint/config for **Render** (`render.yaml`), **Railway**
+(`railway.toml`), and **Docker Compose** (`docker-compose.yml`), plus a
+`Procfile` and `runtime.txt`. Every deployed environment **must** use PostgreSQL
+(`DATABASE_URL`) and a strong `SECRET_KEY`; the app refuses to boot in production
+on SQLite or the insecure dev key. Full instructions, the distribution-worker
+options, and the go-live checklist are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
-Flask-Migrate is initialized in the app. For the next managed schema change:
+---
 
-```bash
-flask --app run:app db init
-flask --app run:app db migrate -m "initial payroll mvp schema"
-flask --app run:app db upgrade
-```
+## A note on the name
 
-## Uploading Payroll Excel
-
-Go to **Upload Payroll Excel**, choose an import mode, choose the payroll month/year, then upload the workbook.
-
-Single Client Import:
-
-- Select one client company.
-- The Smart Excel Import Engine scans all workbook sheets.
-- It matches sheet names such as `MSC_Ghana_Ltd` to `MSC Ghana Ltd`.
-- It imports only the matched sheet.
-
-Multi-Client Workbook Import:
-
-- Leave the client selector blank.
-- The engine scans payroll-looking sheets and matches each to a seeded client company.
-- It previews one row per matched client before creating separate payroll runs.
-- Unmatched payroll-looking sheets are shown but not imported automatically.
-
-Expected columns can use common names such as:
-
-- `staff id`, `staff no`, `employee id`
-- `name`, `employee name`, `full name`
-- `basic`, `basic salary`, `base pay`
-- `transport`, `transport allowance`
-- `housing`, `housing allowance`
-- `overtime`, `ot`, `overtime pay`
-- `gross`, `gross pay`
-- `paye`, `tax`, `income tax`
-- `ssnit`, `social security`
-- `deductions`, `other deductions`
-- `net`, `net pay`, `take home`
-- `employee no`, `worker id`
-- `gross salary`, `net salary`
-- `bank`, `bank name`, `account number`, `bank account`
-- `status`, `service line`, `job role`, `payroll month`
-- `tier 2 pension`, `loan deduction`, `ghana card no`, `momo number`
-
-The importer scans the first 20 rows to find the payroll header, removes blank/footer rows, cleans currency strings such as `GHC 1,200.00`, counts unique workers, and previews warnings before anything is saved permanently.
-
-## Phase 2 Workflow
-
-Payroll statuses now move through:
-
-`Draft` -> `Pending Review` -> `Pending MD Approval` -> `Approved` -> `Paid`
-
-Payroll can also be `Rejected`.
-
-Role behavior:
-
-- Admin can prepare payroll, manage clients, manage employees, and submit payroll for review.
-- Accounts Officer can review payroll, manage remittances, mark vouchers/payroll paid, and manage expenses.
-- MD has full access to every module and every action.
-- Viewer can view reports.
-
-Duplicate payroll uploads for the same client/month are blocked until the user ticks the replacement confirmation on the preview page.
-
-## Reports and Audit
-
-The Reports page supports client/month filters and Excel export for the monthly payroll summary. The Audit Trail records important actions such as payroll upload, import confirmation, review, approval, rejection, voucher generation, payment, remittance payment, expense creation, and expense approval.
-
-Unknown columns are shown as `unmapped` on the preview page.
-
-## Stress Workbook Testing
-
-Use the stress workbook `chrisnat_payroll_stress_test_149_workers.xlsx` from **Upload Payroll Excel**.
-
-Test flows:
-
-- Single Client Import: `MSC Ghana Ltd`
-- Single Client Import: `Stellar Logistics`
-- Multi-Client Workbook Import
-- Workbook with no valid payroll sheets
-- Duplicate upload for the same client/month
-
-Expected behavior: the workbook should no longer produce `0 rows`, `0 workers`, and `GH₵0.00`. The system should identify payroll sheets, count unique workers, calculate totals, and show edge-case warnings.
-
-## Client Company Separation
-
-Every payroll upload must be attached to a selected client company. The preview page shows:
-
-- Selected client company
-- Detected company name from the Excel file, when found
-- Total rows found
-- Total unique workers
-- Duplicate entries found
-- Suggested mappings
-- Validation warnings
-
-Payroll exports include the client name and payroll month in the filename.
-
-## Validation Warnings
-
-The MVP flags missing staff ID, missing employee name, missing SSNIT number, missing Ghana Card number, missing bank/MoMo details, missing or negative net pay, duplicate workers in the same client payroll, worker overlap across clients for the same month, repeated uploads for the same client/month, inactive/terminated workers, high salary, zero salary, high deductions, gross/basic mismatches, net pay mismatches, missing PAYE, and missing SSNIT.
-
-This is not a Ghana tax compliance engine. Uploaded PAYE and SSNIT values are used as-is for Phase 1.
-
-## Next Improvements After Questionnaire Answers
-
-- Confirm exact approval levels and audit trail requirements.
-- Add Flask-Migrate migrations before production-style changes.
-- Add configurable statutory rates and payroll calculation policies.
-- Add detailed invoice generation per client company.
-- Add payslip PDF generation through a dedicated PDF service.
-- Add stronger Excel templates, import history, and rollback tools.
-- Add automated tests around imports, approvals, exports, permissions, and finance calculations.
+This repository directory is historically named `pmvp-v1`, and a few internal
+identifiers retain the founding operator's name (**Chrisnat Limited**): the
+`chrisnat_admin` / `chrisnat_reviewer` role strings, the `@chrisnat.local` demo
+login domain, the GRA employer defaults, and the operator-side export filenames.
+These are **business entities and persisted identifiers**, deliberately left
+unchanged; renaming them would be a data/behaviour migration, not a rebrand. The
+**product** is Payrolla throughout. See the branding taxonomy in the project's
+engineering notes for the full rationale.

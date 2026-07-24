@@ -26,7 +26,7 @@ def role_required(*roles):
                 flash("That area is limited to your company dashboard.", "warning")
                 return redirect(url_for("main.company_dashboard"))
             if current_user.role == "client_user" and "client_user" not in roles:
-                flash("Client portal access is archived while the payroll MVP is stabilized.", "warning")
+                flash("Client portal access is archived while Payrolla is stabilized.", "warning")
                 return redirect(url_for("main.dashboard"))
             if str(current_user.role).lower() in OPERATOR_SUPERUSERS:
                 return view(*args, **kwargs)
@@ -56,7 +56,7 @@ def login():
             session.clear()
             login_user(user)
             # Resolve the landing plane AFTER login so current_user is the new user:
-            # tenant users -> Company Dashboard, Chrisnat users -> oversight console.
+            # tenant users -> Company Dashboard, platform users -> oversight console.
             return redirect(url_for(landing_endpoint()))
         # Re-render with the submitted email preserved (never the password) and an
         # inline error, instead of wiping the form. Not a flash — the message is

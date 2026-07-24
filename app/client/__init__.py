@@ -11,7 +11,7 @@ Full self-service (Sina, 2026-07-16): client_admin/client_preparer manage their
 own employees AND upload a standard payroll workbook to prepare a run. The upload
 (``run_upload``) reuses the operator import pipeline with client_company_id forced
 to the tenant, then routes the new run through the Phase 5 risk gate
-(Submitted -> Held/Auto-Accepted). Raw-hours runs stay a Chrisnat operator flow.
+(Submitted -> Held/Auto-Accepted). Raw-hours runs stay a platform operator flow.
 Statutory rates are global and view-only for clients.
 """
 
@@ -250,7 +250,7 @@ def run_detail(run_id):
 # (create_payroll_run_from_payload, which runs the frozen statutory engine
 # identically) with client_company_id forced to the tenant, then routing the run
 # through the Phase 5 risk gate (Submitted -> Held/Auto-Accepted). Raw-hours
-# workbooks are refused; those remain a Chrisnat operator flow.
+# workbooks are refused; those remain a platform operator flow.
 
 
 def _create_import_draft(company, payload, source_filename, month, year):
@@ -569,7 +569,7 @@ def audit():
 # --- Payslip distribution ---------------------------------------------------
 # The client's own distribution surface. v1 primary channel is a payslip
 # download (single PDF or a run-wide ZIP); SMS / WhatsApp / email reuse the
-# Chrisnat distribution service and stay console-backed until real backends are
+# the platform distribution service and stay console-backed until real backends are
 # configured. Sending is client_admin-only; viewing/downloading is any tenant
 # user. A run is fetched via tenant_get_or_404 so a client can only ever
 # distribute their own run.

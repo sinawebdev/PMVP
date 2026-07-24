@@ -1,4 +1,4 @@
--- PMVP v1 — RLS Stage 1 (default-deny the auto-generated PostgREST API)
+-- Payrolla — RLS Stage 1 (default-deny the auto-generated PostgREST API)
 -- =====================================================================
 -- Decision (see MULTI_TENANT.md): tenant isolation is enforced at the
 -- application layer (Flask). RLS Stage 1 is a cheap, defense-in-depth
@@ -16,7 +16,7 @@
 --   select current_user, rolbypassrls from pg_roles
 --     where rolname = current_user;  -- expect postgres / t
 --
--- Idempotent: safe to re-run. Run once against a freshly bootstrapped pmvp-v1 DB
+-- Idempotent: safe to re-run. Run once against a freshly bootstrapped Payrolla DB
 -- (already applied to project ejpqjfmnnlgvsqszalmm on first setup).
 
 DO $$

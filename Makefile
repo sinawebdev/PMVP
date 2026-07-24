@@ -16,7 +16,7 @@ shell:
 	docker compose exec web bash
 
 db-shell:
-	docker compose exec db psql -U chrisnat -d chrisnat
+	docker compose exec db psql -U payrolla -d payrolla
 
 # This project uses ensure_phase2_schema() + db.create_all() for additive
 # schema changes (no Flask-Migrate migrations folder). `make migrate` re-runs

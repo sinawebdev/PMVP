@@ -1,6 +1,6 @@
 """add tenant branding pack to client_company
 
-PMVP v1 Phase 4, Slice 5 — per-tenant branding for payslip emails: brand name,
+Payrolla Phase 4, Slice 5 — per-tenant branding for payslip emails: brand name,
 accent colour, email sender name, and reply-to. Each NULL falls back to the
 global config, so unset tenants are unchanged. Additive.
 

@@ -180,7 +180,7 @@ def validate_layout(ws, name_row):
 # from GHANA CARD onward two columns left. A fixed position that is right for
 # one is wrong for the other — and, unlike the hours block, these columns were
 # never validated, so a shift silently seeded a bank name into the SSNIT field
-# and a branch into the account number (PMVP-05 Issue 3). We now locate each
+# and a branch into the account number. We now locate each
 # field by matching its header label in the element/NAMES header band.
 
 

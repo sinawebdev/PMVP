@@ -1,6 +1,6 @@
 """add distribution_batch_id to payslip_delivery
 
-PMVP v1 Phase 3, Slice 6 — link each delivery to the batch that last (re)sent it
+Payrolla Phase 3, Slice 6 — link each delivery to the batch that last (re)sent it
 so distribution history can attribute a delivery to the initiating operator and
 filter by batch. Nullable/additive; existing rows keep NULL.
 

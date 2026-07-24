@@ -33,7 +33,7 @@ def resolve_database_uri(local_sqlite_path):
 
 def database_type_label(database_uri):
     # Match both the bare "postgresql://" form and the driver-qualified
-    # "postgresql+psycopg2://" form (the DATABASE_URL shape the pmvp-v1 pooler
+    # "postgresql+psycopg2://" form (the DATABASE_URL shape the Supabase pooler
     # uses). Without the "+driver" case this returns "Other", which silently
     # skips the Supabase connection-resilience engine options below.
     if str(database_uri or "").startswith(("postgresql://", "postgresql+")):
@@ -135,7 +135,7 @@ def create_app():
     app.config["COMPANY_NAME"] = os.getenv("COMPANY_NAME", "Sinaforte Technologies")
     app.config["SERVICE_SLUG"] = os.getenv("SERVICE_SLUG", "payrolla")
     app.config["SQLALCHEMY_DATABASE_URI"] = resolve_database_uri(
-        os.path.join(app.instance_path, "chrisnat_payroll.db")
+        os.path.join(app.instance_path, "payrolla.db")
     )
     assert_persistent_database_config(app)
     # Never sign production sessions with the shared dev fallback: anyone who knows
@@ -475,7 +475,7 @@ def create_app():
         #
         # Tenant-scoped: a client user must never see other tenants' company
         # names in the sidebar, so a tenant user's list is limited to their own
-        # company; platform (Chrisnat) users see all active clients.
+        # company; platform (operator) users see all active clients.
         try:
             query = ClientCompany.query.filter_by(status="Active")
             tenant_id = active_tenant_id()

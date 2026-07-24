@@ -1,10 +1,10 @@
-# PMVP v1 — Multi-Tenant Model
+# Payrolla — Multi-Tenant Model
 
-PMVP v1 turns Chrisnat's single-operator payroll app into a multi-tenant SaaS:
-client companies log in to see and manage **only their own** data, while Chrisnat
-operates an oversight/control plane above every tenant. This document is the
-canonical description of *how* that isolation is guaranteed. For the route-by-route
-disposition, see [AUDIT.md](AUDIT.md).
+Payrolla is a multi-tenant payroll SaaS: client companies log in to see and manage
+**only their own** data, while the platform operator runs an oversight/control
+plane above every tenant. This document is the canonical description of *how* that
+isolation is guaranteed. For the route-by-route disposition, see
+[AUDIT.md](AUDIT.md).
 
 The payroll **engine is frozen**: `app/raw_engine/*`, `app/payroll_calculations/*`,
 `app/money.py`, and `StatutoryRate.compute_*` are unchanged. Identical inputs
@@ -17,7 +17,7 @@ Every request belongs to exactly one plane, decided **only** by
 
 | | `client_company_id` | Who | Sees |
 |---|---|---|---|
-| **Platform (Chrisnat)** | `NULL` | operators / oversight | across all tenants |
+| **Platform (operator)** | `NULL` | operators / oversight | across all tenants |
 | **Tenant (client)** | a company id | client_admin / client_preparer | only that company |
 
 Roles (`app/roles.py`) determine permissions *within* a plane; they never decide
@@ -25,7 +25,9 @@ the plane. A misassigned role can therefore never widen a tenant user's data
 horizon — the plane is set by the (NULL-or-not) company id alone.
 
 - **Platform roles:** `chrisnat_admin`, `chrisnat_reviewer` (+ legacy operator
-  roles `admin`, `md`, `payroll_officer`, …).
+  roles `admin`, `md`, `payroll_officer`, …). The `chrisnat_*` strings are a
+  stable, persisted role vocabulary retained from the founding operator; they are
+  treated as identifiers, not branding (see `app/roles.py`).
 - **Tenant roles:** `client_admin` (can approve; maker-checker is off for v1) and
   `client_preparer`.
 
@@ -90,7 +92,7 @@ All scoping goes through one module so it can never be forgotten:
 
 A client-submitted run does not auto-approve. It enters `Submitted`, is scored by
 the deterministic risk gate (`app/risk.py`), and lands in either **`Held`** (parked
-for Chrisnat review) or **`Auto-Accepted`**. Three settled rules; a run tripping
+for platform review) or **`Auto-Accepted`**. Three settled rules; a run tripping
 **any** rule is held:
 
 1. **New-client hold** — a client's first **2** runs are always held.
@@ -98,8 +100,8 @@ for Chrisnat review) or **`Auto-Accepted`**. Three settled rules; a run tripping
    run (Approved/Processed).
 3. **Headcount swing** — worker count moves **>20%** from that run.
 
-Chrisnat releases a held run into `Pending Approval` from the oversight Risk Queue
-(`/oversight/risk`). The operator lifecycle
+The platform operator releases a held run into `Pending Approval` from the
+oversight Risk Queue (`/oversight/risk`). The operator lifecycle
 (`Draft → Pending Approval → Approved → Processed`) is untouched; the gate is
 additive. → `tests/test_risk.py`
 
@@ -109,8 +111,8 @@ additive. → `tests/test_risk.py`
 in-app). `record_event` (`app/events.py`) appends an event and fans it out to
 recipient users as per-user `Notification` rows. The flow is bidirectional:
 
-- Chrisnat **holds/releases** a run → the client's users are notified.
-- A client **distributes payslips** or **uploads a run** → Chrisnat oversight is
+- The platform **holds/releases** a run → the client's users are notified.
+- A client **distributes payslips** or **uploads a run** → platform oversight is
   notified.
 
 → `tests/test_events.py`
@@ -126,4 +128,4 @@ is `@tenant_required` and scoped through the choke point.
 
 Money stays **Float (stored) + Decimal (computed via `app/money.py`)** — it is
 **not** converted to integer pesewas. This preserves exact parity with the
-internal app's figures.
+payroll engine's reference figures (`tests/test_engine_parity.py`).

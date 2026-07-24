@@ -1,6 +1,6 @@
 """add scheduled_for to distribution_batch
 
-PMVP v1 Phase 3, Slice 7 — scheduled distribution. A batch with scheduled_for
+Payrolla Phase 3, Slice 7 — scheduled distribution. A batch with scheduled_for
 set sits in the new `scheduled` status until the worker activates it at/after
 that time. Additive column; existing rows keep NULL (run-as-soon-as-possible).
 

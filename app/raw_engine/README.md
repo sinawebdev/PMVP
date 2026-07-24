@@ -75,10 +75,10 @@ existing one to re-add a dropped *column*).
 
 ```bash
 # 1. throwaway Postgres (either works)
-docker run -d --name pg_dryrun -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=chrisnat_dryrun -p 5433:5432 postgres:16
-#   ...or a scratch cluster: initdb -D <dir> --auth-local=trust && pg_ctl -D <dir> -o "-p 5433" start && createdb chrisnat_dryrun
+docker run -d --name pg_dryrun -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=payrolla_dryrun -p 5433:5432 postgres:16
+#   ...or a scratch cluster: initdb -D <dir> --auth-local=trust && pg_ctl -D <dir> -o "-p 5433" start && createdb payrolla_dryrun
 
-export FLASK_APP=run.py DATABASE_URL="postgresql://postgres:pw@localhost:5433/chrisnat_dryrun"
+export FLASK_APP=run.py DATABASE_URL="postgresql://postgres:pw@localhost:5433/payrolla_dryrun"
 
 # 2. build the schema the production way, then mark migrations applied
 AUTO_INIT_DB=true python -c "from app import create_app; create_app()"   # create_all + seed

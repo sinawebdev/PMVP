@@ -1,12 +1,12 @@
 """Tenant resolution + scoping — the one choke point for multi-tenancy.
 
-Non-negotiable rules (PMVP v1 §4):
+Non-negotiable rules (see MULTI_TENANT.md):
 
   * The active tenant is resolved ONLY from ``current_user.client_company_id``.
     Never from a URL, form field, or query param. A tenant user cannot widen
     their horizon by editing a request.
   * Every tenant-scoped query goes through :func:`tenant_query` so scoping can't
-    be forgotten. Platform (Chrisnat) users have ``client_company_id`` NULL and
+    be forgotten. Platform (operator) users have ``client_company_id`` NULL and
     intentionally see across all tenants (the oversight/control plane).
   * Child tables with no direct ``client_company_id`` (payroll items, vouchers,
     remittances, payslip deliveries, raw entries/archives) are scoped by joining
@@ -65,7 +65,7 @@ def active_tenant_id():
     """The active tenant id, resolved ONLY from the logged-in user.
 
     Returns the tenant's ``client_company_id`` for a tenant user, or ``None`` for
-    a platform (Chrisnat) user or an anonymous request. ``None`` means "not tenant
+    a platform (operator) user or an anonymous request. ``None`` means "not tenant
     scoped" — platform users legitimately span all tenants.
     """
     if not getattr(current_user, "is_authenticated", False):
@@ -136,7 +136,7 @@ def owns_object(obj):
 def landing_endpoint():
     """Where a just-authenticated user should land.
 
-    Tenant (client) users -> their scoped Company Dashboard; platform (Chrisnat)
+    Tenant (client) users -> their scoped Company Dashboard; platform (operator)
     users -> the cross-tenant oversight console (the operator dashboard).
     """
     if active_tenant_id() is not None:
@@ -145,7 +145,7 @@ def landing_endpoint():
 
 
 def platform_required(view):
-    """Restrict a view to platform (Chrisnat) users — the oversight/control plane.
+    """Restrict a view to platform (operator) users — the oversight/control plane.
 
     A tenant (client) user hitting an oversight/operator route (which shows data
     across all tenants) is redirected to their own scoped Company Dashboard, never
@@ -169,7 +169,7 @@ def platform_required(view):
 def tenant_required(view):
     """Restrict a view to tenant (client) users — the client plane.
 
-    The mirror of :func:`platform_required`: a platform (Chrisnat) user has no
+    The mirror of :func:`platform_required`: a platform (operator) user has no
     single company, so they are sent to the oversight console. Anonymous users
     go through login first. Every client-plane route carries this so a platform
     user never lands inside a single tenant's scoped views by accident.
@@ -188,7 +188,7 @@ def tenant_required(view):
 def tenant_role_required(*roles):
     """Restrict a client-plane view to specific tenant roles (e.g. client_admin).
 
-    Layered on top of :func:`tenant_required`: a platform (Chrisnat) user is sent
+    Layered on top of :func:`tenant_required`: a platform (operator) user is sent
     to the oversight console; a tenant user whose role is not in ``roles`` is
     bounced to their Company Dashboard with a flash. The plane is still decided by
     ``client_company_id`` — the role only narrows permissions *within* the tenant

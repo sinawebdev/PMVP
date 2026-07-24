@@ -1,7 +1,7 @@
 """add job_title to employee
 
 Persists the JOB TITLE / Position parsed from the rich RAW-DATA seed workbook,
-which previously had nowhere to land on Employee (PMVP-05 known issue).
+which previously had nowhere to land on Employee.
 
 Revision ID: f4c2a1b9d7e3
 Revises: d2a4f6108e35

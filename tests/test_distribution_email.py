@@ -93,7 +93,7 @@ class SmtpSenderTestCase(unittest.TestCase):
         # Capture the MIME message by faking the SMTP transport.
         self.app.config.update(
             EMAIL_BACKEND="smtp", SMTP_HOST="smtp.example.com", SMTP_USE_TLS=False,
-            EMAIL_SENDER_NAME="Chrisnat Payroll", DEFAULT_FROM_EMAIL="payroll@chrisnat.io",
+            EMAIL_SENDER_NAME="Payrolla", DEFAULT_FROM_EMAIL="payroll@chrisnat.io",
             EMAIL_REPLY_TO="replies@chrisnat.io",
         )
         captured = {}
@@ -131,7 +131,7 @@ class SmtpSenderTestCase(unittest.TestCase):
 
         self.assertTrue(result.ok)
         mime = captured["mime"]
-        self.assertIn("Chrisnat Payroll", mime["From"])
+        self.assertIn("Payrolla", mime["From"])
         self.assertEqual(mime["Reply-To"], "replies@chrisnat.io")
         # The PDF attachment made it in.
         filenames = [p.get_filename() for p in mime.iter_attachments()]

@@ -2,26 +2,26 @@ services:
 
   db:
     image: postgres:16-alpine
-    container_name: chrisnat_db
+    container_name: payrolla_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB:       chrisnat
-      POSTGRES_USER:     chrisnat
-      POSTGRES_PASSWORD: chrisnat_dev
+      POSTGRES_DB:       payrolla
+      POSTGRES_USER:     payrolla
+      POSTGRES_PASSWORD: payrolla_dev
     volumes:
       - pgdata:/var/lib/postgresql/data
     # No host port publish by default — the web service reaches the DB internally
     # on db:5432. The host already runs Postgres on 5432. To inspect the DB from
     # the host, add e.g.  ports: ["5433:5432"]  (pick any free host port).
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chrisnat -d chrisnat"]
+      test: ["CMD-SHELL", "pg_isready -U payrolla -d payrolla"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   web:
     build: .
-    container_name: chrisnat_web
+    container_name: payrolla_web
     restart: unless-stopped
     depends_on:
       db:
@@ -32,7 +32,7 @@ services:
       FLASK_DEBUG:      "1"
       # Inside the compose network the database is reached via the service
       # name `db`, never localhost.
-      DATABASE_URL:     "postgresql://chrisnat:chrisnat_dev@db:5432/chrisnat"
+      DATABASE_URL:     "postgresql://payrolla:payrolla_dev@db:5432/payrolla"
       SECRET_KEY:       "change-this-in-production"
       # The app's load_dotenv() must not pull the local-dev .env (which leaves
       # DATABASE_URL unset for SQLite) into the container.
@@ -51,14 +51,14 @@ services:
   # worker instead of the web server. Handles SIGTERM for a graceful shutdown.
   worker:
     build: .
-    container_name: chrisnat_worker
+    container_name: payrolla_worker
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     environment:
       FLASK_APP:        "run.py"
-      DATABASE_URL:     "postgresql://chrisnat:chrisnat_dev@db:5432/chrisnat"
+      DATABASE_URL:     "postgresql://payrolla:payrolla_dev@db:5432/payrolla"
       SECRET_KEY:       "change-this-in-production"
       SKIP_DOTENV:      "true"
       PERSISTENCE_REQUIRED: "true"

@@ -1,6 +1,6 @@
 """add worker-reclaim fields to distribution_batch
 
-PMVP v1 Phase 5 — stuck-batch recovery. A batch left in `running` because its
+Payrolla Phase 5 — stuck-batch recovery. A batch left in `running` because its
 worker died mid-send is requeued by the worker's reclaim sweep; these columns
 attribute the claim (claimed_by_worker) and bound how many times a batch may be
 requeued before it is failed as a poison batch (reclaim_count). Both additive:

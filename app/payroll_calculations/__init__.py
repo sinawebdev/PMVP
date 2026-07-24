@@ -48,9 +48,6 @@ def bonus_concession_used_ytd(employee_id, year, exclude_run_id=None):
     ``productivity_bonus + end_of_year_bonus - bonus_excess`` — the same
     arithmetic ``StatutoryRate.split_bonus`` used to produce that item's
     stored bonus_excess in the first place."""
-    from app.models import PayrollItem, PayrollRun
-    from app.payroll_status import CLOSED_STATUSES
-
     if not employee_id:
         return 0.0
 

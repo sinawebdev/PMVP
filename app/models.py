@@ -163,12 +163,12 @@ class PayrollRun(db.Model):
     total_net_pay = db.Column(db.Float, default=0)
     total_paye = db.Column(db.Float, default=0)
     total_ssnit = db.Column(db.Float, default=0)
-    # Employer-side SSF (13%) for the whole run — a Chrisnat cost, not a
+    # Employer-side SSF (13%) for the whole run — an employer cost, not a
     # payslip deduction, persisted so remittances stop re-deriving it.
     total_ssnit_employer = db.Column(db.Float, default=0)
     notes = db.Column(db.Text)
     # 'standard' | 'raw'. Null means no file has been uploaded for the run yet.
-    # 'raw' marks a billable raw-hours import awaiting Chrisnat pay calculation.
+    # 'raw' marks a billable raw-hours import awaiting operator pay calculation.
     upload_type = db.Column(db.String(20), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
     reviewed_at = db.Column(db.DateTime)
@@ -404,7 +404,7 @@ class AuditTrail(db.Model):
 
 
 # ---------------------------------------------------------------------------
-# Domain events + in-app notifications (PMVP v1 Phase 6).
+# Domain events + in-app notifications (Payrolla Phase 6).
 # DomainEvent is an APPEND-ONLY business event log — richer and more structured
 # than AuditTrail (a typed event_type + JSON payload, scoped to a tenant). It is
 # never updated or deleted in the app. Notifications are the per-user in-app
@@ -467,7 +467,7 @@ CHANNEL_WHATSAPP = "whatsapp"
 CHANNEL_EMAIL = "email"
 CHANNEL_AUTO = "auto"
 # Concrete channels in fallback-preference order (worker-centric: phone first, since
-# Chrisnat workers are reached by momo/phone far more often than email).
+# Workers are reached by momo/phone far more often than email).
 DELIVERY_CHANNELS = (CHANNEL_SMS, CHANNEL_WHATSAPP, CHANNEL_EMAIL)
 
 
@@ -825,7 +825,7 @@ class WageRateProfile(db.Model):
 class RawPayEntry(db.Model):
     """One imported raw-hours line per (payroll run, employee, pay code).
 
-    Stores hours only — gross pay is calculated later by a Chrisnat operator,
+    Stores hours only — gross pay is calculated later by a platform operator,
     so this table deliberately holds no money fields."""
 
     __tablename__ = "raw_pay_entries"

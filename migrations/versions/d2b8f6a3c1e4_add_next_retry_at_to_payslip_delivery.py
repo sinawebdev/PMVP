@@ -1,6 +1,6 @@
 """add next_retry_at to payslip_delivery
 
-PMVP v1 Phase 3, Slice 3 — the retry system. A failed PayslipDelivery whose
+Payrolla Phase 3, Slice 3 — the retry system. A failed PayslipDelivery whose
 next_retry_at is set (and past) is picked up by the worker for an automatic
 retry; NULL once the retry limit is exhausted (the "final failure" marker).
 Purely additive.

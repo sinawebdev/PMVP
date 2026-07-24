@@ -1,4 +1,4 @@
-"""Domain events + in-app notification fan-out (PMVP v1 Phase 6).
+"""Domain events + in-app notification fan-out (Payrolla Phase 6).
 
 One entry point, :func:`record_event`, appends a :class:`DomainEvent` (the
 append-only business-event log) and fans it out to recipient users as
@@ -104,7 +104,7 @@ def tenant_users(client_company_id):
 
 
 def platform_admins():
-    """Chrisnat oversight users who should hear about tenant-side activity."""
+    """Platform oversight users who should hear about tenant-side activity."""
     return (
         User.query.filter(
             User.client_company_id.is_(None),

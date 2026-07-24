@@ -1,4 +1,4 @@
-"""In-app notifications (PMVP v1 Phase 6).
+"""In-app notifications (Payrolla Phase 6).
 
 Per-user notification inbox for BOTH planes. A Notification is owned by one
 recipient (``user_id``), so every query here filters by ``current_user.id`` —
@@ -8,7 +8,7 @@ cross-tenant surface: the owning user IS the scope.
 
 from datetime import datetime, timezone
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, redirect, render_template, url_for
 from flask_login import current_user, login_required
 
 from app import db

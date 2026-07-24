@@ -3,7 +3,7 @@
 Confirms the policy settled with Sina: chrisnat_admin sees the operator nav and
 may reach operator routes gated by ``role_required`` (statutory, audit, …) — which
 the legacy operator role lists did not grant. Runs on in-memory SQLite (never the
-pmvp-v1 Supabase DB).
+production Supabase DB).
 """
 
 import os

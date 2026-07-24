@@ -3,7 +3,6 @@ import os
 import tempfile
 from datetime import datetime, timezone
 
-import pandas as pd
 from sqlalchemy.orm import joinedload
 
 from flask import (
@@ -16,7 +15,7 @@ from flask import (
     send_file,
     url_for,
 )
-from flask_login import current_user, login_required
+from flask_login import current_user
 
 from app import db
 from app.audit import record_audit
@@ -61,7 +60,6 @@ from app.models import (
     PayslipDelivery,
     RawPayEntry,
     RawUploadArchive,
-    Remittance,
     WageRateProfile,
 )
 from app.payroll_status import (
@@ -233,7 +231,7 @@ def build_run_payload_from_extraction(
     known_names,
     detected_company_name=None,
 ):
-    # Company detection is fully retired. PMVP already knows the company from
+    # Company detection is fully retired. Payrolla already knows the company from
     # the selected/matched client at upload time, and the old free-text Excel
     # scan (detect_company_name, which produced false positives such as the
     # "GH CARD" column header) is gone. PayrollRun.detected_company_name is
@@ -274,7 +272,6 @@ def build_run_payload_from_extraction(
 
 
 def build_single_payload(file_path, source_filename, client, month, year, selected_sheet_name=None):
-    known_names = [company.name for company in ClientCompany.query.all()]
     sheet_names = workbook_sheet_names(file_path)
     candidates = payroll_sheet_candidates(file_path)
     current_app.logger.info(
@@ -1193,7 +1190,7 @@ def calculate(run_id):
         # confirm and never write RawPayEntry hours. The legacy hours-first
         # rebuild below deletes every item and recreates them from RawPayEntry;
         # for an Engine run that set is empty, so it would wipe the payroll to
-        # nothing (PMVP-05 Issue 1). Only take the destructive rebuild when there
+        # nothing. Only take the destructive rebuild when there
         # are actually raw-hours entries to rebuild from; otherwise the pay is
         # already computed — treat Calculate Pay as a safe no-op.
         if RawPayEntry.query.filter_by(payroll_run_id=payroll_run.id).count() == 0:
@@ -1779,8 +1776,8 @@ def purge_payroll_run(payroll_run):
     RawPayEntry.query.filter_by(payroll_run_id=payroll_run.id).delete()
     # RawUploadArchive stores the original workbook bytes behind a NOT-NULL FK to
     # the run with no DB-side cascade. Every Raw Engine seed writes one, so
-    # without this delete, removing a raw run raised IntegrityError -> 500
-    # (PMVP-05 Issue 2). Removed here — the archive is worthless without its run.
+    # without this delete, removing a raw run raised IntegrityError -> 500.
+    # Removed here — the archive is worthless without its run.
     RawUploadArchive.query.filter_by(payroll_run_id=payroll_run.id).delete()
     ImportBatch.query.filter_by(payroll_run_id=payroll_run.id).delete()
     db.session.delete(payroll_run)  # PayrollItems cascade via the relationship

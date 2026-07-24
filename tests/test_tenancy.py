@@ -1,6 +1,6 @@
 """Phase 1 — roles, tenant resolution, and login routing.
 
-Runs against a fresh in-memory SQLite DB (never the pmvp-v1 Supabase DB).
+Runs against a fresh in-memory SQLite DB (never the production Supabase DB).
 SKIP_DOTENV keeps the repo .env (PERSISTENCE_REQUIRED=true, pooler URL) out of
 the test process so the SQLite persistence assertion doesn't trip.
 """

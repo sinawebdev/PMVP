@@ -19,7 +19,7 @@ ICU_MEMBER_COLUMN = "ICU Member"
 # Read-only reference columns, prefilled from the seeded Employee record so the
 # operator/client can verify master details without re-entering them. They are
 # NOT parsed back on upload (parse_thin_workbook ignores unknown headers), so
-# they never affect computation — reference only (PMVP-05 Feature 4).
+# they never affect computation — reference only.
 REFERENCE_COLUMNS = ["Bank", "A/C No.", "SSNIT No.", "Department", "Position", "Ghana Card", "MoMo No."]
 
 

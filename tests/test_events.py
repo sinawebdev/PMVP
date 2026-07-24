@@ -1,8 +1,8 @@
 """Phase 6 — domain events + in-app notifications.
 
 The append-only DomainEvent log records business events and fans them out to the
-right users: a Chrisnat hold/release notifies the client's users (platform ->
-tenant); a client's payslip distribution notifies Chrisnat oversight (tenant ->
+right users: a platform hold/release notifies the client's users (platform ->
+tenant); a client's payslip distribution notifies platform oversight (tenant ->
 platform). The Notification inbox is strictly per-user.
 """
 

@@ -1,6 +1,6 @@
 """add distribution_worker_heartbeat
 
-PMVP v1 Phase 4 — worker deployment hardening. One row per named worker process,
+Payrolla Phase 4 — worker deployment hardening. One row per named worker process,
 upserted on each poll, so the monitoring dashboard can see an external
 `flask distribution-worker` process (the previous heartbeat was in-process only).
 New table; purely additive.

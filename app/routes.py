@@ -31,8 +31,8 @@ main_bp = Blueprint("main", __name__)
 @main_bp.route("/")
 def index():
     # Signed-in users go to their plane's landing (tenant -> Company Dashboard,
-    # Chrisnat -> oversight console); everyone else sees the public marketing
-    # landing that positions push-distribution vs portal-only competitors.
+    # platform operator -> oversight console); everyone else sees the public
+    # marketing landing that positions push-distribution vs portal-only competitors.
     if current_user.is_authenticated:
         from app.tenancy import landing_endpoint
 
@@ -44,7 +44,7 @@ def index():
 def health():
     return {
         "status": "ok",
-        "service": current_app.config.get("SERVICE_SLUG", "chrisnat-payroll-mvp"),
+        "service": current_app.config.get("SERVICE_SLUG", "payrolla"),
     }
 
 
@@ -256,9 +256,9 @@ def company_dashboard():
     """Tenant plane landing — a client user's own company at a glance.
 
     Hard-scoped to ``current_user.client_company_id`` via tenant_query. A platform
-    (Chrisnat) user has no single company, so they are sent to the oversight
-    console instead. This is a Phase 1 shell; the full client interface (payroll
-    runs, payslips, employees, etc.) is built out in Phase 3.
+    (operator) user has no single company, so they are sent to the oversight
+    console instead. The full client interface (payroll runs, payslips,
+    employees, etc.) hangs off this landing.
     """
     from app.tenancy import active_tenant_id, is_platform_context, tenant_query
 
