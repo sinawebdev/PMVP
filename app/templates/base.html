@@ -23,7 +23,7 @@
 <div class="app-shell">
     <aside class="sidebar" id="primary-nav">
         <div class="brand">
-            <span class="brand-mark logo-bounce"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="{{ app_brand_name }}"></span>
+            <span class="brand-mark"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="{{ app_brand_name }}"></span>
             <div>
                 <strong>{{ app_brand_name }}</strong>
                 <small>{{ app_short_name }}</small>
@@ -81,7 +81,7 @@
     </aside>
     <main id="main-content" class="main-content" tabindex="-1">
         {% block breadcrumbs %}{% endblock %}
-        <header class="topbar page-enter {% block topbar_class %}{% endblock %}">
+        <header class="topbar {% block topbar_class %}{% endblock %}">
             <div class="topbar-copy">
                 <h1>{% block page_title %}Dashboard{% endblock %}</h1>
                 <p class="page-intro">{% block page_intro %}Track payroll, approvals, client costs, and finance work from one calm command center.{% endblock %}</p>

@@ -46,8 +46,11 @@ body {
     font-size: 12px;
 }
 
+/* One-shot entrance for the brand mark on the anonymous screens (login,
+   forgot password). Deliberately NOT used in the app shell: the sidebar mark is
+   persistent chrome and must never animate. */
 .logo-bounce {
-    animation: cnPulse 2.4s ease-in-out infinite;
+    animation: logoIn 420ms var(--ease-out) both;
 }
 
 .sidebar .nav-link {
@@ -341,12 +344,8 @@ body {
     margin-top: 8px;
 }
 
-.page-enter {
-    animation: slideFade 520ms ease both;
-}
-
 .content-enter {
-    animation: riseFade 520ms ease both;
+    animation: contentFade 200ms var(--ease-out) both;
 }
 
 .stats-grid {
@@ -607,6 +606,14 @@ body {
 .btn {
     border-radius: 10px;
     font-weight: 700;
+    /* Press feedback. Asymmetric on purpose: the press snaps (60ms), the release
+       settles (160ms). Bootstrap's own .btn transition covers colour only. */
+    transition: transform 160ms var(--ease-out);
+}
+
+.btn:active {
+    transform: scale(0.97);
+    transition-duration: 60ms;
 }
 
 .btn i {
@@ -870,23 +877,23 @@ body {
     transform: rotate(180deg);
 }
 
-@keyframes cnPulse {
-    0%, 100% {
-        transform: translateY(0) scale(1);
-    }
-    45% {
-        transform: translateY(-6px) scale(1.04);
-    }
-}
-
-@keyframes slideFade {
+@keyframes logoIn {
     from {
         opacity: 0;
-        transform: translateY(-10px);
+        transform: scale(0.92);
     }
     to {
         opacity: 1;
-        transform: translateY(0);
+        transform: none;
+    }
+}
+
+@keyframes contentFade {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
     }
 }
 
@@ -1184,16 +1191,23 @@ body {
     width: 40%;
     border-radius: 999px;
     background: linear-gradient(90deg, var(--brand), var(--brand-dark));
-    animation: cnIndeterminate 1.4s ease-in-out infinite;
+    animation: cnIndeterminate 1.4s linear infinite;
+    will-change: transform;
 }
 .upload-note { color: var(--muted); font-size: 13px; }
 @keyframes cnIndeterminate {
-    0%   { margin-left: -40%; }
-    50%  { margin-left: 60%; }
-    100% { margin-left: 100%; }
+    0%   { transform: translateX(-100%); }
+    50%  { transform: translateX(150%); }
+    100% { transform: translateX(250%); }
 }
 @media (prefers-reduced-motion: reduce) {
-    .upload-progress-bar { animation: none; width: 100%; }
+    /* No sweep. Keep the bar static but de-emphasised, so it reads as an
+       indeterminate busy state rather than a completed 100% bar. */
+    .upload-progress-bar {
+        animation: none;
+        width: 100%;
+        opacity: .55;
+    }
 }
 
 /* ============================================================================
