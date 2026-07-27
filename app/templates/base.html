@@ -85,7 +85,9 @@
             <div class="topbar-copy">
                 <h1>{% block page_title %}Dashboard{% endblock %}</h1>
                 <p class="page-intro">{% block page_intro %}Track payroll, approvals, client costs, and finance work from one calm command center.{% endblock %}</p>
-                <p class="signed-in mb-0">{{ current_user.name }} · {{ current_user.role|role_label }}</p>
+                {# Personalised greeting on every operator page — one resolution
+                   rule (app.resolve_display_name) shared with the tenant portal. #}
+                <p class="signed-in mb-0">{{ user_greeting }} · {{ current_user.role|role_label }}</p>
                 <div class="topbar-actions">
                     {% block page_actions %}{% endblock %}
                 </div>

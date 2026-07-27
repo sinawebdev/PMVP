@@ -16,11 +16,22 @@ os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from app import create_app, db  # noqa: E402
 from app.models import ClientCompany, PayrollRun, User  # noqa: E402
-from app.payroll_status import APPROVED, AUTO_ACCEPTED, DRAFT, HELD, PENDING_APPROVAL  # noqa: E402
+from app.payroll_status import (  # noqa: E402
+    APPROVED,
+    AUTO_ACCEPTED,
+    DRAFT,
+    HELD,
+    PENDING_APPROVAL,
+    RISK_RELEASED,
+    run_progress,
+)
 from app.risk import (  # noqa: E402
     HEADCOUNT_SWING_PCT,
     NET_PAY_VARIANCE_PCT,
     evaluate_run,
+    held_run_count,
+    risk_badge,
+    risk_summary,
 )
 
 _BASE = datetime(2026, 1, 1, 12, 0, 0)
@@ -166,6 +177,50 @@ class RiskOversightRoutesTestCase(unittest.TestCase):
             self.client.post(f"/oversight/runs/{self.run_id}/release").status_code, 302
         )
         self.assertEqual(db.session.get(PayrollRun, self.run_id).status, PENDING_APPROVAL)
+
+    def test_release_clears_every_stale_risk_indicator(self):
+        """Releasing a hold must stop the run reading as held EVERYWHERE.
+
+        Regression: release moved PayrollRun.status off Held but left
+        risk_status at 'held', so the dashboard counter/panel, the run's risk
+        badge, and the tenant's own run page all kept reporting a hold that had
+        already been released."""
+        self._login("chrisnat.admin@chrisnat.local")
+        self.client.post(f"/oversight/runs/{self.run_id}/risk-check")
+
+        # Held: counted on the dashboard and listed in the queue.
+        self.assertEqual(held_run_count(), 1)
+        dashboard = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("Held for Risk Review", dashboard)
+        self.assertIn("Risk gate: Held", self.client.get(
+            f"/payroll/runs/{self.run_id}").get_data(as_text=True))
+
+        self.client.post(f"/oversight/runs/{self.run_id}/release")
+        run = db.session.get(PayrollRun, self.run_id)
+
+        # Verdict moved off 'held' — reasons kept for the audit record.
+        self.assertEqual(run.status, PENDING_APPROVAL)
+        self.assertEqual(run.risk_status, RISK_RELEASED)
+        self.assertIsNotNone(run.risk_reasons)
+
+        # Every derived indicator has cleared.
+        self.assertEqual(held_run_count(), 0)
+        self.assertEqual(risk_summary()["held_runs"], [])
+        self.assertEqual(risk_badge(run)["label"], "Released")
+        self.assertIn(
+            "No runs are currently held",
+            self.client.get("/oversight/risk").get_data(as_text=True),
+        )
+        dashboard = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertNotIn("Held for Risk Review", dashboard)
+        detail = self.client.get(f"/payroll/runs/{self.run_id}").get_data(as_text=True)
+        self.assertIn("Risk gate: Released", detail)
+        self.assertNotIn("Risk gate: Held", detail)
+
+        # The lifecycle stepper still records that it passed THROUGH the hold.
+        self.assertEqual(
+            next(s["state"] for s in run_progress(run) if s["key"] == "held"), "done"
+        )
 
     def test_risk_check_rejects_closed_run(self):
         self._login("chrisnat.admin@chrisnat.local")

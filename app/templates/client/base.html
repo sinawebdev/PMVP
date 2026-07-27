@@ -24,7 +24,7 @@
         <span class="brand-mark">{{ company.name[:2] | upper }}</span>
         <div class="portal-brand-copy">
           <strong>{{ company.name }}</strong>
-          <small>Company portal · {{ current_user.name }}</small>
+          <small>Company portal · {{ user_display_name }}</small>
         </div>
       </div>
       <nav class="portal-nav" aria-label="Company portal">

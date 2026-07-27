@@ -1,20 +1,66 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Payrolla logo">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 138" role="img" aria-label="Payrolla">
+  <!--
+    PAYROLLA ICON — hand-constructed geometry. No tracing, no auto-vectorisation,
+    no embedded bitmap. Every number is derived, not eyeballed.
+
+    The body is delivered as an OUTLINED shape rather than a live stroke. That is
+    deliberate: a stroke's inner corners are always sharp, so a stroked form
+    cannot produce the rounded cut-out this mark needs. Outlining puts every
+    radius under explicit control while keeping the wall thickness constant.
+
+      wall thickness   18, everywhere:
+                         outer top    11 -> opening top     29
+                         opening base 89 -> outer base     107
+                         stem edge    23 -> opening left    41
+                         outer bend   48 -> opening bend    30
+      bend             outer r48 and inner r30 are CONCENTRIC on (62,59), which
+                       is what holds the thickness at exactly 18 around the
+                       whole curve; both chords equal their diameters, so each
+                       is an exact semicircle and meets the horizontal runs with
+                       a horizontal tangent — G1 continuous, no visible kink
+      cut-out          51 x 60 rounded slot: r30 semicircular right end (exactly
+                       half its height), r12 corners at the left
+      junction         r3 concave fillet where the bowl underside meets the stem,
+                       so that corner is eased rather than cut
+      artwork          99 x 117 (height slightly greater than width), centred in
+                       the 120 x 138 viewBox with balanced 10-11 unit padding
+
+    Drawing order matters: the leaf is laid down FIRST so the body covers where
+    the teardrop closes back into it. That is what makes the blend seamless —
+    there is no seam to hide because the join sits underneath.
+  -->
   <defs>
-    <linearGradient id="pl-p" x1="36" y1="22" x2="96" y2="104" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#31D6C2"/>
-      <stop offset=".52" stop-color="#17C3B2"/>
-      <stop offset="1" stop-color="#0E7064"/>
+    <!-- Primary gradient, a true 45 degrees: dx and dy are equal (+99, -99),
+         running bottom-left (deep) to top-right (bright). -->
+    <linearGradient id="pa-body" x1="11" y1="119" x2="110" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0D4D4D"/>
+      <stop offset="1" stop-color="#17C3B2"/>
     </linearGradient>
-    <linearGradient id="pl-fold" x1="14" y1="80" x2="42" y2="114" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#12655C"/>
-      <stop offset="1" stop-color="#0A3B39"/>
+    <!-- Leaf gradient, vertical. -->
+    <linearGradient id="pa-leaf" x1="20" y1="82" x2="20" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#063737"/>
+      <stop offset="1" stop-color="#0D4D4D"/>
+    </linearGradient>
+    <!-- The only lighting in the mark: a very subtle white wash that fades out
+         by mid-height. No shadow, no bevel, no emboss. -->
+    <linearGradient id="pa-sheen" x1="32" y1="11" x2="32" y2="76" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".14"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
   </defs>
-  <!-- folded ribbon tail — the deep-teal underside curling from the stem base -->
-  <path d="M35 70c1 19-6 31-23 39 11-12 9-25 17-32 2-2 4-4 6-7z" fill="url(#pl-fold)"/>
-  <!-- bold rounded "P": bowl + stem -->
-  <g fill="none" stroke="url(#pl-p)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M43 26h17a20 20 0 0 1 0 40H43"/>
-    <path d="M43 26v66"/>
-  </g>
+
+  <!-- Leaf: a teardrop, not a stroke. Rises from beneath the left of the stem,
+       sweeps down and out, and converges to a true point at (11,128) where its
+       two flanks meet at a cusp. Its closing edge lies inside the stem band
+       (x 23-41), so the body covers it completely. -->
+  <path d="M23 82C21 100 17 116 11 128C22 117 32 109 40 92Z" fill="url(#pa-leaf)"/>
+
+  <!-- Body: outer contour first, then the cut-out. evenodd knocks the second
+       subpath out of the first, so the two are one shape with one fill. -->
+  <path fill-rule="evenodd" fill="url(#pa-body)"
+        d="M32 11H62A48 48 0 0 1 62 107H44A3 3 0 0 0 41 110A9 9 0 0 1 23 110V20A9 9 0 0 1 32 11Z
+           M53 29H62A30 30 0 0 1 62 89H53A12 12 0 0 1 41 77V41A12 12 0 0 1 53 29Z"/>
+  <path fill-rule="evenodd" fill="url(#pa-sheen)"
+        d="M32 11H62A48 48 0 0 1 62 107H44A3 3 0 0 0 41 110A9 9 0 0 1 23 110V20A9 9 0 0 1 32 11Z
+           M53 29H62A30 30 0 0 1 62 89H53A12 12 0 0 1 41 77V41A12 12 0 0 1 53 29Z"/>
 </svg>

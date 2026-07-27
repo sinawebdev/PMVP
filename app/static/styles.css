@@ -510,6 +510,34 @@ body {
     min-width: 0;
 }
 
+/* --- Cost Signal cell (Payroll Cost Per Client) -------------------------
+   Two stacked signals answering different questions — share of the largest
+   client (.sparkbar) and direction over recent months (sparkline + delta pill,
+   from macros/charts.html). Stacked rather than split into a new column so the
+   table keeps its existing six columns and width. */
+
+.cost-signal {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 120px;
+}
+
+.cost-signal-trend {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* Trend + "Highest" badge grouped on the card header's right-hand side. */
+.panel-header-signal {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
 .action-required {
     background:
         linear-gradient(135deg, rgba(254, 243, 199, 0.78), rgba(255, 255, 255, 0.95));

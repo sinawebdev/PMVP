@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 228 72" role="img" aria-label="Payrolla">
+  <!--
+    PAYROLLA HORIZONTAL LOCKUP — MONOCHROME.
+
+    For single-colour reproduction: stamps, engraving, fax-grade print,
+    watermarks, and any surface where the gradient cannot survive. Identical
+    geometry to the primary lockup; every gradient collapses to one ink.
+
+    Uses `currentColor` throughout, so the mark takes the colour of whatever it
+    sits in — brand ink by setting `color` to the brand-deep token, white on
+    dark, or pure black for print. One file instead of one per ink.
+
+    The leaf merges into the silhouette rather than being separated by a knockout
+    gap: its tip clears the stem entirely, so the teardrop still reads as a
+    distinct flourish, and there is no hairline gap to close up at small sizes.
+  -->
+  <g transform="translate(1.6 8.2) scale(0.4)" fill="currentColor">
+    <path d="M23 82C21 100 17 116 11 128C22 117 32 109 40 92Z"/>
+    <path fill-rule="evenodd"
+          d="M32 11H62A48 48 0 0 1 62 107H44A3 3 0 0 0 41 110A9 9 0 0 1 23 110V20A9 9 0 0 1 32 11Z
+             M53 29H62A30 30 0 0 1 62 89H53A12 12 0 0 1 41 77V41A12 12 0 0 1 53 29Z"/>
+  </g>
+
+  <text x="58" y="51"
+        font-family="Satoshi,'Plus Jakarta Sans',Inter,'SF Pro Display',system-ui,-apple-system,'Segoe UI',sans-serif"
+        font-size="42" font-weight="700" letter-spacing="-1" fill="currentColor">Payrolla</text>
+</svg>

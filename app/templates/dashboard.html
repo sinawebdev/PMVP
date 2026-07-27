@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% import "macros/lifecycle.html" as lc %}
+{% import "macros/charts.html" as ch %}
 {% block title %}Dashboard · {{ app_name }}{% endblock %}
-{% block page_title %}MD Dashboard{% endblock %}
+{% block page_title %}{{ user_greeting }}{% endblock %}
 {% block page_intro %}A management view of client company payroll costs, pending approvals, statutory totals, expense exposure, and warning signals for {{ selected_month }} {{ selected_year }}.{% endblock %}
 {% block page_actions %}
 <a class="btn btn-light btn-sm" href="{{ url_for('payroll.runs') }}"><i class="bi bi-file-earmark-arrow-up"></i>Create Payroll Run</a>
@@ -59,9 +60,17 @@
         <section class="panel">
             <div class="panel-header">
                 <h2><i class="bi bi-graph-up-arrow"></i>Payroll Cost Per Client</h2>
-                {% if highest_client %}
-                    <span class="badge text-bg-info">Highest: {{ highest_client.client }}</span>
-                {% endif %}
+                <div class="panel-header-signal">
+                    {# Book-wide direction, so the card reads as live at a glance
+                       before the eye reaches any individual row. #}
+                    {% if portfolio_trend.periods_covered > 1 %}
+                        {{ ch.sparkline(portfolio_trend, label="Total payroll cost trend", width=104, height=28) }}
+                        {{ ch.delta(portfolio_trend.change, "vs previous month") }}
+                    {% endif %}
+                    {% if highest_client %}
+                        <span class="badge text-bg-info">Highest: {{ highest_client.client }}</span>
+                    {% endif %}
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table align-middle">
@@ -73,13 +82,26 @@
                             <td>{{ item.workers }}</td>
                             <td>{{ item.payroll_cost|cedis }}</td>
                             <td>
-                                {% if item.payroll_cost and item.bar_percent %}
-                                <div class="sparkbar" title="{{ item.payroll_cost|cedis }}">
-                                    <span style="width: {{ item.bar_percent }}%"></span>
+                                {# Two complementary signals in one cell, so the
+                                   column count and table width are unchanged:
+                                   the bar answers "how big is this client
+                                   against the largest", the sparkline + pill
+                                   answer "which way is it moving". #}
+                                <div class="cost-signal">
+                                    {% if item.payroll_cost and item.bar_percent %}
+                                    <div class="sparkbar" title="{{ item.payroll_cost|cedis }} — {{ item.bar_percent }}% of the largest client this month">
+                                        <span style="width: {{ item.bar_percent }}%"></span>
+                                    </div>
+                                    {% else %}
+                                    <span class="text-muted" title="No payroll cost recorded yet">—</span>
+                                    {% endif %}
+                                    {% if item.trend.periods_covered > 1 %}
+                                    <div class="cost-signal-trend">
+                                        {{ ch.sparkline(item.trend, label=item.client ~ " cost trend") }}
+                                        {{ ch.delta(item.trend.change, "vs previous month") }}
+                                    </div>
+                                    {% endif %}
                                 </div>
-                                {% else %}
-                                <span class="text-muted" title="No payroll cost recorded yet">—</span>
-                                {% endif %}
                             </td>
                             <td><span class="badge {{ item.submission_class }}">{{ item.submission_status }}</span></td>
                             <td>

@@ -5,8 +5,13 @@
     <div class="page-head">
       <h1>{{ run.month }} {{ run.year }} payroll</h1>
       <p class="sub">Status: <span class="badge">{{ run.status }}</span></p>
-      {% if run.risk_status == 'held' and run.risk_reasons %}
-      <p class="sub">Held for {{ app_brand_name }} review — {{ run.risk_reasons }}</p>
+      {# Reads the same centralized verdict the operator sees, so a hold released
+         on the platform side clears here on the next page load. #}
+      {% set badge = risk_badge(run) %}
+      {% if badge and badge.tone == 'warning' and badge.reasons %}
+      <p class="sub">Held for {{ app_brand_name }} review — {{ badge.reasons }}</p>
+      {% elif badge and badge.label == 'Released' %}
+      <p class="sub">Reviewed and released by {{ app_brand_name }} — now awaiting approval.</p>
       {% endif %}
     </div>
     <div class="actions">

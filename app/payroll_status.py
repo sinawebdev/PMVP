@@ -23,6 +23,29 @@ AUTO_ACCEPTED = "Auto-Accepted"
 # Statuses the risk gate may (re)evaluate — never a closed/rejected run.
 RISK_GATED_STATUSES = (DRAFT, PENDING_APPROVAL, SUBMITTED, HELD, AUTO_ACCEPTED)
 
+# --- PayrollRun.risk_status vocabulary --------------------------------------
+# The persisted *verdict* of the risk gate, distinct from PayrollRun.status (the
+# lifecycle state). Kept here — beside the status vocabulary and with no imports
+# of its own — so both app/risk.py and app/payroll_status.py can read it without
+# a circular import.
+#
+#   held      — a rule tripped; the run is parked for oversight review
+#   accepted  — no rule tripped
+#   released  — WAS held, and an operator released it into approval
+#   None      — never scored
+#
+# RISK_RELEASED exists because a released run must stop reading as held
+# everywhere (dashboard counters, run badges, the client's own view) while the
+# lifecycle stepper still shows that it passed *through* the hold branch. Before
+# it, releasing a run moved PayrollRun.status off Held but left risk_status at
+# 'held' forever, so every risk_status-derived indicator went stale.
+RISK_HELD = "held"
+RISK_ACCEPTED = "accepted"
+RISK_RELEASED = "released"
+
+# The run went through the risk-hold branch at some point (stepper history).
+RISK_EVER_HELD = (RISK_HELD, RISK_RELEASED)
+
 # Dashboard counter + client card "still needs action" count.
 PENDING_STATUSES = (DRAFT, PENDING_APPROVAL)
 
@@ -103,11 +126,18 @@ def lifecycle_steps(status, calculated=False, distributed=False, held=False):
     rejected = status == REJECTED
     reached = _reached_stage_index(status, calculated, distributed)
     submitted_idx = _STAGE_INDEX["submitted"]
+    # A released run sits at Pending Approval, which maps back to the Submitted
+    # stage — so the ``idx < reached`` rule alone would render its Held step as a
+    # *future* step even though the hold is already behind it. It was held and is
+    # no longer: that step is done.
+    cleared_hold = held and status != HELD
     steps = []
     for key, label in LIFECYCLE_STAGES:
         idx = _STAGE_INDEX[key]
         if key == "held" and not held:
             state = "skipped"
+        elif key == "held" and cleared_hold and not rejected:
+            state = "done"
         elif rejected:
             state = "done" if idx <= submitted_idx else "skipped"
         elif idx < reached:
@@ -127,7 +157,9 @@ def run_progress(run, distributed=False):
     is passed in — detail pages compute it with one query; list pages pass a
     precomputed membership test — so this stays N+1-free."""
     calculated = (getattr(run, "total_workers", 0) or 0) > 0
-    held = run.risk_status == "held" or run.status == HELD
+    # A released run keeps its Held step (it really did pass through the hold),
+    # which is why this tests RISK_EVER_HELD rather than RISK_HELD alone.
+    held = run.risk_status in RISK_EVER_HELD or run.status == HELD
     return lifecycle_steps(
         run.status, calculated=calculated, distributed=distributed, held=held
     )
