@@ -120,16 +120,30 @@ def resolve_display_name(user):
 
 
 def format_role_label(value):
+    """Human-readable name for a role string.
+
+    Canonicalised through :func:`app.roles.normalise_role` first, so a historical
+    row still carrying a pre-rename alias (an audit entry written before the
+    ``chrisnat_*`` -> ``payrolla_*`` migration) renders under the current name
+    instead of showing retired branding beside the new one.
+    """
+    from app.roles import normalise_role
+
     labels = {
         "admin": "Admin",
         "md": "MD",
+        "payrolla_admin": "Payrolla Admin",
+        "payrolla_reviewer": "Payrolla Reviewer",
         "accounts_officer": "Accounts Officer",
         "payroll_officer": "Payroll Officer",
         "operations_supervisor": "Operations Supervisor",
+        "client_admin": "Client Admin",
+        "client_preparer": "Client Preparer",
         "client_user": "Client User",
         "viewer": "Viewer",
     }
-    return labels.get(str(value or "").lower(), str(value or "").replace("_", " ").title())
+    canonical = normalise_role(value)
+    return labels.get(canonical, canonical.replace("_", " ").title())
 
 
 def create_app():

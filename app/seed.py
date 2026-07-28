@@ -15,9 +15,9 @@ expenses across every category, both tenants populated — use the
 operator-triggered, and never runs at boot.
 
 Identities are professional, not demo-flavoured: platform staff on
-``@payrolla.com`` and client staff on their own company domain. The *role*
-vocabulary is untouched (see :mod:`app.roles`) — only the email addresses and
-display names changed, so every permission check behaves exactly as before.
+``@payrolla.com`` and client staff on their own company domain. Roles are
+imported from :mod:`app.roles` rather than spelled as literals, so the seeded
+roster always matches the vocabulary the permission checks recognise.
 """
 
 import json
@@ -34,6 +34,7 @@ from app.models import (
     StatutoryRate,
     User,
 )
+from app.roles import PAYROLLA_ADMIN, PAYROLLA_REVIEWER
 
 # Demo passwords. Never used by a real deployment: production provisions its
 # credentials in Supabase Auth, and these accounts are only seeded into a fresh
@@ -43,12 +44,13 @@ DEMO_PASSWORD = "password123"
 
 # --- Platform (operator) roster ---------------------------------------------
 # (name, email, role). Every legacy platform role keeps a login so the existing
-# permission model stays fully demonstrable; the role strings themselves are
-# unchanged persisted identifiers (app/roles.py).
+# permission model stays fully demonstrable. Role strings come from app/roles.py
+# rather than being spelled inline, so a seeded account can never drift from the
+# vocabulary the permission checks actually recognise.
 PLATFORM_USERS = [
     ("Payrolla Administrator", "admin@payrolla.com", "admin"),
-    ("Payrolla Operations", "operator@payrolla.com", "chrisnat_admin"),
-    ("Payrolla Support", "support@payrolla.com", "chrisnat_reviewer"),
+    ("Payrolla Operations", "operator@payrolla.com", PAYROLLA_ADMIN),
+    ("Payrolla Support", "support@payrolla.com", PAYROLLA_REVIEWER),
     ("Managing Director", "director@payrolla.com", "md"),
     ("Payroll Officer", "payroll@payrolla.com", "payroll_officer"),
     ("Accounts Officer", "accounts@payrolla.com", "accounts_officer"),

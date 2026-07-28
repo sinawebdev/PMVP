@@ -9,7 +9,7 @@ navigation a user sees and the routes they may hit can never drift apart.
 
 Membership matched the pre-refactor lists exactly at introduction (pure
 de-duplication); the one deliberate policy change since is granting
-``chrisnat_admin`` full operator access (confirmed with Sina) — it joins every
+``payrolla_admin`` full operator access (confirmed with Sina) — it joins every
 group below. Two legacy behaviours are deliberately left untouched:
 
   * The ``md`` role additionally passes *every* ``role_required`` check via a
@@ -30,26 +30,26 @@ from app.payroll_status import (
     PENDING_STATUSES,
     SENDABLE_STATUSES,
 )
-from app.roles import CHRISNAT_ADMIN, CLIENT_ADMIN, CLIENT_PREPARER, normalise_role
+from app.roles import CLIENT_ADMIN, CLIENT_PREPARER, PAYROLLA_ADMIN, normalise_role
 
-# ``chrisnat_admin`` is the SaaS-era platform superuser: it joins every operator
+# ``payrolla_admin`` is the SaaS-era platform superuser: it joins every operator
 # capability group here (drives nav), and app.auth.role_required passes it on
 # every operator route (mirroring ``md``). Legacy operator roles are unchanged.
 
 # Full payroll operations: upload, process, view payslips, distribute.
 PAYROLL_ROLES = frozenset(
-    {"admin", "md", "payroll_officer", "accounts_officer", CHRISNAT_ADMIN}
+    {"admin", "md", "payroll_officer", "accounts_officer", PAYROLLA_ADMIN}
 )
 
 # Employee-roster maintenance. Historically excludes ``md`` from the decorator
 # list; ``md`` still reaches these *routes* via role_required's md special-case.
-REP_ROLES = frozenset({"admin", "payroll_officer", "accounts_officer", CHRISNAT_ADMIN})
+REP_ROLES = frozenset({"admin", "payroll_officer", "accounts_officer", PAYROLLA_ADMIN})
 
 # Oversight of expenses + the audit trail.
-AUDIT_ROLES = frozenset({"admin", "md", CHRISNAT_ADMIN})
+AUDIT_ROLES = frozenset({"admin", "md", PAYROLLA_ADMIN})
 
 # Statutory-rate administration.
-STATUTORY_ROLES = frozenset({"admin", CHRISNAT_ADMIN})
+STATUTORY_ROLES = frozenset({"admin", PAYROLLA_ADMIN})
 
 
 def _in(role, group):
@@ -86,7 +86,7 @@ def can_manage_statutory(role):
 # the two can never drift apart.
 #
 # Membership mirrors the pre-refactor template role lists exactly, plus
-# ``chrisnat_admin`` — which already passed every one of these routes via
+# ``payrolla_admin`` — which already passed every one of these routes via
 # app.auth.role_required's superuser bypass, so it can perform the action; adding
 # it here just lets it SEE the corresponding button (completing the "full
 # operator access" policy). ``md`` likewise passes every route via that bypass,
@@ -94,26 +94,26 @@ def can_manage_statutory(role):
 # …) so the template shows it the button without relying on the bypass.
 
 # Recalculate statutory pay (Calculate Pay) — admin only, historically.
-CALCULATE_ROLES = frozenset({"admin", CHRISNAT_ADMIN})
+CALCULATE_ROLES = frozenset({"admin", PAYROLLA_ADMIN})
 
 # Open the raw-figures grid (Edit Figures). Row edits are further gated to Draft
 # inside the route; the grid is viewable read-only at any status.
-EDIT_FIGURES_ROLES = frozenset({"admin", "payroll_officer", CHRISNAT_ADMIN})
+EDIT_FIGURES_ROLES = frozenset({"admin", "payroll_officer", PAYROLLA_ADMIN})
 
 # Move a Draft run to Pending Approval (Submit for Approval).
-SUBMIT_APPROVAL_ROLES = frozenset({"admin", "accounts_officer", CHRISNAT_ADMIN})
+SUBMIT_APPROVAL_ROLES = frozenset({"admin", "accounts_officer", PAYROLLA_ADMIN})
 
 # Approve or reject a run awaiting sign-off.
-APPROVAL_ROLES = frozenset({"admin", "md", CHRISNAT_ADMIN})
+APPROVAL_ROLES = frozenset({"admin", "md", PAYROLLA_ADMIN})
 
 # Close an approved run (Mark Processed).
 MARK_PROCESSED_ROLES = frozenset(
-    {"admin", "accounts_officer", "md", CHRISNAT_ADMIN}
+    {"admin", "accounts_officer", "md", PAYROLLA_ADMIN}
 )
 
 # Hard-delete a run. Deliberately narrower than export: destroying payroll
 # history is admin/MD only (see the delete route).
-DELETE_ROLES = frozenset({"admin", "md", CHRISNAT_ADMIN})
+DELETE_ROLES = frozenset({"admin", "md", PAYROLLA_ADMIN})
 
 
 def can_calculate_run(role, run):

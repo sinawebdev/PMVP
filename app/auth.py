@@ -13,14 +13,14 @@ from flask import (
 from flask_login import current_user, login_required, login_user, logout_user
 
 from app.models import User
-from app.roles import CHRISNAT_ADMIN
+from app.roles import PAYROLLA_ADMIN, normalise_role
 
 auth_bp = Blueprint("auth", __name__)
 
 # Operator superusers: any role_required check passes for these. ``md`` is the
-# legacy bureau superuser; ``chrisnat_admin`` is the SaaS-era platform admin,
+# legacy bureau superuser; ``payrolla_admin`` is the SaaS-era platform admin,
 # granted full operator access (confirmed with Sina).
-OPERATOR_SUPERUSERS = ("md", CHRISNAT_ADMIN)
+OPERATOR_SUPERUSERS = ("md", PAYROLLA_ADMIN)
 
 
 def role_required(*roles):
@@ -37,9 +37,13 @@ def role_required(*roles):
             if current_user.role == "client_user" and "client_user" not in roles:
                 flash("Client portal access is archived while Payrolla is stabilized.", "warning")
                 return redirect(url_for("main.dashboard"))
-            if str(current_user.role).lower() in OPERATOR_SUPERUSERS:
+            # Compare canonical spellings on both sides: a user row (or a
+            # decorator argument) still using a pre-rename alias resolves to the
+            # same role, so the rename cannot cost anyone access.
+            role = normalise_role(current_user.role)
+            if role in OPERATOR_SUPERUSERS:
                 return view(*args, **kwargs)
-            has_direct_role = current_user.role in roles
+            has_direct_role = role in {normalise_role(r) for r in roles}
             if not has_direct_role:
                 flash("You do not have permission to access that page.", "warning")
                 return redirect(url_for("main.dashboard"))

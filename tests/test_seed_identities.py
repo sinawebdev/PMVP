@@ -28,8 +28,8 @@ from app.seed import DEMO_COMPANIES, PLATFORM_USERS  # noqa: E402
 
 EXPECTED_PLATFORM = {
     "admin@payrolla.com": "admin",
-    "operator@payrolla.com": "chrisnat_admin",
-    "support@payrolla.com": "chrisnat_reviewer",
+    "operator@payrolla.com": "payrolla_admin",
+    "support@payrolla.com": "payrolla_reviewer",
     "director@payrolla.com": "md",
     "payroll@payrolla.com": "payroll_officer",
     "accounts@payrolla.com": "accounts_officer",

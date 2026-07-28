@@ -41,9 +41,19 @@ multi-tenant SaaS built on top of the original single-operator payroll app.
 - Migrated the product identity from the legacy "Chrisnat Payroll MVP" to
   **Payrolla** across code comments, docstrings, user-facing strings, the
   front-end JS/CSS namespace, config, and documentation. Business entities and
-  persisted identifiers (the `chrisnat_*` role vocabulary, the `@chrisnat.local`
-  demo domain, GRA employer defaults, and operator-side export filenames) are
-  deliberately preserved — see the branding note in the [README](README.md).
+  live deployment identifiers (GRA employer defaults, operator-side export
+  filenames and letterhead, the `render.yaml` service name) are deliberately
+  preserved — see the branding note in the [README](README.md).
+- **Platform roles renamed** to `payrolla_admin` / `payrolla_reviewer` (from
+  `chrisnat_*`), completing the rebrand of the permission model. A role names a
+  capability in this product, not the founding bureau, so it belonged on the
+  product's name. Shipped as a reversible data migration (`a4e7c2b81d95`) that
+  rewrites `user.role` plus the three historical role columns
+  (`audit_trail.user_role`, `domain_event.actor_role`,
+  `distribution_batch.initiated_by_role`). No user gains or loses a capability:
+  `app.roles.normalise_role` folds the pre-rename spellings onto the current
+  names, so access is identical before, during and after the migration, and rows
+  that predate it (an un-migrated replica, a restored backup) keep working.
 - Product names are read from a single **branding seam** (`APP_NAME`, …), so a
   rebrand or white-label is a config change, not a template sweep.
 - Removed dead code (unused imports, an unused local computation, a commented-out

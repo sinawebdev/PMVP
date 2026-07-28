@@ -9,12 +9,24 @@ misassigned role can never widen a tenant user's data horizon.
 """
 
 # --- Platform (operator) roles: client_company_id IS NULL --------------------
-# The ``chrisnat_*`` string values are retained from the founding operator
-# (Chrisnat Limited). They are a stable, persisted role vocabulary — existing
-# users carry them in the database — so the strings are treated as identifiers,
-# not branding: renaming them is a data migration, deliberately deferred.
-CHRISNAT_ADMIN = "chrisnat_admin"
-CHRISNAT_REVIEWER = "chrisnat_reviewer"
+# The platform role vocabulary carries the product's name. It was originally
+# ``chrisnat_*`` after the founding operator (Chrisnat Limited); the strings are
+# persisted in ``User.role``, so the rename to ``payrolla_*`` shipped as a data
+# migration (see ``a4e7c2b81d95_rename_chrisnat_roles_to_payrolla``) rather than
+# a bare constant edit.
+PAYROLLA_ADMIN = "payrolla_admin"
+PAYROLLA_REVIEWER = "payrolla_reviewer"
+
+# Pre-rename spellings, mapped to their current equivalent. Every role string
+# entering the app is canonicalised through :func:`normalise_role`, so a row that
+# predates the migration — an un-migrated replica, a restored backup, a fixture
+# or an external caller still saying ``chrisnat_admin`` — keeps exactly the
+# permissions it had. Nothing writes these values any more; they are read-side
+# compatibility only, and can be dropped once no such data remains.
+LEGACY_ROLE_ALIASES = {
+    "chrisnat_admin": PAYROLLA_ADMIN,
+    "chrisnat_reviewer": PAYROLLA_REVIEWER,
+}
 
 # Legacy internal roles from the single-operator bureau app. Still platform-side
 # (client_company_id NULL); kept working so the existing seeded operator logins
@@ -22,7 +34,7 @@ CHRISNAT_REVIEWER = "chrisnat_reviewer"
 LEGACY_PLATFORM_ROLES = frozenset(
     {"admin", "md", "payroll_officer", "accounts_officer", "operations_supervisor", "viewer"}
 )
-PLATFORM_ROLES = frozenset({CHRISNAT_ADMIN, CHRISNAT_REVIEWER}) | LEGACY_PLATFORM_ROLES
+PLATFORM_ROLES = frozenset({PAYROLLA_ADMIN, PAYROLLA_REVIEWER}) | LEGACY_PLATFORM_ROLES
 
 # --- Tenant (client) roles: client_company_id = their company ----------------
 CLIENT_ADMIN = "client_admin"        # can approve (maker-checker OFF for v1)
@@ -31,7 +43,18 @@ TENANT_ROLES = frozenset({CLIENT_ADMIN, CLIENT_PREPARER})
 
 
 def normalise_role(role):
-    return str(role or "").strip().lower()
+    """The canonical spelling of a role string.
+
+    Trims and lowercases, then folds any pre-rename alias
+    (:data:`LEGACY_ROLE_ALIASES`) onto its current name. Because every
+    permission check in the app compares roles *after* this call — the capability
+    groups in :mod:`app.permissions`, :func:`app.auth.role_required`, and
+    :func:`app.tenancy.tenant_role_required` — canonicalising here is what makes
+    a user still carrying ``chrisnat_admin`` behave identically to
+    ``payrolla_admin`` everywhere, with no per-call-site special cases.
+    """
+    role = str(role or "").strip().lower()
+    return LEGACY_ROLE_ALIASES.get(role, role)
 
 
 def is_platform_role(role):

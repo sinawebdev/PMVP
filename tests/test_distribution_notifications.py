@@ -86,7 +86,7 @@ class NotificationTestCase(unittest.TestCase):
         self.assertIsNotNone(event)
         admins = [
             u for u in User.query.filter_by(client_company_id=None).all()
-            if u.role in ("admin", "md", "chrisnat_admin")
+            if u.role in ("admin", "md", "payrolla_admin")
         ]
         self.assertTrue(
             any(self._notes(a, "distribution.failed") for a in admins)
