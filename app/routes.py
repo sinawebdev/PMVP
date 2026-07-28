@@ -5,7 +5,7 @@ import re
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from sqlalchemy import or_, text
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import selectinload
 
 from app import db
@@ -266,8 +266,11 @@ def dashboard():
     from app.events import platform_activity
 
     active_employees = Employee.query.filter_by(status="Active").count()
-    total_expenses = sum(
-        (expense.amount or 0) for expense in Expense.query.all()
+    # Summed in the database rather than by loading every Expense row — this
+    # figure is a single number and the table grows with every client's monthly
+    # spend.
+    total_expenses = (
+        db.session.query(func.coalesce(func.sum(Expense.amount), 0.0)).scalar() or 0.0
     )
     analytics = platform_dashboard_analytics(
         all_clients,
