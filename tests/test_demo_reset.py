@@ -274,12 +274,26 @@ class DemoResetTestCase(unittest.TestCase):
 
     # --- the dashboards it exists to fill ------------------------------------
     def test_every_demo_login_lands_on_a_populated_dashboard(self):
+        # (email, path, a heading ONLY a populated dashboard renders, that same
+        # page's empty-state string). The two planes have different templates and
+        # therefore different empty-state copy, so the negative assertion is per
+        # case — asserting one page's empty string against another's body passes
+        # vacuously and tests nothing.
         cases = [
-            ("admin@payrolla.com", "/dashboard", "Executive Overview"),
-            ("admin@msc.com", "/company", "Monthly payroll trend"),
-            ("finance@acme.com", "/company", "Monthly payroll trend"),
+            (
+                "admin@payrolla.com", "/dashboard",
+                "Executive Overview", "No payroll runs yet",
+            ),
+            (
+                "admin@msc.com", "/company",
+                "Payroll cost trend", "No payroll run yet",
+            ),
+            (
+                "finance@acme.com", "/company",
+                "Payroll cost trend", "No payroll run yet",
+            ),
         ]
-        for email, path, marker in cases:
+        for email, path, marker, empty_marker in cases:
             with self.subTest(email=email):
                 self.client.post(
                     "/login", data={"email": email, "password": "password123"}
@@ -288,7 +302,7 @@ class DemoResetTestCase(unittest.TestCase):
                 self.assertEqual(page.status_code, 200)
                 body = page.get_data(as_text=True)
                 self.assertIn(marker, body)
-                self.assertNotIn("No payroll runs yet", body)
+                self.assertNotIn(empty_marker, body)
                 self.client.get("/logout")
 
     def test_client_expense_page_is_populated(self):
