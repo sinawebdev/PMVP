@@ -237,9 +237,8 @@ h2 { font-size: 17px; font-weight: 750; margin: 26px 0 12px; }
 
 .chart-head small { display: block; font-size: 12px; margin-top: 2px; }
 
-/* The donut sits beside its legend once there is room for both. */
-.chart--donut { align-items: center; display: flex; flex-wrap: wrap; gap: 18px; }
-.chart--donut .chart-legend { flex: 1 1 130px; margin-top: 0; }
+/* The donut's own "sits beside its legend" layout moved to tokens.css with the
+   rest of the chart primitives — the operator dashboard renders the same donut. */
 
 .panel { overflow-x: auto; padding: 4px; }
 .card.form { max-width: 820px; padding: 22px 24px; }

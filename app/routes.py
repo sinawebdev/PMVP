@@ -6,6 +6,7 @@ import re
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import or_, text
+from sqlalchemy.orm import selectinload
 
 from app import db
 from app.audit import record_audit
@@ -118,9 +119,25 @@ def dashboard():
     # already loaded for the cost/pending figures below — no extra query per
     # client — and truncated at the selected period so looking back at March
     # never charts months after it.
-    from app.analytics import client_cost_trend, totals_trend, up_to_period
+    from app.analytics import (
+        MONTH_INDEX,
+        client_cost_trend,
+        totals_trend,
+        up_to_period,
+    )
 
-    all_clients = ClientCompany.query.order_by(ClientCompany.name).all()
+    # Eager-load the two relationships every figure below walks. Without this,
+    # the per-client cost rows, the executive analytics, and the Top Clients
+    # table each lazy-load employees + runs per company (2N queries); with it the
+    # whole dashboard costs three queries no matter how many companies exist.
+    all_clients = (
+        ClientCompany.query.options(
+            selectinload(ClientCompany.employees),
+            selectinload(ClientCompany.payroll_runs),
+        )
+        .order_by(ClientCompany.name)
+        .all()
+    )
     client_costs = [
         {
             "client": client.name,
@@ -240,10 +257,29 @@ def dashboard():
         + [run.id for run in recently_completed]
     )
 
+    # Executive analytics (revenue trend / cost ranking / status mix / client
+    # growth / quick stats / top clients). Computed entirely from `all_clients`,
+    # which is already loaded with its employees and runs above — the whole
+    # section costs no additional queries, matching the tenant dashboard's
+    # "aggregate what you already have" approach.
+    from app.analytics import platform_dashboard_analytics
+    from app.events import platform_activity
+
+    active_employees = Employee.query.filter_by(status="Active").count()
+    total_expenses = sum(
+        (expense.amount or 0) for expense in Expense.query.all()
+    )
+    analytics = platform_dashboard_analytics(
+        all_clients,
+        expense_total=total_expenses,
+        active_employees=active_employees,
+        cutoff=(selected_year, MONTH_INDEX.get(selected_month, 0)),
+    )
+
     return render_template(
         "dashboard.html",
         total_employees=Employee.query.count(),
-        active_employees=Employee.query.filter_by(status="Active").count(),
+        active_employees=active_employees,
         total_clients=ClientCompany.query.count(),
         current_month_total=sum(run.total_net_pay for run in current_runs),
         pending_approvals=pending_approvals,
@@ -253,7 +289,9 @@ def dashboard():
         ssnit_total=sum(
             run.total_ssnit + run.total_ssnit_employer for run in current_runs
         ),
-        total_expenses=sum(expense.amount for expense in Expense.query.all()),
+        total_expenses=total_expenses,
+        analytics=analytics,
+        activity=platform_activity(limit=10),
         recent_runs=recent_runs,
         held_runs=held_runs,
         held_count=held_count,

@@ -55,6 +55,129 @@
     <div class="stat-card" title="{{ payslips_delivered }} of {{ payslips_total }} payslips pushed to workers"><i class="bi bi-send-check stat-icon"></i><span>Payslips Delivered</span><strong>{{ delivery_rate }}%</strong></div>
 </section>
 
+{# --- Executive overview --------------------------------------------------
+   Six book-wide figures and four server-rendered charts. Everything here is
+   aggregated from the client list already loaded for the section below, so the
+   whole overview costs no extra queries — see app/analytics.py. Charts are the
+   shared inline-SVG/CSS macros (no chart library, no JS), so they render before
+   first paint and print. #}
+<section class="panel mt-4">
+    <div class="panel-header">
+        <h2><i class="bi bi-bar-chart-line"></i>Executive Overview</h2>
+        <span class="text-muted small">Book-wide, to {{ selected_month }} {{ selected_year }}</span>
+    </div>
+    <div class="stats-grid">
+        <div class="stat-card"><i class="bi bi-buildings stat-icon"></i><span>Active Companies</span><strong>{{ analytics.stats.active_companies }}</strong></div>
+        <div class="stat-card"><i class="bi bi-person-check stat-icon"></i><span>Active Employees</span><strong>{{ analytics.stats.active_employees }}</strong></div>
+        <div class="stat-card"><i class="bi bi-collection stat-icon"></i><span>Payroll Runs</span><strong>{{ analytics.stats.payroll_runs }}</strong></div>
+        <div class="stat-card"><i class="bi bi-cash-stack stat-icon"></i><span>Total Payroll Value</span><strong>{{ analytics.stats.payroll_total|cedis }}</strong></div>
+        <div class="stat-card"><i class="bi bi-receipt stat-icon"></i><span>Total Client Expenses</span><strong>{{ analytics.stats.expense_total|cedis }}</strong></div>
+        <div class="stat-card" title="Total payroll value divided by active companies"><i class="bi bi-calculator stat-icon"></i><span>Avg Payroll / Company</span><strong>{{ analytics.stats.average_per_company|cedis }}</strong></div>
+    </div>
+</section>
+
+{% if analytics.has_data %}
+<div class="analytics-grid mt-4">
+    <section class="panel chart-card">
+        <div class="chart-head">
+            <h2>Monthly payroll trend</h2>
+            <small class="text-muted">Total payroll processed across all companies</small>
+        </div>
+        {{ ch.line_chart(analytics.revenue_trend, label="Monthly payroll trend") }}
+    </section>
+
+    <section class="panel chart-card">
+        <div class="chart-head">
+            <h2>Companies by payroll cost</h2>
+            <small class="text-muted">Gross pay + employer SSF over the charted months</small>
+        </div>
+        {{ ch.hbar_chart(analytics.companies_by_cost, label="Companies by payroll cost") }}
+    </section>
+
+    <section class="panel chart-card">
+        <div class="chart-head">
+            <h2>Payroll status distribution</h2>
+            <small class="text-muted">Where every run currently sits</small>
+        </div>
+        {{ ch.donut(analytics.status_mix, label="Payroll status distribution", formatter="count", center_label="Runs") }}
+    </section>
+
+    <section class="panel chart-card">
+        <div class="chart-head">
+            <h2>Client growth</h2>
+            <small class="text-muted">Companies onboarded, cumulative</small>
+        </div>
+        {{ ch.line_chart(analytics.growth_trend, label="Client growth", formatter="count") }}
+    </section>
+</div>
+{% else %}
+<section class="panel mt-4">
+    <div class="empty-state">
+        <i class="bi bi-bar-chart-line"></i>
+        <p class="mb-2 text-muted">No payroll has been processed yet, so there is nothing to chart. Onboard a client company and import their first payroll to populate the executive overview.</p>
+        <a class="btn btn-sm btn-primary" href="{{ url_for('main.add_client') }}"><i class="bi bi-building-add"></i>Onboard a Client Company</a>
+    </div>
+</section>
+{% endif %}
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-7">
+        <section class="panel">
+            <div class="panel-header">
+                <h2><i class="bi bi-trophy"></i>Top Clients</h2>
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.clients') }}">All companies</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Company</th><th>Employees</th><th>Payroll</th><th>Last Run</th><th>Status</th></tr></thead>
+                    <tbody>
+                    {% for row in analytics.top_clients %}
+                        <tr>
+                            <td>{{ row.company }}{% if row.code %} <code class="text-muted">{{ row.code }}</code>{% endif %}</td>
+                            <td>{{ row.employees }}</td>
+                            <td>{{ row.payroll|cedis }}</td>
+                            <td>
+                                {% if row.last_run %}
+                                    {{ row.last_run }}
+                                    <span class="badge {{ status_badge_class(row.last_run_status) }}">{{ row.last_run_status }}</span>
+                                {% else %}
+                                    <span class="text-muted">No run yet</span>
+                                {% endif %}
+                            </td>
+                            <td><span class="badge text-bg-{{ 'success' if row.status == 'Active' else 'secondary' }}">{{ row.status }}</span></td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="5" class="text-muted">No client companies onboarded yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+    <div class="col-lg-5">
+        <section class="panel">
+            <div class="panel-header"><h2><i class="bi bi-activity"></i>Payroll Activity</h2></div>
+            <ol class="activity-feed">
+                {% for item in activity %}
+                <li class="activity-item">
+                    <span class="activity-icon text-bg-{{ item.tone }}"><i class="bi {{ item.icon }}"></i></span>
+                    <div class="activity-body">
+                        <strong>{{ item.title }}</strong>
+                        {% if item.detail %}<p class="activity-detail">{{ item.detail }}</p>{% endif %}
+                        <small class="text-muted">
+                            {{ item.actor }}{% if item.company %} · {{ item.company }}{% endif %}
+                            {% if item.at %} · {{ item.at.strftime('%d %b %Y, %H:%M') }}{% endif %}
+                        </small>
+                    </div>
+                </li>
+                {% else %}
+                <li class="text-muted">No activity recorded yet.</li>
+                {% endfor %}
+            </ol>
+        </section>
+    </div>
+</div>
+
 <div class="row g-4 mt-1">
     <div class="col-lg-7">
         <section class="panel">

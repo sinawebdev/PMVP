@@ -18,9 +18,22 @@
      * No animation: these are dense executive cards, and a redraw on every
        dashboard load would be noise. #}
 
+{# --- Value formatting ------------------------------------------------------
+   Every chart labels its own values, and not every series is money: the client
+   growth line counts companies, the status donut counts runs. `formatter` names
+   how to render a value ('cedis' | 'count'); the branch lives here so a chart's
+   tooltip, legend and screen-reader summary can never disagree with each other.
+   Jinja cannot apply a filter chosen at runtime, hence the explicit branch. #}
+{% macro fmt(value, formatter="cedis") -%}
+{%- if formatter == "cedis" -%}{{ value|cedis }}
+{%- elif formatter == "count" -%}{{ value|int }}
+{%- else -%}{{ value }}
+{%- endif -%}
+{%- endmacro %}
+
 {# --- Line chart — a period trend ------------------------------------------
-   points: [{label, full_label, value, pct}] from analytics. `format` is a
-   Jinja filter name applied to values in the tooltip/summary ('cedis'). #}
+   points: [{label, full_label, value, pct}] from analytics. `formatter` names
+   how each value is rendered in the tooltip/summary ('cedis' | 'count'). #}
 {% macro line_chart(points, label="Trend", height=132, formatter="cedis") %}
 {% set w = 320 %}
 {% set h = height %}
@@ -37,7 +50,7 @@
   {% set _ = coords.append({"x": x, "y": y, "p": p}) %}
 {% endfor %}
 <figure class="chart chart--line" role="img"
-        aria-label="{{ label }}: {% for p in points %}{{ p.full_label }} {{ p.value|cedis }}{{ "; " if not loop.last }}{% endfor %}">
+        aria-label="{{ label }}: {% for p in points %}{{ p.full_label }} {{ fmt(p.value, formatter) }}{{ "; " if not loop.last }}{% endfor %}">
   {# Uniform scaling (meet, not none): non-uniform scaling would squash the
      point markers into ellipses at wide card widths. Height follows width via
      .chart--line svg { height: auto }, so it stays responsive either way. #}
@@ -65,19 +78,19 @@
     {% endfor %}
   </svg>
   <div class="chart-axis" aria-hidden="true">
-    {% for p in points %}<span title="{{ p.full_label }}: {{ p.value|cedis }}">{{ p.label }}</span>{% endfor %}
+    {% for p in points %}<span title="{{ p.full_label }}: {{ fmt(p.value, formatter) }}">{{ p.label }}</span>{% endfor %}
   </div>
 </figure>
 {% endmacro %}
 
 {# --- Bar chart — the same periods as magnitude ---------------------------- #}
-{% macro bar_chart(points, label="By month", height=120) %}
+{% macro bar_chart(points, label="By month", height=120, formatter="cedis") %}
 <figure class="chart chart--bar" role="img"
-        aria-label="{{ label }}: {% for p in points %}{{ p.full_label }} {{ p.value|cedis }}{{ "; " if not loop.last }}{% endfor %}">
+        aria-label="{{ label }}: {% for p in points %}{{ p.full_label }} {{ fmt(p.value, formatter) }}{{ "; " if not loop.last }}{% endfor %}">
   <div class="chart-bars" style="height: {{ height }}px" aria-hidden="true">
     {% for p in points %}
     {# min-height keeps a nonzero-but-tiny period visible instead of vanishing. #}
-    <span class="chart-bar" title="{{ p.full_label }}: {{ p.value|cedis }}">
+    <span class="chart-bar" title="{{ p.full_label }}: {{ fmt(p.value, formatter) }}">
       <span class="chart-bar-fill{{ ' is-empty' if not p.value }}" style="height: {{ p.pct if p.value else 0 }}%"></span>
     </span>
     {% endfor %}
@@ -88,15 +101,40 @@
 </figure>
 {% endmacro %}
 
+{# --- Horizontal bar chart — a ranking ------------------------------------
+   Rows, not columns: a ranking's category names are words ("Acme Manufacturing
+   Ltd"), and words do not fit under a vertical bar at card width. Laid out with
+   CSS rather than SVG so the labels use real, selectable, wrapping text and the
+   whole chart reflows on a phone with no viewBox maths. Points come from
+   analytics already carrying `pct` (share of the largest row). #}
+{% macro hbar_chart(points, label="Ranking", formatter="cedis") %}
+<figure class="chart chart--hbar" role="img"
+        aria-label="{{ label }}: {% for p in points %}{{ p.full_label }} {{ fmt(p.value, formatter) }}{{ "; " if not loop.last }}{% endfor %}">
+  <ol class="hbars">
+    {% for p in points %}
+    <li class="hbar">
+      <span class="hbar-label" title="{{ p.full_label }}">{{ p.label }}</span>
+      <span class="hbar-track" aria-hidden="true">
+        <span class="hbar-fill{{ ' is-empty' if not p.value }}" style="width: {{ p.pct if p.value else 0 }}%"></span>
+      </span>
+      <span class="hbar-value nums">{{ fmt(p.value, formatter) }}</span>
+    </li>
+    {% else %}
+    <li class="muted">Nothing to rank yet.</li>
+    {% endfor %}
+  </ol>
+</figure>
+{% endmacro %}
+
 {# --- Donut — composition of a whole --------------------------------------
    mix: {slices: [{label, value, pct, tone}], total} from analytics.cost_mix.
    Built from stroke-dasharray on concentric circles: one <circle> per slice,
    rotated so slices butt against each other with no path maths. #}
-{% macro donut(mix, label="Composition", size=150, thickness=18) %}
+{% macro donut(mix, label="Composition", size=150, thickness=18, formatter="cedis", center_label="Total") %}
 {% set radius = (size / 2) - (thickness / 2) %}
 {% set circumference = 2 * 3.14159265 * radius %}
 <figure class="chart chart--donut" role="img"
-        aria-label="{{ label }}: {% for s in mix.slices %}{{ s.label }} {{ s.value|cedis }} ({{ s.pct }}%){{ "; " if not loop.last }}{% endfor %}">
+        aria-label="{{ label }}: {% for s in mix.slices %}{{ s.label }} {{ fmt(s.value, formatter) }} ({{ s.pct }}%){{ "; " if not loop.last }}{% endfor %}">
   <div class="donut-wrap">
     <svg viewBox="0 0 {{ size }} {{ size }}" width="{{ size }}" height="{{ size }}" focusable="false" aria-hidden="true">
       {# -90deg start puts the first slice at 12 o'clock. #}
@@ -116,15 +154,15 @@
     </svg>
     {% if mix.total %}
     <div class="donut-center" aria-hidden="true">
-      <strong>{{ mix.total|cedis }}</strong>
-      <small>Total</small>
+      <strong>{{ fmt(mix.total, formatter) }}</strong>
+      <small>{{ center_label }}</small>
     </div>
     {% endif %}
   </div>
   <ul class="chart-legend">
     {% for s in mix.slices %}
     <li><span class="legend-swatch legend-swatch--{{ s.tone }}"></span>{{ s.label }}
-      <strong>{{ s.value|cedis }}</strong><small>{{ s.pct }}%</small></li>
+      <strong>{{ fmt(s.value, formatter) }}</strong><small>{{ s.pct }}%</small></li>
     {% else %}
     <li class="muted">Nothing recorded yet.</li>
     {% endfor %}

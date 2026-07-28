@@ -192,7 +192,69 @@
     min-height: 2px;
 }
 
+/* --- Horizontal bar chart (a ranking) ---
+   Rows rather than columns, because the categories are company names. Laid out
+   with CSS grid, not SVG, so the labels stay real text: selectable, truncatable
+   with an ellipsis, and readable by a screen reader without a <title> hack. */
+.hbars {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.hbar {
+    align-items: center;
+    display: grid;
+    gap: 10px;
+    /* Label and value columns are content-sized within a ceiling; the track
+       takes whatever is left, so the chart works from phone to wide desktop
+       with no media query. */
+    grid-template-columns: minmax(56px, 22%) 1fr auto;
+}
+
+.hbar-label {
+    color: var(--ink-soft);
+    font-size: 12.5px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hbar-track {
+    background: var(--surface-alt);
+    border-radius: var(--radius-pill);
+    display: block;
+    height: 12px;
+    overflow: hidden;
+}
+
+.hbar-fill {
+    background: linear-gradient(90deg, var(--brand-deep), var(--brand-bright));
+    border-radius: var(--radius-pill);
+    display: block;
+    height: 100%;
+    min-width: 3px;   /* a small-but-real company stays visible */
+}
+
+.hbar-fill.is-empty { background: var(--line); min-width: 2px; }
+
+.hbar-value {
+    color: var(--ink);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+}
+
 /* --- Donut --- */
+/* The donut sits beside its legend once there is room for both. Shared by both
+   shells, so it lives here rather than in either shell's stylesheet. */
+.chart--donut { align-items: center; display: flex; flex-wrap: wrap; gap: 18px; }
+.chart--donut .chart-legend { flex: 1 1 130px; margin-top: 0; }
+
 .donut-wrap {
     display: inline-grid;
     place-items: center;

@@ -530,6 +530,88 @@ body {
     gap: 8px;
 }
 
+/* --- Executive overview (operator dashboard) -----------------------------
+   The chart row and the activity feed. The charts themselves are the shared
+   macros styled by tokens.css; only the CARD layout is per-shell, because the
+   two shells have different card languages (Bootstrap panels here, bespoke
+   cards in the tenant portal). auto-fit gives four cards on a wide desktop,
+   two on a tablet and one on a phone with no media query. */
+
+.analytics-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.chart-card {
+    min-width: 0;          /* charts shrink with the cell instead of overflowing */
+}
+
+.chart-card:hover {
+    transform: none;       /* a chart is read, not clicked */
+}
+
+.chart-head {
+    margin-bottom: 14px;
+}
+
+.chart-head h2 {
+    font-size: 15px;
+    font-weight: 750;
+    margin: 0;
+}
+
+.chart-head small {
+    display: block;
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+/* Payroll activity timeline. One list, two sources (domain events + curated
+   audit entries) — see app/events.py:platform_activity. */
+.activity-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.activity-item {
+    display: flex;
+    gap: 12px;
+}
+
+.activity-icon {
+    align-items: center;
+    border-radius: var(--radius-pill);
+    display: inline-flex;
+    flex: none;
+    font-size: 13px;
+    height: 30px;
+    justify-content: center;
+    width: 30px;
+}
+
+.activity-body {
+    min-width: 0;   /* long summaries wrap instead of widening the card */
+}
+
+.activity-body strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.activity-detail {
+    color: var(--ink-soft);
+    font-size: 13px;
+    line-height: 1.45;
+    margin: 2px 0 3px;
+    overflow-wrap: anywhere;
+}
+
 /* Trend + "Highest" badge grouped on the card header's right-hand side. */
 .panel-header-signal {
     align-items: center;
