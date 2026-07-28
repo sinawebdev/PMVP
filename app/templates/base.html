@@ -13,6 +13,10 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    {# Empty by default — a page-specific stylesheet loaded ONLY where it is used
+       (see app/static/dashboard.css's own header comment for why), so it can
+       never regress a page that does not opt in. #}
+    {% block head %}{% endblock %}
 </head>
 <body class="brand-shell-bg">
 <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>

@@ -264,6 +264,7 @@ def dashboard():
     # "aggregate what you already have" approach.
     from app.analytics import platform_dashboard_analytics
     from app.events import platform_activity
+    from app.platform_dashboard import platform_kpis, platform_risk_signals
 
     active_employees = Employee.query.filter_by(status="Active").count()
     # Summed in the database rather than by loading every Expense row — this
@@ -279,12 +280,38 @@ def dashboard():
         cutoff=(selected_year, MONTH_INDEX.get(selected_month, 0)),
     )
 
+    # Hoisted so the KPI band and the raw template variables describe the exact
+    # same numbers — computed once, read twice, never two slightly different
+    # queries that could drift apart on a future edit.
+    total_employees_count = Employee.query.count()
+    total_clients_count = ClientCompany.query.count()
+    current_month_total = sum(run.total_net_pay for run in current_runs)
+    period_label = f"{selected_month} {selected_year}"
+
+    kpis = platform_kpis(
+        analytics,
+        current_month_total,
+        portfolio_trend,
+        total_clients_count,
+        active_employees,
+        total_employees_count,
+        total_expenses,
+        delivery_rate,
+        payslips_delivered,
+        payslips_total,
+        period_label,
+    )
+    # Same three counts already driving the KPI counters below and the Held
+    # panel — reshaped, not recomputed, so this panel and those numbers can
+    # never disagree.
+    risk_signals = platform_risk_signals(held_count, pending_approvals, warning_count)
+
     return render_template(
         "dashboard.html",
-        total_employees=Employee.query.count(),
+        total_employees=total_employees_count,
         active_employees=active_employees,
-        total_clients=ClientCompany.query.count(),
-        current_month_total=sum(run.total_net_pay for run in current_runs),
+        total_clients=total_clients_count,
+        current_month_total=current_month_total,
         pending_approvals=pending_approvals,
         paye_total=sum(run.total_paye for run in current_runs),
         # Combined employee (5.5%) + employer (13%) SSF — the figure actually
@@ -294,6 +321,8 @@ def dashboard():
         ),
         total_expenses=total_expenses,
         analytics=analytics,
+        kpis=kpis,
+        risk_signals=risk_signals,
         activity=platform_activity(limit=10),
         recent_runs=recent_runs,
         held_runs=held_runs,
@@ -309,6 +338,7 @@ def dashboard():
         highest_client=highest_client,
         selected_month=selected_month,
         selected_year=selected_year,
+        period_label=period_label,
         month_options=valid_months,
         year_options=sorted(known_years, reverse=True),
         action_required_count=pending_approvals + warning_count,
