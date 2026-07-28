@@ -204,9 +204,44 @@ full, commented list. Key groups:
 - **Distribution channels:** `SMS_BACKEND`, `WHATSAPP_BACKEND`, `EMAIL_BACKEND`
   (each defaults to `console` — logs only, no network) plus their credentials,
   webhook secrets, rate limits, retry policy, and SLA thresholds.
+- **File storage:** `STORAGE_BACKEND` (default `local`), `STORAGE_ROOT` (default
+  `instance/storage`), `RECEIPT_MAX_BYTES` (default 10 MB). Uploaded files are
+  addressed by an opaque storage key rather than a path, so swapping the backend
+  needs no data change — see [Receipt storage](#receipt-storage). On a platform
+  with an ephemeral filesystem, point `STORAGE_ROOT` at a mounted disk.
 - **Statutory / payroll:** `RAW_BANK_WHITELIST`, `CHRISNAT_EMPLOYER_TIN`,
   `CHRISNAT_TAX_OFFICE` (the employer's TIN and tax office printed on GRA
   returns — employer configuration, not product identity).
+
+### Receipt storage
+
+Client expense receipts (PDF/PNG/JPG, up to 10 MB) are the first files the app
+stores permanently. Two modules own the whole path:
+
+| Module | Owns |
+|---|---|
+| `app/storage.py` | Backends — `save` / `open` / `delete` / `exists`, keyed by an opaque **storage key**. Knows nothing about receipts. |
+| `app/receipts.py` | The receipt rules — allowed formats, the size ceiling, the key layout, attach/detach. Knows nothing about filesystems. |
+
+A storage key looks like `receipts/<company_id>/<uuid4>.<ext>`. It is not a
+filesystem path, so it stays valid when the backend changes: **moving to
+Supabase Storage means implementing `StorageBackend` once and setting
+`STORAGE_BACKEND=supabase`** — no route, model, template, migration or stored
+value changes.
+
+Security properties worth knowing:
+
+- Files live under `instance/` by default — outside the package, never served
+  statically, and reachable only through a route that has already resolved the
+  tenant.
+- Receipts are addressed **through their expense** (`/company/expenses/<id>/receipt`),
+  never by receipt id or storage key, so there is no identifier to tamper with.
+  Another tenant's expense id is a 404.
+- The recorded MIME type comes from sniffing the file's leading bytes, not from
+  the client's header. A file whose contents disagree with its extension is
+  rejected, and responses carry `X-Content-Type-Options: nosniff`.
+- Uploaded filenames are kept only to name the download; the stored key is
+  uuid-based, so user text never reaches the filesystem.
 
 ---
 

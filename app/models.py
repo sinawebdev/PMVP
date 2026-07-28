@@ -347,9 +347,10 @@ class Expense(db.Model):
     # it, which site, why it was unusual). Optional.
     notes = db.Column(db.Text)
     receipt_reference = db.Column(db.String(120))
-    # Stored filename of a receipt scan. No upload path is wired yet — the client
-    # expense form shows it as a disabled "coming soon" control — so this stays
-    # NULL until attachments ship.
+    # Legacy single-filename column from the operator-side expense form, which
+    # never had an upload path wired and so is NULL everywhere. Uploaded receipts
+    # live in ExpenseReceipt (below), which carries the metadata a stored file
+    # actually needs. Kept so existing rows and queries stay valid.
     receipt_attachment = db.Column(db.String(255))
     paid_by = db.Column(db.Integer, db.ForeignKey("user.id"))
     approved_by = db.Column(db.Integer, db.ForeignKey("user.id"))
@@ -364,6 +365,63 @@ class Expense(db.Model):
     expense_approver = db.relationship("User", foreign_keys=[approved_by])
     client_company = db.relationship("ClientCompany")
     payroll_run = db.relationship("PayrollRun")
+    # One receipt per expense (uselist=False): the expense form has a single
+    # attachment control, and "the receipt for this expense" is how the UI and
+    # the routes talk about it. The FK is unique, so that is enforced by the
+    # schema rather than by convention. delete-orphan cascades the row when the
+    # expense goes; the stored *file* is removed explicitly by the delete route,
+    # which is the only place that can reach the storage backend.
+    receipt = db.relationship(
+        "ExpenseReceipt",
+        back_populates="expense",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class ExpenseReceipt(db.Model):
+    """An uploaded receipt file backing one expense.
+
+    The row holds *metadata*; the bytes live in whatever
+    :mod:`app.storage` backend is configured, addressed by ``storage_key``.
+    That key is deliberately not a filesystem path — it stays valid when the
+    backend moves to Supabase Storage.
+
+    ``original_filename`` is what the user uploaded, kept only to name the
+    download; it is never used to build a path (the stored key is uuid-based),
+    so a hostile filename cannot reach the filesystem.
+    """
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Unique: one receipt per expense, enforced in the schema.
+    expense_id = db.Column(
+        db.Integer,
+        db.ForeignKey("expense.id"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    # Denormalised from the parent expense so a receipt can be tenant-scoped
+    # (and isolation-tested) without a join, exactly like the other tenant-owned
+    # models in app/tenancy.py. Set from the expense on upload, never from input.
+    client_company_id = db.Column(
+        db.Integer, db.ForeignKey("client_company.id"), nullable=False, index=True
+    )
+    original_filename = db.Column(db.String(255), nullable=False)
+    storage_key = db.Column(db.String(400), nullable=False)
+    content_type = db.Column(db.String(100), nullable=False)
+    byte_size = db.Column(db.Integer, nullable=False, default=0)
+    uploaded_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+
+    expense = db.relationship("Expense", back_populates="receipt")
+    client_company = db.relationship("ClientCompany")
+    uploader = db.relationship("User", foreign_keys=[uploaded_by])
+
+    @property
+    def is_image(self):
+        """True when the browser can render this inline as a preview."""
+        return (self.content_type or "").lower().startswith("image/")
 
 
 class Proposal(db.Model):

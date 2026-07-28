@@ -21,6 +21,17 @@ multi-tenant SaaS built on top of the original single-operator payroll app.
   own operational expenses against a fixed category list, with totals, a
   category breakdown and a by-month chart that feed the company dashboard
   directly.
+- **Expense receipt attachments.** The expense form's attachment field is live:
+  PDF/PNG/JPG/JPEG up to 10 MB, one receipt per expense, with a new expense
+  detail page that previews images inline, marks documents, and offers download
+  and removal. Files go through a storage seam (`app/storage.py`) that addresses
+  objects by an opaque key rather than a path, so **moving to Supabase Storage
+  is one new backend class plus `STORAGE_BACKEND=supabase`** — no route, model,
+  template or data change. Receipt rules (formats, size, key layout) live in
+  `app/receipts.py`, and the recorded MIME type is sniffed from the file's
+  leading bytes rather than trusted from the upload header, so a renamed
+  executable is refused. Receipts are reachable only through their expense, so
+  tenant isolation is the same 404 the rest of the plane already gives.
 - **Professional login identities.** The demo roster moved to `@payrolla.com`
   (platform) and per-company domains (`@msc.com`, `@acme.com`), with an optional
   login-page hint panel built from the seed itself. Role strings — and therefore

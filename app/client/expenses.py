@@ -18,6 +18,14 @@ Every route follows the established tenant-plane contract:
     (``client_admin`` / ``client_preparer``); viewing is any tenant user. No new
     permission concept is introduced.
 
+Receipts (PDF/PNG/JPG, 10 MB) hang off an expense. Their bytes go through
+:mod:`app.storage`, and every rule about them — allowed types, size, the
+storage-key layout — lives in :mod:`app.receipts`; the routes here only decide
+*who* may reach one. That decision is always ``tenant_get_or_404`` on the parent
+expense, so a receipt is addressed exclusively through an id the tenant already
+owns: there is no receipt id or storage key in any URL for a user to tamper
+with.
+
 Totals computed here feed :mod:`app.analytics`, which is what the company
 dashboard's "Total expenses" stat and expenses-vs-payroll donut already read —
 so a newly recorded expense shows up in the dashboard on the next load with no
@@ -29,8 +37,9 @@ at the bottom of its own file (the same pattern as ``raw`` and ``reports``).
 
 from datetime import date, datetime
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user
+from werkzeug.exceptions import NotFound
 
 from app import db
 from app.analytics import expense_summary
@@ -38,6 +47,14 @@ from app.audit import record_audit
 from app.client import _company, client_bp
 from app.models import Expense
 from app.permissions import EXPENSE_ROLES
+from app.receipts import (
+    ACCEPT_ATTRIBUTE,
+    ReceiptValidationError,
+    attach_receipt,
+    detach_receipt,
+    max_megabytes,
+)
+from app.storage import StorageError, get_storage
 from app.tenancy import tenant_get_or_404, tenant_query, tenant_required, tenant_role_required
 
 # The operational spend categories a client company records. Deliberately a
@@ -134,7 +151,22 @@ def _render_form(company, expense, values, errors):
         errors=errors,
         categories=EXPENSE_CATEGORIES,
         today=date.today().isoformat(),
+        receipt_accept=ACCEPT_ATTRIBUTE,
+        receipt_max_mb=max_megabytes(),
     )
+
+
+def _submitted_receipt():
+    """The receipt file on this request, or None when the field was left empty.
+
+    A browser posts an empty ``FileStorage`` for an untouched file input; that is
+    "no change", not "clear the receipt" (clearing has its own button), so it is
+    filtered out here rather than at each call site.
+    """
+    uploaded = request.files.get("receipt")
+    if uploaded is None or not (uploaded.filename or "").strip():
+        return None
+    return uploaded
 
 
 def _form_values(expense=None):
@@ -187,6 +219,7 @@ def expense_add():
     company = _company()
     if request.method == "POST":
         values, errors = validate_expense_form(request.form)
+        uploaded = _submitted_receipt()
         if errors:
             return _render_form(company, None, values, errors)
         expense = Expense(
@@ -197,7 +230,17 @@ def expense_add():
         )
         db.session.add(expense)
         _apply(expense, values)
-        db.session.flush()
+        db.session.flush()  # assigns expense.id, which the receipt row needs
+        if uploaded is not None:
+            try:
+                attach_receipt(expense, uploaded, uploaded_by=current_user.id)
+            except ReceiptValidationError as exc:
+                # Nothing is saved: the expense and the receipt are one
+                # submission, so a bad file re-renders the whole form rather
+                # than silently recording an expense without its receipt.
+                db.session.rollback()
+                errors["receipt"] = str(exc)
+                return _render_form(company, None, values, errors)
         record_audit(
             "Expense recorded",
             expense,
@@ -206,7 +249,7 @@ def expense_add():
         )
         db.session.commit()
         flash(f"Expense recorded: {expense.description}.", "success")
-        return redirect(url_for("client.expenses"))
+        return redirect(url_for("client.expense_detail", expense_id=expense.id))
     return _render_form(company, None, _form_values(), {})
 
 
@@ -217,11 +260,20 @@ def expense_edit(expense_id):
     company = _company()
     if request.method == "POST":
         values, errors = validate_expense_form(request.form)
+        uploaded = _submitted_receipt()
         if errors:
             return _render_form(company, expense, values, errors)
         _apply(expense, values)
         # Keep the tenant binding invariant even on edit.
         expense.client_company_id = company.id
+        if uploaded is not None:
+            try:
+                # Replaces any existing receipt, removing the superseded object.
+                attach_receipt(expense, uploaded, uploaded_by=current_user.id)
+            except ReceiptValidationError as exc:
+                db.session.rollback()
+                errors["receipt"] = str(exc)
+                return _render_form(company, expense, values, errors)
         record_audit(
             "Expense updated",
             expense,
@@ -230,8 +282,88 @@ def expense_edit(expense_id):
         )
         db.session.commit()
         flash("Expense updated.", "success")
-        return redirect(url_for("client.expenses"))
+        return redirect(url_for("client.expense_detail", expense_id=expense.id))
     return _render_form(company, expense, _form_values(expense), {})
+
+
+@client_bp.route("/expenses/<int:expense_id>")
+@tenant_required
+def expense_detail(expense_id):
+    """One expense in full, including its receipt.
+
+    Viewing is any tenant user (same as the ledger); the receipt controls on the
+    page are gated to EXPENSE_ROLES by the template, mirroring the routes.
+    """
+    expense = tenant_get_or_404(Expense, expense_id)  # 404 if another tenant's
+    return render_template(
+        "client/expense_detail.html",
+        company=_company(),
+        expense=expense,
+        receipt=expense.receipt,
+    )
+
+
+def _send_receipt(expense_id, as_attachment):
+    """Stream an expense's receipt, or 404.
+
+    Tenant isolation comes from ``tenant_get_or_404`` on the *expense*: another
+    tenant's expense id is a 404 before storage is touched, so a receipt can only
+    be fetched by someone in the owning company. Receipts are addressed through
+    their expense (never by receipt id or storage key), which means there is no
+    identifier a user could tamper with to reach another tenant's file.
+    """
+    expense = tenant_get_or_404(Expense, expense_id)
+    receipt = expense.receipt
+    if receipt is None:
+        raise NotFound()
+    try:
+        handle = get_storage().open(receipt.storage_key)
+    except StorageError:
+        # Row without its object — a failed upload or an out-of-band deletion.
+        raise NotFound()
+    response = send_file(
+        handle,
+        mimetype=receipt.content_type,
+        as_attachment=as_attachment,
+        download_name=receipt.original_filename,
+    )
+    # The content type was decided by sniffing the bytes on upload, and only
+    # PDF/PNG/JPEG get stored. nosniff stops a browser second-guessing that and
+    # rendering a stored file as something executable.
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@client_bp.route("/expenses/<int:expense_id>/receipt")
+@tenant_required
+def expense_receipt_view(expense_id):
+    """Inline — backs the image preview on the detail page."""
+    return _send_receipt(expense_id, as_attachment=False)
+
+
+@client_bp.route("/expenses/<int:expense_id>/receipt/download")
+@tenant_required
+def expense_receipt_download(expense_id):
+    """As an attachment, under the filename the user originally uploaded."""
+    return _send_receipt(expense_id, as_attachment=True)
+
+
+@client_bp.route("/expenses/<int:expense_id>/receipt/delete", methods=["POST"])
+@tenant_role_required(*EXPENSE_ROLES)
+def expense_receipt_delete(expense_id):
+    expense = tenant_get_or_404(Expense, expense_id)  # 404 if another tenant's
+    name = detach_receipt(expense)
+    if name is None:
+        flash("There is no receipt attached to that expense.", "warning")
+        return redirect(url_for("client.expense_detail", expense_id=expense.id))
+    record_audit(
+        "Expense receipt removed",
+        expense,
+        f"Receipt {name} removed from {expense.category}: {expense.description}.",
+    )
+    db.session.commit()
+    flash(f"Receipt removed: {name}.", "success")
+    return redirect(url_for("client.expense_detail", expense_id=expense.id))
 
 
 @client_bp.route("/expenses/<int:expense_id>/delete", methods=["POST"])
@@ -239,6 +371,9 @@ def expense_edit(expense_id):
 def expense_delete(expense_id):
     expense = tenant_get_or_404(Expense, expense_id)  # 404 if another tenant's
     description = expense.description
+    # Delete the stored object before the row: the cascade removes the receipt
+    # record, and once it is gone nothing points at the file any more.
+    detach_receipt(expense)
     record_audit(
         "Expense deleted",
         expense,

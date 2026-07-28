@@ -11,7 +11,8 @@
   <div class="flash danger" role="alert">Nothing was saved — check the highlighted fields below.</div>
   {% endif %}
 
-  <form method="post" class="card form" novalidate>
+  {# multipart so the receipt field actually submits its bytes. #}
+  <form method="post" class="card form" novalidate enctype="multipart/form-data">
     <div class="formgrid">
       <div>
         <label for="expense_date">Date *</label>
@@ -35,12 +36,22 @@
         {% if errors.amount %}<p class="field-error">{{ errors.amount }}</p>{% endif %}
       </div>
       <div>
-        <label for="receipt">Attachment</label>
-        {# Receipt uploads are not wired yet (Expense.receipt_attachment stays
-           NULL). Shown disabled rather than hidden so the field's future home is
-           obvious and no one designs around its absence. #}
-        <input id="receipt" type="file" disabled aria-describedby="receipt-help">
-        <p class="muted" id="receipt-help">Receipt uploads are coming soon.</p>
+        <label for="receipt">Receipt</label>
+        {# accept= only filters the file picker; the real checks (extension,
+           declared MIME, magic bytes, size) run server-side in app/receipts.py. #}
+        <input id="receipt" name="receipt" type="file" accept="{{ receipt_accept }}"
+               aria-describedby="receipt-help">
+        {% if errors.receipt %}<p class="field-error">{{ errors.receipt }}</p>{% endif %}
+        {% if expense and expense.receipt %}
+        <p class="muted" id="receipt-help">
+          Attached: <strong>{{ expense.receipt.original_filename }}</strong>.
+          Choosing a new file replaces it.
+        </p>
+        {% else %}
+        <p class="muted" id="receipt-help">
+          Optional — PDF, PNG or JPG, up to {{ receipt_max_mb }} MB.
+        </p>
+        {% endif %}
       </div>
     </div>
 

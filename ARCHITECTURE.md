@@ -65,6 +65,8 @@ guessing:
 | `app/audit.py` | Audit-trail blueprint and helpers. |
 | `app/events.py` | Domain-event append + notification fan-out (`record_event`). |
 | `app/money.py` | Decimal money arithmetic used by the compute paths. |
+| `app/storage.py` | **The object-storage seam** — `save`/`open`/`delete`/`exists` against an opaque storage key, plus key validation and path-traversal containment. Domain-agnostic: swapping the local backend for Supabase Storage touches this file only. |
+| `app/receipts.py` | Expense-receipt rules — accepted formats (extension + declared MIME + sniffed magic bytes), the 10 MB ceiling, the `receipts/<company_id>/<uuid4>` key layout, and attach/detach. The only thing in the expense path that calls `app/storage.py`. |
 | `app/validators.py` | Pre-import validation warnings for uploaded workbooks. |
 | `app/htmx_utils.py` | Small helpers for htmx responses/toasts. |
 

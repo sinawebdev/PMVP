@@ -77,6 +77,25 @@ and authorises exactly one payslip — no session, no tenant surface.
   through temp/session storage during parsing; the extracted preview is stored in
   the database and the raw file is not retained as a durable artifact. Real client
   workbooks are explicitly excluded from version control (`.gitignore`).
+- **Uploaded receipts** (expense attachments) are the one class of file the app
+  retains durably. Controls, all in `app/storage.py` + `app/receipts.py`:
+  - *Type:* extension, declared MIME **and** the file's actual leading bytes must
+    agree. The stored content type is derived from the sniffed bytes, never from
+    the client's header, so a renamed executable or a scriptable SVG is refused.
+  - *Size:* 10 MB (`RECEIPT_MAX_BYTES`), measured by seeking the stream rather
+    than trusting `Content-Length`.
+  - *Filenames:* never used to build a path. The storage key is
+    `receipts/<company_id>/<uuid4><ext>`; the original name is kept only to
+    label the download and is passed through `secure_filename` first.
+  - *Path traversal:* keys are pattern-validated (no `..`, absolute paths,
+    backslashes or NUL), and the local backend re-checks that the **resolved**
+    path is inside its root — a second gate that also catches symlinks.
+  - *Isolation:* a receipt is addressed only through its expense
+    (`/company/expenses/<id>/receipt`), which goes through `tenant_get_or_404`.
+    There is no receipt id or storage key in any URL, and another tenant's
+    expense id is a 404, never a 403.
+  - *Serving:* responses carry `X-Content-Type-Options: nosniff`, and files live
+    under `instance/` — outside the package and never served statically.
 - **`/admin/db-health`** is admin-only and reports record counts; it never
   displays the database URL or password.
 - **Secrets** (`SECRET_KEY`, `DATABASE_URL`, provider credentials, webhook

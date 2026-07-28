@@ -406,6 +406,67 @@ input:disabled {
 .formrow > div { min-width: 200px; }
 .form-foot { margin-top: 20px; }
 
+/* --- Receipt attachment ------------------------------------------------- */
+/* Preview beside metadata, stacking on narrow screens. The figure is a fixed
+   box so a tall portrait scan and a wide landscape one occupy the same slot and
+   the actions below never jump. */
+
+.receipt {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+}
+
+.receipt-figure {
+    align-items: center;
+    background: var(--surface-alt);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    display: flex;
+    flex: 0 0 auto;
+    height: 160px;
+    justify-content: center;
+    overflow: hidden;
+    width: 160px;
+}
+
+.receipt-preview {
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+}
+
+/* Documents have no thumbnail — a labelled mark reads faster than a generic
+   file glyph, and says which format will download. */
+.receipt-doc {
+    align-items: center;
+    display: flex;
+    height: 100%;
+    justify-content: center;
+    text-decoration: none;
+    width: 100%;
+}
+
+.receipt-doc-mark {
+    background: var(--brand-soft);
+    border-radius: var(--radius-sm);
+    color: var(--brand);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 14px 16px;
+}
+
+.receipt-meta { flex: 1 1 240px; min-width: 0; }
+
+/* Long uploaded filenames wrap instead of stretching the card. */
+.receipt-name {
+    font-weight: 600;
+    margin: 0 0 4px;
+    overflow-wrap: anywhere;
+}
+
 /* --- Empty state -------------------------------------------------------- */
 
 .empty-state {
