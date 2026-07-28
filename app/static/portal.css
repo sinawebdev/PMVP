@@ -353,7 +353,7 @@ label {
     margin: 14px 0 5px;
 }
 
-input, select {
+input, select, textarea {
     background: var(--surface);
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-sm);
@@ -363,10 +363,32 @@ input, select {
     width: 100%;
 }
 
-input:focus, select:focus {
+/* Free-text fields grow downward only — a horizontally resizable textarea
+   breaks the form grid on narrow screens. */
+textarea {
+    line-height: 1.5;
+    resize: vertical;
+}
+
+input:focus, select:focus, textarea:focus {
     border-color: var(--brand);
     box-shadow: 0 0 0 3px var(--brand-soft);
     outline: none;
+}
+
+input:disabled {
+    background: var(--surface-alt);
+    color: var(--muted);
+    cursor: not-allowed;
+}
+
+/* Validation message bound to the field above it. Never colour alone — the
+   message itself says what is wrong. */
+.field-error {
+    color: #b02a37;
+    font-size: 12.5px;
+    font-weight: 600;
+    margin: 5px 0 0;
 }
 
 .formgrid {

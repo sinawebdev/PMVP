@@ -407,6 +407,7 @@ def create_app():
         can_maintain_roster,
         can_mark_run_processed,
         can_operate_payroll,
+        can_record_expenses,
         can_reject_run,
         can_submit_run_for_approval,
         can_view_audit,
@@ -443,6 +444,8 @@ def create_app():
         can_mark_run_processed=can_mark_run_processed,
         can_distribute_run=can_distribute_run,
         can_delete_run=can_delete_run,
+        # Tenant-plane capability (client portal): who may record expenses.
+        can_record_expenses=can_record_expenses,
     )
 
     from app.audit import audit_bp

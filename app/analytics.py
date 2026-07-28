@@ -165,6 +165,99 @@ def cost_mix(payroll_total, expense_total):
     }
 
 
+# Slice tones the chart macros know how to colour, cycled for a breakdown with
+# more categories than named tones. Presentation only.
+BREAKDOWN_TONES = ("brand", "accent", "deep", "soft", "muted")
+
+
+def category_breakdown(expenses, tones=BREAKDOWN_TONES):
+    """Expenses grouped by category, largest first, in donut-slice shape.
+
+    ``{slices: [{label, value, pct, tone}], total}`` — the same contract as
+    :func:`cost_mix`, so the donut macro renders it with no changes. Categories
+    summing to zero yield an empty slice list rather than a divide-by-zero.
+    """
+    buckets = {}
+    for expense in expenses:
+        label = (getattr(expense, "category", None) or "Uncategorised").strip() or "Uncategorised"
+        buckets[label] = buckets.get(label, 0.0) + (getattr(expense, "amount", 0) or 0)
+    total = sum(buckets.values())
+    if total <= 0:
+        return {"slices": [], "total": 0}
+    ordered = sorted(buckets.items(), key=lambda pair: pair[1], reverse=True)
+    return {
+        "slices": [
+            {
+                "label": label,
+                "value": value,
+                "pct": round(value / total * 100, 2),
+                "tone": tones[index % len(tones)],
+            }
+            for index, (label, value) in enumerate(ordered)
+            if value > 0
+        ],
+        "total": total,
+    }
+
+
+def expense_summary(expenses, today=None):
+    """Headline figures for a company's expense ledger.
+
+    ``{total, monthly_total, monthly_label, count, breakdown, by_month}``:
+
+      total         — every recorded expense
+      monthly_total — the CURRENT calendar month only (the figure a manager
+                      checks against this month's budget)
+      breakdown     — :func:`category_breakdown`, donut-ready
+      by_month      — the last :data:`TREND_PERIODS` months as bar-chart points
+
+    ``expenses`` is passed in already tenant-scoped, so this never queries and
+    cannot leak across tenants — the same contract as
+    :func:`client_dashboard_analytics`.
+    """
+    from datetime import date as _date
+
+    today = today or _date.today()
+    rows = list(expenses)
+    total = sum((expense.amount or 0) for expense in rows)
+
+    monthly_total = sum(
+        (expense.amount or 0)
+        for expense in rows
+        if expense.expense_date
+        and expense.expense_date.year == today.year
+        and expense.expense_date.month == today.month
+    )
+
+    # Month buckets keyed chronologically, so a December/January boundary orders
+    # correctly rather than alphabetically by month name.
+    buckets = {}
+    for expense in rows:
+        when = expense.expense_date
+        if not when:
+            continue
+        key = (when.year, when.month)
+        bucket = buckets.setdefault(
+            key,
+            {
+                "label": month_name[when.month][:3],
+                "full_label": f"{month_name[when.month]} {when.year}",
+                "amount": 0.0,
+            },
+        )
+        bucket["amount"] += expense.amount or 0
+    ordered = [buckets[key] for key in sorted(buckets)][-TREND_PERIODS:]
+
+    return {
+        "total": total,
+        "monthly_total": monthly_total,
+        "monthly_label": f"{month_name[today.month]} {today.year}",
+        "count": len(rows),
+        "breakdown": category_breakdown(rows),
+        "by_month": _as_points(ordered, "amount"),
+    }
+
+
 def pct_change(current, previous):
     """Signed fractional change vs ``previous``, or None when there is no
     baseline to compare against (no previous period, or a zero baseline — a

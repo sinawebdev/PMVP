@@ -1,0 +1,61 @@
+{% extends "client/base.html" %}
+{% block title %}{{ "Edit" if expense else "Add" }} expense{% endblock %}
+{% set r = values.raw %}
+{% block body %}
+  <div class="page-head">
+    <h1>{{ "Edit expense" if expense else "Add expense" }}</h1>
+    <p class="sub">Expenses you record belong to {{ company.name }} only, and feed your dashboard totals.</p>
+  </div>
+
+  {% if errors %}
+  <div class="flash danger" role="alert">Nothing was saved — check the highlighted fields below.</div>
+  {% endif %}
+
+  <form method="post" class="card form" novalidate>
+    <div class="formgrid">
+      <div>
+        <label for="expense_date">Date *</label>
+        <input id="expense_date" name="expense_date" type="date" required
+               max="{{ today }}" value="{{ r.expense_date }}">
+        {% if errors.expense_date %}<p class="field-error">{{ errors.expense_date }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="category">Category *</label>
+        <select id="category" name="category" required>
+          <option value="" {{ "selected" if not r.category }}>Choose a category…</option>
+          {% for category in categories %}
+          <option value="{{ category }}" {{ "selected" if r.category == category }}>{{ category }}</option>
+          {% endfor %}
+        </select>
+        {% if errors.category %}<p class="field-error">{{ errors.category }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="amount">Amount (GH₵) *</label>
+        <input id="amount" name="amount" inputmode="decimal" required value="{{ r.amount }}">
+        {% if errors.amount %}<p class="field-error">{{ errors.amount }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="receipt">Attachment</label>
+        {# Receipt uploads are not wired yet (Expense.receipt_attachment stays
+           NULL). Shown disabled rather than hidden so the field's future home is
+           obvious and no one designs around its absence. #}
+        <input id="receipt" type="file" disabled aria-describedby="receipt-help">
+        <p class="muted" id="receipt-help">Receipt uploads are coming soon.</p>
+      </div>
+    </div>
+
+    <label for="description">Description *</label>
+    <input id="description" name="description" required maxlength="255" value="{{ r.description }}"
+           placeholder="What was the money spent on?">
+    {% if errors.description %}<p class="field-error">{{ errors.description }}</p>{% endif %}
+
+    <label for="notes">Notes</label>
+    <textarea id="notes" name="notes" rows="3"
+              placeholder="Optional — who authorised it, which site, anything unusual.">{{ r.notes }}</textarea>
+
+    <div class="actions form-foot">
+      <button class="btn primary" type="submit">{{ "Save changes" if expense else "Add expense" }}</button>
+      <a class="btn" href="{{ url_for('client.expenses') }}">Cancel</a>
+    </div>
+  </form>
+{% endblock %}

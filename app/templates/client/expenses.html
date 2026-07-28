@@ -1,29 +1,96 @@
 {% extends "client/base.html" %}
+{% import "macros/charts.html" as ch %}
 {% block title %}Expenses{% endblock %}
+{% set may_record = can_record_expenses(current_user.role) %}
 {% block body %}
-  <div class="page-head">
-    <h1>Expenses</h1>
-    <p class="sub">Expenses recorded against {{ company.name }}.</p>
+  <div class="toolbar">
+    <div class="page-head">
+      <h1>Expenses</h1>
+      <p class="sub">Operational expenses recorded against {{ company.name }}. These totals feed your dashboard.</p>
+    </div>
+    {% if may_record %}
+    <a class="btn primary" href="{{ url_for('client.expense_add') }}">+ Add Expense</a>
+    {% endif %}
   </div>
+
+  {# --- Totals ------------------------------------------------------------
+     Three figures a manager checks first: everything recorded, this calendar
+     month, and how many entries sit behind them. Every one is derived from the
+     same app.analytics.expense_summary the dashboard reads. #}
+  <div class="grid">
+    <div class="card stat-card">
+      <span class="n">{{ summary.total | cedis }}</span>
+      <span class="l">Total expenses</span>
+    </div>
+    <div class="card stat-card">
+      <span class="n">{{ summary.monthly_total | cedis }}</span>
+      <span class="l">This month · {{ summary.monthly_label }}</span>
+    </div>
+    <div class="card stat-card">
+      <span class="n">{{ summary.count }}</span>
+      <span class="l">Expenses recorded</span>
+    </div>
+  </div>
+
+  {% if summary.breakdown.slices %}
+  <div class="analytics-grid">
+    <section class="card chart-card">
+      <div class="chart-head">
+        <h2>Category breakdown</h2>
+        <small class="muted">Share of recorded spend</small>
+      </div>
+      {{ ch.donut(summary.breakdown, label="Expenses by category") }}
+    </section>
+    <section class="card chart-card">
+      <div class="chart-head">
+        <h2>Expenses by month</h2>
+        <small class="muted">Last {{ summary.by_month | length }} month{{ "" if summary.by_month|length == 1 else "s" }} recorded</small>
+      </div>
+      {{ ch.bar_chart(summary.by_month, label="Expenses by month") }}
+    </section>
+  </div>
+  {% endif %}
+
   {% if expenses %}
   <div class="panel">
     <table>
-      <thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Method</th><th class="right">Amount</th><th>Status</th></tr></thead>
+      <thead>
+        <tr>
+          <th>Date</th><th>Category</th><th>Description</th><th>Notes</th>
+          <th class="right">Amount</th><th>Status</th>{% if may_record %}<th></th>{% endif %}
+        </tr>
+      </thead>
       <tbody>
         {% for x in expenses %}
         <tr>
-          <td>{{ x.expense_date }}</td>
+          <td class="nums">{{ x.expense_date }}</td>
           <td>{{ x.category }}</td>
-          <td class="muted">{{ x.description }}</td>
-          <td class="muted">{{ x.payment_method or '—' }}</td>
+          <td>{{ x.description }}</td>
+          <td class="muted">{{ x.notes or "—" }}</td>
           <td class="right nums">{{ x.amount | cedis }}</td>
           <td><span class="badge">{{ x.status }}</span></td>
+          {% if may_record %}
+          <td class="right">
+            <div class="actions end">
+              <a class="btn sm" href="{{ url_for('client.expense_edit', expense_id=x.id) }}">Edit</a>
+              <form method="post" action="{{ url_for('client.expense_delete', expense_id=x.id) }}"
+                    onsubmit="return confirm('Delete this expense? This cannot be undone.');">
+                <button class="btn sm danger" type="submit">Delete</button>
+              </form>
+            </div>
+          </td>
+          {% endif %}
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <div class="empty-state">No expenses recorded for your company yet.</div>
+  <div class="empty-state">
+    <p>No expenses recorded for your company yet.</p>
+    {% if may_record %}
+    <a class="btn primary" href="{{ url_for('client.expense_add') }}">+ Add Expense</a>
+    {% endif %}
+  </div>
   {% endif %}
 {% endblock %}

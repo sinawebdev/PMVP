@@ -343,7 +343,13 @@ class Expense(db.Model):
     description = db.Column(db.String(255), nullable=False)
     amount = db.Column(db.Float, default=0)
     payment_method = db.Column(db.String(80))
+    # Free-text context the one-line ``description`` cannot hold (who authorised
+    # it, which site, why it was unusual). Optional.
+    notes = db.Column(db.Text)
     receipt_reference = db.Column(db.String(120))
+    # Stored filename of a receipt scan. No upload path is wired yet — the client
+    # expense form shows it as a disabled "coming soon" control — so this stays
+    # NULL until attachments ship.
     receipt_attachment = db.Column(db.String(255))
     paid_by = db.Column(db.Integer, db.ForeignKey("user.id"))
     approved_by = db.Column(db.Integer, db.ForeignKey("user.id"))

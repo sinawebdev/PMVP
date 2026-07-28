@@ -535,16 +535,8 @@ def statutory():
     )
 
 
-# --- Expenses (read, tenant-scoped) ----------------------------------------
-@client_bp.route("/expenses")
-@tenant_required
-def expenses():
-    rows = (
-        tenant_query(Expense).order_by(Expense.expense_date.desc()).all()
-        if hasattr(Expense, "client_company_id")
-        else []
-    )
-    return render_template("client/expenses.html", company=_company(), expenses=rows)
+# Expenses (self-service CRUD, tenant-scoped) live in app/client/expenses.py and
+# are attached to client_bp by the import at the bottom of this file.
 
 
 # --- Audit trail (read, tenant-scoped) -------------------------------------
@@ -753,3 +745,8 @@ from app.client import raw as _raw  # noqa: E402,F401
 # schedule) — thin wrappers over the shared export engine, tenant-scoped and
 # gated on a completed run. Same import-at-the-bottom pattern as raw.
 from app.client import reports as _reports  # noqa: E402,F401
+
+# Self-service expense management (create/edit/delete a company's own operational
+# expenses), tenant-scoped. Same import-at-the-bottom pattern; its totals feed
+# the company dashboard analytics.
+from app.client import expenses as _expenses  # noqa: E402,F401

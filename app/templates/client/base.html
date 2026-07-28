@@ -33,7 +33,7 @@
         <a href="{{ url_for('client.employees') }}" {% if ep and ep.startswith('client.employee') %}aria-current="page"{% endif %}>Employees</a>
         <a href="{{ url_for('client.runs') }}" {% if ep in ('client.runs', 'client.run_detail', 'client.run_upload', 'client.import_preview', 'client.distribute') %}aria-current="page"{% endif %}>Payroll</a>
         <a href="{{ url_for('client.statutory') }}" {% if ep == 'client.statutory' %}aria-current="page"{% endif %}>Statutory</a>
-        <a href="{{ url_for('client.expenses') }}" {% if ep == 'client.expenses' %}aria-current="page"{% endif %}>Expenses</a>
+        <a href="{{ url_for('client.expenses') }}" {% if ep and ep.startswith('client.expense') %}aria-current="page"{% endif %}>Expenses</a>
         <a href="{{ url_for('client.audit') }}" {% if ep == 'client.audit' %}aria-current="page"{% endif %}>Audit</a>
         {% if (current_user.role or '')|lower == 'client_admin' %}
         <a href="{{ url_for('client.branding') }}" {% if ep == 'client.branding' %}aria-current="page"{% endif %}>Branding</a>
