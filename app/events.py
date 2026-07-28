@@ -185,15 +185,18 @@ def timeline_look(title):
     return _TIMELINE_LOOKS.get(title, _DEFAULT_LOOK)
 
 
-def platform_activity(limit=10):
+def platform_activity(limit=10, now=None):
     """The most recent cross-tenant milestones, newest first.
 
     Two bounded queries (each capped at ``limit``), merged and re-sorted — never
     a full-table scan, and no per-row lookups. Each item is
-    ``{at, actor, title, detail, company, icon, tone}``; ``company`` is the
-    tenant the event belongs to when it is knowable, else None (a platform-plane
-    event).
+    ``{at, when, actor, title, detail, company, icon, tone}``; ``company`` is
+    the tenant the event belongs to when it is knowable, else None (a
+    platform-plane event). ``when`` is the same relative-time string
+    :func:`tenant_activity` computes, so the operator dashboard's timeline can
+    reuse ``macros/dashboard.html::activity_item`` unchanged.
     """
+    now = now or datetime.now(timezone.utc)
     items = []
 
     events = (
@@ -235,7 +238,10 @@ def platform_activity(limit=10):
         )
 
     items.sort(key=lambda item: item["at"].timestamp() if item["at"] else 0.0, reverse=True)
-    return items[:limit]
+    items = items[:limit]
+    for item in items:
+        item["when"] = relative_time(item["at"], now=now)
+    return items
 
 
 # --- Tenant activity timeline -----------------------------------------------

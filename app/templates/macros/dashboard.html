@@ -133,7 +133,10 @@
    A rail with a node per entry: an audit feed's value is the sequence, and the
    rail is what makes the sequence readable at a glance. Time is relative
    ("5 minutes ago") with the exact timestamp on the element's title, because an
-   auditor eventually needs the precise moment. #}
+   auditor eventually needs the precise moment. ``entry.company`` is optional —
+   tenant_activity's items never set it (one tenant, no need to say so); the
+   operator dashboard's platform_activity does, since a cross-tenant feed
+   without the tenant name attached is not actually readable. #}
 {% macro activity_item(entry) %}
 <li class="tl-item tl-item--{{ entry.tone }}">
   <span class="tl-node" aria-hidden="true">{{ icon(entry.icon, 14) }}</span>
@@ -142,6 +145,7 @@
     {% if entry.detail %}<p class="tl-detail">{{ entry.detail }}</p>{% endif %}
     <p class="tl-meta">
       <span>{{ entry.actor }}</span>
+      {% if entry.company %}<span aria-hidden="true">·</span><span>{{ entry.company }}</span>{% endif %}
       <span aria-hidden="true">·</span>
       <time datetime="{{ entry.at.isoformat() if entry.at }}"
             title="{{ entry.at.strftime('%d %b %Y, %H:%M UTC') if entry.at }}">{{ entry.when }}</time>

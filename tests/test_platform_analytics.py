@@ -172,21 +172,30 @@ class PlatformDashboardRenderTestCase(unittest.TestCase):
         self.ctx.pop()
 
     def test_dashboard_renders_every_executive_section(self):
+        # Updated for the executive dashboard redesign: the old two-row,
+        # sixteen-card stats grid was consolidated into a five-tile KPI band
+        # (one tile per distinct question) plus a Risk & Action signals panel
+        # for everything that implies an action rather than states a fact —
+        # see app/platform_dashboard.py for the reasoning. Some headings below
+        # are renamed rather than removed, to match the company portal's own
+        # vocabulary for the same concept (e.g. "Payroll cost trend",
+        # "Recent activity").
         page = self.client.get("/dashboard")
         self.assertEqual(page.status_code, 200)
         body = page.get_data(as_text=True)
         for heading in (
-            "Executive Overview",
-            "Active Companies",
-            "Total Payroll Value",
-            "Total Client Expenses",
-            "Avg Payroll / Company",
-            "Monthly payroll trend",
+            "Payroll cost",
+            "Workforce",
+            "Client companies",
+            "Client expenses",
+            "Payslip delivery",
+            "Risk &amp; action",
+            "Payroll cost trend",
             "Companies by payroll cost",
             "Payroll status distribution",
             "Client growth",
             "Top Clients",
-            "Payroll Activity",
+            "Recent activity",
         ):
             with self.subTest(heading=heading):
                 self.assertIn(heading, body)
