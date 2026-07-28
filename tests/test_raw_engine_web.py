@@ -65,7 +65,7 @@ class RawEngineWebTests(unittest.TestCase):
             db.session.commit()
             self.cid = company.id
 
-    def _login(self, email="admin@chrisnat.local"):
+    def _login(self, email="admin@payrolla.com"):
         return self.client.post(
             "/login", data={"email": email, "password": "password123"},
             follow_redirects=True,
@@ -294,7 +294,7 @@ class RawEngineWebTests(unittest.TestCase):
         run_id = self._seed_via_lib()
         with self.app.app_context():
             aid = RawUploadArchive.query.first().id
-        self._login("operations@chrisnat.local")  # operations_supervisor, not admin
+        self._login("operations@payrolla.com")  # operations_supervisor, not admin
         for method, url in [
             ("post", "/raw/upload"),
             ("post", "/raw/confirm"),

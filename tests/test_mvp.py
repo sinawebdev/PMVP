@@ -31,25 +31,25 @@ class MvpTestCase(unittest.TestCase):
     def login_admin(self):
         return self.client.post(
             "/login",
-            data={"email": "admin@chrisnat.local", "password": "password123"},
+            data={"email": "admin@payrolla.com", "password": "password123"},
             follow_redirects=True,
         )
 
     def login_md(self):
         return self.client.post(
             "/login",
-            data={"email": "md@chrisnat.local", "password": "password123"},
+            data={"email": "director@payrolla.com", "password": "password123"},
             follow_redirects=True,
         )
 
     def login_operations(self):
         return self.client.post(
             "/login",
-            data={"email": "operations@chrisnat.local", "password": "password123"},
+            data={"email": "operations@payrolla.com", "password": "password123"},
             follow_redirects=True,
         )
 
-    def login_client(self, email="msc.client@chrisnat.local"):
+    def login_client(self, email="finance@msc.com"):
         return self.client.post(
             "/login",
             data={"email": email, "password": "password123"},
@@ -85,7 +85,7 @@ class MvpTestCase(unittest.TestCase):
         workbook = Workbook()
         sheet = workbook.active
         sheet.append(["Chrisnat Limited", "Payroll schedule"])
-        sheet.append(["Client", "MSC Ghana Ltd"])
+        sheet.append(["Client", "MSC Limited"])
         sheet.append([])
         sheet.append(
             [
@@ -120,7 +120,7 @@ class MvpTestCase(unittest.TestCase):
 
         sheet = workbook.create_sheet("MSC_Ghana_Ltd")
         sheet.append(["Chrisnat Limited", "Client payroll schedule"])
-        sheet.append(["Client Company", "MSC Ghana Ltd"])
+        sheet.append(["Client Company", "MSC Limited"])
         sheet.append(["Prepared for stress testing"])
         sheet.append(
             [
@@ -260,8 +260,13 @@ class MvpTestCase(unittest.TestCase):
         # Rows carry a basic salary: the compute engine derives everything
         # from basic, and the §8 hard-stop refuses active workers without one.
         for sheet_name, staff_id, worker_name, basic, gross, net in [
+            # Sheet names are what a client actually writes on the tab, so they
+            # only ever approximate the registered company name — the importer
+            # fuzzy-matches them. "MSC_Ghana_Ltd" is deliberately a stale variant
+            # that must still resolve to MSC Limited; the second sheet names its
+            # company properly.
             ("MSC_Ghana_Ltd", "MSC-MC-001", "Adwoa Frimpong", 1200, 1500, 1300),
-            ("Stellar_Logistics", "STL-MC-001", "Yaw Antwi", 800, 1000, 900),
+            ("Acme_Manufacturing_Ltd", "ACM-MC-001", "Yaw Antwi", 800, 1000, 900),
         ]:
             sheet = workbook.create_sheet(sheet_name)
             sheet.append(["Client payroll export"])
@@ -285,8 +290,8 @@ class MvpTestCase(unittest.TestCase):
         sheet.append(["Chrisnat Limited", "Mixed client payroll"])
         sheet.append([])
         sheet.append(["Client Company", "Staff ID", "Worker", "Basic Pay", "Gross Amount", "Tax Deducted", "SSNIT Emp", "Net Amount"])
-        sheet.append(["MSC Ghana Ltd", "MSC-C-001", "Efua Mensah", "1,000.00", "GHC 1,200.00", "100", "50", "1,050.00"])
-        sheet.append(["Stellar Logistics", "STL-C-001", "Kofi Adu", "750", "900", "80", "40", "780"])
+        sheet.append(["MSC Limited", "MSC-C-001", "Efua Mensah", "1,000.00", "GHC 1,200.00", "100", "50", "1,050.00"])
+        sheet.append(["Acme Manufacturing Ltd", "STL-C-001", "Kofi Adu", "750", "900", "80", "40", "780"])
         stream = BytesIO()
         workbook.save(stream)
         stream.seek(0)
@@ -305,8 +310,8 @@ class MvpTestCase(unittest.TestCase):
 
     def test_seeded_users_and_clients_exist(self):
         with self.app.app_context():
-            self.assertIsNotNone(User.query.filter_by(email="admin@chrisnat.local").first())
-            self.assertIsNotNone(ClientCompany.query.filter_by(name="MSC Ghana Ltd").first())
+            self.assertIsNotNone(User.query.filter_by(email="admin@payrolla.com").first())
+            self.assertIsNotNone(ClientCompany.query.filter_by(name="MSC Limited").first())
 
     def test_database_url_normalizes_render_postgres_url(self):
         previous_url = os.environ.get("DATABASE_URL")
@@ -397,8 +402,8 @@ class MvpTestCase(unittest.TestCase):
         try:
             first_app = create_app()
             with first_app.app_context():
-                admin = User.query.filter_by(email="admin@chrisnat.local").first()
-                client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+                admin = User.query.filter_by(email="admin@payrolla.com").first()
+                client_company = ClientCompany.query.filter_by(name="MSC Limited").first()
                 payroll_run = PayrollRun(
                     month="December",
                     year=2099,
@@ -498,7 +503,7 @@ class MvpTestCase(unittest.TestCase):
             file.write(workbook.read())
 
         candidates = payroll_sheet_candidates(file_path)
-        matched_sheet = match_client_sheet("MSC Ghana Ltd", [candidate["sheet_name"] for candidate in candidates])
+        matched_sheet = match_client_sheet("MSC Limited", [candidate["sheet_name"] for candidate in candidates])
         extraction = extract_payroll_sheet(file_path, matched_sheet)
 
         self.assertEqual(matched_sheet, "MSC_Ghana_Ltd")
@@ -648,7 +653,7 @@ class MvpTestCase(unittest.TestCase):
 
     def test_operations_supervisor_seed_user_exists(self):
         with self.app.app_context():
-            user = User.query.filter_by(email="operations@chrisnat.local").first()
+            user = User.query.filter_by(email="operations@payrolla.com").first()
 
         self.assertIsNotNone(user)
         self.assertEqual(user.role, "operations_supervisor")
@@ -674,7 +679,7 @@ class MvpTestCase(unittest.TestCase):
         from app.models import ImportBatch
 
         with self.app.app_context():
-            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_company = ClientCompany.query.filter_by(name="MSC Limited").first()
             client_id = client_company.id
 
         response = self.client.post(
@@ -708,7 +713,7 @@ class MvpTestCase(unittest.TestCase):
         from app.models import ImportBatch
 
         with self.app.app_context():
-            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_company = ClientCompany.query.filter_by(name="MSC Limited").first()
             client_id = client_company.id
 
         response = self.client.post(
@@ -749,7 +754,7 @@ class MvpTestCase(unittest.TestCase):
         stream.seek(0)
 
         with self.app.app_context():
-            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_company = ClientCompany.query.filter_by(name="MSC Limited").first()
             client_id = client_company.id
             original_batches = ImportBatch.query.count()
 
@@ -791,7 +796,7 @@ class MvpTestCase(unittest.TestCase):
         self.assertEqual(preview_response.status_code, 200)
         self.assertIn(b"Confirm and Create Payroll Runs", preview_response.data)
         self.assertIn(b"MSC_Ghana_Ltd", preview_response.data)
-        self.assertIn(b"Stellar_Logistics", preview_response.data)
+        self.assertIn(b"Acme_Manufacturing_Ltd", preview_response.data)
         self.assertIn(b"Unknown_Client_Payroll", preview_response.data)
 
         import_id = response.headers["Location"].rstrip("/").split("/")[-1]
@@ -801,10 +806,10 @@ class MvpTestCase(unittest.TestCase):
         with self.app.app_context():
             batch = db.session.get(ImportBatch, int(import_id))
             self.assertEqual(batch.status, "Imported")
-            msc = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
-            stellar = ClientCompany.query.filter_by(name="Stellar Logistics").first()
+            msc = ClientCompany.query.filter_by(name="MSC Limited").first()
+            acme = ClientCompany.query.filter_by(name="Acme Manufacturing Ltd").first()
             self.assertIsNotNone(PayrollRun.query.filter_by(client_company_id=msc.id, month="April", year=2101).first())
-            self.assertIsNotNone(PayrollRun.query.filter_by(client_company_id=stellar.id, month="April", year=2101).first())
+            self.assertIsNotNone(PayrollRun.query.filter_by(client_company_id=acme.id, month="April", year=2101).first())
 
     def test_multi_client_upload_splits_consolidated_sheet_by_client_column(self):
         self.login_admin()
@@ -825,16 +830,16 @@ class MvpTestCase(unittest.TestCase):
         preview_response = self.client.get(response.headers["Location"])
         self.assertEqual(preview_response.status_code, 200)
         self.assertIn(b"Consolidated_Mixed_Clients", preview_response.data)
-        self.assertIn(b"MSC Ghana Ltd", preview_response.data)
-        self.assertIn(b"Stellar Logistics", preview_response.data)
+        self.assertIn(b"MSC Limited", preview_response.data)
+        self.assertIn(b"Acme Manufacturing Ltd", preview_response.data)
 
         import_id = response.headers["Location"].rstrip("/").split("/")[-1]
         confirm_response = self.client.post(f"/payroll/confirm/{import_id}", follow_redirects=True)
         self.assertEqual(confirm_response.status_code, 200)
 
         with self.app.app_context():
-            msc = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
-            stellar = ClientCompany.query.filter_by(name="Stellar Logistics").first()
+            msc = ClientCompany.query.filter_by(name="MSC Limited").first()
+            stellar = ClientCompany.query.filter_by(name="Acme Manufacturing Ltd").first()
             msc_run = PayrollRun.query.filter_by(client_company_id=msc.id, month="July", year=2101).first()
             stellar_run = PayrollRun.query.filter_by(client_company_id=stellar.id, month="July", year=2101).first()
             self.assertIsNotNone(msc_run)
@@ -857,7 +862,7 @@ class MvpTestCase(unittest.TestCase):
         stream.seek(0)
 
         with self.app.app_context():
-            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_company = ClientCompany.query.filter_by(name="MSC Limited").first()
             client_id = client_company.id
 
         response = self.client.post(
@@ -889,7 +894,7 @@ class MvpTestCase(unittest.TestCase):
     def test_duplicate_payroll_requires_replacement_confirmation(self):
         self.login_admin()
         with self.app.app_context():
-            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_company = ClientCompany.query.filter_by(name="MSC Limited").first()
             client_id = client_company.id
             # Seed a colliding run so the duplicate guard is exercised regardless of
             # the real-world date. The demo seed only creates a run for the *current*
@@ -1037,8 +1042,8 @@ class MvpTestCase(unittest.TestCase):
                 month="March",
                 year=2101,
                 status="Draft",
-                created_by=User.query.filter_by(email="admin@chrisnat.local").first().id,
-                client_company_id=ClientCompany.query.filter_by(name="MSC Ghana Ltd").first().id,
+                created_by=User.query.filter_by(email="admin@payrolla.com").first().id,
+                client_company_id=ClientCompany.query.filter_by(name="MSC Limited").first().id,
                 total_workers=1,
                 total_gross_pay=1200,
                 total_deductions=100,
@@ -1079,7 +1084,7 @@ class MvpTestCase(unittest.TestCase):
         self.client.get("/logout")
         self.client.post(
             "/login",
-            data={"email": "accounts@chrisnat.local", "password": "password123"},
+            data={"email": "accounts@payrolla.com", "password": "password123"},
             follow_redirects=True,
         )
 
@@ -1093,7 +1098,7 @@ class MvpTestCase(unittest.TestCase):
     def test_audit_page_records_expenses(self):
         self.login_md()
         with self.app.app_context():
-            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_company = ClientCompany.query.filter_by(name="MSC Limited").first()
             payroll_run = PayrollRun.query.filter_by(client_company_id=client_company.id).first()
             client_id = client_company.id
             run_id = payroll_run.id
@@ -1160,7 +1165,7 @@ class MvpTestCase(unittest.TestCase):
     def test_inactive_client_status_is_red(self):
         self.login_admin()
         with self.app.app_context():
-            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_company = ClientCompany.query.filter_by(name="MSC Limited").first()
             client_company.status = "Inactive"
             db.session.commit()
 
@@ -1172,7 +1177,7 @@ class MvpTestCase(unittest.TestCase):
     def test_confirmed_import_creates_employee_records(self):
         self.login_admin()
         with self.app.app_context():
-            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_company = ClientCompany.query.filter_by(name="MSC Limited").first()
             client_id = client_company.id
 
         upload_response = self.client.post(
@@ -1199,13 +1204,13 @@ class MvpTestCase(unittest.TestCase):
     def test_payroll_runs_filter_by_client_tab(self):
         self.login_admin()
         with self.app.app_context():
-            msc = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
-            stellar = ClientCompany.query.filter_by(name="Stellar Logistics").first()
+            msc = ClientCompany.query.filter_by(name="MSC Limited").first()
+            stellar = ClientCompany.query.filter_by(name="Acme Manufacturing Ltd").first()
             stellar_run = PayrollRun(
                 month="January",
                 year=2101,
                 status="Draft",
-                created_by=User.query.filter_by(email="admin@chrisnat.local").first().id,
+                created_by=User.query.filter_by(email="admin@payrolla.com").first().id,
                 client_company_id=stellar.id,
                 total_workers=1,
                 source_filename="stellar.xlsx",
@@ -1218,7 +1223,7 @@ class MvpTestCase(unittest.TestCase):
         response = self.client.get(f"/payroll/runs?client_id={msc_id}")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"MSC Ghana Ltd", response.data)
+        self.assertIn(b"MSC Limited", response.data)
         self.assertNotIn(b"stellar.xlsx", response.data)
 
     def test_payroll_runs_page_contains_embedded_upload_form(self):
@@ -1261,7 +1266,7 @@ class MvpTestCase(unittest.TestCase):
     def test_admin_can_create_proposal_draft_for_client(self):
         self.login_admin()
         with self.app.app_context():
-            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_company = ClientCompany.query.filter_by(name="MSC Limited").first()
             client_id = client_company.id
 
         response = self.client.post(
@@ -1286,7 +1291,7 @@ class MvpTestCase(unittest.TestCase):
     def test_client_detail_shows_phase2_payroll_dashboard_metrics(self):
         self.login_admin()
         with self.app.app_context():
-            client_company = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+            client_company = ClientCompany.query.filter_by(name="MSC Limited").first()
             client_id = client_company.id
 
         response = self.client.get(f"/clients/{client_id}")

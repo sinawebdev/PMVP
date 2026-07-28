@@ -25,7 +25,7 @@ class HistorySearchTestCase(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
         self.run = PayrollRun.query.filter_by(status="Approved").first()
-        self.operator = User.query.filter_by(email="admin@chrisnat.local").first()
+        self.operator = User.query.filter_by(email="admin@payrolla.com").first()
         # One completed distribution so there is history to search.
         enqueue_distribution(self.run, "auto", False, self.operator)
         process_all_queued()
@@ -80,7 +80,7 @@ class HistoryRouteTestCase(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
         self.run = PayrollRun.query.filter_by(status="Approved").first()
-        self.operator = User.query.filter_by(email="admin@chrisnat.local").first()
+        self.operator = User.query.filter_by(email="admin@payrolla.com").first()
         enqueue_distribution(self.run, "auto", False, self.operator)
         process_all_queued()
 
@@ -92,7 +92,7 @@ class HistoryRouteTestCase(unittest.TestCase):
         self.http.post("/login", data={"email": email, "password": "password123"})
 
     def test_operator_sees_history_and_batch_detail(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         hist = self.http.get("/distribution/history")
         self.assertEqual(hist.status_code, 200)
         self.assertIn("Distribution History", hist.get_data(as_text=True))
@@ -103,7 +103,7 @@ class HistoryRouteTestCase(unittest.TestCase):
         self.assertIn("Initiated by", detail.get_data(as_text=True))
 
     def test_tenant_user_is_blocked_from_history(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         resp = self.http.get("/distribution/history", follow_redirects=False)
         self.assertEqual(resp.status_code, 302)
         self.assertNotIn("/distribution/history", resp.headers["Location"])

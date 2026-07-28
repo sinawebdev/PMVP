@@ -47,7 +47,7 @@ class CancelDistributionTestCase(unittest.TestCase):
         self.ctx.push()
         self.run = PayrollRun.query.filter_by(status="Approved").first()
         self.item = self.run.items[0]
-        self.operator = User.query.filter_by(email="admin@chrisnat.local").first()
+        self.operator = User.query.filter_by(email="admin@payrolla.com").first()
 
     def tearDown(self):
         db.session.remove()
@@ -139,7 +139,7 @@ class CancelRouteTestCase(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
         self.run = PayrollRun.query.filter_by(status="Approved").first()
-        self.operator = User.query.filter_by(email="admin@chrisnat.local").first()
+        self.operator = User.query.filter_by(email="admin@payrolla.com").first()
 
     def tearDown(self):
         db.session.remove()
@@ -149,7 +149,7 @@ class CancelRouteTestCase(unittest.TestCase):
         self.http.post("/login", data={"email": email, "password": "password123"})
 
     def test_operator_cancel_route_cancels_queued_batch(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         enqueue_distribution(self.run, "auto", False, self.operator)
         resp = self.http.post(
             f"/distribution/run/{self.run.id}/cancel", follow_redirects=True
@@ -163,7 +163,7 @@ class CancelRouteTestCase(unittest.TestCase):
         )
 
     def test_cancel_requires_operator_role(self):
-        self._login("operations@chrisnat.local")  # not in PAYROLL_ROLES
+        self._login("operations@payrolla.com")  # not in PAYROLL_ROLES
         enqueue_distribution(self.run, "auto", False, self.operator)
         resp = self.http.post(
             f"/distribution/run/{self.run.id}/cancel", follow_redirects=True

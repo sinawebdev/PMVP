@@ -26,8 +26,8 @@ class ClientDistributionTestCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        self.msc = User.query.filter_by(email="admin@msc.demo").first()
-        self.stellar = User.query.filter_by(email="admin@stellar.demo").first()
+        self.msc = User.query.filter_by(email="admin@msc.com").first()
+        self.stellar = User.query.filter_by(email="admin@acme.com").first()
         self.msc_run = PayrollRun.query.filter_by(
             client_company_id=self.msc.client_company_id
         ).first()
@@ -60,7 +60,7 @@ class ClientDistributionTestCase(unittest.TestCase):
         ).all()
 
     def test_admin_views_page_and_downloads_zip(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         self.assertEqual(
             self.client.get(f"/company/runs/{self.msc_run.id}/distribute").status_code, 200
         )
@@ -70,7 +70,7 @@ class ClientDistributionTestCase(unittest.TestCase):
         self.assertTrue(resp.get_data().startswith(b"PK"))  # a real zip
 
     def test_admin_send_queues_a_batch_and_is_idempotent(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         nonce = "fixed-nonce-1"
         first = self.client.post(
             f"/company/runs/{self.msc_run.id}/distribute/send",
@@ -114,7 +114,7 @@ class ClientDistributionTestCase(unittest.TestCase):
         )
 
     def test_cross_tenant_distribution_is_404(self):
-        self._login("admin@stellar.demo")  # a different tenant (also client_admin)
+        self._login("admin@acme.com")  # a different tenant (also client_admin)
         self.assertEqual(
             self.client.get(f"/company/runs/{self.msc_run.id}/distribute").status_code, 404
         )
@@ -140,7 +140,7 @@ class ClientDistributionTestCase(unittest.TestCase):
         )
 
     def test_status_fragment_renders_delivery_table(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         resp = self.client.get(
             f"/company/runs/{self.msc_run.id}/distribute/status-fragment"
         )
@@ -148,7 +148,7 @@ class ClientDistributionTestCase(unittest.TestCase):
         self.assertIn("Per-worker delivery", resp.get_data(as_text=True))
 
     def test_send_hidden_while_a_batch_is_in_flight(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         self.client.post(
             f"/company/runs/{self.msc_run.id}/distribute/send",
             data={"channel": "auto", "nonce": "n2"},

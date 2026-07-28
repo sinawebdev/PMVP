@@ -227,7 +227,7 @@ class RenderedButtonVisibilityTestCase(unittest.TestCase):
         return {name for name, frag in actions.items() if frag in body}
 
     def test_admin_draft_run_shows_full_open_toolset(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         run_id = self._make_run(DRAFT)
         self.assertEqual(
             self._buttons(run_id),
@@ -235,7 +235,7 @@ class RenderedButtonVisibilityTestCase(unittest.TestCase):
         )
 
     def test_admin_pending_run_hides_submit_and_delete(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         run_id = self._make_run(PENDING_APPROVAL)
         buttons = self._buttons(run_id)
         self.assertEqual(buttons, {"calculate", "edit", "approve", "reject"})
@@ -243,7 +243,7 @@ class RenderedButtonVisibilityTestCase(unittest.TestCase):
         self.assertNotIn("delete", buttons)  # not a deletable status
 
     def test_admin_approved_run_shows_mark_processed_edit_and_distribute(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         run_id = self._make_run(APPROVED)
         buttons = self._buttons(run_id)
         # Approved is a SENDABLE status, so Distribute Payslips appears alongside
@@ -256,7 +256,7 @@ class RenderedButtonVisibilityTestCase(unittest.TestCase):
         # The bug fix: a Processed (terminal) run still offers Distribute
         # Payslips. It used to disappear because the gate checked the dead
         # "Paid" status instead of "Processed".
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         run_id = self._make_run(PROCESSED)
         buttons = self._buttons(run_id)
         self.assertEqual(buttons, {"edit", "distribute"})
@@ -266,7 +266,7 @@ class RenderedButtonVisibilityTestCase(unittest.TestCase):
     def test_distribute_button_visible_only_for_sendable_statuses(self):
         # Distribution is offered for finalized runs (Approved, Processed) and
         # for no other lifecycle state.
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         for status in (APPROVED, PROCESSED):
             with self.subTest(status=status):
                 self.assertIn("distribute", self._buttons(self._make_run(status)))
@@ -275,12 +275,12 @@ class RenderedButtonVisibilityTestCase(unittest.TestCase):
                 self.assertNotIn("distribute", self._buttons(self._make_run(status)))
 
     def test_payroll_officer_only_sees_edit_figures(self):
-        self._login("payroll@chrisnat.local")
+        self._login("payroll@payrolla.com")
         run_id = self._make_run(DRAFT)
         self.assertEqual(self._buttons(run_id), {"edit"})
 
     def test_accounts_officer_can_submit_not_approve(self):
-        self._login("accounts@chrisnat.local")
+        self._login("accounts@payrolla.com")
         run_id = self._make_run(DRAFT)
         buttons = self._buttons(run_id)
         self.assertIn("submit", buttons)
@@ -288,7 +288,7 @@ class RenderedButtonVisibilityTestCase(unittest.TestCase):
         self.assertNotIn("delete", buttons)
 
     def test_md_approves_and_deletes_but_cannot_submit(self):
-        self._login("md@chrisnat.local")
+        self._login("director@payrolla.com")
         run_id = self._make_run(DRAFT)
         buttons = self._buttons(run_id)
         self.assertIn("approve", buttons)
@@ -301,7 +301,7 @@ class RenderedButtonVisibilityTestCase(unittest.TestCase):
         # The behaviour change this refactor intentionally makes: chrisnat_admin
         # could already POST these routes; it now also sees the buttons, matching
         # admin exactly.
-        self._login("chrisnat.admin@chrisnat.local")
+        self._login("operator@payrolla.com")
         draft = self._make_run(DRAFT)
         self.assertEqual(
             self._buttons(draft),
@@ -324,7 +324,7 @@ class DistributionRouteEnforcementTestCase(unittest.TestCase):
         with self.app.app_context():
             self.client_id = ClientCompany.query.first().id
         self.http.post(
-            "/login", data={"email": "admin@chrisnat.local", "password": "password123"}
+            "/login", data={"email": "admin@payrolla.com", "password": "password123"}
         )
 
     def _make_run(self, status):
@@ -391,7 +391,7 @@ class DistributionRouteEnforcementTestCase(unittest.TestCase):
         run_id = self._make_run(APPROVED)
         with self.app.app_context():
             run = db.session.get(PayrollRun, run_id)
-            operator = User.query.filter_by(email="admin@chrisnat.local").first()
+            operator = User.query.filter_by(email="admin@payrolla.com").first()
             enqueue_distribution(run, CHANNEL_AUTO, False, operator)
 
         resp = self.http.get(f"/distribution/run/{run_id}")

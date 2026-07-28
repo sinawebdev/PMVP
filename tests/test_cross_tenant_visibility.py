@@ -32,8 +32,8 @@ class CrossTenantVisibilityTestCase(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
 
-        self.msc = User.query.filter_by(email="admin@msc.demo").first()
-        self.stellar = User.query.filter_by(email="admin@stellar.demo").first()
+        self.msc = User.query.filter_by(email="admin@msc.com").first()
+        self.stellar = User.query.filter_by(email="admin@acme.com").first()
         self.msc_cid = self.msc.client_company_id
         self.stellar_cid = self.stellar.client_company_id
 
@@ -83,15 +83,15 @@ class CrossTenantVisibilityTestCase(unittest.TestCase):
         self.client.get("/logout")
 
     def test_msc_never_sees_stellar_markers(self):
-        self._sweep("admin@msc.demo", self.msc_cid, self.stellar_cid)
+        self._sweep("admin@msc.com", self.msc_cid, self.stellar_cid)
 
     def test_stellar_never_sees_msc_markers(self):
-        self._sweep("admin@stellar.demo", self.stellar_cid, self.msc_cid)
+        self._sweep("admin@acme.com", self.stellar_cid, self.msc_cid)
 
     def test_each_tenant_sees_its_own_markers(self):
         # Guard the test: the markers ARE visible to their owner, so a passing
         # cross-visibility sweep is meaningful (not just empty pages).
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         emp_html = self.client.get("/company/employees").get_data(as_text=True)
         self.assertIn("ZZMSCEMP", emp_html)
         exp_html = self.client.get("/company/expenses").get_data(as_text=True)

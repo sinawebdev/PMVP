@@ -135,6 +135,108 @@ def event_type_label(event_type):
     return _EVENT_LABELS.get(event_type, event_type.replace(".", " ").replace("_", " ").title())
 
 
+# --- Platform activity timeline ---------------------------------------------
+# The operator dashboard's "what has been happening across the book" feed. The
+# two existing logs already hold everything it needs, so this introduces no
+# model and no writer: DomainEvents supply the distribution/risk milestones,
+# AuditTrail the lifecycle ones. AuditTrail is filtered to a curated set of
+# MILESTONE actions — an unfiltered feed drowns in per-field payroll edits and
+# stops being an executive summary.
+PLATFORM_TIMELINE_ACTIONS = (
+    "Client company onboarded",
+    "Client run imported",
+    "Payroll import confirmed",
+    "Payroll approval",
+    "Payroll rejection",
+    "Payroll processed",
+    "Payslips distributed",
+    "Risk hold released",
+    "Expense recorded",
+    "Statutory rate version added",
+)
+
+# title -> (Bootstrap icon class, semantic tone). Same layering as
+# app.payroll_status.status_badge_class: presentation mapping in Python so every
+# surface renders the same event identically.
+_TIMELINE_LOOKS = {
+    "Client company onboarded": ("bi-building-add", "success"),
+    "Client run imported": ("bi-file-earmark-arrow-up", "info"),
+    "Payroll import confirmed": ("bi-file-earmark-arrow-up", "info"),
+    "Payroll approval": ("bi-check2-circle", "success"),
+    "Payroll rejection": ("bi-x-circle", "danger"),
+    "Payroll processed": ("bi-flag", "primary"),
+    "Payslips distributed": ("bi-send-check", "primary"),
+    "Distribution completed": ("bi-send-check", "primary"),
+    "Distribution failed": ("bi-exclamation-octagon", "danger"),
+    "Distribution cancelled": ("bi-slash-circle", "warning"),
+    "Payroll run held for review": ("bi-shield-exclamation", "warning"),
+    "Payroll run released": ("bi-shield-check", "success"),
+    "Risk hold released": ("bi-shield-check", "success"),
+    "Payroll run auto-accepted": ("bi-shield-check", "info"),
+    "Expense recorded": ("bi-receipt", "secondary"),
+    "Statutory rate version added": ("bi-bank", "secondary"),
+}
+_DEFAULT_LOOK = ("bi-dot", "secondary")
+
+
+def timeline_look(title):
+    """(icon class, tone) for a timeline entry; a sane default for anything new."""
+    return _TIMELINE_LOOKS.get(title, _DEFAULT_LOOK)
+
+
+def platform_activity(limit=10):
+    """The most recent cross-tenant milestones, newest first.
+
+    Two bounded queries (each capped at ``limit``), merged and re-sorted — never
+    a full-table scan, and no per-row lookups. Each item is
+    ``{at, actor, title, detail, company, icon, tone}``; ``company`` is the
+    tenant the event belongs to when it is knowable, else None (a platform-plane
+    event).
+    """
+    items = []
+
+    events = (
+        DomainEvent.query.order_by(DomainEvent.created_at.desc()).limit(limit).all()
+    )
+    for event in events:
+        title = event_type_label(event.event_type)
+        icon, tone = timeline_look(title)
+        items.append(
+            {
+                "at": event.created_at,
+                "actor": event.actor.name if event.actor else "System",
+                "title": title,
+                "detail": event.summary or "",
+                "company": event.client_company.name if event.client_company else None,
+                "icon": icon,
+                "tone": tone,
+            }
+        )
+
+    audits = (
+        AuditTrail.query.filter(AuditTrail.action.in_(PLATFORM_TIMELINE_ACTIONS))
+        .order_by(AuditTrail.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    for entry in audits:
+        icon, tone = timeline_look(entry.action)
+        items.append(
+            {
+                "at": entry.created_at,
+                "actor": entry.user.name if entry.user else "System",
+                "title": entry.action,
+                "detail": entry.notes or "",
+                "company": None,
+                "icon": icon,
+                "tone": tone,
+            }
+        )
+
+    items.sort(key=lambda item: item["at"].timestamp() if item["at"] else 0.0, reverse=True)
+    return items[:limit]
+
+
 def run_activity(run):
     """A run's merged, most-recent-first activity + approval timeline.
 

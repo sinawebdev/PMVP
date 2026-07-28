@@ -16,7 +16,11 @@ group below. Two legacy behaviours are deliberately left untouched:
     special case in :func:`app.auth.role_required`. That is independent of these
     groups (which gate templates literally) and is unchanged here.
   * Tenant (client) roles are governed separately in :mod:`app.roles` /
-    :func:`app.tenancy.tenant_role_required`; this module is operator-plane only.
+    :func:`app.tenancy.tenant_role_required`. The operator groups here never
+    apply to them. A small tenant-capability section lives at the bottom of this
+    file so "which role may do X" has one home across both planes — but the
+    *plane* is still decided solely by ``User.client_company_id``, so a tenant
+    role can never widen a tenant user's data horizon.
 """
 
 from app.payroll_status import (
@@ -26,7 +30,7 @@ from app.payroll_status import (
     PENDING_STATUSES,
     SENDABLE_STATUSES,
 )
-from app.roles import CHRISNAT_ADMIN, normalise_role
+from app.roles import CHRISNAT_ADMIN, CLIENT_ADMIN, CLIENT_PREPARER, normalise_role
 
 # ``chrisnat_admin`` is the SaaS-era platform superuser: it joins every operator
 # capability group here (drives nav), and app.auth.role_required passes it on
@@ -171,6 +175,24 @@ def can_distribute_run(role, run):
     status guard, so the button a user sees and the route they may hit derive
     from one rule."""
     return _in(role, PAYROLL_ROLES) and run.status in SENDABLE_STATUSES
+
+
+# --- Tenant (client plane) capabilities --------------------------------------
+# The mirror of the operator groups above, for roles inside ONE tenant. Same
+# contract: the predicate gates both the control a user sees and the route they
+# may hit, so the two cannot drift. These say what a tenant role may DO; the
+# plane (and therefore the data horizon) is still resolved only from
+# ``User.client_company_id`` in app/tenancy.py.
+
+# Record, edit and delete the company's own operational expenses. Deliberately
+# the same pair that may prepare a payroll run — expense capture introduces no
+# new permission concept, it reuses the "may act on this company's books" role.
+EXPENSE_ROLES = frozenset({CLIENT_ADMIN, CLIENT_PREPARER})
+
+
+def can_record_expenses(role):
+    """May create/edit/delete their own company's expenses (tenant plane)."""
+    return _in(role, EXPENSE_ROLES)
 
 
 def can_delete_run(role, run):

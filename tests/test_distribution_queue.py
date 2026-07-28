@@ -43,8 +43,8 @@ class DistributionQueueTestCase(unittest.TestCase):
         self.ctx.push()
         self.run = PayrollRun.query.filter_by(status="Approved").first()
         self.assertIsNotNone(self.run, "expected a seeded Approved payroll run")
-        self.operator = User.query.filter_by(email="admin@chrisnat.local").first()
-        self.tenant_admin = User.query.filter_by(email="admin@msc.demo").first()
+        self.operator = User.query.filter_by(email="admin@payrolla.com").first()
+        self.tenant_admin = User.query.filter_by(email="admin@msc.com").first()
 
     def tearDown(self):
         db.session.remove()
@@ -127,7 +127,7 @@ class DistributionQueueTestCase(unittest.TestCase):
         self.assertEqual(process_all_queued(), [])
 
     def test_client_initiated_batch_notifies_platform_admins(self):
-        self.assertIsNotNone(self.tenant_admin, "expected seeded admin@msc.demo")
+        self.assertIsNotNone(self.tenant_admin, "expected seeded admin@msc.com")
         msc_run = PayrollRun.query.filter_by(
             client_company_id=self.tenant_admin.client_company_id
         ).first()

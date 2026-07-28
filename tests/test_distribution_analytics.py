@@ -29,7 +29,7 @@ class AnalyticsTestCase(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
         self.run = PayrollRun.query.filter_by(status="Approved").first()
-        self.operator = User.query.filter_by(email="admin@chrisnat.local").first()
+        self.operator = User.query.filter_by(email="admin@payrolla.com").first()
         # One item fails (no contact) so analytics has a sent/failed mix on sms.
         item = self.run.items[0]
         item.momo_number = None
@@ -96,7 +96,7 @@ class AnalyticsRouteTestCase(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
         self.run = PayrollRun.query.filter_by(status="Approved").first()
-        self.operator = User.query.filter_by(email="admin@chrisnat.local").first()
+        self.operator = User.query.filter_by(email="admin@payrolla.com").first()
         enqueue_distribution(self.run, "auto", False, self.operator)
         process_all_queued()
 
@@ -108,7 +108,7 @@ class AnalyticsRouteTestCase(unittest.TestCase):
         self.http.post("/login", data={"email": email, "password": "password123"})
 
     def test_operator_sees_analytics_and_exports(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         self.assertEqual(self.http.get("/distribution/analytics").status_code, 200)
         csv_resp = self.http.get("/distribution/history/export.csv")
         self.assertEqual(csv_resp.status_code, 200)
@@ -119,7 +119,7 @@ class AnalyticsRouteTestCase(unittest.TestCase):
         self.assertTrue(xlsx_resp.get_data().startswith(b"PK"))
 
     def test_tenant_user_is_blocked(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         resp = self.http.get("/distribution/analytics", follow_redirects=False)
         self.assertEqual(resp.status_code, 302)
         self.assertNotIn("/distribution/analytics", resp.headers["Location"])

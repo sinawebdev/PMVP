@@ -51,7 +51,7 @@ class RunsListNoNPlusOneTests(unittest.TestCase):
 
     def _login(self):
         self.client.post(
-            "/login", data={"email": "admin@chrisnat.local", "password": "password123"},
+            "/login", data={"email": "admin@payrolla.com", "password": "password123"},
             follow_redirects=True,
         )
 
@@ -108,7 +108,7 @@ class BulkApplyBatchFetchTests(unittest.TestCase):
             db.session.flush()
             ids.append(run.id)
         db.session.commit()
-        user = User.query.filter_by(email="admin@chrisnat.local").first()
+        user = User.query.filter_by(email="admin@payrolla.com").first()
 
         # predicate=False exercises the skip branch, which builds a label from
         # run.client_company — batching must eager-load it so neither the fetch nor

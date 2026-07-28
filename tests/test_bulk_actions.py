@@ -65,7 +65,7 @@ class BulkActionsTestCase(unittest.TestCase):
     # --- bulk approve --------------------------------------------------
 
     def test_bulk_approve_mixed_statuses_skips_ineligible(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         eligible = self._run(DRAFT)
         also_eligible = self._run(PENDING_APPROVAL)
         ineligible = self._run(APPROVED)
@@ -86,7 +86,7 @@ class BulkActionsTestCase(unittest.TestCase):
         self.assertEqual(also_eligible.status, APPROVED)
 
     def test_bulk_approve_stamps_approver_and_records_audit(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         run = self._run(DRAFT)
         self.http.post("/payroll/runs/bulk/approve", data={"run_ids": [str(run.id)]})
         db.session.refresh(run)
@@ -97,7 +97,7 @@ class BulkActionsTestCase(unittest.TestCase):
         self.assertIn("Payroll approval", html)  # shows in the run's activity feed
 
     def test_bulk_approve_requires_approval_role(self):
-        self._login("payroll@chrisnat.local")  # payroll_officer is not in APPROVAL_ROLES
+        self._login("payroll@payrolla.com")  # payroll_officer is not in APPROVAL_ROLES
         run = self._run(DRAFT)
         resp = self.http.post(
             "/payroll/runs/bulk/approve",
@@ -109,14 +109,14 @@ class BulkActionsTestCase(unittest.TestCase):
         self.assertEqual(run.status, DRAFT)
 
     def test_bulk_approve_empty_selection_flashes_and_changes_nothing(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         resp = self.http.post(
             "/payroll/runs/bulk/approve", data={}, follow_redirects=True
         )
         self.assertIn("No runs selected for bulk approve", resp.get_data(as_text=True))
 
     def test_bulk_approve_ignores_duplicate_and_unknown_ids(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         run = self._run(DRAFT)
         resp = self.http.post(
             "/payroll/runs/bulk/approve",
@@ -131,7 +131,7 @@ class BulkActionsTestCase(unittest.TestCase):
         self.assertEqual(run.status, APPROVED)
 
     def test_bulk_approve_preserves_list_filter_on_redirect(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         run = self._run(DRAFT)
         resp = self.http.post(
             "/payroll/runs/bulk/approve",
@@ -143,7 +143,7 @@ class BulkActionsTestCase(unittest.TestCase):
     # --- bulk reject -----------------------------------------------------
 
     def test_bulk_reject_applies_shared_notes_to_every_run(self):
-        self._login("md@chrisnat.local")
+        self._login("director@payrolla.com")
         a = self._run(DRAFT)
         b = self._run(PENDING_APPROVAL)
         resp = self.http.post(
@@ -160,7 +160,7 @@ class BulkActionsTestCase(unittest.TestCase):
         self.assertEqual(b.notes, "Duplicate upload")
 
     def test_bulk_reject_skips_already_closed_run(self):
-        self._login("md@chrisnat.local")
+        self._login("director@payrolla.com")
         closed = self._run(PROCESSED)
         resp = self.http.post(
             "/payroll/runs/bulk/reject",
@@ -172,7 +172,7 @@ class BulkActionsTestCase(unittest.TestCase):
         self.assertEqual(closed.status, PROCESSED)
 
     def test_bulk_reject_requires_approval_role(self):
-        self._login("accounts@chrisnat.local")  # accounts_officer not in APPROVAL_ROLES
+        self._login("accounts@payrolla.com")  # accounts_officer not in APPROVAL_ROLES
         run = self._run(DRAFT)
         resp = self.http.post(
             "/payroll/runs/bulk/reject",
@@ -186,7 +186,7 @@ class BulkActionsTestCase(unittest.TestCase):
     # --- bulk distribute ---------------------------------------------------
 
     def test_bulk_distribute_sends_eligible_and_skips_draft(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         seeded_approved = PayrollRun.query.filter_by(status=APPROVED).first()
         self.assertIsNotNone(seeded_approved, "expected a seeded Approved payroll run")
         draft = self._run(DRAFT)
@@ -211,7 +211,7 @@ class BulkActionsTestCase(unittest.TestCase):
         self.assertTrue(rows)
 
     def test_bulk_distribute_requires_payroll_role(self):
-        self._login("operations@chrisnat.local")  # operations_supervisor: no lifecycle group
+        self._login("operations@payrolla.com")  # operations_supervisor: no lifecycle group
         seeded_approved = PayrollRun.query.filter_by(status=APPROVED).first()
         resp = self.http.post(
             "/payroll/runs/bulk/distribute",
@@ -226,7 +226,7 @@ class BulkActionsTestCase(unittest.TestCase):
     def test_bulk_distribute_on_processed_run_is_eligible(self):
         # SENDABLE_STATUSES = Approved or Processed — a closed run stays
         # distributable, matching can_distribute_run/the single-run route.
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         run = self._run(PROCESSED)
         resp = self.http.post(
             "/payroll/runs/bulk/distribute",
@@ -238,7 +238,7 @@ class BulkActionsTestCase(unittest.TestCase):
     # --- UI wiring ---------------------------------------------------------
 
     def test_runs_list_renders_bulk_controls_for_admin(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         html = self.http.get("/payroll/runs").get_data(as_text=True)
         self.assertIn("Bulk Approve", html)
         self.assertIn("Bulk Reject", html)
@@ -246,7 +246,7 @@ class BulkActionsTestCase(unittest.TestCase):
         self.assertIn("run-select-checkbox", html)
 
     def test_runs_list_hides_bulk_controls_for_unprivileged_role(self):
-        self._login("operations@chrisnat.local")
+        self._login("operations@payrolla.com")
         resp = self.http.get("/payroll/runs")
         # operations_supervisor is redirected off the operator-only runs list
         # entirely (role_required), so the bulk controls never render for it.

@@ -165,6 +165,99 @@ def cost_mix(payroll_total, expense_total):
     }
 
 
+# Slice tones the chart macros know how to colour, cycled for a breakdown with
+# more categories than named tones. Presentation only.
+BREAKDOWN_TONES = ("brand", "accent", "deep", "soft", "muted")
+
+
+def category_breakdown(expenses, tones=BREAKDOWN_TONES):
+    """Expenses grouped by category, largest first, in donut-slice shape.
+
+    ``{slices: [{label, value, pct, tone}], total}`` — the same contract as
+    :func:`cost_mix`, so the donut macro renders it with no changes. Categories
+    summing to zero yield an empty slice list rather than a divide-by-zero.
+    """
+    buckets = {}
+    for expense in expenses:
+        label = (getattr(expense, "category", None) or "Uncategorised").strip() or "Uncategorised"
+        buckets[label] = buckets.get(label, 0.0) + (getattr(expense, "amount", 0) or 0)
+    total = sum(buckets.values())
+    if total <= 0:
+        return {"slices": [], "total": 0}
+    ordered = sorted(buckets.items(), key=lambda pair: pair[1], reverse=True)
+    return {
+        "slices": [
+            {
+                "label": label,
+                "value": value,
+                "pct": round(value / total * 100, 2),
+                "tone": tones[index % len(tones)],
+            }
+            for index, (label, value) in enumerate(ordered)
+            if value > 0
+        ],
+        "total": total,
+    }
+
+
+def expense_summary(expenses, today=None):
+    """Headline figures for a company's expense ledger.
+
+    ``{total, monthly_total, monthly_label, count, breakdown, by_month}``:
+
+      total         — every recorded expense
+      monthly_total — the CURRENT calendar month only (the figure a manager
+                      checks against this month's budget)
+      breakdown     — :func:`category_breakdown`, donut-ready
+      by_month      — the last :data:`TREND_PERIODS` months as bar-chart points
+
+    ``expenses`` is passed in already tenant-scoped, so this never queries and
+    cannot leak across tenants — the same contract as
+    :func:`client_dashboard_analytics`.
+    """
+    from datetime import date as _date
+
+    today = today or _date.today()
+    rows = list(expenses)
+    total = sum((expense.amount or 0) for expense in rows)
+
+    monthly_total = sum(
+        (expense.amount or 0)
+        for expense in rows
+        if expense.expense_date
+        and expense.expense_date.year == today.year
+        and expense.expense_date.month == today.month
+    )
+
+    # Month buckets keyed chronologically, so a December/January boundary orders
+    # correctly rather than alphabetically by month name.
+    buckets = {}
+    for expense in rows:
+        when = expense.expense_date
+        if not when:
+            continue
+        key = (when.year, when.month)
+        bucket = buckets.setdefault(
+            key,
+            {
+                "label": month_name[when.month][:3],
+                "full_label": f"{month_name[when.month]} {when.year}",
+                "amount": 0.0,
+            },
+        )
+        bucket["amount"] += expense.amount or 0
+    ordered = [buckets[key] for key in sorted(buckets)][-TREND_PERIODS:]
+
+    return {
+        "total": total,
+        "monthly_total": monthly_total,
+        "monthly_label": f"{month_name[today.month]} {today.year}",
+        "count": len(rows),
+        "breakdown": category_breakdown(rows),
+        "by_month": _as_points(ordered, "amount"),
+    }
+
+
 def pct_change(current, previous):
     """Signed fractional change vs ``previous``, or None when there is no
     baseline to compare against (no previous period, or a zero baseline — a
@@ -203,6 +296,199 @@ def totals_trend(runs, periods=TREND_PERIODS):
     header sparkline. Same shape as :func:`client_cost_trend`; runs from
     different clients in the same month are summed into one point."""
     return client_cost_trend(runs, periods=periods)
+
+
+# --- Platform (operator) executive overview ---------------------------------
+# The operator dashboard's counterpart to client_dashboard_analytics: the same
+# lightweight, per-request, no-cache approach, aggregated ACROSS tenants rather
+# than within one. Deliberately not a BI layer — every figure is a plain
+# aggregate of columns the models already carry.
+
+# Run status -> a donut tone name defined in tokens.css. Presentation only; the
+# status vocabulary itself lives in app/payroll_status.py.
+STATUS_TONES = {
+    "Approved": "green",
+    "Processed": "brand",
+    "Held": "warn",
+    "Pending Approval": "accent",
+    "Submitted": "deep",
+    "Auto-Accepted": "deep",
+    "Draft": "muted",
+    "Rejected": "danger",
+}
+
+# How many companies the "by payroll cost" ranking shows. Enough to see the
+# shape of the book at card height without turning the card into a second
+# client list.
+TOP_CLIENT_LIMIT = 6
+
+
+def status_distribution(runs, tones=STATUS_TONES):
+    """Payroll runs grouped by status, in donut-slice shape.
+
+    Values are run COUNTS, not money — render with ``formatter="count"``.
+    Ordered largest-first so the dominant state reads first."""
+    buckets = {}
+    for run in runs:
+        label = run.status or "Unknown"
+        buckets[label] = buckets.get(label, 0) + 1
+    total = sum(buckets.values())
+    if total <= 0:
+        return {"slices": [], "total": 0}
+    ordered = sorted(buckets.items(), key=lambda pair: pair[1], reverse=True)
+    return {
+        "slices": [
+            {
+                "label": label,
+                "value": count,
+                "pct": round(count / total * 100, 2),
+                "tone": tones.get(label, "soft"),
+            }
+            for label, count in ordered
+        ],
+        "total": total,
+    }
+
+
+def client_growth(clients, cutoff=None, periods=TREND_PERIODS):
+    """Cumulative companies onboarded per month, as line-chart points.
+
+    Cumulative rather than per-month because "client growth" is the size of the
+    book over time, not the intake of any one month — a month with no signings
+    should hold the line flat, not drop it to zero. Companies with no
+    ``created_at`` are counted in the opening balance so the final point always
+    equals the real company count.
+
+    ``cutoff`` is a ``(year, month)`` tuple; months after it are dropped, so a
+    period-scoped dashboard never charts months that had not happened yet in the
+    view the operator selected."""
+    dated = [c for c in clients if getattr(c, "created_at", None)]
+    undated = len(clients) - len(dated)
+
+    buckets = {}
+    for company in dated:
+        created = company.created_at
+        key = (created.year, created.month)
+        if cutoff and key > cutoff:
+            continue
+        bucket = buckets.setdefault(
+            key,
+            {
+                "label": month_name[created.month][:3],
+                "full_label": f"{month_name[created.month]} {created.year}",
+                "new": 0,
+            },
+        )
+        bucket["new"] += 1
+
+    running = undated
+    rows = []
+    for key in sorted(buckets):
+        running += buckets[key]["new"]
+        rows.append({**buckets[key], "total": running})
+    return _as_points(rows[-periods:] if periods else rows, "total")
+
+
+def platform_dashboard_analytics(
+    clients, expense_total, active_employees, cutoff=None, periods=TREND_PERIODS
+):
+    """The operator dashboard's executive bundle.
+
+    ``clients`` is every :class:`~app.models.ClientCompany` with its
+    ``employees`` and ``payroll_runs`` relationships already loaded — the caller
+    eager-loads them once, so nothing here issues a query and the whole overview
+    costs no extra round trips. ``expense_total`` and ``active_employees`` are
+    passed in for the same reason: the dashboard route already counts them.
+
+    ``cutoff`` is a ``(year, month)`` tuple (the selected period) that truncates
+    every time series, matching the rest of the period-scoped dashboard.
+
+    Returns ``{has_data, revenue_trend, companies_by_cost, status_mix,
+    growth_trend, stats, top_clients}``.
+    """
+    runs = [run for client in clients for run in client.payroll_runs]
+    if cutoff:
+        runs = [run for run in runs if period_key(run) <= cutoff]
+
+    rows = monthly_totals(runs, periods=periods)
+    charted_periods = {(row["year"], MONTH_INDEX.get(row["month"], 0)) for row in rows}
+
+    # Per-company payroll expenditure over exactly the charted window, so the
+    # ranking and the trend above it describe the same months.
+    ranked = []
+    for client in clients:
+        window_runs = [
+            run
+            for run in client.payroll_runs
+            if period_key(run) in charted_periods
+            and (cutoff is None or period_key(run) <= cutoff)
+        ]
+        ranked.append(
+            {
+                "label": client.company_code or client.name,
+                "full_label": client.name,
+                "cost": sum(
+                    (run.total_gross_pay or 0) + (run.total_ssnit_employer or 0)
+                    for run in window_runs
+                ),
+            }
+        )
+    ranked.sort(key=lambda row: row["cost"], reverse=True)
+    companies_by_cost = _as_points(ranked[:TOP_CLIENT_LIMIT], "cost")
+
+    payroll_total = sum((run.total_net_pay or 0) for run in runs)
+    active_companies = sum(1 for client in clients if client.status == "Active")
+
+    return {
+        "has_data": bool(runs),
+        "revenue_trend": _as_points(rows, "net"),
+        "companies_by_cost": companies_by_cost,
+        "status_mix": status_distribution(runs),
+        "growth_trend": client_growth(clients, cutoff=cutoff, periods=periods),
+        "stats": {
+            "active_companies": active_companies,
+            "active_employees": active_employees,
+            "payroll_runs": len(runs),
+            "payroll_total": payroll_total,
+            "expense_total": expense_total,
+            # Per ACTIVE company: an inactive tenant with no runs would otherwise
+            # drag the average down and read as a decline in the book.
+            "average_per_company": (payroll_total / active_companies)
+            if active_companies
+            else 0,
+        },
+        "top_clients": top_clients(clients, cutoff=cutoff),
+    }
+
+
+def top_clients(clients, cutoff=None, limit=TOP_CLIENT_LIMIT):
+    """The Top Clients table: ``{company, code, employees, payroll, last_run,
+    last_run_status, status}`` per row, ranked by payroll value.
+
+    ``payroll`` is the company's lifetime net payroll (up to ``cutoff``), and
+    ``last_run`` its most recent period — the two questions an executive asks of
+    a client row. Computed from the already-loaded relationships."""
+    rows = []
+    for client in clients:
+        runs = list(client.payroll_runs)
+        if cutoff:
+            runs = [run for run in runs if period_key(run) <= cutoff]
+        latest = max(runs, key=period_key) if runs else None
+        rows.append(
+            {
+                "company": client.name,
+                "code": client.company_code,
+                "employees": sum(
+                    1 for employee in client.employees if employee.status == "Active"
+                ),
+                "payroll": sum((run.total_net_pay or 0) for run in runs),
+                "last_run": f"{latest.month} {latest.year}" if latest else None,
+                "last_run_status": latest.status if latest else None,
+                "status": client.status,
+            }
+        )
+    rows.sort(key=lambda row: row["payroll"], reverse=True)
+    return rows[:limit]
 
 
 def up_to_period(runs, year, month):

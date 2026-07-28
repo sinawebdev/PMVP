@@ -37,7 +37,7 @@ class CsrfEnforcementTests(unittest.TestCase):
     def test_post_with_form_token_passes_csrf(self):
         token = self._csrf_token()
         resp = self.client.post("/login", data={
-            "email": "admin@chrisnat.local", "password": "password123",
+            "email": "admin@payrolla.com", "password": "password123",
             "csrf_token": token,
         })
         self.assertNotEqual(resp.status_code, 400, "valid form token should pass CSRF")
@@ -46,7 +46,7 @@ class CsrfEnforcementTests(unittest.TestCase):
         token = self._csrf_token()
         resp = self.client.post(
             "/login",
-            data={"email": "admin@chrisnat.local", "password": "password123"},
+            data={"email": "admin@payrolla.com", "password": "password123"},
             headers={"X-CSRFToken": token},
         )
         self.assertNotEqual(resp.status_code, 400, "valid header token should pass CSRF")
@@ -60,7 +60,7 @@ class CsrfEnforcementTests(unittest.TestCase):
         from app.models import User
 
         with self.app.app_context():
-            uid = User.query.filter_by(email="admin@msc.demo").first().id
+            uid = User.query.filter_by(email="admin@msc.com").first().id
         # Seed a logged-in session directly. The real /login POST calls
         # session.clear(); combined with the test client's cookie jar that drops
         # the pre-login token, so seeding the session lets us exercise genuine

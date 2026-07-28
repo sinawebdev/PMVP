@@ -157,7 +157,7 @@ class ShapeGuardWebTests(unittest.TestCase):
             db.session.commit()
             self.cid = client.id
         self.http.post(
-            "/login", data={"email": "admin@chrisnat.local", "password": "password123"}
+            "/login", data={"email": "admin@payrolla.com", "password": "password123"}
         )
 
     def tearDown(self):

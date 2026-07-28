@@ -73,6 +73,30 @@
     .login-legal{
         margin-top:22px;text-align:center;color:#77a49b;font-size:11.5px;letter-spacing:.02em;
     }
+    /* Demo sign-in hints. Rendered only for a seeded non-production database
+       (SHOW_DEMO_LOGINS); a real deployment never advertises accounts. */
+    .login-hints{
+        margin-top:20px;border-top:1px solid rgba(255,255,255,.10);padding-top:16px;
+    }
+    .login-hints > summary{
+        color:#9fc4bc;cursor:pointer;font-size:12px;letter-spacing:.04em;
+        list-style:none;text-transform:uppercase;
+    }
+    .login-hints > summary::-webkit-details-marker{display:none}
+    .login-hints > summary:hover{color:#7ce7db}
+    .login-hints-group{margin-top:12px}
+    .login-hints-group strong{
+        color:#bcd8d2;display:block;font-size:11px;letter-spacing:.08em;
+        margin-bottom:5px;text-transform:uppercase;
+    }
+    .login-hint{
+        background:none;border:0;color:#eaf6f4;cursor:pointer;display:flex;
+        font-size:12.5px;gap:8px;justify-content:space-between;padding:4px 0;
+        text-align:left;width:100%;
+    }
+    .login-hint:hover{color:#7ce7db}
+    .login-hint span:last-child{color:#77a49b;flex:none}
+    .login-hints-pass{color:#77a49b;font-size:11.5px;margin:12px 0 0}
 </style>
 <main class="login-page">
     <section class="login-card">
@@ -108,8 +132,42 @@
             <button class="btn btn-primary w-100" type="submit"><i class="bi bi-box-arrow-in-right"></i>Log in</button>
         </form>
         <p class="text-center mt-3 mb-0"><a href="{{ url_for('auth.forgot_password') }}">Forgot password?</a></p>
+        {% if demo_logins %}
+        {# Seeded demo accounts, listed straight from app/seed.py so the hints can
+           never drift from the roster that exists. Clicking one fills the email
+           field; the password is never pre-filled. #}
+        <details class="login-hints">
+            <summary>Demo sign-in accounts</summary>
+            {% for group in demo_logins %}
+            <div class="login-hints-group">
+                <strong>{{ group.group }}</strong>
+                {% for row in group.rows %}
+                <button class="login-hint" type="button" data-demo-email="{{ row.email }}">
+                    <span>{{ row.email }}</span><span>{{ row.label }}</span>
+                </button>
+                {% endfor %}
+            </div>
+            {% endfor %}
+            <p class="login-hints-pass">All demo accounts use the password <code>{{ demo_password }}</code>.</p>
+        </details>
+        {% endif %}
         <a class="login-back" href="{{ url_for('main.index') }}"><i class="bi bi-arrow-left"></i> Back to site</a>
         <p class="login-legal">© 2026 {{ app_brand_name }}. A product by {{ company_name }}.</p>
     </section>
 </main>
+{% if demo_logins %}
+<script>
+// Fill the email field from a demo hint. Progressive enhancement only — the
+// hints are readable and copyable with JavaScript off.
+document.addEventListener('click', function (event) {
+    var hint = event.target.closest('[data-demo-email]');
+    if (!hint) return;
+    var field = document.getElementById('email');
+    if (!field) return;
+    field.value = hint.getAttribute('data-demo-email');
+    var password = document.getElementById('password');
+    if (password) password.focus();
+});
+</script>
+{% endif %}
 {% endblock %}

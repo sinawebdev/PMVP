@@ -159,7 +159,7 @@ class RiskOversightRoutesTestCase(unittest.TestCase):
         )
 
     def test_risk_check_holds_first_run_then_release(self):
-        self._login("chrisnat.admin@chrisnat.local")
+        self._login("operator@payrolla.com")
         resp = self.client.post(f"/oversight/runs/{self.run_id}/risk-check")
         self.assertEqual(resp.status_code, 302)
         run = db.session.get(PayrollRun, self.run_id)
@@ -185,7 +185,7 @@ class RiskOversightRoutesTestCase(unittest.TestCase):
         risk_status at 'held', so the dashboard counter/panel, the run's risk
         badge, and the tenant's own run page all kept reporting a hold that had
         already been released."""
-        self._login("chrisnat.admin@chrisnat.local")
+        self._login("operator@payrolla.com")
         self.client.post(f"/oversight/runs/{self.run_id}/risk-check")
 
         # Held: counted on the dashboard and listed in the queue.
@@ -223,7 +223,7 @@ class RiskOversightRoutesTestCase(unittest.TestCase):
         )
 
     def test_risk_check_rejects_closed_run(self):
-        self._login("chrisnat.admin@chrisnat.local")
+        self._login("operator@payrolla.com")
         self.run.status = APPROVED
         db.session.commit()
         resp = self.client.post(f"/oversight/runs/{self.run_id}/risk-check")
@@ -231,7 +231,7 @@ class RiskOversightRoutesTestCase(unittest.TestCase):
         self.assertEqual(db.session.get(PayrollRun, self.run_id).status, APPROVED)
 
     def test_tenant_user_cannot_reach_oversight(self):
-        self._login("admin@msc.demo")  # a tenant user
+        self._login("admin@msc.com")  # a tenant user
         resp = self.client.get("/oversight/risk")
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.headers["Location"].endswith("/company"))

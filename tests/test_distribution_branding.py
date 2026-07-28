@@ -45,14 +45,14 @@ class BrandingRenderTestCase(unittest.TestCase):
 
     def test_tenant_brand_overrides_global(self):
         run = _Obj(month="June", year=2026)
-        branded = _Obj(name="MSC Ghana Ltd", brand_name="MSC Payroll", brand_color="#123456")
+        branded = _Obj(name="MSC Limited", brand_name="MSC Payroll", brand_color="#123456")
         _, _, html = render_payslip_email(_item(), run, branded, link="https://x/p/t")
         self.assertIn("MSC Payroll", html)
         self.assertIn("#123456", html)
 
     def test_falls_back_to_global_when_unset(self):
         run = _Obj(month="June", year=2026)
-        plain = _Obj(name="MSC Ghana Ltd", brand_name=None, brand_color=None)
+        plain = _Obj(name="MSC Limited", brand_name=None, brand_color=None)
         _, _, html = render_payslip_email(_item(), run, plain, link="https://x/p/t")
         # Default accent from config (Payrolla Deep Teal).
         self.assertIn("#0D4D4D", html)
@@ -111,7 +111,7 @@ class BrandingRouteTestCase(unittest.TestCase):
         self.http = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        self.msc = User.query.filter_by(email="admin@msc.demo").first()
+        self.msc = User.query.filter_by(email="admin@msc.com").first()
         self.company_id = self.msc.client_company_id
         self.preparer = User(
             name="MSC Preparer", email="preparer2@msc.demo",
@@ -129,7 +129,7 @@ class BrandingRouteTestCase(unittest.TestCase):
         self.http.post("/login", data={"email": email, "password": "password123"})
 
     def test_admin_saves_branding(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         resp = self.http.post(
             "/company/branding",
             data={"brand_name": "MSC Payroll", "brand_color": "#123456",
@@ -143,7 +143,7 @@ class BrandingRouteTestCase(unittest.TestCase):
         self.assertEqual(company.email_reply_to, "hr@msc.example")
 
     def test_invalid_color_is_rejected(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         self.http.post(
             "/company/branding",
             data={"brand_color": "notacolor"}, follow_redirects=True,
@@ -152,7 +152,7 @@ class BrandingRouteTestCase(unittest.TestCase):
         self.assertIsNone(company.brand_color)
 
     def test_invalid_reply_to_is_rejected(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         self.http.post(
             "/company/branding",
             data={"email_reply_to": "not-an-email"}, follow_redirects=True,

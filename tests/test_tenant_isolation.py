@@ -38,9 +38,9 @@ class TenantIsolationTestCase(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
 
-        self.msc_user = User.query.filter_by(email="admin@msc.demo").first()
-        self.stellar_user = User.query.filter_by(email="admin@stellar.demo").first()
-        self.platform_user = User.query.filter_by(email="chrisnat.admin@chrisnat.local").first()
+        self.msc_user = User.query.filter_by(email="admin@msc.com").first()
+        self.stellar_user = User.query.filter_by(email="admin@acme.com").first()
+        self.platform_user = User.query.filter_by(email="operator@payrolla.com").first()
         # The seeded MSC payroll run (+ an item) and an MSC employee — the
         # cross-tenant objects a Stellar user must be denied.
         self.msc_run = PayrollRun.query.filter_by(
@@ -63,7 +63,7 @@ class TenantIsolationTestCase(unittest.TestCase):
 
     # --- route level: tenant user is bounced, never served -----------------
     def test_tenant_user_bounced_from_oversight_routes(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         routes = OVERSIGHT_ROUTES + [
             f"/clients/{self.stellar_company_id}",      # another tenant's client page
             f"/payroll/runs/{self.msc_run.id}",         # operator run detail
@@ -78,13 +78,13 @@ class TenantIsolationTestCase(unittest.TestCase):
 
     def test_tenant_user_bounced_from_operator_action_route(self):
         # A role_required operator route (GET on an edit view) also bounces.
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         resp = self.client.get(f"/payroll/runs/{self.msc_run.id}/items/edit")
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.headers["Location"].endswith("/company"))
 
     def test_platform_user_still_gets_oversight_routes(self):
-        self._login("chrisnat.admin@chrisnat.local")
+        self._login("operator@payrolla.com")
         for route in OVERSIGHT_ROUTES:
             resp = self.client.get(route)
             self.assertEqual(resp.status_code, 200, f"platform user should get {route}")
@@ -128,7 +128,7 @@ class TenantIsolationTestCase(unittest.TestCase):
         # write leaks across tenants.
         self.msc_emp.status = "Active"
         db.session.commit()
-        self._login("admin@stellar.demo")
+        self._login("admin@acme.com")
         resp = self.client.post(
             f"/company/employees/{self.msc_emp.id}/deactivate"
         )
@@ -144,7 +144,7 @@ class TenantIsolationTestCase(unittest.TestCase):
         ).first()
         if own is None:
             self.skipTest("no active Stellar employee seeded")
-        self._login("admin@stellar.demo")
+        self._login("admin@acme.com")
         resp = self.client.post(f"/company/employees/{own.id}/deactivate")
         self.assertIn(resp.status_code, (302, 200))
         db.session.refresh(own)

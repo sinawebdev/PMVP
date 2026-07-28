@@ -44,7 +44,7 @@ class DeleteButtonRenderingTestCase(unittest.TestCase):
         self.app.config["TESTING"] = True
         self.http = self.app.test_client()
         self.http.post(
-            "/login", data={"email": "admin@chrisnat.local", "password": "password123"}
+            "/login", data={"email": "admin@payrolla.com", "password": "password123"}
         )
         with self.app.app_context():
             self.client_id = ClientCompany.query.first().id
@@ -105,7 +105,7 @@ class LooksLikeHeaderLabelTestCase(unittest.TestCase):
 
     def test_does_not_flag_real_names_or_companies(self):
         for real in ("SAMPSON K. KLUVIE", "David Kwame Tetteh", "ACS/GMT Shipping",
-                     "MSC Ghana Ltd"):
+                     "MSC Limited"):
             with self.subTest(real=real):
                 self.assertFalse(looks_like_header_label(real, numeric_is_suspicious=True))
 
@@ -136,7 +136,7 @@ class BankBranchRoundTripTestCase(unittest.TestCase):
         self.app.config["TESTING"] = True
         self.http = self.app.test_client()
         self.http.post(
-            "/login", data={"email": "admin@chrisnat.local", "password": "password123"}
+            "/login", data={"email": "admin@payrolla.com", "password": "password123"}
         )
         self.ctx = self.app.app_context()
         self.ctx.push()
@@ -284,7 +284,7 @@ class HeaderMisdetectionWarningTestCase(unittest.TestCase):
         ws.append(["AC1", "0", 1000, "RELEASE", "ACS", "GHA-1", "012", 1000])
         wb.save(path)
 
-        detected = detect_company_name(path, ["MSC Ghana Ltd"])
+        detected = detect_company_name(path, ["MSC Limited"])
         self.assertTrue(
             looks_like_header_label(detected),
             f"detected company {detected!r} should look like a header label",

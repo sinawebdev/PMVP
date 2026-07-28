@@ -27,7 +27,7 @@ class RunActivityTestCase(unittest.TestCase):
         self.ctx.push()
         self.assertEqual(
             self.client.post(
-                "/login", data={"email": "admin@chrisnat.local", "password": "password123"}
+                "/login", data={"email": "admin@payrolla.com", "password": "password123"}
             ).status_code,
             302,
         )

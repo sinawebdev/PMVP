@@ -73,10 +73,17 @@ class SlashClientExportTestCase(unittest.TestCase):
         self.app.config["TESTING"] = True
         self.ctx = self.app.app_context()
         self.ctx.push()
-        # "ACS/GMT Shipping" is a real seeded client — the exact one whose slash
-        # crashed the exports in production. Reuse it (name is unique).
+        # "ACS/GMT Shipping" is the real client name whose slash crashed the
+        # exports in production. It is no longer a seeded demo tenant (the seed
+        # ships two professional companies), so the fixture creates it here —
+        # what matters to this test is the slash in the name, not the seed.
         self.client_co = ClientCompany.query.filter_by(name="ACS/GMT Shipping").first()
-        self.assertIsNotNone(self.client_co, "seed should include ACS/GMT Shipping")
+        if self.client_co is None:
+            self.client_co = ClientCompany(
+                name="ACS/GMT Shipping", company_code="ACSGMT", status="Active"
+            )
+            db.session.add(self.client_co)
+            db.session.flush()
         self.run = PayrollRun(
             client_company_id=self.client_co.id, month="July", year=2026,
             status=APPROVED, total_gross_pay=3061.30, total_paye=382.63,
@@ -175,7 +182,7 @@ class RejectedRunDeleteRouteTestCase(unittest.TestCase):
         self.app.config["TESTING"] = True
         self.http = self.app.test_client()
         self.http.post(
-            "/login", data={"email": "admin@chrisnat.local", "password": "password123"}
+            "/login", data={"email": "admin@payrolla.com", "password": "password123"}
         )
         with self.app.app_context():
             client_co = ClientCompany.query.first()
@@ -204,7 +211,7 @@ class DashboardSsnitTotalTestCase(unittest.TestCase):
         self.app.config["TESTING"] = True
         self.http = self.app.test_client()
         self.http.post(
-            "/login", data={"email": "admin@chrisnat.local", "password": "password123"}
+            "/login", data={"email": "admin@payrolla.com", "password": "password123"}
         )
         with self.app.app_context():
             client_co = ClientCompany.query.first()
@@ -242,7 +249,7 @@ class EmployeeDeleteTestCase(unittest.TestCase):
         self.app.config["TESTING"] = True
         self.http = self.app.test_client()
         self.http.post(
-            "/login", data={"email": "admin@chrisnat.local", "password": "password123"}
+            "/login", data={"email": "admin@payrolla.com", "password": "password123"}
         )
         with self.app.app_context():
             self.client_id = ClientCompany.query.first().id
@@ -313,7 +320,7 @@ class EmployeeDeleteTestCase(unittest.TestCase):
         officer = self.app.test_client()
         officer.post(
             "/login",
-            data={"email": "payroll@chrisnat.local", "password": "password123"},
+            data={"email": "payroll@payrolla.com", "password": "password123"},
         )
         officer.post(
             f"/employees/clients/{self.client_id}/delete/{emp_id}",
