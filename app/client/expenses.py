@@ -37,7 +37,7 @@ from app.analytics import expense_summary
 from app.audit import record_audit
 from app.client import _company, client_bp
 from app.models import Expense
-from app.roles import CLIENT_ADMIN, CLIENT_PREPARER
+from app.permissions import EXPENSE_ROLES
 from app.tenancy import tenant_get_or_404, tenant_query, tenant_required, tenant_role_required
 
 # The operational spend categories a client company records. Deliberately a
@@ -182,7 +182,7 @@ def expenses():
 
 
 @client_bp.route("/expenses/add", methods=["GET", "POST"])
-@tenant_role_required(CLIENT_ADMIN, CLIENT_PREPARER)
+@tenant_role_required(*EXPENSE_ROLES)
 def expense_add():
     company = _company()
     if request.method == "POST":
@@ -211,7 +211,7 @@ def expense_add():
 
 
 @client_bp.route("/expenses/<int:expense_id>/edit", methods=["GET", "POST"])
-@tenant_role_required(CLIENT_ADMIN, CLIENT_PREPARER)
+@tenant_role_required(*EXPENSE_ROLES)
 def expense_edit(expense_id):
     expense = tenant_get_or_404(Expense, expense_id)  # 404 if another tenant's
     company = _company()
@@ -235,7 +235,7 @@ def expense_edit(expense_id):
 
 
 @client_bp.route("/expenses/<int:expense_id>/delete", methods=["POST"])
-@tenant_role_required(CLIENT_ADMIN, CLIENT_PREPARER)
+@tenant_role_required(*EXPENSE_ROLES)
 def expense_delete(expense_id):
     expense = tenant_get_or_404(Expense, expense_id)  # 404 if another tenant's
     description = expense.description

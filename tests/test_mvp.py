@@ -260,8 +260,13 @@ class MvpTestCase(unittest.TestCase):
         # Rows carry a basic salary: the compute engine derives everything
         # from basic, and the §8 hard-stop refuses active workers without one.
         for sheet_name, staff_id, worker_name, basic, gross, net in [
+            # Sheet names are what a client actually writes on the tab, so they
+            # only ever approximate the registered company name — the importer
+            # fuzzy-matches them. "MSC_Ghana_Ltd" is deliberately a stale variant
+            # that must still resolve to MSC Limited; the second sheet names its
+            # company properly.
             ("MSC_Ghana_Ltd", "MSC-MC-001", "Adwoa Frimpong", 1200, 1500, 1300),
-            ("Stellar_Logistics", "STL-MC-001", "Yaw Antwi", 800, 1000, 900),
+            ("Acme_Manufacturing_Ltd", "ACM-MC-001", "Yaw Antwi", 800, 1000, 900),
         ]:
             sheet = workbook.create_sheet(sheet_name)
             sheet.append(["Client payroll export"])
@@ -791,7 +796,7 @@ class MvpTestCase(unittest.TestCase):
         self.assertEqual(preview_response.status_code, 200)
         self.assertIn(b"Confirm and Create Payroll Runs", preview_response.data)
         self.assertIn(b"MSC_Ghana_Ltd", preview_response.data)
-        self.assertIn(b"Stellar_Logistics", preview_response.data)
+        self.assertIn(b"Acme_Manufacturing_Ltd", preview_response.data)
         self.assertIn(b"Unknown_Client_Payroll", preview_response.data)
 
         import_id = response.headers["Location"].rstrip("/").split("/")[-1]
@@ -802,9 +807,9 @@ class MvpTestCase(unittest.TestCase):
             batch = db.session.get(ImportBatch, int(import_id))
             self.assertEqual(batch.status, "Imported")
             msc = ClientCompany.query.filter_by(name="MSC Limited").first()
-            stellar = ClientCompany.query.filter_by(name="Acme Manufacturing Ltd").first()
+            acme = ClientCompany.query.filter_by(name="Acme Manufacturing Ltd").first()
             self.assertIsNotNone(PayrollRun.query.filter_by(client_company_id=msc.id, month="April", year=2101).first())
-            self.assertIsNotNone(PayrollRun.query.filter_by(client_company_id=stellar.id, month="April", year=2101).first())
+            self.assertIsNotNone(PayrollRun.query.filter_by(client_company_id=acme.id, month="April", year=2101).first())
 
     def test_multi_client_upload_splits_consolidated_sheet_by_client_column(self):
         self.login_admin()
