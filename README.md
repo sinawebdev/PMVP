@@ -152,6 +152,40 @@ flask --app run:app demo-reset --yes
 
 It is never triggered at boot — see [Demo data reset](#demo-data-reset).
 
+### Demo data reset
+
+`flask --app run:app demo-reset` prepares a database for a demonstration. It is
+**destructive** and deliberately explicit — nothing about it runs automatically.
+
+Without `--yes` it only reports what it would do:
+
+```
+demo-reset would:
+  keep and rebuild : MSC Limited, Acme Manufacturing Ltd
+  delete entirely  : Test Co 3, Old Client Ltd
+
+Re-run with --yes to apply.
+```
+
+With `--yes` it:
+
+1. deletes every client company that is not one of the two professional demo
+   tenants, together with all of its employees, payroll runs, items, vouchers,
+   remittances, deliveries, expenses, imports, events, notifications and audit
+   entries — child rows first, so no foreign key is ever left dangling;
+2. removes platform logins outside the professional roster, **re-pointing** the
+   history they own (approved runs, recorded expenses, statutory rate versions)
+   at the retained platform admin rather than deleting it;
+3. empties and rebuilds MSC Limited and Acme Manufacturing Ltd with a roster,
+   six months of payroll history, expenses across every category, and delivered
+   payslips for the closed runs.
+
+Payroll figures are produced by the real statutory calculator against the active
+`StatutoryRate` — demo payslips are arithmetically identical to production ones.
+Everything runs in one transaction and the command is idempotent, so running it
+twice leaves the same database. It refuses to run against a production
+deployment; use `--months N` to change the length of the generated history.
+
 ---
 
 ## Configuration

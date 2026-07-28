@@ -575,6 +575,72 @@ def create_app():
         initialize_database(app)
         print("Database initialized.")
 
+    @app.cli.command("demo-reset")
+    @click.option(
+        "--yes",
+        is_flag=True,
+        help="Confirm the destructive reset. Without it the command only reports.",
+    )
+    @click.option(
+        "--months",
+        default=None,
+        type=int,
+        help="Months of payroll history to build (default 6).",
+    )
+    def demo_reset_command(yes, months):
+        """Rebuild the demonstration dataset (DESTRUCTIVE).
+
+        Deletes every client company that is not a professional demo tenant —
+        with all of its employees, payroll runs, expenses, notifications and
+        audit entries — removes obsolete platform logins, then repopulates the
+        two demo tenants with several months of realistic payroll history.
+
+        Refuses to run in production, and does nothing at all without --yes, so
+        it can be inspected before it is trusted.
+        """
+        from app.demo_data import DEFAULT_MONTHS, DEMO_COMPANIES, reset_demo_data
+        from app.models import ClientCompany
+
+        if app.config.get("IS_PRODUCTION"):
+            raise click.ClickException(
+                "demo-reset refuses to run against a production deployment."
+            )
+
+        with app.app_context():
+            keep = ", ".join(spec["name"] for spec in DEMO_COMPANIES)
+            doomed = [
+                company.name
+                for company in ClientCompany.query.order_by(ClientCompany.name).all()
+                if company.name not in {spec["name"] for spec in DEMO_COMPANIES}
+            ]
+            if not yes:
+                click.echo("demo-reset would:")
+                click.echo(f"  keep and rebuild : {keep}")
+                click.echo(
+                    "  delete entirely  : "
+                    + (", ".join(doomed) if doomed else "(no other companies)")
+                )
+                click.echo("\nRe-run with --yes to apply.")
+                return
+
+            try:
+                summary = reset_demo_data(months=months or DEFAULT_MONTHS)
+            except Exception:
+                db.session.rollback()
+                raise
+
+            for name in summary["removed_companies"]:
+                click.echo(f"removed company: {name}")
+            for email in summary["removed_users"]:
+                click.echo(f"removed login:   {email}")
+            for row in summary["companies"]:
+                click.echo(
+                    f"rebuilt {row['name']} ({row['code']}): "
+                    f"{row['employees']} employees, {row['runs']} payroll runs, "
+                    f"net payroll {row['payroll_total']:,.2f}"
+                )
+            click.echo("Demo reset complete.")
+
     @app.cli.command("distribution-worker")
     @click.option("--once", is_flag=True, help="Process the queue once and exit (cron mode).")
     def distribution_worker_command(once):

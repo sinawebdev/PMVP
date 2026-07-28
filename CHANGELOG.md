@@ -9,6 +9,33 @@ The first production-ready release of Payrolla — **Payroll, HR, Compliance &
 Workforce Management Platform** by Sinaforte Technologies — consolidating the
 multi-tenant SaaS built on top of the original single-operator payroll app.
 
+### Operations & onboarding
+
+- **Client onboarding.** Add Company collects the full onboarding record
+  (company code, contact, email, phone, address, status, notes), validates it
+  inline, and lands the operator on an onboarding summary that restates the key
+  details and the one manual step left: provisioning credentials in Supabase
+  Authentication. Company creation is deliberately independent of authentication
+  — Payrolla never mints an auth user.
+- **Client expense management.** A client company records, edits and deletes its
+  own operational expenses against a fixed category list, with totals, a
+  category breakdown and a by-month chart that feed the company dashboard
+  directly.
+- **Professional login identities.** The demo roster moved to `@payrolla.com`
+  (platform) and per-company domains (`@msc.com`, `@acme.com`), with an optional
+  login-page hint panel built from the seed itself. Role strings — and therefore
+  every permission check — are unchanged.
+- **Executive analytics on the admin dashboard.** Book-wide quick stats, a
+  monthly payroll trend, a companies-by-cost ranking, a payroll status donut, a
+  client-growth line, a Top Clients table and a payroll activity timeline — all
+  server-rendered SVG/CSS with no chart library, aggregated from data the page
+  already loads (the client list is now eager-loaded, removing an N+1).
+- **`flask demo-reset`.** An explicit, idempotent, transaction-safe command that
+  strips demo/test tenants and obsolete logins (child rows first, no orphans;
+  surviving history is reassigned rather than deleted) and rebuilds the two
+  professional tenants with months of real calculated payroll history, expenses
+  and delivered payslips.
+
 ### Stabilization & brand consolidation
 
 - Migrated the product identity from the legacy "Chrisnat Payroll MVP" to
