@@ -97,11 +97,216 @@
     justify-content: center;
     width: 46px;
 }
+/* Height drives, width follows: the mark is taller than it is wide (99 x 117),
+   so a square box would letterbox it. `width: auto` keeps the aspect exact at
+   any tile size and survives a future change to the artwork's proportions. */
 .brand-mark img {
     display: block;
-    height: 32px;
-    width: 32px;
+    height: 34px;
+    width: auto;
 }
+
+/* --- Shared chart primitives ---------------------------------------------
+   Styling for templates/macros/charts.html. These live here, beside
+   .brand-mark, for the same reason: the macros are rendered by BOTH shells
+   (operator dashboard via styles.css, tenant portal via portal.css), so one
+   definition means one look. Colour is tokens only, so a brand change
+   recolours every chart. No animation — a dashboard of cards redrawing on
+   every load is noise, not polish. */
+
+.chart {
+    margin: 0;
+    min-width: 0;   /* let a chart shrink inside a grid cell instead of overflowing */
+}
+
+.chart svg {
+    display: block;
+    height: auto;
+    width: 100%;
+}
+
+.chart-grid {
+    stroke: var(--line);
+    stroke-width: 1;
+}
+
+.chart-line {
+    fill: none;
+    stroke: var(--brand);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2.25;
+}
+
+.chart-dot {
+    fill: var(--surface);
+    stroke: var(--brand);
+    stroke-width: 2;
+}
+
+.chart-dot--last {
+    fill: var(--brand);
+    stroke: var(--surface);
+}
+
+/* Period labels under a line/bar chart, on the same track as the data. */
+.chart-axis {
+    color: var(--muted);
+    display: flex;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    justify-content: space-between;
+    margin-top: 8px;
+}
+
+.chart-axis span {
+    flex: 1 1 0;
+    text-align: center;
+}
+
+/* Bars are CSS boxes, not SVG: they reflow at any width with no distortion. */
+.chart-bars {
+    align-items: flex-end;
+    display: flex;
+    gap: 8px;
+}
+
+.chart-bar {
+    align-items: flex-end;
+    background: var(--surface-alt);
+    border-radius: var(--radius-sm);
+    display: flex;
+    flex: 1 1 0;
+    height: 100%;
+    overflow: hidden;
+}
+
+.chart-bar-fill {
+    background: linear-gradient(180deg, var(--brand-bright), var(--brand));
+    border-radius: var(--radius-sm);
+    display: block;
+    min-height: 3px;   /* a small-but-real period stays visible */
+    width: 100%;
+}
+
+.chart-bar-fill.is-empty {
+    background: var(--line);
+    min-height: 2px;
+}
+
+/* --- Donut --- */
+.donut-wrap {
+    display: inline-grid;
+    place-items: center;
+    position: relative;
+}
+
+.donut-wrap svg {
+    height: auto;
+    max-width: 100%;
+}
+
+.donut-track { stroke: var(--surface-alt); }
+.donut-slice--brand { stroke: var(--brand-deep); }
+.donut-slice--accent { stroke: var(--brand-bright); }
+
+.donut-center {
+    line-height: 1.15;
+    position: absolute;
+    text-align: center;
+}
+
+.donut-center strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.donut-center small {
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.chart-legend {
+    display: flex;
+    flex-direction: column;
+    font-size: 13px;
+    gap: 7px;
+    list-style: none;
+    margin: 14px 0 0;
+    padding: 0;
+}
+
+.chart-legend li {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+}
+
+.chart-legend strong {
+    font-variant-numeric: tabular-nums;
+    margin-left: auto;
+}
+
+.chart-legend small {
+    color: var(--muted);
+    min-width: 3.2em;
+    text-align: right;
+}
+
+.legend-swatch {
+    border-radius: 3px;
+    flex: none;
+    height: 10px;
+    width: 10px;
+}
+
+.legend-swatch--brand { background: var(--brand-deep); }
+.legend-swatch--accent { background: var(--brand-bright); }
+
+/* --- Sparkline (table-cell trend) --- */
+.sparkline {
+    display: inline-block;
+    line-height: 0;
+    vertical-align: middle;
+}
+
+.sparkline svg { height: auto; max-width: 100%; }
+
+.sparkline-path {
+    fill: none;
+    stroke: var(--brand);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.75;
+}
+
+.sparkline-head { fill: var(--brand); }
+
+/* A falling trend is drawn in the warn tone — but direction is always ALSO
+   carried by the delta pill's arrow and text, never by colour alone. */
+.sparkline--down .sparkline-path { stroke: var(--warn); }
+.sparkline--down .sparkline-head { fill: var(--warn); }
+
+/* --- Delta pill --- */
+.delta {
+    align-items: center;
+    background: var(--surface-alt);
+    border-radius: var(--radius-pill);
+    color: var(--ink-soft);
+    display: inline-flex;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    gap: 4px;
+    padding: 2px 9px;
+    white-space: nowrap;
+}
+
+.delta small { color: var(--muted); font-weight: 600; }
+.delta--up { background: var(--green-soft); color: #14532d; }
+.delta--down { background: var(--warn-soft); color: var(--warn); }
+.delta--none { color: var(--muted); }
 
 @media (prefers-reduced-motion: reduce) {
     :root { --ease: 1ms linear; }

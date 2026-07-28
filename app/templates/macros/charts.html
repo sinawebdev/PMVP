@@ -1,0 +1,183 @@
+{# Executive chart primitives — hand-drawn inline SVG, no chart library.
+   Backed by app/analytics.py, which supplies points already carrying `pct`
+   (0-100 of the series peak); these macros only turn that into geometry.
+
+   Why inline SVG rather than a chart library: both shells must stay fast on
+   Ghanaian mobile data, and the tenant portal is deliberately dependency-free
+   (see the note at the top of portal.css). A library would cost 50-200KB to
+   draw four small cards. Server-rendered SVG costs nothing extra, needs no JS,
+   renders before first paint, prints, and scales to any width.
+
+   Shared conventions:
+     * A viewBox + `preserveAspectRatio` and width:100% (see .chart in
+       tokens.css) makes every chart responsive with no media queries.
+     * Colour comes from design tokens only (--brand, --accent, --brand-deep).
+     * Each chart is an img-role figure with a text summary for screen readers,
+       and values are also listed in the visible legend/axis, so the data is
+       never SVG-only.
+     * No animation: these are dense executive cards, and a redraw on every
+       dashboard load would be noise. #}
+
+{# --- Line chart — a period trend ------------------------------------------
+   points: [{label, full_label, value, pct}] from analytics. `format` is a
+   Jinja filter name applied to values in the tooltip/summary ('cedis'). #}
+{% macro line_chart(points, label="Trend", height=132, formatter="cedis") %}
+{% set w = 320 %}
+{% set h = height %}
+{% set pad_x = 6 %}
+{% set pad_y = 10 %}
+{% set span = (w - pad_x * 2) %}
+{% set inner = (h - pad_y * 2) %}
+{% set step = (span / (points|length - 1)) if points|length > 1 else 0 %}
+{# y is inverted: pct 100 sits at the top (pad_y), pct 0 at the baseline. #}
+{% set coords = [] %}
+{% for p in points %}
+  {% set x = pad_x + (loop.index0 * step) if points|length > 1 else (w / 2) %}
+  {% set y = pad_y + inner - (p.pct / 100 * inner) %}
+  {% set _ = coords.append({"x": x, "y": y, "p": p}) %}
+{% endfor %}
+<figure class="chart chart--line" role="img"
+        aria-label="{{ label }}: {% for p in points %}{{ p.full_label }} {{ p.value|cedis }}{{ "; " if not loop.last }}{% endfor %}">
+  {# Uniform scaling (meet, not none): non-uniform scaling would squash the
+     point markers into ellipses at wide card widths. Height follows width via
+     .chart--line svg { height: auto }, so it stays responsive either way. #}
+  <svg viewBox="0 0 {{ w }} {{ h }}" preserveAspectRatio="xMidYMid meet" focusable="false" aria-hidden="true">
+    <defs>
+      <linearGradient id="chart-line-fill-{{ label|replace(' ', '') }}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="var(--brand-bright)" stop-opacity=".26"/>
+        <stop offset="1" stop-color="var(--brand-bright)" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    {# Baseline + two quiet gridlines for magnitude, drawn behind the series. #}
+    {% for fraction in [0, 0.5, 1] %}
+    <line class="chart-grid" x1="{{ pad_x }}" x2="{{ w - pad_x }}"
+          y1="{{ pad_y + inner * fraction }}" y2="{{ pad_y + inner * fraction }}"/>
+    {% endfor %}
+    {% if coords|length > 1 %}
+    <polygon class="chart-area" fill="url(#chart-line-fill-{{ label|replace(' ', '') }})"
+             points="{{ pad_x }},{{ pad_y + inner }} {% for c in coords %}{{ "%.2f"|format(c.x) }},{{ "%.2f"|format(c.y) }} {% endfor %}{{ w - pad_x }},{{ pad_y + inner }}"/>
+    <polyline class="chart-line" vector-effect="non-scaling-stroke"
+              points="{% for c in coords %}{{ "%.2f"|format(c.x) }},{{ "%.2f"|format(c.y) }} {% endfor %}"/>
+    {% endif %}
+    {% for c in coords %}
+    <circle class="chart-dot{{ ' chart-dot--last' if loop.last }}" vector-effect="non-scaling-stroke"
+            cx="{{ "%.2f"|format(c.x) }}" cy="{{ "%.2f"|format(c.y) }}" r="{{ 3.5 if loop.last else 2.5 }}"/>
+    {% endfor %}
+  </svg>
+  <div class="chart-axis" aria-hidden="true">
+    {% for p in points %}<span title="{{ p.full_label }}: {{ p.value|cedis }}">{{ p.label }}</span>{% endfor %}
+  </div>
+</figure>
+{% endmacro %}
+
+{# --- Bar chart — the same periods as magnitude ---------------------------- #}
+{% macro bar_chart(points, label="By month", height=120) %}
+<figure class="chart chart--bar" role="img"
+        aria-label="{{ label }}: {% for p in points %}{{ p.full_label }} {{ p.value|cedis }}{{ "; " if not loop.last }}{% endfor %}">
+  <div class="chart-bars" style="height: {{ height }}px" aria-hidden="true">
+    {% for p in points %}
+    {# min-height keeps a nonzero-but-tiny period visible instead of vanishing. #}
+    <span class="chart-bar" title="{{ p.full_label }}: {{ p.value|cedis }}">
+      <span class="chart-bar-fill{{ ' is-empty' if not p.value }}" style="height: {{ p.pct if p.value else 0 }}%"></span>
+    </span>
+    {% endfor %}
+  </div>
+  <div class="chart-axis" aria-hidden="true">
+    {% for p in points %}<span>{{ p.label }}</span>{% endfor %}
+  </div>
+</figure>
+{% endmacro %}
+
+{# --- Donut — composition of a whole --------------------------------------
+   mix: {slices: [{label, value, pct, tone}], total} from analytics.cost_mix.
+   Built from stroke-dasharray on concentric circles: one <circle> per slice,
+   rotated so slices butt against each other with no path maths. #}
+{% macro donut(mix, label="Composition", size=150, thickness=18) %}
+{% set radius = (size / 2) - (thickness / 2) %}
+{% set circumference = 2 * 3.14159265 * radius %}
+<figure class="chart chart--donut" role="img"
+        aria-label="{{ label }}: {% for s in mix.slices %}{{ s.label }} {{ s.value|cedis }} ({{ s.pct }}%){{ "; " if not loop.last }}{% endfor %}">
+  <div class="donut-wrap">
+    <svg viewBox="0 0 {{ size }} {{ size }}" width="{{ size }}" height="{{ size }}" focusable="false" aria-hidden="true">
+      {# -90deg start puts the first slice at 12 o'clock. #}
+      <g transform="rotate(-90 {{ size / 2 }} {{ size / 2 }})">
+        <circle class="donut-track" cx="{{ size / 2 }}" cy="{{ size / 2 }}" r="{{ "%.3f"|format(radius) }}"
+                stroke-width="{{ thickness }}" fill="none"/>
+        {% set offset = namespace(pct=0) %}
+        {% for s in mix.slices %}
+        <circle class="donut-slice donut-slice--{{ s.tone }}" cx="{{ size / 2 }}" cy="{{ size / 2 }}"
+                r="{{ "%.3f"|format(radius) }}" stroke-width="{{ thickness }}" fill="none"
+                stroke-dasharray="{{ "%.3f"|format(circumference * s.pct / 100) }} {{ "%.3f"|format(circumference) }}"
+                stroke-dashoffset="{{ "%.3f"|format(-1 * circumference * offset.pct / 100) }}"
+                stroke-linecap="butt"/>
+        {% set offset.pct = offset.pct + s.pct %}
+        {% endfor %}
+      </g>
+    </svg>
+    {% if mix.total %}
+    <div class="donut-center" aria-hidden="true">
+      <strong>{{ mix.total|cedis }}</strong>
+      <small>Total</small>
+    </div>
+    {% endif %}
+  </div>
+  <ul class="chart-legend">
+    {% for s in mix.slices %}
+    <li><span class="legend-swatch legend-swatch--{{ s.tone }}"></span>{{ s.label }}
+      <strong>{{ s.value|cedis }}</strong><small>{{ s.pct }}%</small></li>
+    {% else %}
+    <li class="muted">Nothing recorded yet.</li>
+    {% endfor %}
+  </ul>
+</figure>
+{% endmacro %}
+
+{# --- Sparkline — a trend at table-cell size ------------------------------
+   Deliberately tiny and label-free: it answers "which way is this going",
+   not "what exactly was March". The precise figures stay in the row's own
+   columns, and the title attribute carries the period values. #}
+{% macro sparkline(trend, label="cost trend", width=84, height=26) %}
+{% set points = trend.points %}
+{% set pad = 3 %}
+{% set span = width - pad * 2 %}
+{% set inner = height - pad * 2 %}
+{% set step = (span / (points|length - 1)) if points|length > 1 else 0 %}
+{% set coords = [] %}
+{% for p in points %}
+  {% set x = (pad + loop.index0 * step) if points|length > 1 else (width / 2) %}
+  {% set y = pad + inner - (p.pct / 100 * inner) %}
+  {% set _ = coords.append({"x": x, "y": y}) %}
+{% endfor %}
+<span class="sparkline{{ ' sparkline--down' if trend.change is not none and trend.change < 0 }}"
+      title="{{ label }} — {% for p in points %}{{ p.full_label }}: {{ p.value|cedis }}{{ ' · ' if not loop.last }}{% endfor %}">
+  <svg viewBox="0 0 {{ width }} {{ height }}" width="{{ width }}" height="{{ height }}"
+       preserveAspectRatio="xMidYMid meet" role="img"
+       aria-label="{{ label }}: {% for p in points %}{{ p.full_label }} {{ p.value|cedis }}{{ '; ' if not loop.last }}{% endfor %}">
+    {% if coords|length > 1 %}
+    <polyline class="sparkline-path" vector-effect="non-scaling-stroke"
+              points="{% for c in coords %}{{ "%.2f"|format(c.x) }},{{ "%.2f"|format(c.y) }} {% endfor %}"/>
+    <circle class="sparkline-head" vector-effect="non-scaling-stroke"
+            cx="{{ "%.2f"|format(coords[-1].x) }}" cy="{{ "%.2f"|format(coords[-1].y) }}" r="2.4"/>
+    {% elif coords %}
+    <circle class="sparkline-head" cx="{{ "%.2f"|format(coords[0].x) }}" cy="{{ "%.2f"|format(coords[0].y) }}" r="2.4"/>
+    {% endif %}
+  </svg>
+</span>
+{% endmacro %}
+
+{# --- Delta pill — signed percentage change -------------------------------
+   change is a signed fraction (0.083 -> +8.3%) or None when there is no
+   baseline. Direction is carried by an arrow glyph AND the wording, never by
+   colour alone. #}
+{% macro delta(change, suffix="vs previous") %}
+{% if change is not none %}
+<span class="delta {{ 'delta--up' if change > 0 else ('delta--down' if change < 0 else 'delta--flat') }}"
+      title="{{ "%+.1f"|format(change * 100) }}% {{ suffix }}">
+  <span aria-hidden="true">{{ "▲" if change > 0 else ("▼" if change < 0 else "▬") }}</span>
+  {{ "%+.1f"|format(change * 100) }}%
+  <small>{{ suffix }}</small>
+</span>
+{% else %}
+<span class="delta delta--none" title="No earlier period to compare against">—</span>
+{% endif %}
+{% endmacro %}

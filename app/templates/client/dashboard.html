@@ -1,21 +1,83 @@
 {% extends "client/base.html" %}
+{% import "macros/charts.html" as ch %}
 {% block title %}Dashboard{% endblock %}
 {% block body %}
   <div class="page-head">
-    <h1>Dashboard</h1>
+    {# Personalised greeting — resolved by app.resolve_display_name, the same
+       rule the operator shell uses (see base.html). #}
+    <h1>{{ user_greeting }}</h1>
     <p class="sub">An overview of {{ company.name }}.</p>
   </div>
 
+  {# --- Quick stats -------------------------------------------------------
+     The four figures an executive checks first. Employee count doubles as the
+     roster statistic card; the payroll figure carries its period and its change
+     against the previous period so the number has context, not just a value. #}
   <div class="grid">
-    <div class="card stat-card"><span class="n">{{ employee_count }}</span><span class="l">Employees ({{ active_employee_count }} active)</span></div>
-    <div class="card stat-card"><span class="n">{{ run_count }}</span><span class="l">Payroll runs</span></div>
-    <div class="card stat-card"><span class="n">{{ pending_runs }}</span><span class="l">Runs awaiting review</span></div>
+    <div class="card stat-card">
+      <span class="n">{{ analytics.stats.employees }}</span>
+      <span class="l">Total employees{% if active_employee_count != analytics.stats.employees %} ({{ active_employee_count }} active){% endif %}</span>
+    </div>
+    <div class="card stat-card">
+      <span class="n">{{ analytics.stats.current_payroll | cedis }}</span>
+      <span class="l">
+        Current payroll{% if analytics.stats.current_period %} · {{ analytics.stats.current_period }}{% endif %}
+        {% if analytics.stats.previous_period %}<br>{{ ch.delta(analytics.stats.payroll_change, "vs " ~ analytics.stats.previous_period) }}{% endif %}
+      </span>
+    </div>
+    <div class="card stat-card">
+      <span class="n">{{ analytics.stats.expenses | cedis }}</span>
+      <span class="l">Total expenses</span>
+    </div>
+    <div class="card stat-card">
+      <span class="n">{{ analytics.stats.average_net | cedis }}</span>
+      <span class="l">Average net salary{% if analytics.stats.current_period %} · {{ analytics.stats.current_period }}{% endif %}</span>
+    </div>
   </div>
 
   {% if draft_count %}
   <div class="flash info" role="status">
     You have {{ draft_count }} import{{ "" if draft_count == 1 else "s" }} in progress.
     <a href="{{ url_for('client.runs') }}">Resume {{ "it" if draft_count == 1 else "them" }} →</a>
+  </div>
+  {% endif %}
+  {% if held_runs_count %}
+  <div class="flash warning" role="status">
+    {{ held_runs_count }} payroll run{{ "" if held_runs_count == 1 else "s" }}
+    {{ "is" if held_runs_count == 1 else "are" }} held for {{ app_brand_name }} review.
+    <a href="{{ url_for('client.runs') }}">View runs →</a>
+  </div>
+  {% endif %}
+
+  {# --- Analytics ---------------------------------------------------------
+     Three small server-rendered SVG/CSS charts (macros/charts.html) — no chart
+     library, no JS, no extra requests. Hidden entirely until the company has at
+     least one run, so a new tenant sees an invitation rather than empty axes. #}
+  {% if analytics.has_data %}
+  <div class="analytics-grid">
+    <section class="card chart-card">
+      <div class="chart-head">
+        <h2>Monthly payroll trend</h2>
+        <small class="muted">Net pay per month</small>
+      </div>
+      {{ ch.line_chart(analytics.trend, label="Monthly payroll trend") }}
+    </section>
+
+    <section class="card chart-card">
+      <div class="chart-head">
+        <h2>Payroll cost by month</h2>
+        <small class="muted">Gross pay + employer SSF</small>
+      </div>
+      {{ ch.bar_chart(analytics.cost_by_month, label="Payroll cost by month") }}
+    </section>
+
+    <section class="card chart-card">
+      <div class="chart-head">
+        <h2>Expenses vs payroll</h2>
+        <small class="muted">Recorded to date</small>
+      </div>
+      {{ ch.donut(analytics.cost_mix, label="Expenses vs payroll") }}
+    </section>
   </div>
   {% endif %}
 

@@ -21,15 +21,24 @@ Thresholds settled with Sina (2026-07-16); see the pmvp-v1-decisions memory:
 from dataclasses import dataclass, field
 
 from app.models import PayrollRun
-from app.payroll_status import CLOSED_STATUSES, REJECTED
+from app.payroll_status import (
+    CLOSED_STATUSES,
+    HELD,
+    REJECTED,
+    RISK_ACCEPTED,
+    RISK_EVER_HELD,
+    RISK_HELD,
+    RISK_RELEASED,
+)
 
 # --- Settled thresholds (Sina, 2026-07-16) ---------------------------------
 FIRST_N_RUNS_HELD = 2        # Rule 1: a client's first N runs are always held.
 NET_PAY_VARIANCE_PCT = 0.15  # Rule 2: |Δ total net pay| vs previous closed run.
 HEADCOUNT_SWING_PCT = 0.20   # Rule 3: |Δ worker count| vs previous closed run.
 
-RISK_HELD = "held"
-RISK_ACCEPTED = "accepted"
+# Re-exported from app.payroll_status (the canonical vocabulary) so
+# ``from app.risk import RISK_HELD`` keeps working.
+__all_risk_states__ = (RISK_HELD, RISK_ACCEPTED, RISK_RELEASED)
 
 
 @dataclass
@@ -315,3 +324,91 @@ def apply_risk_gate(run, when=None):
     run.risk_reasons = verdict.reasons_text() or None
     run.risk_checked_at = when
     return verdict
+
+
+def release_risk_hold(run):
+    """Clear the *hold* from a run's persisted verdict, keeping its history.
+
+    The caller owns the PayrollRun.status transition (Held -> Pending Approval)
+    and the commit; this only moves risk_status ``held`` -> ``released`` so no
+    risk_status-derived indicator keeps reporting a hold that no longer exists.
+    ``risk_reasons`` is deliberately preserved — *why* it was held stays on the
+    record for the audit trail and the operator's own reference.
+
+    Idempotent: a run that was never held is left untouched."""
+    if run.risk_status == RISK_HELD:
+        run.risk_status = RISK_RELEASED
+
+
+# --- Risk summary (one source of truth for every risk indicator) ------------
+# "Currently held" is PayrollRun.status == Held — the lifecycle state, which is
+# what the operator actually acts on. risk_status is the *verdict record*, and
+# is NOT a substitute: both gate call sites (oversight.risk_check and the client
+# import in app/client/__init__.py) write status and risk_status together, so the
+# two agree at scoring time, but only status keeps tracking reality afterwards
+# as the run is released, approved, or rejected.
+#
+# Every risk counter/list/badge in the app routes through the helpers below, so a
+# lifecycle change is reflected on the operator dashboard, the risk queue, the run
+# detail page, and the client's own dashboard from the same query and the same
+# labels. Nothing here caches — each page render re-reads the current state, so
+# there is no cache to invalidate and no polling to add.
+
+
+def held_run_criterion():
+    """SQLAlchemy criterion for 'this run is currently held by the risk gate'."""
+    return PayrollRun.status == HELD
+
+
+def held_run_count():
+    """How many runs are held right now, across every tenant."""
+    return PayrollRun.query.filter(held_run_criterion()).count()
+
+
+def held_runs(limit=None):
+    """Held runs, newest first. ``limit`` caps the list for dashboard panels."""
+    query = (
+        PayrollRun.query.filter(held_run_criterion())
+        .order_by(PayrollRun.risk_checked_at.desc(), PayrollRun.id.desc())
+    )
+    return (query.limit(limit).all() if limit else query.all())
+
+
+def risk_summary(limit=8):
+    """The platform-wide risk picture: ``{"held_count": int, "held_runs": [...]}``.
+
+    Used by the operator dashboard (counter tiles, Action Required, the Held
+    panel) so those three numbers can never disagree with each other or with the
+    risk queue."""
+    return {"held_count": held_run_count(), "held_runs": held_runs(limit=limit)}
+
+
+# Badge label + tone per persisted verdict. One mapping, so the run detail page
+# and the tenant portal describe the same run identically.
+_RISK_BADGE = {
+    RISK_HELD: ("Held", "warning"),
+    RISK_ACCEPTED: ("Auto-accepted", "success"),
+    RISK_RELEASED: ("Released", "info"),
+}
+
+
+def risk_badge(run):
+    """``{"label", "tone", "reasons"}`` for a run's risk verdict, or None if the
+    run was never scored. ``tone`` is a semantic name (warning/success/info) the
+    template maps to its own shell's classes."""
+    label_tone = _RISK_BADGE.get(run.risk_status)
+    if label_tone is None:
+        return None
+    label, tone = label_tone
+    return {"label": label, "tone": tone, "reasons": run.risk_reasons or ""}
+
+
+def is_held(run):
+    """Whether ``run`` is currently held — the row-level twin of
+    :func:`held_run_criterion`, for templates and in-Python checks."""
+    return run.status == HELD
+
+
+def was_ever_held(run):
+    """Whether ``run`` passed through the risk-hold branch at any point."""
+    return run.risk_status in RISK_EVER_HELD or run.status == HELD

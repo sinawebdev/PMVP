@@ -23,7 +23,7 @@ from app.models import (
     User,
 )
 
-from app.payroll_status import HELD, PENDING_STATUSES, PROCESSED
+from app.payroll_status import PENDING_STATUSES, PROCESSED
 
 main_bp = Blueprint("main", __name__)
 
@@ -111,6 +111,14 @@ def dashboard():
         year=selected_year,
     ).all()
     pending_statuses = PENDING_STATUSES
+    # Per-client cost history for the sparkline + % change on the Payroll Cost
+    # Per Client card. Computed from the client.payroll_runs relationship that is
+    # already loaded for the cost/pending figures below — no extra query per
+    # client — and truncated at the selected period so looking back at March
+    # never charts months after it.
+    from app.analytics import client_cost_trend, totals_trend, up_to_period
+
+    all_clients = ClientCompany.query.order_by(ClientCompany.name).all()
     client_costs = [
         {
             "client": client.name,
@@ -119,6 +127,9 @@ def dashboard():
                 run.total_net_pay
                 for run in client.payroll_runs
                 if run.month == selected_month and run.year == selected_year
+            ),
+            "trend": client_cost_trend(
+                up_to_period(client.payroll_runs, selected_year, selected_month)
             ),
             "pending": sum(
                 1
@@ -133,8 +144,17 @@ def dashboard():
                 if run.month == selected_month and run.year == selected_year
             ],
         }
-        for client in ClientCompany.query.order_by(ClientCompany.name).all()
+        for client in all_clients
     ]
+    # Book-wide trend for the card header, summed from the same already-loaded
+    # relationship the per-client rows use (no additional query).
+    portfolio_trend = totals_trend(
+        up_to_period(
+            [run for client in all_clients for run in client.payroll_runs],
+            selected_year,
+            selected_month,
+        )
+    )
     max_cost = max((item["payroll_cost"] for item in client_costs), default=0)
     for item in client_costs:
         item["bar_percent"] = round((item["payroll_cost"] / max_cost) * 100, 1) if max_cost else 0
@@ -187,16 +207,17 @@ def dashboard():
     )
     delivery_rate = round(payslips_delivered / payslips_total * 100) if payslips_total else 0
 
-    # Phase 2: held payrolls (risk gate) and recently completed runs, plus the
+    # Held payrolls (risk gate) and recently completed runs, plus the
     # 'distributed' signal for the stepper — all reusing existing state.
-    held_filter = or_(PayrollRun.risk_status == "held", PayrollRun.status == HELD)
-    held_count = PayrollRun.query.filter(held_filter).count()
-    held_runs = (
-        PayrollRun.query.filter(held_filter)
-        .order_by(PayrollRun.created_at.desc())
-        .limit(8)
-        .all()
-    )
+    #
+    # The counter, the Action Required row, the Held panel, and the risk queue all
+    # come from this one call (app.risk.risk_summary) so they cannot disagree, and
+    # a release/approval is reflected on the next render with no cache to clear.
+    from app.risk import risk_summary
+
+    risk = risk_summary(limit=8)
+    held_count = risk["held_count"]
+    held_runs = risk["held_runs"]
     recent_runs = (
         PayrollRun.query.filter_by(month=selected_month, year=selected_year)
         .order_by(PayrollRun.created_at.desc())
@@ -241,6 +262,7 @@ def dashboard():
         payslips_delivered=payslips_delivered,
         payslips_total=payslips_total,
         client_costs=client_costs,
+        portfolio_trend=portfolio_trend,
         highest_client=highest_client,
         selected_month=selected_month,
         selected_year=selected_year,
@@ -274,6 +296,11 @@ def company_dashboard():
     active_employee_count = tenant_query(Employee).filter(Employee.status == "Active").count()
     runs = tenant_query(PayrollRun).order_by(PayrollRun.created_at.desc()).all()
     pending_runs = sum(1 for run in runs if run.status in PENDING_STATUSES)
+    # Risk holds on this company's own runs, from the same centralized rule the
+    # operator dashboard uses — so a release clears here on the next load too.
+    from app.risk import is_held
+
+    held_runs_count = sum(1 for run in runs if is_held(run))
 
     from app.models import ImportBatch
 
@@ -283,6 +310,18 @@ def company_dashboard():
         .count()
     )
 
+    # Executive analytics (trend / cost by month / cost mix / quick stats).
+    # Computed from the runs + expenses already scoped to this tenant, so the
+    # charts can never show another company's figures.
+    from app.analytics import client_dashboard_analytics
+
+    expense_total = sum(
+        expense.amount or 0 for expense in tenant_query(Expense).all()
+    )
+    analytics = client_dashboard_analytics(
+        runs, employee_count=employee_count, expense_total=expense_total
+    )
+
     return render_template(
         "client/dashboard.html",
         company=company,
@@ -290,8 +329,10 @@ def company_dashboard():
         active_employee_count=active_employee_count,
         run_count=len(runs),
         pending_runs=pending_runs,
+        held_runs_count=held_runs_count,
         draft_count=draft_count,
         recent_runs=runs[:8],
+        analytics=analytics,
     )
 
 

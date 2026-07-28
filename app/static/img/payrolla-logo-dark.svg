@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 228 72" role="img" aria-label="Payrolla">
+  <!--
+    PAYROLLA HORIZONTAL LOCKUP — DARK BACKGROUND VERSION.
+
+    Identical geometry to payrolla-logo.svg; only the palette is re-tuned for a
+    dark surface, which is a necessary adaptation rather than a restyle:
+
+      * The primary gradient lifts to bright then soft teal. The master's
+        #0D4D4D start is very close to the deep-teal surfaces this sits on
+        (the brand-deep token), so on dark it would read as a hole in the mark.
+      * The leaf lifts to #0D4D4D then #135F5A for the same reason — #063737 is
+        effectively invisible against a dark shell.
+      * The wordmark goes white; #0D4D4D text on dark is unreadable.
+
+    Background stays transparent, so this drops onto the sidebar gradient, a
+    photo, or black equally well. The gradient angle is still exactly 45 degrees.
+  -->
+  <defs>
+    <linearGradient id="pd-body" x1="11" y1="119" x2="110" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17C3B2"/>
+      <stop offset="1" stop-color="#8FF0E4"/>
+    </linearGradient>
+    <linearGradient id="pd-leaf" x1="20" y1="82" x2="20" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0D4D4D"/>
+      <stop offset="1" stop-color="#135F5A"/>
+    </linearGradient>
+    <linearGradient id="pd-sheen" x1="32" y1="11" x2="32" y2="76" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(1.6 8.2) scale(0.4)">
+    <path d="M23 82C21 100 17 116 11 128C22 117 32 109 40 92Z" fill="url(#pd-leaf)"/>
+    <path fill-rule="evenodd" fill="url(#pd-body)"
+          d="M32 11H62A48 48 0 0 1 62 107H44A3 3 0 0 0 41 110A9 9 0 0 1 23 110V20A9 9 0 0 1 32 11Z
+             M53 29H62A30 30 0 0 1 62 89H53A12 12 0 0 1 41 77V41A12 12 0 0 1 53 29Z"/>
+    <path fill-rule="evenodd" fill="url(#pd-sheen)"
+          d="M32 11H62A48 48 0 0 1 62 107H44A3 3 0 0 0 41 110A9 9 0 0 1 23 110V20A9 9 0 0 1 32 11Z
+             M53 29H62A30 30 0 0 1 62 89H53A12 12 0 0 1 41 77V41A12 12 0 0 1 53 29Z"/>
+  </g>
+
+  <text x="58" y="51"
+        font-family="Satoshi,'Plus Jakarta Sans',Inter,'SF Pro Display',system-ui,-apple-system,'Segoe UI',sans-serif"
+        font-size="42" font-weight="700" letter-spacing="-1" fill="#FFFFFF">Payrolla</text>
+</svg>

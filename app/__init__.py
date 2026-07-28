@@ -1,4 +1,5 @@
 import os
+import re
 import socket
 import threading
 import time
@@ -86,6 +87,36 @@ def format_duration(seconds):
         return f"{minutes}m {secs}s" if secs else f"{minutes}m"
     hours, mins = divmod(minutes, 60)
     return f"{hours}h {mins}m" if mins else f"{hours}h"
+
+
+def resolve_display_name(user):
+    """The human name to greet ``user`` by. Empty string for anonymous users.
+
+    Fallback order, first non-empty wins:
+
+      1. ``display_name`` — an explicit preferred name, if the schema grows one
+      2. ``full_name``    — likewise
+      3. ``name``         — today's User column, which holds the full name
+      4. the email's local part, humanised ("john.mensah" -> "John Mensah")
+
+    The full email address is deliberately never returned: an address is an
+    identifier, not a name, and greeting someone by it reads as a bug. Step 4
+    only ever exposes the part before the ``@``.
+
+    Steps 1-2 are checked via getattr so adding either column later personalises
+    every greeting with no template change.
+    """
+    if user is None or not getattr(user, "is_authenticated", True):
+        return ""
+    for attribute in ("display_name", "full_name", "name"):
+        value = str(getattr(user, attribute, "") or "").strip()
+        if value:
+            return value
+    local_part = str(getattr(user, "email", "") or "").split("@", 1)[0].strip()
+    if not local_part:
+        return ""
+    humanised = re.sub(r"[._+-]+", " ", local_part).strip()
+    return humanised.title() if humanised else local_part
 
 
 def format_role_label(value):
@@ -359,6 +390,9 @@ def create_app():
     app.jinja_env.filters["cedis"] = format_ghana_cedis
     app.jinja_env.filters["role_label"] = format_role_label
     app.jinja_env.filters["duration"] = format_duration
+    # Greet any user by name: {{ some_user|display_name }}. The *current* user's
+    # name is also injected as `user_display_name` (see inject_user_greeting).
+    app.jinja_env.filters["display_name"] = resolve_display_name
 
     # Operator capability predicates as template globals — one source of truth
     # (app/permissions.py) for nav/action gating, replacing inline role lists.
@@ -379,9 +413,14 @@ def create_app():
     )
 
     from app.payroll_status import run_progress, status_badge_class
+    from app.risk import risk_badge
     from app.distribution.service import retry_state as delivery_retry_state
 
     app.jinja_env.globals.update(
+        # Risk-gate verdict badge (label + semantic tone) from the run's persisted
+        # risk_status — one mapping in app/risk.py for the operator run page and
+        # the tenant portal, so a released run stops reading as held in both.
+        risk_badge=risk_badge,
         # Per-delivery retry position (attempts, retries remaining, final-failure)
         # for the distribution status tables — one source of truth, Phase 3 Slice 3.
         delivery_retry_state=delivery_retry_state,
@@ -449,6 +488,24 @@ def create_app():
             "app_brand_mark": app.config["APP_BRAND_MARK"],
             "app_tagline": app.config["APP_TAGLINE"],
             "company_name": app.config["COMPANY_NAME"],
+        }
+
+    @app.context_processor
+    def inject_user_greeting():
+        # The signed-in user's display name + a ready-made greeting, for the
+        # personalised headers in BOTH shells (operator base.html and the tenant
+        # portal). One resolution rule (resolve_display_name) means the operator
+        # app and the company portal always greet the same person the same way.
+        # Never raises — this renders on the error pages too.
+        from flask_login import current_user
+
+        try:
+            name = resolve_display_name(current_user)
+        except Exception:  # noqa: BLE001 - context processors must never raise
+            name = ""
+        return {
+            "user_display_name": name,
+            "user_greeting": f"Welcome, {name}" if name else "Welcome",
         }
 
     @app.context_processor

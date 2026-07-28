@@ -22,7 +22,7 @@ from app.audit import record_audit
 from app.events import record_event, tenant_users
 from app.models import PayrollRun
 from app.payroll_status import AUTO_ACCEPTED, HELD, PENDING_APPROVAL, RISK_GATED_STATUSES
-from app.risk import apply_risk_gate
+from app.risk import apply_risk_gate, held_runs, release_risk_hold
 from app.tenancy import platform_required
 
 oversight_bp = Blueprint("oversight", __name__, url_prefix="/oversight")
@@ -31,13 +31,11 @@ oversight_bp = Blueprint("oversight", __name__, url_prefix="/oversight")
 @oversight_bp.route("/risk")
 @platform_required
 def risk_queue():
-    """Every held run, newest first — the platform review queue."""
-    held_runs = (
-        PayrollRun.query.filter(PayrollRun.status == HELD)
-        .order_by(PayrollRun.risk_checked_at.desc(), PayrollRun.id.desc())
-        .all()
-    )
-    return render_template("oversight/risk_queue.html", held_runs=held_runs)
+    """Every held run, newest first — the platform review queue.
+
+    Shares app.risk.held_runs with the operator dashboard's counters and Held
+    panel, so the queue and the dashboard can never report different totals."""
+    return render_template("oversight/risk_queue.html", held_runs=held_runs())
 
 
 @oversight_bp.route("/runs/<int:run_id>/risk-check", methods=["POST"])
@@ -82,6 +80,11 @@ def release_hold(run_id):
         flash("Only a held run can be released.", "warning")
         return redirect(url_for("payroll.detail", run_id=run.id))
     run.status = PENDING_APPROVAL
+    # Clear the hold from the persisted verdict in the SAME transaction as the
+    # status move. Without this, risk_status stays 'held' and every indicator
+    # derived from it (dashboard counters, the run's risk badge, the tenant's own
+    # run page) keeps showing a hold that has already been released.
+    release_risk_hold(run)
     note = (request.form.get("notes") or "").strip()
     record_audit(
         "Risk hold released",
