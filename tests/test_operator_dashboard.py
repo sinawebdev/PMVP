@@ -51,7 +51,12 @@ class OperatorDashboardTestCase(unittest.TestCase):
         db.session.commit()
 
         html = self.client.get("/dashboard").get_data(as_text=True)
-        self.assertIn("Held Payrolls", html)          # stat card
+        # The "Held Payrolls" stat card no longer exists — the executive
+        # dashboard redesign moved it into the Risk & Action signals panel
+        # (app/platform_dashboard.py::platform_risk_signals) alongside pending
+        # approvals and validation warnings, so a held count sits next to the
+        # action it implies rather than floating in a grid of numbers.
+        self.assertIn("payroll held for risk review", html)  # risk signal
         self.assertIn("Held for Risk Review", html)    # held panel
         self.assertIn("net pay variance", html)        # held reason surfaced
         self.assertIn("Recently Completed", html)      # completed panel
