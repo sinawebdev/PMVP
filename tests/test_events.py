@@ -65,7 +65,7 @@ class EventFanoutTestCase(unittest.TestCase):
         return Notification.query.filter_by(user_id=user.id).all()
 
     def test_risk_hold_emits_event_and_notifies_tenant(self):
-        self._login("chrisnat.admin@chrisnat.local")
+        self._login("operator@payrolla.com")
         self.client.post(f"/oversight/runs/{self.run_id}/risk-check")
         event = DomainEvent.query.filter_by(event_type="run.risk_held").first()
         self.assertIsNotNone(event)
@@ -79,17 +79,17 @@ class EventFanoutTestCase(unittest.TestCase):
         self.assertIsNone(notes[0].read_at)
 
     def test_release_emits_event_and_notifies_tenant(self):
-        self._login("chrisnat.admin@chrisnat.local")
+        self._login("operator@payrolla.com")
         self.client.post(f"/oversight/runs/{self.run_id}/risk-check")  # -> Held + 1 note
         self.client.post(f"/oversight/runs/{self.run_id}/release")
         self.assertEqual(DomainEvent.query.filter_by(event_type="run.hold_released").count(), 1)
         self.assertEqual(len(self._notes_for(self.co_admin)), 2)  # held + released
 
     def test_client_distribution_notifies_platform_admins(self):
-        # Seeded MSC has a client_admin (admin@msc.demo) and an Approved run.
-        msc = User.query.filter_by(email="admin@msc.demo").first()
+        # Seeded MSC has a client_admin (admin@msc.com) and an Approved run.
+        msc = User.query.filter_by(email="admin@msc.com").first()
         msc_run = PayrollRun.query.filter_by(client_company_id=msc.client_company_id).first()
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         self.client.post(
             f"/company/runs/{msc_run.id}/distribute/send",
             data={"channel": "auto", "nonce": "n1"},
@@ -101,7 +101,7 @@ class EventFanoutTestCase(unittest.TestCase):
         self.assertEqual(event.client_company_id, msc.client_company_id)
         # The payslips.distributed (tenant -> platform) event notifies platform
         # admins, NOT the client_admin.
-        chrisnat = User.query.filter_by(email="chrisnat.admin@chrisnat.local").first()
+        chrisnat = User.query.filter_by(email="operator@payrolla.com").first()
         self.assertGreaterEqual(len(self._notes_for(chrisnat)), 1)
         msc_notes_for_event = [
             n for n in self._notes_for(msc) if n.event_id == event.id
@@ -121,8 +121,8 @@ class NotificationInboxTestCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        self.msc = User.query.filter_by(email="admin@msc.demo").first()
-        self.stellar = User.query.filter_by(email="admin@stellar.demo").first()
+        self.msc = User.query.filter_by(email="admin@msc.com").first()
+        self.stellar = User.query.filter_by(email="admin@acme.com").first()
         self.mine = Notification(
             user_id=self.msc.id, title="Yours", body="A note for MSC", level="info"
         )
@@ -143,14 +143,14 @@ class NotificationInboxTestCase(unittest.TestCase):
         )
 
     def test_inbox_shows_only_my_notifications(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         html = self.client.get("/notifications").get_data(as_text=True)
         self.assertEqual(self.client.get("/notifications").status_code, 200)
         self.assertIn("A note for MSC", html)
         self.assertNotIn("A note for Stellar", html)
 
     def test_mark_read_only_my_own(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         self.assertEqual(
             self.client.post(f"/notifications/{self.mine_id}/read").status_code, 302
         )

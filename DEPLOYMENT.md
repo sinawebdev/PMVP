@@ -19,7 +19,6 @@ non-negotiables:
 | `PERSISTENCE_REQUIRED` | `true` | Fail fast if Postgres is missing. |
 | `AUTO_INIT_DB` | `false` | Schema is owned by Alembic migrations in prod. |
 | `SEED_DEMO_DATA` | `false` | Never seed demo tenants/users into a real deployment. |
-| `SEED_ARCHIVED_FEATURES` | `false` | Keep archived Phase 2/3 demo data out. |
 | `SESSION_COOKIE_SECURE` | `true` | HTTPS-only session cookie. |
 
 Optional groups (all documented in [.env.example](.env.example)): the branding
@@ -79,7 +78,6 @@ DATABASE_URL=${{ Postgres.DATABASE_URL }}
 AUTO_INIT_DB=true
 PERSISTENCE_REQUIRED=true
 SEED_DEMO_DATA=false
-SEED_ARCHIVED_FEATURES=false
 SESSION_COOKIE_SECURE=true
 ```
 

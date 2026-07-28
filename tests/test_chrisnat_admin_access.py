@@ -30,7 +30,7 @@ class ChrisnatAdminAccessTestCase(unittest.TestCase):
     def _login_platform(self):
         resp = self.client.post(
             "/login",
-            data={"email": "chrisnat.admin@chrisnat.local", "password": "password123"},
+            data={"email": "operator@payrolla.com", "password": "password123"},
         )
         self.assertEqual(resp.status_code, 302)  # -> /dashboard
 

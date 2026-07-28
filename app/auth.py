@@ -1,6 +1,15 @@
 from functools import wraps
 
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import (
+    Blueprint,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from flask_login import current_user, login_required, login_user, logout_user
 
 from app.models import User
@@ -41,6 +50,51 @@ def role_required(*roles):
     return decorator
 
 
+def demo_login_hints():
+    """Sign-in hints for the login page, grouped by plane.
+
+    ``[{"group": ..., "rows": [{"email": ..., "label": ...}]}]``, derived from
+    the seed roster itself (:mod:`app.seed`) so the hints can never drift from
+    the accounts that actually exist. Empty — and the panel disappears entirely —
+    unless ``SHOW_DEMO_LOGINS`` is on, which is impossible in production.
+    """
+    if not current_app.config.get("SHOW_DEMO_LOGINS"):
+        return []
+    from app.seed import (
+        DEMO_COMPANIES,
+        PLATFORM_USERS,
+        TENANT_USER_TEMPLATE,
+        company_domain,
+    )
+
+    groups = [
+        {
+            "group": "Payrolla platform",
+            "rows": [
+                {"email": email, "label": name} for name, email, _role in PLATFORM_USERS
+            ],
+        }
+    ]
+    for spec in DEMO_COMPANIES:
+        domain = company_domain(spec)
+        groups.append(
+            {
+                "group": f"{spec['name']} ({spec['company_code']})",
+                "rows": [
+                    {"email": f"{local}@{domain}", "label": title}
+                    for local, title, _role in TENANT_USER_TEMPLATE
+                ],
+            }
+        )
+    return groups
+
+
+def demo_login_password():
+    from app.seed import DEMO_PASSWORD
+
+    return DEMO_PASSWORD if current_app.config.get("SHOW_DEMO_LOGINS") else ""
+
+
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     from app.tenancy import landing_endpoint
@@ -65,9 +119,15 @@ def login():
             "login.html",
             email=email,
             login_error="Invalid email or password.",
+            demo_logins=demo_login_hints(),
+            demo_password=demo_login_password(),
         )
 
-    return render_template("login.html")
+    return render_template(
+        "login.html",
+        demo_logins=demo_login_hints(),
+        demo_password=demo_login_password(),
+    )
 
 
 @auth_bp.route("/logout")

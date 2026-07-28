@@ -35,8 +35,6 @@ services:
         value: "true"
       - key: SEED_DEMO_DATA
         value: "false"
-      - key: SEED_ARCHIVED_FEATURES
-        value: "false"
       # Distribution worker (Phase 4). Default: the web process runs the worker on
       # an in-process thread (free-plan friendly; the queue lives in Postgres and
       # survives restarts). To split it onto its own service, set this to "false"

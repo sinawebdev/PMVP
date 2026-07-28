@@ -55,7 +55,7 @@ class WorkerLoopIntegrationTestCase(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
         self.run = PayrollRun.query.filter_by(status="Approved").first()
-        self.operator = User.query.filter_by(email="admin@chrisnat.local").first()
+        self.operator = User.query.filter_by(email="admin@payrolla.com").first()
 
     def tearDown(self):
         db.session.remove()

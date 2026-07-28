@@ -45,7 +45,7 @@ class SlaEvaluateTestCase(unittest.TestCase):
         self.ctx.push()
         reset()
         self.run = PayrollRun.query.filter_by(status="Approved").first()
-        self.operator = User.query.filter_by(email="admin@chrisnat.local").first()
+        self.operator = User.query.filter_by(email="admin@payrolla.com").first()
 
     def tearDown(self):
         reset()
@@ -148,7 +148,7 @@ class SlaRouteTestCase(unittest.TestCase):
         self.ctx.pop()
 
     def test_dashboard_renders_sla_panel(self):
-        self.http.post("/login", data={"email": "admin@chrisnat.local", "password": "password123"})
+        self.http.post("/login", data={"email": "admin@payrolla.com", "password": "password123"})
         resp = self.http.get("/distribution/dashboard")
         self.assertEqual(resp.status_code, 200)
         self.assertIn("SLA", resp.get_data(as_text=True))

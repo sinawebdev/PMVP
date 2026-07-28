@@ -101,7 +101,7 @@ class RunsListRendersStepperTestCase(unittest.TestCase):
     def test_operator_runs_list_shows_lifecycle_stepper(self):
         self.assertEqual(
             self.client.post(
-                "/login", data={"email": "admin@chrisnat.local", "password": "password123"}
+                "/login", data={"email": "admin@payrolla.com", "password": "password123"}
             ).status_code,
             302,
         )

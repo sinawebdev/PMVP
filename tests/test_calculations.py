@@ -887,7 +887,7 @@ class GridEditTestCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.client.post(
             "/login",
-            data={"email": "admin@chrisnat.local", "password": "password123"},
+            data={"email": "admin@payrolla.com", "password": "password123"},
         )
 
     def _make_standard_run(self, status="Draft"):

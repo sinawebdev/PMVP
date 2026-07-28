@@ -1,3 +1,25 @@
+"""Bootstrap data for a fresh Payrolla database.
+
+Two tiers, deliberately separated:
+
+  * **Always** — the platform roster, the two demo client companies, and the
+    statutory rate version. Cheap, idempotent, and safe to run on every boot.
+  * **``SEED_DEMO_DATA=true``** — a small slice of employees, one payroll run
+    and a couple of expenses, so a fresh checkout and the test suite have
+    something to render. Kept intentionally light: this runs on every test's
+    ``create_app()``.
+
+For a *demonstration-grade* dataset — several months of payroll history,
+expenses across every category, both tenants populated — use the
+``flask demo-reset`` command (:mod:`app.demo_data`), which is explicit,
+operator-triggered, and never runs at boot.
+
+Identities are professional, not demo-flavoured: platform staff on
+``@payrolla.com`` and client staff on their own company domain. The *role*
+vocabulary is untouched (see :mod:`app.roles`) — only the email addresses and
+display names changed, so every permission check behaves exactly as before.
+"""
+
 import json
 import os
 from datetime import date, datetime
@@ -13,60 +35,126 @@ from app.models import (
     User,
 )
 
+# Demo passwords. Never used by a real deployment: production provisions its
+# credentials in Supabase Auth, and these accounts are only seeded into a fresh
+# local/staging database.
+DEMO_PASSWORD = "password123"
+
+
+# --- Platform (operator) roster ---------------------------------------------
+# (name, email, role). Every legacy platform role keeps a login so the existing
+# permission model stays fully demonstrable; the role strings themselves are
+# unchanged persisted identifiers (app/roles.py).
+PLATFORM_USERS = [
+    ("Payrolla Administrator", "admin@payrolla.com", "admin"),
+    ("Payrolla Operations", "operator@payrolla.com", "chrisnat_admin"),
+    ("Payrolla Support", "support@payrolla.com", "chrisnat_reviewer"),
+    ("Managing Director", "director@payrolla.com", "md"),
+    ("Payroll Officer", "payroll@payrolla.com", "payroll_officer"),
+    ("Accounts Officer", "accounts@payrolla.com", "accounts_officer"),
+    ("Operations Supervisor", "operations@payrolla.com", "operations_supervisor"),
+]
+
+# --- Demo client companies ---------------------------------------------------
+# Exactly two, both fully configured (code, contact, address). Everything a
+# demonstration needs and nothing an audience has to be told to ignore.
+DEMO_COMPANIES = [
+    {
+        "name": "MSC Limited",
+        "company_code": "MSC",
+        "contact_person": "Ama Mensah",
+        "email": "admin@msc.com",
+        "phone": "0302 700 100",
+        "address": "18 Harbour Road, Tema Port",
+        "location": "Tema",
+        "service_type": "Port operations support",
+        "notes": "Monthly payroll, bank transfer settlement.",
+    },
+    {
+        "name": "Acme Manufacturing Ltd",
+        "company_code": "ACME",
+        "contact_person": "Kofi Frimpong",
+        "email": "admin@acme.com",
+        "phone": "0302 800 200",
+        "address": "5 Spintex Industrial Avenue",
+        "location": "Accra",
+        "service_type": "Manufacturing & warehouse operations",
+        "notes": "Monthly payroll, mixed bank and mobile-money settlement.",
+    },
+]
+
+# (local part, display suffix, tenant role) applied to every demo company. The
+# split mirrors how a client actually staffs payroll: an administrator and a
+# finance lead who can approve and distribute, and a payroll clerk who prepares.
+TENANT_USER_TEMPLATE = [
+    ("admin", "Administrator", "client_admin"),
+    ("finance", "Finance Lead", "client_admin"),
+    ("payroll", "Payroll Officer", "client_preparer"),
+]
+
+
+def company_domain(company):
+    """The email domain a company's staff logins use, derived from its own
+    contact address ("admin@msc.com" -> "msc.com") so identities stay tied to
+    the company rather than to a demo domain."""
+    return (company["email"].split("@", 1)[1]).lower()
+
 
 def seed_default_data():
     seed_users()
     seed_clients()
     seed_statutory_rates()
-    # Payrolla tenancy: one platform admin + a client_admin for two demo
-    # tenants, so the two-tenant zero-cross-visibility story is testable from the
-    # first boot. Runs after seed_clients() so the companies exist to bind to.
-    seed_pmvp_tenancy()
+    # One client_admin/finance/payroll login per demo tenant, so the two-tenant
+    # zero-cross-visibility story is testable from the first boot. Runs after
+    # seed_clients() so the companies exist to bind to.
+    seed_tenant_users()
     if os.getenv("SEED_DEMO_DATA", "false").lower() == "true":
         seed_employees()
         seed_payroll()
         seed_expenses()
-    if os.getenv("SEED_ARCHIVED_FEATURES", "false").lower() == "true":
-        seed_client_users()
     db.session.commit()
 
 
-# The two seeded companies designated as Payrolla demo tenants (each gets a
-# client_admin login). They must already exist via seed_clients().
-PMVP_DEMO_TENANTS = [
-    ("MSC Ghana Ltd", "MSC Admin", "admin@msc.demo"),
-    ("Stellar Logistics", "Stellar Admin", "admin@stellar.demo"),
-]
+def seed_users():
+    """The platform (operator) roster. ``client_company_id`` stays NULL — that
+    NULL is what makes them platform users (app/roles.py)."""
+    for name, email, role in PLATFORM_USERS:
+        if not User.query.filter_by(email=email).first():
+            user = User(name=name, email=email, role=role)
+            user.set_password(DEMO_PASSWORD)
+            db.session.add(user)
 
 
-def seed_pmvp_tenancy():
-    """One chrisnat_admin (platform) + a client_admin for each demo tenant.
+def seed_clients():
+    for spec in DEMO_COMPANIES:
+        if not ClientCompany.query.filter_by(name=spec["name"]).first():
+            db.session.add(ClientCompany(status="Active", **spec))
+    db.session.flush()
+
+
+def seed_tenant_users():
+    """Three staff logins per demo company, each hard-bound to that company.
 
     Idempotent: every user is guarded by an email-existence check, so re-running
-    on an already-seeded DB is a no-op. Passwords are demo-only ("password123").
+    on an already-seeded database is a no-op.
     """
-    # Platform (operator) oversight admin — client_company_id stays NULL.
-    if not User.query.filter_by(email="chrisnat.admin@chrisnat.local").first():
-        admin = User(
-            name="Chrisnat Admin",
-            email="chrisnat.admin@chrisnat.local",
-            role="chrisnat_admin",
-        )
-        admin.set_password("password123")
-        db.session.add(admin)
-
-    # One client_admin per demo tenant, hard-bound to that company.
-    for company_name, admin_name, admin_email in PMVP_DEMO_TENANTS:
-        company = ClientCompany.query.filter_by(name=company_name).first()
-        if company and not User.query.filter_by(email=admin_email).first():
-            tenant_admin = User(
-                name=admin_name,
-                email=admin_email,
-                role="client_admin",
+    for spec in DEMO_COMPANIES:
+        company = ClientCompany.query.filter_by(name=spec["name"]).first()
+        if company is None:
+            continue
+        domain = company_domain(spec)
+        for local_part, title, role in TENANT_USER_TEMPLATE:
+            email = f"{local_part}@{domain}"
+            if User.query.filter_by(email=email).first():
+                continue
+            user = User(
+                name=f"{spec['company_code']} {title}",
+                email=email,
+                role=role,
                 client_company_id=company.id,
             )
-            tenant_admin.set_password("password123")
-            db.session.add(tenant_admin)
+            user.set_password(DEMO_PASSWORD)
+            db.session.add(user)
 
 
 # Initial statutory rate version from the ACS workbook's live PAYE formula
@@ -120,89 +208,30 @@ def seed_statutory_rates():
     )
 
 
-def seed_users():
-    users = [
-        ("Admin User", "admin@chrisnat.local", "admin"),
-        ("Managing Director", "md@chrisnat.local", "md"),
-        ("Payroll Officer", "payroll@chrisnat.local", "payroll_officer"),
-        ("Accounts Officer", "accounts@chrisnat.local", "accounts_officer"),
-        ("Operations Supervisor", "operations@chrisnat.local", "operations_supervisor"),
-    ]
-    for name, email, role in users:
-        if not User.query.filter_by(email=email).first():
-            user = User(name=name, email=email, role=role)
-            user.set_password("password123")
-            db.session.add(user)
-
-
-def seed_client_users():
-    client_users = [
-        ("MSC Client User", "msc.client@chrisnat.local", "MSC Ghana Ltd"),
-        ("Stellar Client User", "stellar.client@chrisnat.local", "Stellar Logistics"),
-        ("Grimaldi Client User", "grimaldi.client@chrisnat.local", "Grimaldi Ghana Ltd"),
-    ]
-    for name, email, client_name in client_users:
-        client = ClientCompany.query.filter_by(name=client_name).first()
-        if client and not User.query.filter_by(email=email).first():
-            user = User(
-                name=name,
-                email=email,
-                role="client_user",
-                client_company_id=client.id,
-            )
-            user.set_password("password123")
-            db.session.add(user)
-
-
-def seed_clients():
-    clients = [
-        ("MSC Ghana Ltd", "Ama Mensah", "Accra", "Port operations support"),
-        ("Grimaldi Ghana Ltd", "Kojo Boateng", "Tema", "Logistics staffing"),
-        ("ACS/GMT Shipping", "Efua Owusu", "Tema", "Shipping services"),
-        ("Portmarine Ltd", "Yaw Addo", "Takoradi", "Marine support"),
-        ("Multipurpose Terminal", "Akosua Asante", "Tema", "Terminal labour"),
-        ("Stellar Logistics", "Kofi Frimpong", "Accra", "Warehouse operations"),
-    ]
-    for name, contact, location, service_type in clients:
-        if not ClientCompany.query.filter_by(name=name).first():
-            db.session.add(
-                ClientCompany(
-                    name=name,
-                    contact_person=contact,
-                    phone="0240000000",
-                    email=f"{name.lower().replace('/', '').replace(' ', '.')}@example.com",
-                    location=location,
-                    service_type=service_type,
-                    status="Active",
-                )
-            )
-    db.session.flush()
-
-
 def seed_employees():
     if Employee.query.count():
         return
     names = [
-        ("CN-001", "Kwame Mensah", "MSC Ghana Ltd", 2600),
-        ("CN-002", "Akosua Osei", "MSC Ghana Ltd", 2400),
-        ("CN-003", "Yaw Boateng", "Grimaldi Ghana Ltd", 2800),
-        ("CN-004", "Ama Serwaa", "ACS/GMT Shipping", 2300),
-        ("CN-005", "Kofi Appiah", "Portmarine Ltd", 3100),
-        ("CN-006", "Efua Nyarko", "Multipurpose Terminal", 2500),
-        ("CN-007", "Kojo Antwi", "Stellar Logistics", 2700),
-        ("CN-008", "Abena Darko", "MSC Ghana Ltd", 2350),
-        ("CN-009", "Nana Adu", "Grimaldi Ghana Ltd", 2950),
-        ("CN-010", "Esi Amponsah", "Stellar Logistics", 2450),
-        ("CN-011", "Akua Boateng", "MSC Ghana Ltd", 2550),
-        ("CN-012", "Kojo Addai", "MSC Ghana Ltd", 2650),
-        ("CN-013", "Afia Darko", "MSC Ghana Ltd", 2350),
-        ("CN-014", "Yaw Antwi", "Stellar Logistics", 2750),
-        ("CN-015", "Abigail Tetteh", "Stellar Logistics", 2300),
-        ("CN-016", "Samuel Nartey", "Grimaldi Ghana Ltd", 2850),
-        ("CN-017", "Linda Ofori", "Grimaldi Ghana Ltd", 2450),
-        ("CN-018", "Isaac Quaye", "ACS/GMT Shipping", 2650),
-        ("CN-019", "Mavis Adjei", "Portmarine Ltd", 2500),
-        ("CN-020", "Daniel Asamoah", "Multipurpose Terminal", 2700),
+        ("CN-001", "Kwame Mensah", "MSC Limited", 2600),
+        ("CN-002", "Akosua Osei", "MSC Limited", 2400),
+        ("CN-003", "Yaw Boateng", "Acme Manufacturing Ltd", 2800),
+        ("CN-004", "Ama Serwaa", "MSC Limited", 2300),
+        ("CN-005", "Kofi Appiah", "Acme Manufacturing Ltd", 3100),
+        ("CN-006", "Efua Nyarko", "Acme Manufacturing Ltd", 2500),
+        ("CN-007", "Kojo Antwi", "Acme Manufacturing Ltd", 2700),
+        ("CN-008", "Abena Darko", "MSC Limited", 2350),
+        ("CN-009", "Nana Adu", "Acme Manufacturing Ltd", 2950),
+        ("CN-010", "Esi Amponsah", "Acme Manufacturing Ltd", 2450),
+        ("CN-011", "Akua Boateng", "MSC Limited", 2550),
+        ("CN-012", "Kojo Addai", "MSC Limited", 2650),
+        ("CN-013", "Afia Darko", "MSC Limited", 2350),
+        ("CN-014", "Yaw Antwi", "Acme Manufacturing Ltd", 2750),
+        ("CN-015", "Abigail Tetteh", "Acme Manufacturing Ltd", 2300),
+        ("CN-016", "Samuel Nartey", "Acme Manufacturing Ltd", 2850),
+        ("CN-017", "Linda Ofori", "Acme Manufacturing Ltd", 2450),
+        ("CN-018", "Isaac Quaye", "MSC Limited", 2650),
+        ("CN-019", "Mavis Adjei", "MSC Limited", 2500),
+        ("CN-020", "Daniel Asamoah", "Acme Manufacturing Ltd", 2700),
     ]
     for index, (staff_id, full_name, client_name, salary) in enumerate(names, start=1):
         client = ClientCompany.query.filter_by(name=client_name).first()
@@ -229,9 +258,9 @@ def seed_employees():
 def seed_payroll():
     if PayrollRun.query.count():
         return
-    admin = User.query.filter_by(email="admin@chrisnat.local").first()
-    md = User.query.filter_by(email="md@chrisnat.local").first()
-    client = ClientCompany.query.filter_by(name="MSC Ghana Ltd").first()
+    admin = User.query.filter_by(email="admin@payrolla.com").first()
+    director = User.query.filter_by(email="director@payrolla.com").first()
+    client = ClientCompany.query.filter_by(name="MSC Limited").first()
     now = datetime.now()
     employees = Employee.query.filter(
         Employee.client_company_id == client.id,
@@ -242,7 +271,7 @@ def seed_payroll():
         year=now.year,
         status="Approved",
         created_by=admin.id,
-        approved_by=md.id,
+        approved_by=director.id,
         client_company_id=client.id,
         total_workers=len(employees),
         total_rows_imported=len(employees),
@@ -294,16 +323,19 @@ def seed_payroll():
 def seed_expenses():
     if Expense.query.count():
         return
-    accounts = User.query.filter_by(email="accounts@chrisnat.local").first()
+    accounts = User.query.filter_by(email="accounts@payrolla.com").first()
+    client = ClientCompany.query.filter_by(name="MSC Limited").first()
     db.session.add(
         Expense(
-            title="Cleaning supplies",
+            title="Office internet",
             expense_date=date.today(),
-            category="Cleaning supplies",
-            description="Detergents and office cleaning materials",
+            category="Internet",
+            description="Monthly fibre subscription for the site office",
             amount=450,
-            payment_method="Cash",
+            payment_method="Bank Transfer",
             receipt_reference="REC-001",
+            client_company_id=client.id if client else None,
+            status="Recorded",
             recorded_by=accounts.id,
         )
     )
@@ -311,11 +343,13 @@ def seed_expenses():
         Expense(
             title="Staff transport",
             expense_date=date.today(),
-            category="Transport",
+            category="Travel",
             description="Staff movement to client site",
             amount=780,
             payment_method="Mobile Money",
             receipt_reference="MOMO-002",
+            client_company_id=client.id if client else None,
+            status="Recorded",
             recorded_by=accounts.id,
         )
     )

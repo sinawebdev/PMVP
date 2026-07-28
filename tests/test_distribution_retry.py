@@ -190,7 +190,7 @@ class RetryVisibilityTestCase(unittest.TestCase):
         self.run = PayrollRun.query.filter_by(status="Approved").first()
         self.item = self.run.items[0]
         self.http.post(
-            "/login", data={"email": "admin@chrisnat.local", "password": "password123"}
+            "/login", data={"email": "admin@payrolla.com", "password": "password123"}
         )
 
     def tearDown(self):

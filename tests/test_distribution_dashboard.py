@@ -25,7 +25,7 @@ class DashboardStatsTestCase(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
         self.run = PayrollRun.query.filter_by(status="Approved").first()
-        self.operator = User.query.filter_by(email="admin@chrisnat.local").first()
+        self.operator = User.query.filter_by(email="admin@payrolla.com").first()
 
     def tearDown(self):
         db.session.remove()
@@ -90,7 +90,7 @@ class DashboardRouteTestCase(unittest.TestCase):
         self.http.post("/login", data={"email": email, "password": "password123"})
 
     def test_operator_sees_dashboard_and_fragment(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         page = self.http.get("/distribution/dashboard")
         self.assertEqual(page.status_code, 200)
         self.assertIn("Distribution Monitor", page.get_data(as_text=True))
@@ -99,7 +99,7 @@ class DashboardRouteTestCase(unittest.TestCase):
         self.assertIn("distribution-monitor", frag.get_data(as_text=True))
 
     def test_tenant_user_is_blocked_from_the_operator_dashboard(self):
-        self._login("admin@msc.demo")  # a client_admin
+        self._login("admin@msc.com")  # a client_admin
         resp = self.http.get("/distribution/dashboard", follow_redirects=False)
         self.assertEqual(resp.status_code, 302)
         self.assertNotIn("/distribution/dashboard", resp.headers["Location"])

@@ -192,13 +192,19 @@ class ClientExpensesTestCase(unittest.TestCase):
     # --- analytics feed ------------------------------------------------------
     def test_recorded_expenses_feed_the_company_dashboard(self):
         self._login(self.admin)
+        baseline = sum(
+            (row.amount or 0)
+            for row in Expense.query.filter_by(client_company_id=self.company.id).all()
+        )
         self._add(amount="500", description="Water bill", category="Utilities")
         self._add(amount="250", description="Fuel top-up", category="Fuel")
 
         page = self.client.get("/company")
         self.assertEqual(page.status_code, 200)
-        # 750 across both entries, rendered by the cedis filter on the stat card.
-        self.assertIn("750.00", page.get_data(as_text=True))
+        # The dashboard's Total expenses card is the tenant's whole ledger, so it
+        # must have moved by exactly the 750 just recorded.
+        expected = f"{baseline + 750:,.2f}"
+        self.assertIn(expected, page.get_data(as_text=True))
 
     def test_expenses_page_shows_totals_and_breakdown(self):
         self._login(self.admin)

@@ -43,9 +43,9 @@ class DistributionTestCase(unittest.TestCase):
                     paye=200, ssnit=120, tier_2_pension=0, loan_deduction=0,
                     other_deductions=0, total_deductions=320, net_pay=1980)
         run = _Obj(month="June", year=2026)
-        client = _Obj(name="MSC Ghana Ltd")
+        client = _Obj(name="MSC Limited")
         text = render_payslip_text(item, run, client)
-        self.assertIn("MSC Ghana Ltd", text)
+        self.assertIn("MSC Limited", text)
         self.assertIn("Ama Mensah", text)
         self.assertIn("NET PAY", text)
         self.assertIn("1,980", text)

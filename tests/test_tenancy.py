@@ -28,9 +28,9 @@ class TenancyTestCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        self.platform = User.query.filter_by(email="chrisnat.admin@chrisnat.local").first()
-        self.msc = User.query.filter_by(email="admin@msc.demo").first()
-        self.stellar = User.query.filter_by(email="admin@stellar.demo").first()
+        self.platform = User.query.filter_by(email="operator@payrolla.com").first()
+        self.msc = User.query.filter_by(email="admin@msc.com").first()
+        self.stellar = User.query.filter_by(email="admin@acme.com").first()
 
     def tearDown(self):
         self.ctx.pop()
@@ -98,7 +98,7 @@ class TenancyTestCase(unittest.TestCase):
     # --- login routing ------------------------------------------------------
     def test_login_routes_tenant_to_company_dashboard(self):
         resp = self.client.post(
-            "/login", data={"email": "admin@msc.demo", "password": "password123"}
+            "/login", data={"email": "admin@msc.com", "password": "password123"}
         )
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.headers["Location"].endswith("/company"))
@@ -106,7 +106,7 @@ class TenancyTestCase(unittest.TestCase):
     def test_login_routes_platform_to_oversight(self):
         resp = self.client.post(
             "/login",
-            data={"email": "chrisnat.admin@chrisnat.local", "password": "password123"},
+            data={"email": "operator@payrolla.com", "password": "password123"},
         )
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.headers["Location"].endswith("/dashboard"))

@@ -36,7 +36,7 @@ class ClientReportsTestCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        self.msc = User.query.filter_by(email="admin@msc.demo").first()
+        self.msc = User.query.filter_by(email="admin@msc.com").first()
         self.tenant_id = self.msc.client_company_id
         self.run = PayrollRun.query.filter_by(client_company_id=self.tenant_id).first()
         self.run.status = APPROVED  # a completed run — reports unlocked
@@ -66,7 +66,7 @@ class ClientReportsTestCase(unittest.TestCase):
 
     # --- preview hub --------------------------------------------------------
     def test_reports_hub_renders_with_all_three_exports(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         resp = self.client.get(f"/company/runs/{self.run.id}/reports")
         self.assertEqual(resp.status_code, 200)
         html = resp.get_data(as_text=True)
@@ -81,7 +81,7 @@ class ClientReportsTestCase(unittest.TestCase):
 
     # --- downloads reuse the shared engine ----------------------------------
     def test_each_export_downloads_as_xlsx_attachment(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         for path in EXPORT_PATHS:
             resp = self.client.get(f"/company/runs/{self.run.id}{path}")
             self.assertEqual(resp.status_code, 200, path)
@@ -92,7 +92,7 @@ class ClientReportsTestCase(unittest.TestCase):
     def test_client_export_does_not_advance_run_to_processed(self):
         # Unlike the operator payroll export, a client export is read-only and
         # must NOT close the run — that stays an operator/accounts action.
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         self.client.get(f"/company/runs/{self.run.id}/export")
         db.session.refresh(self.run)
         self.assertEqual(self.run.status, APPROVED)
@@ -102,7 +102,7 @@ class ClientReportsTestCase(unittest.TestCase):
     def test_downloads_blocked_until_run_is_completed(self):
         self.run.status = HELD  # not yet approved
         db.session.commit()
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         for path in EXPORT_PATHS:
             resp = self.client.get(f"/company/runs/{self.run.id}{path}")
             self.assertEqual(resp.status_code, 302, path)  # redirected, no file
@@ -115,7 +115,7 @@ class ClientReportsTestCase(unittest.TestCase):
     def test_cross_tenant_run_is_404_on_every_report_route(self):
         # A different tenant must never reach MSC's run through the report routes.
         msc_run_id = self.run.id
-        self._login("admin@stellar.demo")
+        self._login("admin@acme.com")
         for path in ["/reports"] + EXPORT_PATHS:
             self.assertEqual(
                 self.client.get(f"/company/runs/{msc_run_id}{path}").status_code, 404, path
@@ -123,14 +123,14 @@ class ClientReportsTestCase(unittest.TestCase):
 
     # --- authorization ------------------------------------------------------
     def test_platform_user_bounced_from_client_reports(self):
-        self._login("chrisnat.admin@chrisnat.local")
+        self._login("operator@payrolla.com")
         resp = self.client.get(f"/company/runs/{self.run.id}/reports")
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.headers["Location"].endswith("/dashboard"))
 
     # --- identity: a client's exports carry THEIR company, not the bureau ----
     def test_client_exports_name_the_client_company_not_the_bureau(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         company_name = self.run.client_company.name
         for path in EXPORT_PATHS:
             resp = self.client.get(f"/company/runs/{self.run.id}{path}")
@@ -142,7 +142,7 @@ class ClientReportsTestCase(unittest.TestCase):
             self.assertNotIn("Chrisnat Limited", blob, path)
 
     def test_client_gra_export_names_client_as_employer(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         resp = self.client.get(f"/company/runs/{self.run.id}/export/gra-paye")
         self.assertEqual(resp.status_code, 200)
         # D9 is the GRA "Name of Employer" cell — it must be the client company.
@@ -157,7 +157,7 @@ class ClientReportsTestCase(unittest.TestCase):
         self.assertTrue(self.run.items, "seed run should have payroll items")
         self.run.items[0].warning_notes = sentinel
         db.session.commit()
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         resp = self.client.get(f"/company/runs/{self.run.id}/export/gra-paye")
         self.assertEqual(resp.status_code, 200)
         self.assertNotIn(sentinel, self._cell_text(resp))

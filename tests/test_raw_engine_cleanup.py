@@ -34,7 +34,7 @@ class OldRawPathRetiredTests(unittest.TestCase):
         self.app.config["TESTING"] = True
         self.http = self.app.test_client()
         self.http.post(
-            "/login", data={"email": "admin@chrisnat.local", "password": "password123"}
+            "/login", data={"email": "admin@payrolla.com", "password": "password123"}
         )
 
     def test_retired_endpoints_absent_from_url_map(self):
@@ -124,7 +124,7 @@ class PayTypeChangeGuardTests(unittest.TestCase):
         self.app.config["TESTING"] = True
         self.http = self.app.test_client()
         self.http.post(
-            "/login", data={"email": "admin@chrisnat.local", "password": "password123"}
+            "/login", data={"email": "admin@payrolla.com", "password": "password123"}
         )
         with self.app.app_context():
             client = ClientCompany(name="DZ GUARD CO", status="Active")

@@ -111,21 +111,46 @@ For a Docker-based local stack (Postgres + web + distribution worker) see
 
 ### Default seed logins
 
-Seeded only when `SEED_DEMO_DATA=true` (never in a real deployment). All use
-password `password123`:
+Seeded into a fresh local/staging database only — a real deployment provisions
+its credentials in Supabase Authentication. All demo accounts use the password
+`password123`.
 
-| Plane | Role | Email |
+**Platform (operator) plane** — `client_company_id` is NULL:
+
+| Email | Role string | Capability |
 |---|---|---|
-| Platform | Admin | `admin@chrisnat.local` |
-| Platform | MD | `md@chrisnat.local` |
-| Platform | Payroll Officer | `payroll@chrisnat.local` |
-| Platform | Accounts Officer | `accounts@chrisnat.local` |
-| Tenant | Client user | `msc.client@chrisnat.local` |
+| `admin@payrolla.com` | `admin` | Full operator administration |
+| `operator@payrolla.com` | `chrisnat_admin` | Platform superuser (SaaS operator) |
+| `support@payrolla.com` | `chrisnat_reviewer` | Read-only support/oversight |
+| `director@payrolla.com` | `md` | Managing Director — approvals |
+| `payroll@payrolla.com` | `payroll_officer` | Payroll processing |
+| `accounts@payrolla.com` | `accounts_officer` | Submission, close-out |
+| `operations@payrolla.com` | `operations_supervisor` | Operations view |
 
-> The `@chrisnat.local` demo domain and the `chrisnat_admin` platform role are
-> retained from the founding operator (Chrisnat Limited) and are treated as
-> stable identifiers, not product branding. See
-> [the branding note](#a-note-on-the-name) below.
+**Tenant (client) plane** — each bound to one company:
+
+| Company | Code | Email | Role string |
+|---|---|---|---|
+| MSC Limited | `MSC` | `admin@msc.com` | `client_admin` |
+| MSC Limited | `MSC` | `finance@msc.com` | `client_admin` |
+| MSC Limited | `MSC` | `payroll@msc.com` | `client_preparer` |
+| Acme Manufacturing Ltd | `ACME` | `admin@acme.com` | `client_admin` |
+| Acme Manufacturing Ltd | `ACME` | `finance@acme.com` | `client_admin` |
+| Acme Manufacturing Ltd | `ACME` | `payroll@acme.com` | `client_preparer` |
+
+> Only the *identities* are professional — the role strings above are unchanged
+> persisted identifiers. `chrisnat_admin` / `chrisnat_reviewer` are retained from
+> the founding operator (Chrisnat Limited) and treated as stable identifiers, not
+> product branding. See [the branding note](#a-note-on-the-name) below.
+
+For a demonstration-grade dataset (several months of payroll history, expenses
+across every category, both tenants populated) run the explicit reset command:
+
+```bash
+flask --app run:app demo-reset --yes
+```
+
+It is never triggered at boot — see [Demo data reset](#demo-data-reset).
 
 ---
 

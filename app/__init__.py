@@ -165,6 +165,14 @@ def create_app():
     )
     app.config["COMPANY_NAME"] = os.getenv("COMPANY_NAME", "Sinaforte Technologies")
     app.config["SERVICE_SLUG"] = os.getenv("SERVICE_SLUG", "payrolla")
+    # Sign-in hints on the login page. Only meaningful where the demo roster was
+    # actually seeded, and hard-off in production — a real deployment must never
+    # advertise accounts, seeded or not.
+    app.config["SHOW_DEMO_LOGINS"] = (
+        not is_production
+        and os.getenv("SEED_DEMO_DATA", "false").lower() == "true"
+        and os.getenv("SHOW_DEMO_LOGINS", "true").lower() == "true"
+    )
     app.config["SQLALCHEMY_DATABASE_URI"] = resolve_database_uri(
         os.path.join(app.instance_path, "payrolla.db")
     )

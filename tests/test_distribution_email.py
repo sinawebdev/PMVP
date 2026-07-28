@@ -59,9 +59,9 @@ class EmailRenderTestCase(unittest.TestCase):
 
     def test_branded_html_and_plaintext_fallback(self):
         run = _Obj(month="June", year=2026)
-        client = _Obj(name="MSC Ghana Ltd")
+        client = _Obj(name="MSC Limited")
         subject, text, html = render_payslip_email(_item(), run, client, link="https://x/p/tok")
-        self.assertIn("MSC Ghana Ltd", subject)
+        self.assertIn("MSC Limited", subject)
         # Plain-text fallback carries the numbers, no HTML.
         self.assertIn("NET PAY", text)
         self.assertNotIn("<", text)

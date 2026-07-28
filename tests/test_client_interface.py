@@ -28,7 +28,7 @@ class ClientInterfaceTestCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        self.msc = User.query.filter_by(email="admin@msc.demo").first()
+        self.msc = User.query.filter_by(email="admin@msc.com").first()
         self.msc_run = PayrollRun.query.filter_by(client_company_id=self.msc.client_company_id).first()
         self.msc_item = PayrollItem.query.filter_by(payroll_run_id=self.msc_run.id).first()
         self.msc_emp = Employee.query.filter_by(client_company_id=self.msc.client_company_id).first()
@@ -40,7 +40,7 @@ class ClientInterfaceTestCase(unittest.TestCase):
         self.assertEqual(self.client.post("/login", data={"email": email, "password": "password123"}).status_code, 302)
 
     def test_tenant_user_reaches_all_client_pages(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         for page in CLIENT_PAGES:
             self.assertEqual(self.client.get(page).status_code, 200, page)
         # own run detail + payslip PDF
@@ -48,14 +48,14 @@ class ClientInterfaceTestCase(unittest.TestCase):
         self.assertEqual(self.client.get(f"/company/items/{self.msc_item.id}/payslip").status_code, 200)
 
     def test_platform_user_bounced_from_client_plane(self):
-        self._login("chrisnat.admin@chrisnat.local")
+        self._login("operator@payrolla.com")
         for page in ["/company/employees", "/company/runs", "/company/statutory"]:
             resp = self.client.get(page)
             self.assertEqual(resp.status_code, 302, page)
             self.assertTrue(resp.headers["Location"].endswith("/dashboard"))
 
     def test_employee_self_service_add_is_tenant_bound(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         resp = self.client.post(
             "/company/employees/add",
             data={"staff_id": "msc new 7", "full_name": "New Worker", "basic_salary": "1500"},
@@ -67,7 +67,7 @@ class ClientInterfaceTestCase(unittest.TestCase):
         self.assertEqual(emp.full_name, "New Worker")
 
     def test_cross_tenant_objects_404_through_client_routes(self):
-        self._login("admin@stellar.demo")  # different tenant
+        self._login("admin@acme.com")  # different tenant
         for path in [
             f"/company/employees/{self.msc_emp.id}/edit",
             f"/company/runs/{self.msc_run.id}",
@@ -78,7 +78,7 @@ class ClientInterfaceTestCase(unittest.TestCase):
     def test_audit_trail_is_tenant_scoped(self):
         # MSC user's action is auditable and shows in MSC's audit; a different
         # tenant never sees it.
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         self.client.post(
             "/company/employees/add",
             data={"staff_id": "MSCAUD1", "full_name": "Audit Marker Worker"},
@@ -88,12 +88,12 @@ class ClientInterfaceTestCase(unittest.TestCase):
         self.assertIn("Audit Marker Worker", html)
         # Stellar user must not see MSC's audit entry.
         self.client.get("/logout")
-        self._login("admin@stellar.demo")
+        self._login("admin@acme.com")
         stellar_html = self.client.get("/company/audit").get_data(as_text=True)
         self.assertNotIn("Audit Marker Worker", stellar_html)
 
     def test_employee_list_is_scoped(self):
-        self._login("admin@msc.demo")
+        self._login("admin@msc.com")
         # Every employee shown belongs to MSC (checked via DB — the list query is tenant_query).
         html = self.client.get("/company/employees").get_data(as_text=True)
         stellar_emp = Employee.query.filter(

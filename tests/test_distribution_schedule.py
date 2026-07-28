@@ -43,7 +43,7 @@ class ScheduleTestCase(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
         self.run = PayrollRun.query.filter_by(status="Approved").first()
-        self.operator = User.query.filter_by(email="admin@chrisnat.local").first()
+        self.operator = User.query.filter_by(email="admin@payrolla.com").first()
 
     def tearDown(self):
         db.session.remove()
@@ -180,7 +180,7 @@ class ScheduleRouteTestCase(unittest.TestCase):
         self.http.post("/login", data={"email": email, "password": "password123"})
 
     def test_operator_schedule_route_creates_scheduled_batch(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         when = (datetime.now(timezone.utc) + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
         resp = self.http.post(
             f"/distribution/run/{self.run.id}/schedule",
@@ -196,7 +196,7 @@ class ScheduleRouteTestCase(unittest.TestCase):
         )
 
     def test_schedule_rejects_a_past_time(self):
-        self._login("admin@chrisnat.local")
+        self._login("admin@payrolla.com")
         when = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
         resp = self.http.post(
             f"/distribution/run/{self.run.id}/schedule",
