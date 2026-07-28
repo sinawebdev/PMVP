@@ -1,108 +1,291 @@
 {% extends "client/base.html" %}
 {% import "macros/charts.html" as ch %}
+{% import "macros/dashboard.html" as ui %}
 {% block title %}Dashboard{% endblock %}
+
+{# The executive workspace stylesheet loads only here — every other portal page
+   is unaffected by it, and cannot be regressed by a change to it. #}
+{% block head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
+{% endblock %}
+
 {% block body %}
-  <div class="page-head">
-    {# Personalised greeting — resolved by app.resolve_display_name, the same
-       rule the operator shell uses (see base.html). #}
-    <h1>{{ user_greeting }}</h1>
-    <p class="sub">An overview of {{ company.name }}.</p>
-  </div>
+{% set health = overview.health %}
+{% set run = health.run %}
+{% set compliance = overview.compliance %}
+{% set workforce = overview.workforce %}
 
-  {# --- Quick stats -------------------------------------------------------
-     The four figures an executive checks first. Employee count doubles as the
-     roster statistic card; the payroll figure carries its period and its change
-     against the previous period so the number has context, not just a value. #}
-  <div class="grid">
-    <div class="card stat-card">
-      <span class="n">{{ analytics.stats.employees }}</span>
-      <span class="l">Total employees{% if active_employee_count != analytics.stats.employees %} ({{ active_employee_count }} active){% endif %}</span>
-    </div>
-    <div class="card stat-card">
-      <span class="n">{{ analytics.stats.current_payroll | cedis }}</span>
-      <span class="l">
-        Current payroll{% if analytics.stats.current_period %} · {{ analytics.stats.current_period }}{% endif %}
-        {% if analytics.stats.previous_period %}<br>{{ ch.delta(analytics.stats.payroll_change, "vs " ~ analytics.stats.previous_period) }}{% endif %}
-      </span>
-    </div>
-    <div class="card stat-card">
-      <span class="n">{{ analytics.stats.expenses | cedis }}</span>
-      <span class="l">Total expenses</span>
-    </div>
-    <div class="card stat-card">
-      <span class="n">{{ analytics.stats.average_net | cedis }}</span>
-      <span class="l">Average net salary{% if analytics.stats.current_period %} · {{ analytics.stats.current_period }}{% endif %}</span>
-    </div>
-  </div>
+<div class="exec">
 
-  {% if draft_count %}
-  <div class="flash info" role="status">
-    You have {{ draft_count }} import{{ "" if draft_count == 1 else "s" }} in progress.
-    <a href="{{ url_for('client.runs') }}">Resume {{ "it" if draft_count == 1 else "them" }} →</a>
-  </div>
-  {% endif %}
-  {% if held_runs_count %}
-  <div class="flash warning" role="status">
-    {{ held_runs_count }} payroll run{{ "" if held_runs_count == 1 else "s" }}
-    {{ "is" if held_runs_count == 1 else "are" }} held for {{ app_brand_name }} review.
-    <a href="{{ url_for('client.runs') }}">View runs →</a>
-  </div>
-  {% endif %}
+  {# --- Header -----------------------------------------------------------
+     The greeting stays (it is the same resolve_display_name rule the operator
+     shell uses), but it now carries the period the whole page is reporting on.
+     A dashboard without a date is a dashboard nobody can quote in a meeting. #}
+  <header class="exec-head">
+    <div>
+      <h1>{{ user_greeting }}</h1>
+      <p class="sub">
+        {{ company.name }}
+        {%- if run %} · reporting on {{ run.month }} {{ run.year }}{% endif %}
+      </p>
+    </div>
+    <div class="actions">
+      {% if run %}<span class="exec-period">{{ ui.icon('clock', 15) }}Latest run {{ run.month }} {{ run.year }}</span>{% endif %}
+      {% if 'run_payroll' in overview.actions | map(attribute='key') | list %}
+      <a class="btn primary" href="{{ url_for('client.run_upload') }}">Run payroll</a>
+      {% endif %}
+    </div>
+  </header>
 
-  {# --- Analytics ---------------------------------------------------------
-     Three small server-rendered SVG/CSS charts (macros/charts.html) — no chart
-     library, no JS, no extra requests. Hidden entirely until the company has at
-     least one run, so a new tenant sees an invitation rather than empty axes. #}
-  {% if analytics.has_data %}
-  <div class="analytics-grid">
-    <section class="card chart-card">
-      <div class="chart-head">
-        <h2>Monthly payroll trend</h2>
-        <small class="muted">Net pay per month</small>
+  <div class="exec-grid">
+
+    {# --- 1. Executive KPIs ---------------------------------------------
+       Four tiles, four distinct questions: what is payroll costing, how big is
+       the workforce, what else are we spending, and are we safe. Run STATUS is
+       deliberately not a tile — it needs a reason and a next step, which is the
+       Payroll Health panel's whole job. #}
+    <section class="area-kpis" aria-labelledby="kpi-heading">
+      <h2 id="kpi-heading" class="sr-only">Executive summary</h2>
+      <div class="kpi-band">
+        {% for kpi in overview.kpis %}{{ ui.kpi_card(kpi, url_for(kpi.endpoint)) }}{% endfor %}
       </div>
-      {{ ch.line_chart(analytics.trend, label="Monthly payroll trend") }}
     </section>
 
-    <section class="card chart-card">
-      <div class="chart-head">
-        <h2>Payroll cost by month</h2>
-        <small class="muted">Gross pay + employer SSF</small>
+    {# --- 2. Payroll Health Center --------------------------------------- #}
+    <section class="xpanel area-health" aria-labelledby="health-heading">
+      <div class="panel-head">
+        <div>
+          <h2 id="health-heading">Payroll health</h2>
+          <p class="panel-sub">Where this period's payroll stands and what happens next.</p>
+        </div>
+        {% if run %}<a class="link-action" href="{{ url_for('client.run_detail', run_id=run.id) }}">Open run{{ ui.icon('arrow', 14) }}</a>{% endif %}
       </div>
-      {{ ch.bar_chart(analytics.cost_by_month, label="Payroll cost by month") }}
+
+      {% if health.has_run %}
+      <div class="health-top">
+        <div>
+          <p class="health-period">{{ run.month }} {{ run.year }}</p>
+          <p class="panel-sub">{{ run.total_workers }} worker{{ '' if run.total_workers == 1 else 's' }} · {{ run.total_net_pay | cedis }} net</p>
+        </div>
+        {{ ui.status_badge(run.status) }}
+      </div>
+
+      {# The next step, always. A status without an action is a status the
+         reader has to interpret; this states the action in their words. #}
+      <div class="health-next {{ 'health-next--warn' if run.status in ('Held', 'Rejected') }}">
+        <strong>{{ health.next_step }}</strong>
+        <p>{{ health.next_detail }}</p>
+      </div>
+
+      <div class="progress-meta">
+        <span class="muted">Lifecycle completion</span>
+        <strong>{{ health.completion }}%</strong>
+      </div>
+      <div class="progress" role="progressbar" aria-valuenow="{{ health.completion }}"
+           aria-valuemin="0" aria-valuemax="100" aria-label="Payroll lifecycle completion">
+        <span class="progress-fill" style="width: {{ health.completion }}%"></span>
+      </div>
+
+      {{ ui.stepper(health.steps) }}
+
+      <dl class="figures">
+        <div class="figure"><dt>Gross pay</dt><dd class="nums">{{ run.total_gross_pay | cedis }}</dd></div>
+        <div class="figure"><dt>Net pay</dt><dd class="nums">{{ run.total_net_pay | cedis }}</dd></div>
+        <div class="figure {{ 'figure--flag' if health.pending_count }}">
+          <dt>Awaiting action</dt><dd class="nums">{{ health.pending_count }}</dd>
+        </div>
+        <div class="figure {{ 'figure--flag' if health.exceptions }}">
+          <dt>Exceptions</dt><dd class="nums">{{ health.exceptions }}</dd>
+        </div>
+      </dl>
+
+      {% if health.draft_count %}
+      <p class="chart-note">
+        {{ health.draft_count }} import{{ '' if health.draft_count == 1 else 's' }} still in progress.
+        <a href="{{ url_for('client.runs') }}">Resume {{ 'it' if health.draft_count == 1 else 'them' }}</a>.
+      </p>
+      {% endif %}
+
+      {% else %}
+      {{ ui.empty(
+           "No payroll run yet",
+           "Upload this period's payroll workbook. Payrolla validates it, scores it against the risk rules, and prepares your payslips.",
+           "Upload payroll" if 'run_payroll' in overview.actions | map(attribute='key') | list else "",
+           url_for('client.run_upload')) }}
+      {% endif %}
     </section>
 
-    <section class="card chart-card">
-      <div class="chart-head">
-        <h2>Expenses vs payroll</h2>
-        <small class="muted">Recorded to date</small>
+    {# --- 3. Risk Intelligence -------------------------------------------
+       The panel that makes Payrolla feel like it is watching. Every signal is
+       the output of an engine that already runs on every submission — this only
+       says it in business language, next to the action it implies. #}
+    <section class="xpanel area-risk" aria-labelledby="risk-heading">
+      <div class="panel-head">
+        <div>
+          <h2 id="risk-heading">Risk &amp; compliance watch</h2>
+          <p class="panel-sub">Checked on every payroll you submit.</p>
+        </div>
       </div>
-      {{ ch.donut(analytics.cost_mix, label="Expenses vs payroll") }}
-    </section>
-  </div>
-  {% endif %}
-
-  <div class="toolbar">
-    <h2>Recent payroll runs</h2>
-    <a class="btn" href="{{ url_for('client.runs') }}">View all</a>
-  </div>
-  {% if recent_runs %}
-  <div class="panel">
-    <table>
-      <thead><tr><th>Period</th><th>Status</th><th class="right">Workers</th><th class="right">Net pay</th><th></th></tr></thead>
-      <tbody>
-        {% for run in recent_runs %}
-        <tr>
-          <td>{{ run.month }} {{ run.year }}</td>
-          <td><span class="badge">{{ run.status }}</span></td>
-          <td class="right nums">{{ run.total_workers }}</td>
-          <td class="right nums">{{ run.total_net_pay | cedis }}</td>
-          <td class="right"><a class="btn sm" href="{{ url_for('client.run_detail', run_id=run.id) }}">Open</a></td>
-        </tr>
+      {% if overview.risks %}
+      <ul class="signals">
+        {% for item in overview.risks %}
+        {# An all-clear card gets no "Review" link — there is nothing to review,
+           and an action on reassurance is a false affordance. #}
+        {% if item.tone == 'ok' %}{{ ui.signal(item) }}
+        {% elif item.endpoint == 'client.run_detail' and run %}{{ ui.signal(item, url_for('client.run_detail', run_id=run.id)) }}
+        {% else %}{{ ui.signal(item, url_for(item.endpoint)) }}{% endif %}
         {% endfor %}
-      </tbody>
-    </table>
+      </ul>
+      {% else %}
+      {{ ui.empty("Nothing to review", "Risk checks run the moment a payroll is submitted.") }}
+      {% endif %}
+    </section>
+
+    {# --- 4. Financial analytics -----------------------------------------
+       Three charts, three business questions. Anything that did not answer one
+       was cut: the old "expenses vs payroll" donut compared two unrelated
+       ledgers and told nobody anything they could act on. #}
+    <div class="area-charts">
+      {% if overview.analytics.has_data %}
+      <div class="charts-grid">
+
+        <section class="xpanel" aria-labelledby="trend-heading">
+          <div class="panel-head">
+            <div>
+              <h2 id="trend-heading">Payroll cost trend</h2>
+              <p class="panel-sub">Employer outlay per month — gross pay plus employer SSF.</p>
+            </div>
+          </div>
+          {{ ch.line_chart(overview.analytics.cost_by_month, label="Payroll cost trend") }}
+          <p class="chart-note">The number a budget is built from: what payroll actually costs the company, not what employees take home.</p>
+        </section>
+
+        <section class="xpanel" aria-labelledby="mix-heading">
+          <div class="panel-head">
+            <div>
+              <h2 id="mix-heading">Employee cost distribution</h2>
+              <p class="panel-sub">{{ run.month }} {{ run.year }} gross pay, by component.</p>
+            </div>
+          </div>
+          {% if overview.composition.slices %}
+          {{ ch.donut(overview.composition, label="Employee cost distribution", center_label="Gross") }}
+          <p class="chart-note">Where that gross went:</p>
+          <ul class="destination">
+            {% for row in overview.composition.destination %}
+            <li><span class="legend-swatch legend-swatch--{{ row.tone }}"></span>{{ row.label }}<strong class="nums">{{ row.value | cedis }}</strong></li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          {{ ui.empty("No line items yet", "The breakdown appears once a payroll run has calculated figures.") }}
+          {% endif %}
+        </section>
+
+        <section class="xpanel" aria-labelledby="wf-heading">
+          <div class="panel-head">
+            <div>
+              <h2 id="wf-heading">Workforce movement</h2>
+              <p class="panel-sub">Paid headcount per period.</p>
+            </div>
+          </div>
+          {{ ch.bar_chart(workforce.headcount, label="Paid headcount by month", formatter="count") }}
+          <dl class="movement">
+            <div><dt>Joined (30d)</dt><dd class="nums">{{ workforce.joined }}</dd></div>
+            <div><dt>Left</dt><dd class="nums">{{ workforce.left }}</dd></div>
+            <div><dt>On leave</dt><dd class="nums">{{ workforce.on_leave }}</dd></div>
+          </dl>
+          <p class="chart-note">
+            {% if workforce.growth_rate is not none %}
+              Headcount {{ 'grew' if workforce.growth_rate > 0 else ('shrank' if workforce.growth_rate < 0 else 'held steady') }}
+              {{ "%.1f"|format(workforce.growth_rate | abs * 100) }}% against {{ workforce.previous_period }}.
+            {% else %}
+              A second payroll period will establish a growth rate.
+            {% endif %}
+          </p>
+        </section>
+
+      </div>
+      {% else %}
+      <section class="xpanel">
+        {{ ui.empty("Analytics start with your first payroll",
+                    "Trends, cost breakdowns and workforce movement appear here once a payroll run exists — no setup required.") }}
+      </section>
+      {% endif %}
+    </div>
+
+    {# --- 5. Compliance --------------------------------------------------
+       Every row is a real coverage count over data the app already stores. The
+       score is the weighted mean of those five ratios, so it can be reconciled
+       line by line from this panel — an executive can defend it. #}
+    <section class="xpanel area-compliance" aria-labelledby="compliance-heading">
+      <div class="panel-head">
+        <div>
+          <h2 id="compliance-heading">Compliance</h2>
+          <p class="panel-sub">Ghana statutory readiness for {{ company.name }}.</p>
+        </div>
+        <a class="link-action" href="{{ url_for('client.statutory') }}">Rates{{ ui.icon('arrow', 14) }}</a>
+      </div>
+
+      {% set circ = 163.363 %}
+      <div class="compliance-score">
+        <div class="ring ring--{{ compliance.state }}">
+          <svg width="68" height="68" viewBox="0 0 68 68" role="img"
+               aria-label="Compliance score {{ compliance.score }} percent">
+            <circle class="ring-track" cx="34" cy="34" r="26" stroke-width="7"/>
+            <circle class="ring-fill" cx="34" cy="34" r="26" stroke-width="7"
+                    stroke-dasharray="{{ "%.2f"|format(circ * compliance.score / 100) }} {{ "%.2f"|format(circ) }}"/>
+          </svg>
+          <span class="ring-label" aria-hidden="true">{{ compliance.score }}</span>
+        </div>
+        <div class="compliance-headline">
+          <strong>{{ compliance.headline }}</strong>
+          <p>Weighted across PAYE, SSNIT, payment details, employee documents and filing readiness.</p>
+        </div>
+      </div>
+
+      <ul class="creqs">
+        {% for check in compliance.checks %}{{ ui.compliance_row(check, url_for(check.endpoint)) }}{% endfor %}
+      </ul>
+    </section>
+
+    {# --- 6. Recent activity ---------------------------------------------
+       Fed by the same DomainEvent + AuditTrail records the Audit page reads, so
+       this feed and a formal audit export can never tell different stories. #}
+    <section class="xpanel area-activity" aria-labelledby="activity-heading">
+      <div class="panel-head">
+        <div>
+          <h2 id="activity-heading">Recent activity</h2>
+          <p class="panel-sub">Every payroll action, on the record.</p>
+        </div>
+        <a class="link-action" href="{{ url_for('client.audit') }}">Full audit trail{{ ui.icon('arrow', 14) }}</a>
+      </div>
+      {% if overview.activity %}
+      <ol class="timeline">
+        {% for entry in overview.activity %}{{ ui.activity_item(entry) }}{% endfor %}
+      </ol>
+      {% else %}
+      {{ ui.empty("No activity yet", "Uploads, approvals, payslip runs and employee changes are recorded here automatically.") }}
+      {% endif %}
+    </section>
+
+    {# --- 7. Quick actions -----------------------------------------------
+       Role-filtered in app/dashboard.py against the same roles the target
+       routes are decorated with, so a preparer is never shown a button that
+       would bounce them. Actions needing a completed run disappear when the
+       company has none, rather than linking into an error. #}
+    <section class="xpanel area-actions" aria-labelledby="actions-heading">
+      <div class="panel-head">
+        <div>
+          <h2 id="actions-heading">Quick actions</h2>
+          <p class="panel-sub">Shortcuts available to your role.</p>
+        </div>
+      </div>
+      <div class="qa-grid">
+        {% for action in overview.actions %}
+        {{ ui.action_tile(action, url_for(action.endpoint, run_id=action.run_id) if action.run_id else url_for(action.endpoint)) }}
+        {% endfor %}
+      </div>
+    </section>
+
   </div>
-  {% else %}
-  <div class="empty-state">No payroll runs yet.</div>
-  {% endif %}
+</div>
 {% endblock %}

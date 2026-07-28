@@ -12,6 +12,7 @@ without duplicating queries.
 """
 
 import json as _json
+from datetime import datetime, timezone
 
 from flask import has_request_context
 from flask_login import current_user
@@ -234,6 +235,169 @@ def platform_activity(limit=10):
         )
 
     items.sort(key=lambda item: item["at"].timestamp() if item["at"] else 0.0, reverse=True)
+    return items[:limit]
+
+
+# --- Tenant activity timeline -----------------------------------------------
+# The company portal's counterpart to platform_activity: the same two sources
+# and the same "curated milestones only" discipline, scoped to ONE tenant. It
+# lives here rather than in the dashboard module because this file already owns
+# the timeline sources, their labels and their looks — a second feed assembled
+# somewhere else would eventually describe the same event differently.
+
+TENANT_TIMELINE_ACTIONS = (
+    "Client run imported",
+    "Client import draft",
+    "Client import discarded",
+    "Payroll approval",
+    "Payroll rejection",
+    "Payroll processed",
+    "Payslips distributed",
+    "Risk hold released",
+    "Employee saved",
+    "Employee deactivated",
+    "Employee reactivated",
+    "Expense recorded",
+    "Client payroll export",
+    "Client bank listing export",
+    "Branding updated",
+)
+
+# The portal shell carries no icon font (see the note at the top of portal.css),
+# so the tenant feed names an icon from the inline SVG set in
+# templates/macros/dashboard.html rather than a Bootstrap Icons class. Same
+# layering as _TIMELINE_LOOKS above: the mapping is in Python so every surface
+# renders the same event identically.
+_TENANT_LOOKS = {
+    "Payroll run held for review": ("shield-alert", "warn"),
+    "Payroll run released": ("shield-check", "ok"),
+    "Payroll run auto-accepted": ("shield-check", "ok"),
+    "Payroll approval": ("check-circle", "ok"),
+    "Payroll rejection": ("x-circle", "danger"),
+    "Payroll processed": ("flag", "brand"),
+    "Payslips distributed": ("send", "brand"),
+    "Distribution completed": ("send", "brand"),
+    "Distribution failed": ("x-circle", "danger"),
+    "Distribution cancelled": ("alert-triangle", "warn"),
+    "Client run imported": ("upload", "muted"),
+    "Client import draft": ("upload", "muted"),
+    "Client import discarded": ("upload", "muted"),
+    "Employee saved": ("users", "muted"),
+    "Employee deactivated": ("users", "warn"),
+    "Employee reactivated": ("users", "muted"),
+    "Expense recorded": ("receipt", "muted"),
+    "Client payroll export": ("download", "muted"),
+    "Client bank listing export": ("download", "muted"),
+    "Branding updated": ("activity", "muted"),
+}
+
+
+def tenant_look(title):
+    """(icon name, tone) for a tenant timeline entry; a neutral default for
+    anything new, so an unmapped event still renders."""
+    return _TENANT_LOOKS.get(title, ("activity", "muted"))
+
+
+def as_utc(moment):
+    """A comparable, timezone-aware UTC datetime.
+
+    SQLite hands back naive values for columns written with a tz-aware default
+    (:func:`app.models.utc_now`), so comparing a stored ``created_at`` against
+    ``datetime.now(timezone.utc)`` raises. Normalise rather than trust the
+    driver — the same row must sort identically on SQLite and PostgreSQL."""
+    if moment is None:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def relative_time(moment, now=None):
+    """'5 minutes ago' / 'Yesterday' / '12 Mar' for a timeline entry.
+
+    Coarsens with age deliberately: an approval two minutes ago is a live event
+    and the minute matters; one from March is a date. The exact timestamp is
+    never lost — the template puts it on the element's ``title`` and in a
+    machine-readable ``<time datetime>``, which is what an auditor needs."""
+    moment = as_utc(moment)
+    if moment is None:
+        return ""
+    now = as_utc(now) or datetime.now(timezone.utc)
+    seconds = max((now - moment).total_seconds(), 0)
+    if seconds < 60:
+        return "Just now"
+    if seconds < 3600:
+        minutes = int(seconds // 60)
+        return f"{minutes} minute{'' if minutes == 1 else 's'} ago"
+    if seconds < 86400:
+        hours = int(seconds // 3600)
+        return f"{hours} hour{'' if hours == 1 else 's'} ago"
+    if seconds < 172800:
+        return "Yesterday"
+    if seconds < 604800:
+        return f"{int(seconds // 86400)} days ago"
+    return f"{moment.day} {moment:%b %Y}"
+
+
+def tenant_activity(company_id, limit=8, now=None):
+    """One company's recent milestones, newest first.
+
+    Two bounded queries merged and re-sorted, never a full-table scan:
+    DomainEvents scoped by ``client_company_id``, and AuditTrail entries recorded
+    by users belonging to this company — AuditTrail carries no tenant column,
+    which is exactly how ``client.audit`` scopes it, so this feed and the audit
+    page can never disagree about who did what.
+
+    Each item is ``{at, when, actor, title, detail, tone, icon}``.
+    """
+    if not company_id:
+        return []
+    now = now or datetime.now(timezone.utc)
+    items = []
+
+    for event in (
+        DomainEvent.query.filter(DomainEvent.client_company_id == company_id)
+        .order_by(DomainEvent.created_at.desc())
+        .limit(limit)
+        .all()
+    ):
+        title = event_type_label(event.event_type)
+        icon, tone = tenant_look(title)
+        items.append(
+            {
+                "at": as_utc(event.created_at),
+                "actor": event.actor.name if event.actor else "Payrolla",
+                "title": title,
+                "detail": event.summary or "",
+                "icon": icon,
+                "tone": tone,
+            }
+        )
+
+    user_ids = [u.id for u in User.query.filter_by(client_company_id=company_id).all()]
+    if user_ids:
+        for entry in (
+            AuditTrail.query.filter(
+                AuditTrail.user_id.in_(user_ids),
+                AuditTrail.action.in_(TENANT_TIMELINE_ACTIONS),
+            )
+            .order_by(AuditTrail.created_at.desc())
+            .limit(limit)
+            .all()
+        ):
+            icon, tone = tenant_look(entry.action)
+            items.append(
+                {
+                    "at": as_utc(entry.created_at),
+                    "actor": entry.user.name if entry.user else "Payrolla",
+                    "title": entry.action,
+                    "detail": entry.notes or "",
+                    "icon": icon,
+                    "tone": tone,
+                }
+            )
+
+    items.sort(key=lambda item: item["at"].timestamp() if item["at"] else 0.0, reverse=True)
+    for item in items:
+        item["when"] = relative_time(item["at"], now=now)
     return items[:limit]
 
 

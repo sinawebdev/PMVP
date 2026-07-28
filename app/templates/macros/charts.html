@@ -174,7 +174,7 @@
    Deliberately tiny and label-free: it answers "which way is this going",
    not "what exactly was March". The precise figures stay in the row's own
    columns, and the title attribute carries the period values. #}
-{% macro sparkline(trend, label="cost trend", width=84, height=26) %}
+{% macro sparkline(trend, label="cost trend", width=84, height=26, formatter="cedis") %}
 {% set points = trend.points %}
 {% set pad = 3 %}
 {% set span = width - pad * 2 %}
@@ -187,10 +187,10 @@
   {% set _ = coords.append({"x": x, "y": y}) %}
 {% endfor %}
 <span class="sparkline{{ ' sparkline--down' if trend.change is not none and trend.change < 0 }}"
-      title="{{ label }} — {% for p in points %}{{ p.full_label }}: {{ p.value|cedis }}{{ ' · ' if not loop.last }}{% endfor %}">
+      title="{{ label }} — {% for p in points %}{{ p.full_label }}: {{ fmt(p.value, formatter) }}{{ ' · ' if not loop.last }}{% endfor %}">
   <svg viewBox="0 0 {{ width }} {{ height }}" width="{{ width }}" height="{{ height }}"
        preserveAspectRatio="xMidYMid meet" role="img"
-       aria-label="{{ label }}: {% for p in points %}{{ p.full_label }} {{ p.value|cedis }}{{ '; ' if not loop.last }}{% endfor %}">
+       aria-label="{{ label }}: {% for p in points %}{{ p.full_label }} {{ fmt(p.value, formatter) }}{{ '; ' if not loop.last }}{% endfor %}">
     {% if coords|length > 1 %}
     <polyline class="sparkline-path" vector-effect="non-scaling-stroke"
               points="{% for c in coords %}{{ "%.2f"|format(c.x) }},{{ "%.2f"|format(c.y) }} {% endfor %}"/>

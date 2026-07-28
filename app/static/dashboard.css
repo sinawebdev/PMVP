@@ -1,0 +1,770 @@
+/* ---------------------------------------------------------------------------
+   Payrolla — Executive Dashboard layer.
+
+   Loaded ONLY by the company dashboard (client/base.html's `head` block), on
+   top of tokens.css + portal.css. It adds the workspace grid and the executive
+   components; it does not restyle anything the rest of the portal uses, so a
+   change here can never regress another page.
+
+   Three rules this file holds itself to:
+
+     1. Colour, radius, shadow and easing come from tokens.css. There is not one
+        raw brand hex below — a brand change recolours the whole dashboard.
+     2. Motion is interaction-only. There is no entrance animation: a dozen
+        cards redrawing on every load is noise, not polish (the same argument
+        macros/charts.html makes for its charts). What DOES animate is state
+        that genuinely changed — the completion bar and the compliance ring —
+        so movement always means "this value moved".
+     3. Status is never carried by colour alone. Every tone below is paired with
+        an icon and a word, so the dashboard survives greyscale printing, a
+        screen reader, and the ~8% of men with a colour-vision deficiency who
+        run payroll for a living.
+
+   Written mobile-first (base = the phone stack, min-width queries build up to
+   the desktop workspace) even though the design is specified desktop-first.
+   Same result at 1440px, but the phone never has to override a desktop rule.
+   --------------------------------------------------------------------------- */
+
+.exec {
+    --node: 26px;
+    --rail: 13px;          /* timeline rail = half --node, so it hits node centre */
+    --panel-pad: 20px;
+}
+
+/* --- Page header ---------------------------------------------------------
+   The dashboard's own head, not portal.css's .page-head: it carries a period
+   context line and the primary action, which is the difference between "a page
+   title" and "an executive briefing dated to a period". */
+
+.exec-head {
+    align-items: flex-end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.exec-head h1 {
+    font-size: clamp(22px, 2.2vw, 27px);
+    letter-spacing: -0.02em;   /* large text reads too loose at default tracking */
+    line-height: 1.15;
+    margin: 0 0 4px;
+}
+
+.exec-head .sub { margin: 0; }
+
+.exec-period {
+    align-items: center;
+    color: var(--muted);
+    display: inline-flex;
+    font-size: 12.5px;
+    font-weight: 600;
+    gap: 6px;
+}
+
+/* --- Workspace grid ------------------------------------------------------
+   Named areas rather than column spans: the layout intent is legible in the
+   grid-template-areas block itself, and a breakpoint re-orders the workspace by
+   rewriting five words instead of touching every child. */
+
+.exec-grid {
+    display: grid;
+    gap: 18px;
+    grid-template-areas: "kpis" "health" "risk" "charts" "compliance" "activity" "actions";
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.area-kpis { grid-area: kpis; }
+.area-health { grid-area: health; }
+.area-risk { grid-area: risk; }
+.area-charts { grid-area: charts; }
+.area-compliance { grid-area: compliance; }
+.area-activity { grid-area: activity; }
+.area-actions { grid-area: actions; }
+
+/* --- Panel shell ---------------------------------------------------------
+   Deliberately NOT portal.css's .card: that lifts 2px on hover, which is right
+   for a clickable summary card and wrong for a panel you read. A panel here is
+   still — only its interactive children respond. */
+
+.xpanel {
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: var(--panel-pad);
+}
+
+.panel-head {
+    align-items: flex-start;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.panel-head h2 {
+    font-size: 15px;
+    font-weight: 750;
+    letter-spacing: -0.006em;
+    margin: 0;
+}
+
+.panel-sub {
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.5;
+    margin: 3px 0 0;
+}
+
+.link-action {
+    align-items: center;
+    color: var(--brand);
+    display: inline-flex;
+    flex: none;
+    font-size: 13px;
+    font-weight: 650;
+    gap: 3px;
+    text-decoration: none;
+    transition: gap var(--ease), color var(--ease);
+}
+
+.link-action:hover { color: var(--brand-dark); gap: 6px; }
+.link-action .ico { transition: transform var(--ease); }
+
+.ico { flex: none; vertical-align: middle; }
+
+/* --- KPI band ------------------------------------------------------------
+   Four tiles, four different questions. Each is a link, because the executive
+   reflex on seeing a number move is to open it — making the tile itself the
+   target removes a hunt for a "view" link. */
+
+.kpi-band {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(212px, 1fr));
+}
+
+.kpi {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    color: inherit;
+    display: grid;
+    gap: 2px;
+    grid-template-areas: "label label" "value spark" "move spark" "caption caption";
+    grid-template-columns: 1fr auto;
+    padding: 16px 18px 15px;
+    position: relative;
+    text-decoration: none;
+    transition: border-color var(--ease), box-shadow var(--ease), transform var(--ease);
+}
+
+/* Response lives on the press, not the release — the tile acknowledges the
+   click before the navigation resolves. */
+.kpi:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
+.kpi:active { transform: scale(0.995); }
+
+.kpi-label {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 650;
+    grid-area: label;
+    letter-spacing: 0.02em;   /* small text needs a touch more air, not less */
+    text-transform: uppercase;
+}
+
+.kpi-value {
+    align-items: baseline;
+    display: flex;
+    font-size: clamp(23px, 2.4vw, 28px);
+    font-weight: 800;
+    grid-area: value;
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+    margin-top: 7px;
+}
+
+.kpi-value .unit { font-size: 0.62em; font-weight: 700; margin-left: 1px; }
+
+.kpi-move { grid-area: move; margin-top: 7px; min-height: 20px; }
+
+.kpi-caption {
+    color: var(--muted);
+    font-size: 12px;
+    grid-area: caption;
+    line-height: 1.45;
+    margin-top: 9px;
+}
+
+.kpi-spark { align-self: end; grid-area: spark; opacity: 0.9; }
+
+/* --- Payroll Health Center ----------------------------------------------- */
+
+.health-top {
+    align-items: flex-start;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 18px;
+    justify-content: space-between;
+}
+
+.health-period {
+    font-size: 19px;
+    font-weight: 750;
+    letter-spacing: -0.015em;
+    margin: 0;
+}
+
+.health-next {
+    background: var(--brand-tint);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin: 16px 0;
+    padding: 13px 15px;
+}
+
+.health-next strong { display: block; font-size: 13.5px; }
+.health-next p { color: var(--ink-soft); font-size: 12.5px; line-height: 1.55; margin: 3px 0 0; }
+.health-next--warn { background: var(--warn-soft); border-color: #f3dcb4; }
+
+/* Completion — the only bar on the dashboard, because completion is the only
+   value that is genuinely a proportion of a fixed whole. */
+.progress {
+    background: var(--surface-alt);
+    border-radius: var(--radius-pill);
+    height: 7px;
+    margin-top: 6px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    background: linear-gradient(90deg, var(--brand-deep), var(--brand-bright));
+    border-radius: var(--radius-pill);
+    display: block;
+    height: 100%;
+    /* Transitions the CHANGE, not the arrival: on first paint the width is
+       already correct, so nothing animates until the value actually moves. */
+    transition: width 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.progress-meta {
+    align-items: baseline;
+    display: flex;
+    font-size: 12px;
+    justify-content: space-between;
+}
+
+.progress-meta strong { font-size: 13px; font-variant-numeric: tabular-nums; }
+
+/* Lifecycle stepper — horizontal on desktop, scrolls rather than wraps so the
+   sequence never breaks into a second line and read as two sequences. */
+.steps {
+    display: flex;
+    gap: 4px;
+    list-style: none;
+    margin: 18px 0 0;
+    overflow-x: auto;
+    padding: 0 0 4px;
+    scrollbar-width: thin;
+}
+
+.step {
+    align-items: center;
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 74px;
+    position: relative;
+    text-align: center;
+}
+
+/* The connector is drawn on the step, not between steps, so the last one has
+   no dangling tail and no :last-child exception is needed. */
+.step::before {
+    background: var(--line);
+    content: "";
+    height: 2px;
+    left: -50%;
+    position: absolute;
+    top: 5px;
+    width: 100%;
+    z-index: 0;
+}
+
+.step:first-child::before { display: none; }
+.step--done::before, .step--current::before { background: var(--brand-bright); }
+
+.step-dot {
+    background: var(--surface);
+    border: 2px solid var(--line-strong);
+    border-radius: 50%;
+    height: 12px;
+    position: relative;
+    width: 12px;
+    z-index: 1;
+}
+
+.step--done .step-dot { background: var(--brand); border-color: var(--brand); }
+.step--current .step-dot {
+    background: var(--surface);
+    border-color: var(--brand-bright);
+    box-shadow: 0 0 0 4px var(--brand-soft);
+}
+
+.step-label { color: var(--muted); font-size: 11px; font-weight: 600; line-height: 1.3; }
+.step--done .step-label, .step--current .step-label { color: var(--ink-soft); }
+.step--current .step-label { font-weight: 750; }
+
+/* Run figures — a four-up strip, tabular so the digits line up column to
+   column and the eye can compare them vertically. */
+.figures {
+    border-top: 1px solid var(--line);
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+    margin-top: 18px;
+    padding-top: 16px;
+}
+
+.figure dt { color: var(--muted); font-size: 11.5px; font-weight: 600; }
+.figure dd {
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 750;
+    letter-spacing: -0.012em;
+    margin: 3px 0 0;
+}
+
+.figure--flag dd { color: var(--warn); }
+
+/* --- Signals (Risk Intelligence) ----------------------------------------- */
+
+.signals { display: flex; flex-direction: column; gap: 10px; list-style: none; margin: 0; padding: 0; }
+
+.signal {
+    align-items: flex-start;
+    background: var(--surface-alt);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--line-strong);
+    border-radius: var(--radius);
+    display: flex;
+    gap: 11px;
+    padding: 12px 13px;
+}
+
+.signal-ico { flex: none; line-height: 0; margin-top: 1px; }
+.signal-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.signal-body strong { font-size: 13.5px; line-height: 1.35; }
+.signal-detail { color: var(--ink-soft); font-size: 12.5px; line-height: 1.5; }
+
+.signal-link {
+    align-self: center;
+    color: var(--brand);
+    flex: none;
+    font-size: 12.5px;
+    font-weight: 650;
+    margin-left: auto;
+    text-decoration: none;
+}
+
+.signal-link:hover { text-decoration: underline; }
+
+.signal--ok { background: var(--green-soft); border-color: #cbe8d7; border-left-color: var(--green); }
+.signal--ok .signal-ico { color: var(--green); }
+.signal--warn { background: var(--warn-soft); border-color: #f3dcb4; border-left-color: var(--warn); }
+.signal--warn .signal-ico { color: var(--warn); }
+.signal--danger { background: var(--danger-soft); border-color: #f6cdd2; border-left-color: var(--danger); }
+.signal--danger .signal-ico { color: var(--danger); }
+
+/* --- Analytics ----------------------------------------------------------- */
+
+.charts-grid {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.chart-note {
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.55;
+    margin: 14px 0 0;
+    padding-top: 12px;
+}
+
+/* "Where gross went" — a legend-style list, not a second donut: the four parts
+   answer a different question from the composition ring above them. */
+.destination { display: flex; flex-direction: column; gap: 8px; list-style: none; margin: 0; padding: 0; }
+
+.destination li {
+    align-items: center;
+    display: flex;
+    font-size: 12.5px;
+    gap: 8px;
+}
+
+.destination strong { font-variant-numeric: tabular-nums; margin-left: auto; }
+
+/* Workforce movement counters. */
+.movement {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(3, 1fr);
+    margin-top: 16px;
+}
+
+.movement div { text-align: center; }
+.movement dt { color: var(--muted); font-size: 11.5px; font-weight: 600; }
+.movement dd {
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 750;
+    margin: 2px 0 0;
+}
+
+/* --- Compliance ---------------------------------------------------------- */
+
+.compliance-score {
+    align-items: center;
+    display: flex;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.ring { flex: none; position: relative; }
+.ring svg { display: block; transform: rotate(-90deg); }
+.ring-track { fill: none; stroke: var(--surface-alt); }
+
+.ring-fill {
+    fill: none;
+    stroke: var(--brand);
+    stroke-linecap: round;
+    /* Same rule as .progress-fill: animates a change, not an arrival. */
+    transition: stroke-dasharray 520ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.ring--warn .ring-fill { stroke: var(--warn); }
+.ring--danger .ring-fill { stroke: var(--danger); }
+
+.ring-label {
+    align-items: center;
+    display: flex;
+    font-size: 17px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+    inset: 0;
+    justify-content: center;
+    letter-spacing: -0.02em;
+    position: absolute;
+}
+
+.compliance-headline strong { display: block; font-size: 14.5px; }
+.compliance-headline p { color: var(--muted); font-size: 12.5px; line-height: 1.5; margin: 3px 0 0; }
+
+.creqs { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
+
+.creq {
+    align-items: center;
+    border-top: 1px solid var(--line);
+    display: flex;
+    gap: 11px;
+    padding: 12px 0;
+}
+
+.creq:first-child { border-top: 0; padding-top: 0; }
+.creq-mark { flex: none; line-height: 0; }
+.creq--ok .creq-mark { color: var(--green); }
+.creq--warn .creq-mark { color: var(--warn); }
+.creq--danger .creq-mark { color: var(--danger); }
+
+.creq-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.creq-body strong { font-size: 13.5px; }
+.creq-detail { color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+.creq-state {
+    border-radius: var(--radius-pill);
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: auto;
+    padding: 3px 9px;
+    white-space: nowrap;
+}
+
+.creq--ok .creq-state { background: var(--green-soft); color: #14532d; }
+.creq--warn .creq-state { background: var(--warn-soft); color: var(--warn); }
+.creq--danger .creq-state { background: var(--danger-soft); color: #991b1b; }
+
+.creq-link { color: var(--muted); flex: none; line-height: 0; transition: color var(--ease); }
+.creq-link:hover { color: var(--brand); }
+
+/* --- Activity timeline ---------------------------------------------------
+   A rail with a node per entry. The rail is what turns a list of events into a
+   sequence, which is the only reason an audit feed is worth the space. */
+
+.timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+
+.timeline::before {
+    background: var(--line);
+    bottom: 14px;
+    content: "";
+    left: var(--rail);
+    position: absolute;
+    top: 14px;
+    width: 1px;
+}
+
+.tl-item { display: flex; gap: 12px; padding: 0 0 18px; position: relative; }
+.tl-item:last-child { padding-bottom: 0; }
+
+.tl-node {
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    color: var(--muted);
+    display: flex;
+    flex: none;
+    height: var(--node);
+    justify-content: center;
+    width: var(--node);
+    z-index: 1;
+}
+
+.tl-item--ok .tl-node { background: var(--green-soft); border-color: #cbe8d7; color: var(--green); }
+.tl-item--warn .tl-node { background: var(--warn-soft); border-color: #f3dcb4; color: var(--warn); }
+.tl-item--danger .tl-node { background: var(--danger-soft); border-color: #f6cdd2; color: var(--danger); }
+.tl-item--brand .tl-node { background: var(--brand-soft); border-color: var(--line-strong); color: var(--brand); }
+
+.tl-body { min-width: 0; padding-top: 2px; }
+.tl-title { font-size: 13.5px; font-weight: 650; line-height: 1.35; margin: 0; }
+
+.tl-detail {
+    color: var(--ink-soft);
+    font-size: 12.5px;
+    line-height: 1.5;
+    margin: 3px 0 0;
+    /* Long audit summaries are clamped, not truncated mid-sentence — the full
+       text stays in the DOM for a screen reader and for find-in-page. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+}
+
+.tl-meta {
+    color: var(--muted);
+    display: flex;
+    font-size: 11.5px;
+    gap: 6px;
+    margin: 5px 0 0;
+}
+
+/* --- Quick actions ------------------------------------------------------- */
+
+.qa-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.qa {
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    color: inherit;
+    display: flex;
+    gap: 12px;
+    /* 44pt minimum interactive height, met by padding rather than a fixed
+       height so a wrapped label grows the tile instead of overflowing it. */
+    min-height: 58px;
+    padding: 12px 14px;
+    text-decoration: none;
+    transition: border-color var(--ease), background var(--ease), transform var(--ease);
+}
+
+.qa:hover { background: var(--brand-tint); border-color: var(--line-strong); }
+.qa:active { transform: scale(0.99); }
+
+.qa-ico {
+    align-items: center;
+    background: var(--brand-soft);
+    border-radius: var(--radius-sm);
+    color: var(--brand-deep);
+    display: flex;
+    flex: none;
+    height: 34px;
+    justify-content: center;
+    width: 34px;
+}
+
+.qa-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.qa-body strong { font-size: 13.5px; }
+.qa-body small { color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+
+/* --- Status pill --------------------------------------------------------- */
+
+.pill {
+    align-items: center;
+    border-radius: var(--radius-pill);
+    display: inline-flex;
+    font-size: 12px;
+    font-weight: 700;
+    gap: 6px;
+    padding: 4px 11px;
+    white-space: nowrap;
+}
+
+.pill-dot { border-radius: 50%; height: 6px; width: 6px; background: currentColor; flex: none; }
+
+.pill--muted { background: var(--surface-alt); color: var(--muted); }
+.pill--info { background: var(--brand-tint); color: #134e4a; }
+.pill--brand { background: var(--brand-soft); color: var(--brand-deep); }
+.pill--ok { background: var(--green-soft); color: #14532d; }
+.pill--warn { background: var(--warn-soft); color: var(--warn); }
+.pill--danger { background: var(--danger-soft); color: #991b1b; }
+
+/* --- Empty / loading / error states -------------------------------------- */
+
+.state {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 26px 18px;
+    text-align: center;
+}
+
+.state-ico { color: var(--muted); line-height: 0; }
+.state-title { font-size: 13.5px; font-weight: 700; margin: 0; }
+.state-detail { color: var(--muted); font-size: 12.5px; line-height: 1.55; margin: 0; max-width: 42ch; }
+.state .btn { margin-top: 6px; }
+
+.state--empty .state-ico { color: var(--line-strong); }
+.state--error .state-ico { color: var(--danger); }
+
+/* Skeleton: matches the height of what it replaces, so an async swap cannot
+   shift the layout. Shimmer travels rather than pulsing — a pulsing block at
+   0.2Hz is exactly the frequency reduced-motion exists to suppress. */
+.state--loading { align-items: stretch; gap: 10px; padding: 4px 0; }
+
+.sk-line {
+    background: linear-gradient(90deg, var(--surface-alt) 25%, var(--shell) 37%, var(--surface-alt) 63%);
+    background-size: 400% 100%;
+    border-radius: var(--radius-sm);
+    display: block;
+    height: 13px;
+}
+
+.sk-line:nth-child(even) { width: 72%; }
+
+@media (prefers-reduced-motion: no-preference) {
+    .sk-line { animation: sk-shimmer 1.4s linear infinite; }
+}
+
+@keyframes sk-shimmer {
+    from { background-position: 100% 0; }
+    to { background-position: 0 0; }
+}
+
+.sr-only {
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+
+/* --- Focus --------------------------------------------------------------
+   Interactive dashboard surfaces are large; the ring is drawn OUTSIDE them with
+   an offset so it stays visible against both the white tile and the shell. */
+.kpi:focus-visible,
+.qa:focus-visible,
+.link-action:focus-visible,
+.signal-link:focus-visible,
+.creq-link:focus-visible {
+    border-radius: var(--radius);
+    outline: 3px solid var(--brand);
+    outline-offset: 2px;
+}
+
+/* --- Responsive ----------------------------------------------------------
+   Tablet (>=860px): the workspace pairs up — health beside risk, compliance
+   beside activity — but stays two columns so no panel drops below its legible
+   width. Desktop (>=1180px): the full 12-column executive workspace, with the
+   8/4 split that gives the payroll run room for its stepper and figures while
+   the risk column stays scannable. */
+
+@media (min-width: 860px) {
+    .exec-grid {
+        grid-template-areas:
+            "kpis       kpis"
+            "health     risk"
+            "charts     charts"
+            "compliance activity"
+            "actions    actions";
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+    }
+}
+
+@media (min-width: 1180px) {
+    .exec { --panel-pad: 22px; }
+    .exec-grid {
+        grid-template-areas:
+            "kpis   kpis   kpis   kpis   kpis   kpis   kpis   kpis   kpis  kpis  kpis  kpis"
+            "health health health health health health health health risk  risk  risk  risk"
+            "charts charts charts charts charts charts charts charts charts charts charts charts"
+            "compliance compliance compliance compliance compliance activity activity activity activity activity activity activity"
+            "actions actions actions actions actions actions actions actions actions actions actions actions";
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 20px;
+    }
+    .movement { gap: 16px; }
+}
+
+/* Phone: the brief's mobile priority order is payroll status, alerts, KPIs,
+   quick actions — so on a phone the health panel and risk signals move ABOVE
+   the KPI band. A payroll operator checking their phone needs "is it held",
+   not "what did it cost". */
+@media (max-width: 640px) {
+    .exec { --panel-pad: 16px; }
+    .exec-grid {
+        gap: 14px;
+        grid-template-areas: "health" "risk" "kpis" "actions" "charts" "compliance" "activity";
+    }
+    .exec-head { align-items: flex-start; flex-direction: column; gap: 10px; }
+    .kpi-band { gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    .kpi { grid-template-areas: "label label" "value spark" "move spark" "caption caption"; padding: 14px; }
+    .kpi-value { font-size: 21px; }
+    .figures { gap: 12px; grid-template-columns: repeat(2, 1fr); }
+    .creq { align-items: flex-start; flex-wrap: wrap; }
+    .creq-state { margin-left: 0; order: 3; }
+}
+
+/* --- Accessibility preferences -------------------------------------------
+   tokens.css already collapses --ease to 1ms under reduced-motion, which stops
+   every hover/press transition here. These add what a token cannot express:
+   the two value transitions become instant, and the shimmer stops (handled
+   above by scoping it to `no-preference`). */
+@media (prefers-reduced-motion: reduce) {
+    .progress-fill, .ring-fill { transition: none; }
+    .link-action:hover { gap: 3px; }
+}
+
+@media (prefers-contrast: more) {
+    .xpanel, .kpi, .qa, .signal { border-color: var(--ink-soft); }
+    .kpi-caption, .creq-detail, .tl-meta, .panel-sub { color: var(--ink-soft); }
+}
