@@ -12,17 +12,25 @@
 {% endblock %}
 {% block page_actions %}
 <a class="btn btn-light btn-sm" href="{{ url_for('employees.roster', client_id=client.id) }}"><i class="bi bi-people"></i>Manage Employees</a>
+<a class="btn btn-outline-light btn-sm" href="{{ url_for('main.client_onboarding', client_id=client.id) }}"><i class="bi bi-clipboard-check"></i>Onboarding Summary</a>
 {% endblock %}
 {% block content %}
 <section class="panel">
     <div class="row g-3">
-        <div class="col-md-3"><strong>Contact</strong><p>{{ client.contact_person }}</p></div>
-        <div class="col-md-3"><strong>Phone</strong><p>{{ client.phone }}</p></div>
-        <div class="col-md-3"><strong>Email</strong><p>{{ client.email }}</p></div>
-        <div class="col-md-3">
+        <div class="col-md-2"><strong>Code</strong><p>{% if client.company_code %}<code>{{ client.company_code }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</p></div>
+        <div class="col-md-3"><strong>Contact</strong><p>{{ client.contact_person or "—" }}</p></div>
+        <div class="col-md-2"><strong>Phone</strong><p>{{ client.phone or "—" }}</p></div>
+        <div class="col-md-3"><strong>Email</strong><p>{{ client.email or "—" }}</p></div>
+        <div class="col-md-2">
             <strong>Status</strong>
             <p><span class="badge text-bg-{{ 'success' if client.status == 'Active' else 'danger' }}">{{ client.status }}</span></p>
         </div>
+        {% if client.address or client.location %}
+        <div class="col-md-6"><strong>Address</strong><p class="mb-0 text-muted">{{ client.address or client.location }}</p></div>
+        {% endif %}
+        {% if client.notes %}
+        <div class="col-md-6"><strong>Notes</strong><p class="mb-0 text-muted">{{ client.notes }}</p></div>
+        {% endif %}
     </div>
 </section>
 <section class="stats-grid mt-3">

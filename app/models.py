@@ -30,12 +30,24 @@ class User(UserMixin, db.Model):
 class ClientCompany(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(160), nullable=False, unique=True)
+    # Short operator-facing handle for the tenant ("MSC", "ACME"), quoted on
+    # exports, support tickets, and the onboarding summary. Unique and
+    # normalised to uppercase on save (see app.routes.normalise_company_code).
+    # Nullable so companies onboarded before the column existed stay valid.
+    company_code = db.Column(db.String(20), unique=True, index=True)
     contact_person = db.Column(db.String(120))
     phone = db.Column(db.String(40))
     email = db.Column(db.String(160))
+    # Postal/office address captured at onboarding. ``location`` stays the coarse
+    # city label the operator client list and sidebar have always shown; they are
+    # deliberately separate fields, not a rename.
+    address = db.Column(db.String(255))
     location = db.Column(db.String(120))
     service_type = db.Column(db.String(120))
     status = db.Column(db.String(20), nullable=False, default="Active")
+    # Free-text onboarding context (billing quirks, contract dates, who to call).
+    # Operator-plane only — never rendered in the tenant portal.
+    notes = db.Column(db.Text)
     # Per-tenant branding pack for payslip emails (Phase 4, Slice 5). Each NULL
     # falls back to the global product/email config, so unset tenants are
     # unchanged.

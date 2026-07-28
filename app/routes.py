@@ -1,12 +1,14 @@
 from calendar import month_name
 from datetime import datetime
 import os
+import re
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import or_, text
 
 from app import db
+from app.audit import record_audit
 from app.auth import role_required
 from app.tenancy import platform_required
 from app.models import (
@@ -343,6 +345,88 @@ def clients():
     return render_template("clients.html", clients=clients)
 
 
+# --- Client onboarding ------------------------------------------------------
+# Onboarding a company is deliberately independent of authentication: this
+# workflow only ever creates the ClientCompany record. Supabase Auth users are
+# provisioned by hand afterwards (see the onboarding summary page), so a company
+# can exist, be edited, and be deleted without any credential ever being minted
+# by the app — and a credential outage never blocks onboarding.
+
+COMPANY_STATUSES = ("Active", "Inactive")
+
+# A company code is an identifier an operator types and quotes, so it is kept to
+# an unambiguous shape: A-Z, 0-9 and dashes, 2-20 characters, starting on a
+# letter or digit.
+COMPANY_CODE_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9-]{1,19}$")
+
+
+def normalise_company_code(value):
+    """Canonical form of a typed company code: uppercase, separators collapsed
+    to single dashes, no leading/trailing dash ("msc  ltd" -> "MSC-LTD")."""
+    code = re.sub(r"[\s_]+", "-", str(value or "").strip().upper())
+    return re.sub(r"-{2,}", "-", code).strip("-")
+
+
+def validate_client_form(form, client=None):
+    """(values, errors) for a submitted client company form.
+
+    ``values`` is the normalised submission, echoed back verbatim when the form
+    is re-rendered so the operator never retypes a long address. ``errors`` maps
+    field name -> message; an empty dict means the submission is savable.
+    Uniqueness is checked against the database excluding ``client`` itself, so
+    editing a company and saving its own name/code back is not a conflict.
+    """
+    values = {
+        "name": (form.get("name") or "").strip(),
+        "company_code": normalise_company_code(form.get("company_code")),
+        "contact_person": (form.get("contact_person") or "").strip(),
+        "email": (form.get("email") or "").strip(),
+        "phone": (form.get("phone") or "").strip(),
+        "address": (form.get("address") or "").strip(),
+        "location": (form.get("location") or "").strip(),
+        "service_type": (form.get("service_type") or "").strip(),
+        "status": (form.get("status") or "Active").strip(),
+        "notes": (form.get("notes") or "").strip(),
+    }
+    errors = {}
+    other_id = client.id if client else -1
+
+    if not values["name"]:
+        errors["name"] = "Company name is required."
+    elif (
+        ClientCompany.query.filter(
+            ClientCompany.name == values["name"], ClientCompany.id != other_id
+        ).first()
+        is not None
+    ):
+        errors["name"] = f"Another company is already registered as {values['name']}."
+
+    if not values["company_code"]:
+        errors["company_code"] = "Company code is required."
+    elif not COMPANY_CODE_PATTERN.match(values["company_code"]):
+        errors["company_code"] = (
+            "Use 2-20 letters, digits or dashes (e.g. MSC or ACME-GH)."
+        )
+    elif (
+        ClientCompany.query.filter(
+            ClientCompany.company_code == values["company_code"],
+            ClientCompany.id != other_id,
+        ).first()
+        is not None
+    ):
+        errors["company_code"] = f"Company code {values['company_code']} is already in use."
+
+    # Email is optional, but a typo'd address is worse than a blank one — this is
+    # where the client's own onboarding correspondence goes.
+    if values["email"] and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", values["email"]):
+        errors["email"] = "Enter a valid email address."
+
+    if values["status"] not in COMPANY_STATUSES:
+        errors["status"] = "Choose a valid status."
+
+    return values, errors
+
+
 @main_bp.route("/clients/add", methods=["GET", "POST"])
 @role_required("admin")
 def add_client():
@@ -358,20 +442,71 @@ def edit_client(client_id):
 
 def client_form(client=None):
     if request.method == "POST":
-        if client is None:
+        values, errors = validate_client_form(request.form, client)
+        if errors:
+            # Re-render at 200 with the submission intact and the messages bound
+            # to their fields (the login/employee-form pattern), rather than
+            # bouncing to an empty form.
+            return render_template(
+                "client_form.html", client=client, values=values, errors=errors
+            )
+        creating = client is None
+        if creating:
             client = ClientCompany()
             db.session.add(client)
-        client.name = request.form["name"]
-        client.contact_person = request.form.get("contact_person")
-        client.phone = request.form.get("phone")
-        client.email = request.form.get("email")
-        client.location = request.form.get("location")
-        client.service_type = request.form.get("service_type")
-        client.status = request.form.get("status", "Active")
+        client.name = values["name"]
+        client.company_code = values["company_code"]
+        client.contact_person = values["contact_person"] or None
+        client.phone = values["phone"] or None
+        client.email = values["email"] or None
+        client.address = values["address"] or None
+        client.location = values["location"] or None
+        client.service_type = values["service_type"] or None
+        client.status = values["status"]
+        client.notes = values["notes"] or None
+        db.session.flush()  # assign client.id before the audit entry references it
+        record_audit(
+            "Client company onboarded" if creating else "Client company updated",
+            client,
+            f"{client.name} ({client.company_code}) "
+            f"{'onboarded' if creating else 'updated'} by {current_user.name}.",
+        )
         db.session.commit()
-        flash("Client company saved.", "success")
+        if creating:
+            # A new company lands on its onboarding summary, which is where the
+            # manual Supabase credential step is spelled out.
+            return redirect(url_for("main.client_onboarding", client_id=client.id))
+        flash(f"{client.name} updated.", "success")
         return redirect(url_for("main.clients"))
-    return render_template("client_form.html", client=client)
+
+    values = {
+        "name": client.name if client else "",
+        "company_code": client.company_code if client else "",
+        "contact_person": client.contact_person if client else "",
+        "email": client.email if client else "",
+        "phone": client.phone if client else "",
+        "address": client.address if client else "",
+        "location": client.location if client else "",
+        "service_type": client.service_type if client else "",
+        "status": client.status if client else "Active",
+        "notes": client.notes if client else "",
+    }
+    return render_template("client_form.html", client=client, values=values, errors={})
+
+
+@main_bp.route("/clients/<int:client_id>/onboarding")
+@platform_required
+def client_onboarding(client_id):
+    """The post-creation onboarding summary.
+
+    Confirms what was saved and states the one manual step left: an
+    administrator provisions the company's login credentials in Supabase
+    Authentication. Deliberately NOT automated — company records and auth
+    identities stay independent (see the module note above), so this page is
+    informational and creates nothing.
+    """
+    client = db.get_or_404(ClientCompany, client_id)
+    return render_template("client_onboarding.html", client=client)
 
 
 @main_bp.route("/clients/<int:client_id>")

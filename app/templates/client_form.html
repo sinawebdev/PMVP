@@ -1,25 +1,97 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block title %}{{ "Edit" if client else "Add" }} Client · {{ app_name }}{% endblock %}
-{% block page_title %}{{ "Edit" if client else "Add" }} Client Company{% endblock %}
-{% block page_intro %}Capture the contact, location, and service details needed to keep payroll imports separated by client company.{% endblock %}
+{% block page_title %}{{ "Edit" if client else "Onboard" }} Client Company{% endblock %}
+{% block page_intro %}Capture the company details {{ app_brand_name }} needs to keep payroll, payslips, and expenses separated by client. Creating a company does not create logins — credentials are provisioned separately in Supabase Authentication.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Client Companies", url_for('main.clients')),
+    ("Edit " ~ client.name if client else "Add Company", None),
+]) }}
+{% endblock %}
 {% block content %}
+{% macro field_error(name) %}
+    {% if errors.get(name) %}<div class="invalid-feedback d-block">{{ errors[name] }}</div>{% endif %}
+{% endmacro %}
+{% if errors %}
+<div class="alert alert-danger" role="alert">
+    <i class="bi bi-exclamation-triangle"></i>
+    Nothing was saved — check the highlighted fields below.
+</div>
+{% endif %}
 <section class="panel form-panel">
-    <form method="post" class="row g-3">
-        <div class="col-md-6"><label class="form-label">Name</label><input class="form-control" name="name" value="{{ client.name if client else '' }}" required></div>
-        <div class="col-md-6"><label class="form-label">Contact Person</label><input class="form-control" name="contact_person" value="{{ client.contact_person if client else '' }}"></div>
-        <div class="col-md-4"><label class="form-label">Phone</label><input class="form-control" name="phone" value="{{ client.phone if client else '' }}"></div>
-        <div class="col-md-4"><label class="form-label">Email</label><input class="form-control" type="email" name="email" value="{{ client.email if client else '' }}"></div>
-        <div class="col-md-4"><label class="form-label">Location</label><input class="form-control" name="location" value="{{ client.location if client else '' }}"></div>
-        <div class="col-md-8"><label class="form-label">Service Type</label><input class="form-control" name="service_type" value="{{ client.service_type if client else '' }}"></div>
+    <form method="post" class="row g-3" novalidate>
+        <div class="col-md-8">
+            <label class="form-label" for="name">Company Name <span class="text-danger">*</span></label>
+            <input class="form-control {{ 'is-invalid' if errors.get('name') }}" id="name" name="name"
+                   value="{{ values.name }}" required autofocus>
+            {{ field_error('name') }}
+        </div>
         <div class="col-md-4">
-            <label class="form-label">Status</label>
-            <select class="form-select" name="status">
+            <label class="form-label" for="company_code">Company Code <span class="text-danger">*</span></label>
+            <input class="form-control text-uppercase {{ 'is-invalid' if errors.get('company_code') }}"
+                   id="company_code" name="company_code" value="{{ values.company_code }}"
+                   placeholder="MSC" maxlength="20" required
+                   aria-describedby="company-code-help">
+            {{ field_error('company_code') }}
+            <div class="form-text" id="company-code-help">Short unique handle used on exports and support requests.</div>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="contact_person">Contact Person</label>
+            <input class="form-control" id="contact_person" name="contact_person" value="{{ values.contact_person }}">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="email">Company Email</label>
+            <input class="form-control {{ 'is-invalid' if errors.get('email') }}" type="email" id="email"
+                   name="email" value="{{ values.email }}">
+            {{ field_error('email') }}
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="phone">Phone Number</label>
+            <input class="form-control" id="phone" name="phone" value="{{ values.phone }}" inputmode="tel">
+        </div>
+        <div class="col-md-8">
+            <label class="form-label" for="address">Address</label>
+            <input class="form-control" id="address" name="address" value="{{ values.address }}"
+                   placeholder="Street, building, postal address">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="location">City / Location</label>
+            <input class="form-control" id="location" name="location" value="{{ values.location }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="service_type">Service Type</label>
+            <input class="form-control" id="service_type" name="service_type" value="{{ values.service_type }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="status">Status</label>
+            <select class="form-select {{ 'is-invalid' if errors.get('status') }}" id="status" name="status">
                 {% for status in ["Active", "Inactive"] %}
-                    <option value="{{ status }}" {% if client and client.status == status %}selected{% endif %}>{{ status }}</option>
+                    <option value="{{ status }}" {% if values.status == status %}selected{% endif %}>{{ status }}</option>
                 {% endfor %}
             </select>
+            {{ field_error('status') }}
         </div>
-        <div class="col-12"><button class="btn btn-primary"><i class="bi bi-check2-circle"></i>Save Client</button></div>
+        <div class="col-12">
+            <label class="form-label" for="notes">Notes <span class="text-muted">(optional)</span></label>
+            <textarea class="form-control" id="notes" name="notes" rows="3"
+                      placeholder="Billing arrangement, contract dates, escalation contact…">{{ values.notes }}</textarea>
+        </div>
+        <div class="col-12 d-flex gap-2 flex-wrap">
+            <button class="btn btn-primary"><i class="bi bi-check2-circle"></i>{{ "Save Changes" if client else "Save Company" }}</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('main.clients') }}">Cancel</a>
+        </div>
     </form>
 </section>
+{% if not client %}
+<section class="panel mt-3">
+    <div class="panel-header"><h2><i class="bi bi-shield-lock"></i>What happens next</h2></div>
+    <p class="text-muted mb-0">
+        Saving creates the company record only. You will land on an onboarding summary
+        with the details to provision the client's login credentials in Supabase
+        Authentication — the company can sign in as soon as you have done that.
+    </p>
+</section>
+{% endif %}
 {% endblock %}
