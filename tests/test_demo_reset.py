@@ -282,7 +282,7 @@ class DemoResetTestCase(unittest.TestCase):
         cases = [
             (
                 "admin@payrolla.com", "/dashboard",
-                "Executive Overview", "No payroll runs yet",
+                "Companies by payroll cost", "No payroll processed yet",
             ),
             (
                 "admin@msc.com", "/company",
