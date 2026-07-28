@@ -13,6 +13,10 @@
      see the note at the top of portal.css. #}
   <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='portal.css') }}" />
+  {# Page-scoped stylesheets (the dashboard's executive layer is the only one
+     today). Loading them here rather than in portal.css keeps a page's styles
+     off every other page, so they cannot regress one. #}
+  {% block head %}{% endblock %}
 </head>
 <body class="brand-shell-bg">
   <a class="skip-link" href="#main-content">Skip to content</a>

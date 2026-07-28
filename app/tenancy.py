@@ -30,6 +30,7 @@ from app.models import (
     Employee,
     EmployeeDeployment,
     Expense,
+    ExpenseReceipt,
     ImportBatch,
     PaymentVoucher,
     PayrollItem,
@@ -50,8 +51,8 @@ class TenantScopeError(Exception):
 
 # Models carrying client_company_id directly.
 TENANT_OWNED_MODELS = frozenset(
-    {User, Employee, EmployeeDeployment, PayrollRun, Expense, Proposal, ImportBatch,
-     WageRateProfile, DomainEvent, DistributionBatch}
+    {User, Employee, EmployeeDeployment, PayrollRun, Expense, ExpenseReceipt, Proposal,
+     ImportBatch, WageRateProfile, DomainEvent, DistributionBatch}
 )
 
 # Child models with no client_company_id — scoped by joining through payroll_run.

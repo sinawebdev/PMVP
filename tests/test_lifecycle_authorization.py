@@ -8,7 +8,7 @@ app/permissions.py. These tests pin:
   1. The predicate truth tables (role x run-status) — the single source of truth.
   2. That the predicate role halves exactly preserve the pre-refactor template
      role lists for the legacy operator roles.
-  3. That ``chrisnat_admin`` — which already reached every one of these routes via
+  3. That ``payrolla_admin`` — which already reached every one of these routes via
      the role_required superuser bypass — now also SEES the corresponding buttons
      (the deliberate "full operator access" completion, confirmed with Sina).
   4. The rendered payroll_detail buttons match the predicates end-to-end.
@@ -46,7 +46,7 @@ ALL_ROLES = (
     "md",
     "payroll_officer",
     "accounts_officer",
-    "chrisnat_admin",
+    "payrolla_admin",
     "operations_supervisor",
 )
 
@@ -59,18 +59,18 @@ class PredicateTruthTableTestCase(unittest.TestCase):
     """The predicates are literal (role, status) truth tables — assert the
     reference expression directly so any drift is caught."""
 
-    # Reference role sets = pre-refactor template lists + chrisnat_admin. If the
+    # Reference role sets = pre-refactor template lists + payrolla_admin. If the
     # policy ever changes, THIS is the line that must change with it.
-    CALC = {"admin", "chrisnat_admin"}
-    EDIT = {"admin", "payroll_officer", "chrisnat_admin"}
-    SUBMIT = {"admin", "accounts_officer", "chrisnat_admin"}
-    APPROVE = {"admin", "md", "chrisnat_admin"}
-    PROCESS = {"admin", "accounts_officer", "md", "chrisnat_admin"}
-    DELETE = {"admin", "md", "chrisnat_admin"}
+    CALC = {"admin", "payrolla_admin"}
+    EDIT = {"admin", "payroll_officer", "payrolla_admin"}
+    SUBMIT = {"admin", "accounts_officer", "payrolla_admin"}
+    APPROVE = {"admin", "md", "payrolla_admin"}
+    PROCESS = {"admin", "accounts_officer", "md", "payrolla_admin"}
+    DELETE = {"admin", "md", "payrolla_admin"}
     # Distribution reuses the canonical PAYROLL_ROLES operator group (the four
-    # legacy payroll roles + chrisnat_admin) — the same set the /distribution
+    # legacy payroll roles + payrolla_admin) — the same set the /distribution
     # routes gate on — rather than a bespoke lifecycle group.
-    DISTRIBUTE = {"admin", "md", "payroll_officer", "accounts_officer", "chrisnat_admin"}
+    DISTRIBUTE = {"admin", "md", "payroll_officer", "accounts_officer", "payrolla_admin"}
 
     PENDING = {DRAFT, PENDING_APPROVAL}
     DELETABLE = {DRAFT, PREVIEWED, REJECTED}
@@ -150,33 +150,33 @@ class PredicateTruthTableTestCase(unittest.TestCase):
         # Predicates normalise the role string (case/whitespace), like the rest
         # of app/permissions.py.
         self.assertTrue(permissions.can_approve_run("  ADMIN ", _run(DRAFT)))
-        self.assertTrue(permissions.can_delete_run("Chrisnat_Admin", _run(REJECTED)))
+        self.assertTrue(permissions.can_delete_run("Payrolla_Admin", _run(REJECTED)))
 
-    def test_chrisnat_admin_matches_admin_on_every_predicate(self):
-        # The deliberate inclusion: chrisnat_admin is granted the same lifecycle
+    def test_payrolla_admin_matches_admin_on_every_predicate(self):
+        # The deliberate inclusion: payrolla_admin is granted the same lifecycle
         # visibility as admin (it already passed every route via the superuser
         # bypass).
         for status in ALL_STATUSES:
             run = _run(status)
             with self.subTest(status=status):
                 self.assertEqual(
-                    permissions.can_calculate_run("chrisnat_admin", run),
+                    permissions.can_calculate_run("payrolla_admin", run),
                     permissions.can_calculate_run("admin", run),
                 )
                 self.assertEqual(
-                    permissions.can_approve_run("chrisnat_admin", run),
+                    permissions.can_approve_run("payrolla_admin", run),
                     permissions.can_approve_run("admin", run),
                 )
                 self.assertEqual(
-                    permissions.can_reject_run("chrisnat_admin", run),
+                    permissions.can_reject_run("payrolla_admin", run),
                     permissions.can_reject_run("admin", run),
                 )
                 self.assertEqual(
-                    permissions.can_delete_run("chrisnat_admin", run),
+                    permissions.can_delete_run("payrolla_admin", run),
                     permissions.can_delete_run("admin", run),
                 )
                 self.assertEqual(
-                    permissions.can_distribute_run("chrisnat_admin", run),
+                    permissions.can_distribute_run("payrolla_admin", run),
                     permissions.can_distribute_run("admin", run),
                 )
 
@@ -297,8 +297,8 @@ class RenderedButtonVisibilityTestCase(unittest.TestCase):
         self.assertNotIn("submit", buttons)  # md not in the submit group
         self.assertNotIn("edit", buttons)    # md not in the edit-figures group
 
-    def test_chrisnat_admin_now_sees_lifecycle_buttons(self):
-        # The behaviour change this refactor intentionally makes: chrisnat_admin
+    def test_payrolla_admin_now_sees_lifecycle_buttons(self):
+        # The behaviour change this refactor intentionally makes: payrolla_admin
         # could already POST these routes; it now also sees the buttons, matching
         # admin exactly.
         self._login("operator@payrolla.com")

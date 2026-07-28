@@ -1,0 +1,91 @@
+{% extends "client/base.html" %}
+{% block title %}{{ expense.description }}{% endblock %}
+{% set may_record = can_record_expenses(current_user.role) %}
+{% block body %}
+  <div class="toolbar">
+    <div class="page-head">
+      <h1>{{ expense.description }}</h1>
+      <p class="sub">{{ expense.category }} · {{ expense.expense_date }} · <span class="badge">{{ expense.status }}</span></p>
+    </div>
+    <div class="actions">
+      {% if may_record %}
+      <a class="btn primary" href="{{ url_for('client.expense_edit', expense_id=expense.id) }}">Edit</a>
+      {% endif %}
+      <a class="btn" href="{{ url_for('client.expenses') }}">Back to expenses</a>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card stat-card">
+      <span class="n">{{ expense.amount | cedis }}</span>
+      <span class="l">Amount</span>
+    </div>
+    <div class="card stat-card">
+      <span class="n">{{ expense.category }}</span>
+      <span class="l">Category</span>
+    </div>
+    <div class="card stat-card">
+      <span class="n">{{ expense.expense_date }}</span>
+      <span class="l">Date incurred</span>
+    </div>
+  </div>
+
+  {% if expense.notes %}
+  <section class="card stack">
+    <h2>Notes</h2>
+    <p class="muted">{{ expense.notes }}</p>
+  </section>
+  {% endif %}
+
+  {# --- Receipt ------------------------------------------------------------
+     Images preview inline (served by expense_receipt_view, which sets
+     Content-Disposition: inline); PDFs show a document mark instead, since a
+     browser cannot be relied on to render one in an <img>. Both offer the same
+     download action. #}
+  <section class="card stack">
+    <h2>Receipt</h2>
+    {% if receipt %}
+    <div class="receipt">
+      <div class="receipt-figure">
+        {% if receipt.is_image %}
+        <a href="{{ url_for('client.expense_receipt_view', expense_id=expense.id) }}"
+           target="_blank" rel="noopener">
+          <img class="receipt-preview"
+               src="{{ url_for('client.expense_receipt_view', expense_id=expense.id) }}"
+               alt="Receipt for {{ expense.description }}">
+        </a>
+        {% else %}
+        <a class="receipt-doc" href="{{ url_for('client.expense_receipt_view', expense_id=expense.id) }}"
+           target="_blank" rel="noopener" aria-label="Open {{ receipt.original_filename }}">
+          <span class="receipt-doc-mark" aria-hidden="true">PDF</span>
+        </a>
+        {% endif %}
+      </div>
+      <div class="receipt-meta">
+        <p class="receipt-name">{{ receipt.original_filename }}</p>
+        <p class="muted">
+          {{ receipt.content_type }} · {{ receipt.byte_size | filesize }}
+          · uploaded {{ receipt.uploaded_at.strftime('%d %b %Y') }}
+          {%- if receipt.uploader %} by {{ receipt.uploader.name }}{% endif %}
+        </p>
+        <div class="actions">
+          <a class="btn primary" href="{{ url_for('client.expense_receipt_download', expense_id=expense.id) }}">Download</a>
+          {% if may_record %}
+          <form method="post" action="{{ url_for('client.expense_receipt_delete', expense_id=expense.id) }}"
+                onsubmit="return confirm('Remove this receipt? This cannot be undone.');">
+            <button class="btn sm danger" type="submit">Remove receipt</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p>No receipt attached to this expense.</p>
+      {% if may_record %}
+      <a class="btn primary" href="{{ url_for('client.expense_edit', expense_id=expense.id) }}">Attach a receipt</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -24,10 +24,11 @@ Roles (`app/roles.py`) determine permissions *within* a plane; they never decide
 the plane. A misassigned role can therefore never widen a tenant user's data
 horizon — the plane is set by the (NULL-or-not) company id alone.
 
-- **Platform roles:** `chrisnat_admin`, `chrisnat_reviewer` (+ legacy operator
-  roles `admin`, `md`, `payroll_officer`, …). The `chrisnat_*` strings are a
-  stable, persisted role vocabulary retained from the founding operator; they are
-  treated as identifiers, not branding (see `app/roles.py`).
+- **Platform roles:** `payrolla_admin`, `payrolla_reviewer` (+ legacy operator
+  roles `admin`, `md`, `payroll_officer`, …). These were `chrisnat_*` until the
+  brand cleanup; migration `a4e7c2b81d95` moved the persisted strings, and
+  `normalise_role` still folds the old spellings onto the new ones on read, so an
+  un-migrated row keeps its permissions (see `app/roles.py`).
 - **Tenant roles:** `client_admin` (can approve; maker-checker is off for v1) and
   `client_preparer`.
 

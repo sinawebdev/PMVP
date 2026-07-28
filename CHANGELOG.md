@@ -21,6 +21,17 @@ multi-tenant SaaS built on top of the original single-operator payroll app.
   own operational expenses against a fixed category list, with totals, a
   category breakdown and a by-month chart that feed the company dashboard
   directly.
+- **Expense receipt attachments.** The expense form's attachment field is live:
+  PDF/PNG/JPG/JPEG up to 10 MB, one receipt per expense, with a new expense
+  detail page that previews images inline, marks documents, and offers download
+  and removal. Files go through a storage seam (`app/storage.py`) that addresses
+  objects by an opaque key rather than a path, so **moving to Supabase Storage
+  is one new backend class plus `STORAGE_BACKEND=supabase`** — no route, model,
+  template or data change. Receipt rules (formats, size, key layout) live in
+  `app/receipts.py`, and the recorded MIME type is sniffed from the file's
+  leading bytes rather than trusted from the upload header, so a renamed
+  executable is refused. Receipts are reachable only through their expense, so
+  tenant isolation is the same 404 the rest of the plane already gives.
 - **Professional login identities.** The demo roster moved to `@payrolla.com`
   (platform) and per-company domains (`@msc.com`, `@acme.com`), with an optional
   login-page hint panel built from the seed itself. Role strings — and therefore
@@ -41,9 +52,19 @@ multi-tenant SaaS built on top of the original single-operator payroll app.
 - Migrated the product identity from the legacy "Chrisnat Payroll MVP" to
   **Payrolla** across code comments, docstrings, user-facing strings, the
   front-end JS/CSS namespace, config, and documentation. Business entities and
-  persisted identifiers (the `chrisnat_*` role vocabulary, the `@chrisnat.local`
-  demo domain, GRA employer defaults, and operator-side export filenames) are
-  deliberately preserved — see the branding note in the [README](README.md).
+  live deployment identifiers (GRA employer defaults, operator-side export
+  filenames and letterhead, the `render.yaml` service name) are deliberately
+  preserved — see the branding note in the [README](README.md).
+- **Platform roles renamed** to `payrolla_admin` / `payrolla_reviewer` (from
+  `chrisnat_*`), completing the rebrand of the permission model. A role names a
+  capability in this product, not the founding bureau, so it belonged on the
+  product's name. Shipped as a reversible data migration (`a4e7c2b81d95`) that
+  rewrites `user.role` plus the three historical role columns
+  (`audit_trail.user_role`, `domain_event.actor_role`,
+  `distribution_batch.initiated_by_role`). No user gains or loses a capability:
+  `app.roles.normalise_role` folds the pre-rename spellings onto the current
+  names, so access is identical before, during and after the migration, and rows
+  that predate it (an un-migrated replica, a restored backup) keep working.
 - Product names are read from a single **branding seam** (`APP_NAME`, …), so a
   rebrand or white-label is a config change, not a template sweep.
 - Removed dead code (unused imports, an unused local computation, a commented-out

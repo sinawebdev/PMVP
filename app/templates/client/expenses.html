@@ -57,6 +57,7 @@
       <thead>
         <tr>
           <th>Date</th><th>Category</th><th>Description</th><th>Notes</th>
+          <th>Receipt</th>
           <th class="right">Amount</th><th>Status</th>{% if may_record %}<th></th>{% endif %}
         </tr>
       </thead>
@@ -65,8 +66,9 @@
         <tr>
           <td class="nums">{{ x.expense_date }}</td>
           <td>{{ x.category }}</td>
-          <td>{{ x.description }}</td>
+          <td><a href="{{ url_for('client.expense_detail', expense_id=x.id) }}">{{ x.description }}</a></td>
           <td class="muted">{{ x.notes or "—" }}</td>
+          <td class="muted">{{ "Attached" if x.receipt else "—" }}</td>
           <td class="right nums">{{ x.amount | cedis }}</td>
           <td><span class="badge">{{ x.status }}</span></td>
           {% if may_record %}

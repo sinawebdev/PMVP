@@ -120,8 +120,8 @@ its credentials in Supabase Authentication. All demo accounts use the password
 | Email | Role string | Capability |
 |---|---|---|
 | `admin@payrolla.com` | `admin` | Full operator administration |
-| `operator@payrolla.com` | `chrisnat_admin` | Platform superuser (SaaS operator) |
-| `support@payrolla.com` | `chrisnat_reviewer` | Read-only support/oversight |
+| `operator@payrolla.com` | `payrolla_admin` | Platform superuser (SaaS operator) |
+| `support@payrolla.com` | `payrolla_reviewer` | Read-only support/oversight |
 | `director@payrolla.com` | `md` | Managing Director — approvals |
 | `payroll@payrolla.com` | `payroll_officer` | Payroll processing |
 | `accounts@payrolla.com` | `accounts_officer` | Submission, close-out |
@@ -138,10 +138,11 @@ its credentials in Supabase Authentication. All demo accounts use the password
 | Acme Manufacturing Ltd | `ACME` | `finance@acme.com` | `client_admin` |
 | Acme Manufacturing Ltd | `ACME` | `payroll@acme.com` | `client_preparer` |
 
-> Only the *identities* are professional — the role strings above are unchanged
-> persisted identifiers. `chrisnat_admin` / `chrisnat_reviewer` are retained from
-> the founding operator (Chrisnat Limited) and treated as stable identifiers, not
-> product branding. See [the branding note](#a-note-on-the-name) below.
+> The platform roles were once named after the founding operator
+> (`chrisnat_admin` / `chrisnat_reviewer`). They now carry the product's name.
+> The old spellings are still accepted on read — `app.roles.normalise_role` folds
+> them onto the current names — so an un-migrated row keeps exactly its previous
+> permissions. See [the branding note](#a-note-on-the-name) below.
 
 For a demonstration-grade dataset (several months of payroll history, expenses
 across every category, both tenants populated) run the explicit reset command:
@@ -203,9 +204,44 @@ full, commented list. Key groups:
 - **Distribution channels:** `SMS_BACKEND`, `WHATSAPP_BACKEND`, `EMAIL_BACKEND`
   (each defaults to `console` — logs only, no network) plus their credentials,
   webhook secrets, rate limits, retry policy, and SLA thresholds.
+- **File storage:** `STORAGE_BACKEND` (default `local`), `STORAGE_ROOT` (default
+  `instance/storage`), `RECEIPT_MAX_BYTES` (default 10 MB). Uploaded files are
+  addressed by an opaque storage key rather than a path, so swapping the backend
+  needs no data change — see [Receipt storage](#receipt-storage). On a platform
+  with an ephemeral filesystem, point `STORAGE_ROOT` at a mounted disk.
 - **Statutory / payroll:** `RAW_BANK_WHITELIST`, `CHRISNAT_EMPLOYER_TIN`,
   `CHRISNAT_TAX_OFFICE` (the employer's TIN and tax office printed on GRA
   returns — employer configuration, not product identity).
+
+### Receipt storage
+
+Client expense receipts (PDF/PNG/JPG, up to 10 MB) are the first files the app
+stores permanently. Two modules own the whole path:
+
+| Module | Owns |
+|---|---|
+| `app/storage.py` | Backends — `save` / `open` / `delete` / `exists`, keyed by an opaque **storage key**. Knows nothing about receipts. |
+| `app/receipts.py` | The receipt rules — allowed formats, the size ceiling, the key layout, attach/detach. Knows nothing about filesystems. |
+
+A storage key looks like `receipts/<company_id>/<uuid4>.<ext>`. It is not a
+filesystem path, so it stays valid when the backend changes: **moving to
+Supabase Storage means implementing `StorageBackend` once and setting
+`STORAGE_BACKEND=supabase`** — no route, model, template, migration or stored
+value changes.
+
+Security properties worth knowing:
+
+- Files live under `instance/` by default — outside the package, never served
+  statically, and reachable only through a route that has already resolved the
+  tenant.
+- Receipts are addressed **through their expense** (`/company/expenses/<id>/receipt`),
+  never by receipt id or storage key, so there is no identifier to tamper with.
+  Another tenant's expense id is a 404.
+- The recorded MIME type comes from sniffing the file's leading bytes, not from
+  the client's header. A file whose contents disagree with its extension is
+  rejected, and responses carry `X-Content-Type-Options: nosniff`.
+- Uploaded filenames are kept only to name the download; the stored key is
+  uuid-based, so user text never reaches the filesystem.
 
 ---
 
@@ -235,11 +271,18 @@ options, and the go-live checklist are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## A note on the name
 
-This repository directory is historically named `pmvp-v1`, and a few internal
-identifiers retain the founding operator's name (**Chrisnat Limited**): the
-`chrisnat_admin` / `chrisnat_reviewer` role strings, the `@chrisnat.local` demo
-login domain, the GRA employer defaults, and the operator-side export filenames.
-These are **business entities and persisted identifiers**, deliberately left
-unchanged; renaming them would be a data/behaviour migration, not a rebrand. The
-**product** is Payrolla throughout. See the branding taxonomy in the project's
-engineering notes for the full rationale.
+This repository directory is historically named `pmvp-v1`, and a few identifiers
+still carry the founding operator's name (**Chrisnat Limited**): the GRA employer
+defaults (`CHRISNAT_EMPLOYER_TIN`, `CHRISNAT_TAX_OFFICE`), the operator-side
+export filenames and report letterhead, and the `chrisnat-payroll-mvp` service
+name in `render.yaml`. Those are **business entities and live deployment
+identifiers** — the bureau that the reports are printed for, and a running
+service whose rename would orphan its `DATABASE_URL` binding — so they are
+deliberately left alone. The **product** is Payrolla throughout.
+
+The platform *role* strings were in that list until the brand cleanup; they are
+now `payrolla_admin` / `payrolla_reviewer`, moved by a reversible data migration
+(`a4e7c2b81d95`) with the old spellings still accepted on read. A role names a
+capability in this product, not the bureau, so it belonged on the product's name.
+See the branding taxonomy in the project's engineering notes for the full
+rationale.

@@ -38,7 +38,7 @@ class TenancyTestCase(unittest.TestCase):
     # --- seed / roles -------------------------------------------------------
     def test_seed_creates_platform_and_tenant_admins(self):
         self.assertIsNotNone(self.platform)
-        self.assertEqual(self.platform.role, "chrisnat_admin")
+        self.assertEqual(self.platform.role, "payrolla_admin")
         self.assertIsNone(self.platform.client_company_id)
         self.assertTrue(roles.is_platform_user(self.platform))
         self.assertFalse(roles.is_tenant_user(self.platform))

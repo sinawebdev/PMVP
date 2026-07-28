@@ -8,7 +8,7 @@ from datetime import timedelta
 import click
 
 from dotenv import load_dotenv
-from flask import Flask, render_template
+from flask import Flask, flash, redirect, render_template, request, url_for
 from flask_login import LoginManager
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
@@ -89,6 +89,26 @@ def format_duration(seconds):
     return f"{hours}h {mins}m" if mins else f"{hours}h"
 
 
+def format_file_size(num_bytes):
+    """Human file size for stored attachments: 900 -> '900 B', 20480 -> '20 KB',
+    5242880 -> '5.0 MB'. None/negative -> '—'.
+
+    MB keeps one decimal because the receipt limit is stated in whole MB — a
+    user comparing a rejected file against "10 MB" needs to see 10.4, not 10.
+    """
+    try:
+        size = int(num_bytes)
+    except (TypeError, ValueError):
+        return "—"
+    if size < 0:
+        return "—"
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.0f} KB"
+    return f"{size / (1024 * 1024):.1f} MB"
+
+
 def resolve_display_name(user):
     """The human name to greet ``user`` by. Empty string for anonymous users.
 
@@ -120,16 +140,30 @@ def resolve_display_name(user):
 
 
 def format_role_label(value):
+    """Human-readable name for a role string.
+
+    Canonicalised through :func:`app.roles.normalise_role` first, so a historical
+    row still carrying a pre-rename alias (an audit entry written before the
+    ``chrisnat_*`` -> ``payrolla_*`` migration) renders under the current name
+    instead of showing retired branding beside the new one.
+    """
+    from app.roles import normalise_role
+
     labels = {
         "admin": "Admin",
         "md": "MD",
+        "payrolla_admin": "Payrolla Admin",
+        "payrolla_reviewer": "Payrolla Reviewer",
         "accounts_officer": "Accounts Officer",
         "payroll_officer": "Payroll Officer",
         "operations_supervisor": "Operations Supervisor",
+        "client_admin": "Client Admin",
+        "client_preparer": "Client Preparer",
         "client_user": "Client User",
         "viewer": "Viewer",
     }
-    return labels.get(str(value or "").lower(), str(value or "").replace("_", " ").title())
+    canonical = normalise_role(value)
+    return labels.get(canonical, canonical.replace("_", " ").title())
 
 
 def create_app():
@@ -234,6 +268,25 @@ def create_app():
     )
     app.config["IMPORT_SESSION_FOLDER"] = os.path.join(
         app.instance_path, "import_sessions"
+    )
+
+    # --- Persistent object storage (app/storage.py) ---
+    # Files the app must keep, addressed by an opaque storage key rather than a
+    # path so the backend can change without touching callers. "local" writes
+    # under STORAGE_ROOT; Supabase Storage is the planned alternative and needs
+    # only a new backend class plus STORAGE_BACKEND=supabase.
+    app.config["STORAGE_BACKEND"] = os.getenv("STORAGE_BACKEND", "local")
+    # Under instance/ deliberately: outside the package, so stored files are
+    # never importable, never served statically, and can only leave through a
+    # route that has checked tenant ownership.
+    app.config["STORAGE_ROOT"] = os.path.abspath(
+        os.getenv("STORAGE_ROOT", os.path.join(app.instance_path, "storage"))
+    )
+    # Per-receipt ceiling, enforced in app/receipts.py. Well under the global
+    # MAX_CONTENT_LENGTH above so an oversized receipt gets a field-level
+    # validation message rather than Werkzeug's bare 413.
+    app.config["RECEIPT_MAX_BYTES"] = int(
+        os.getenv("RECEIPT_MAX_BYTES", 10 * 1024 * 1024)
     )
 
     # Raw-hours engine bank whitelist (config, never hardcoded in a formula —
@@ -381,6 +434,8 @@ def create_app():
     os.makedirs(app.instance_path, exist_ok=True)
     os.makedirs(app.config["EXPORT_FOLDER"], exist_ok=True)
     os.makedirs(app.config["IMPORT_SESSION_FOLDER"], exist_ok=True)
+    if app.config["STORAGE_BACKEND"] == "local":
+        os.makedirs(app.config["STORAGE_ROOT"], exist_ok=True)
 
     db.init_app(app)
     login_manager.init_app(app)
@@ -398,6 +453,7 @@ def create_app():
     app.jinja_env.filters["cedis"] = format_ghana_cedis
     app.jinja_env.filters["role_label"] = format_role_label
     app.jinja_env.filters["duration"] = format_duration
+    app.jinja_env.filters["filesize"] = format_file_size
     # Greet any user by name: {{ some_user|display_name }}. The *current* user's
     # name is also injected as `user_display_name` (see inject_user_greeting).
     app.jinja_env.filters["display_name"] = resolve_display_name
@@ -561,6 +617,25 @@ def create_app():
     @app.errorhandler(404)
     def handle_not_found(error):
         return render_template("errors/404.html"), 404
+
+    @app.errorhandler(413)
+    def handle_payload_too_large(error):
+        """A body over MAX_CONTENT_LENGTH — Werkzeug aborts before any view runs.
+
+        Receipts have their own 10 MB check that produces a field-level message,
+        but it can only run on a request that was read. Anything larger than the
+        global ceiling dies here instead, so it needs its own explanation rather
+        than Werkzeug's bare 413.
+        """
+        db.session.rollback()
+        limit_mb = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+        flash(
+            f"That upload is too large. Files must be under {limit_mb} MB.",
+            "danger",
+        )
+        # Back to where they were, with the flash, rather than an error page:
+        # the fix is picking a smaller file, and the form is where they do it.
+        return redirect(request.referrer or url_for("main.dashboard")), 413
 
     @app.errorhandler(500)
     def handle_server_error(error):

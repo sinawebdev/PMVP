@@ -318,13 +318,22 @@ def dashboard():
 @main_bp.route("/company")
 @login_required
 def company_dashboard():
-    """Tenant plane landing — a client user's own company at a glance.
+    """Tenant plane landing — the company's executive decision workspace.
 
     Hard-scoped to ``current_user.client_company_id`` via tenant_query. A platform
     (operator) user has no single company, so they are sent to the oversight
     console instead. The full client interface (payroll runs, payslips,
     employees, etc.) hangs off this landing.
+
+    The route's whole job is to fetch this tenant's rows; every figure, verdict
+    and shortcut on the page is assembled by :func:`app.dashboard.company_overview`
+    from signals that already exist elsewhere in the app (analytics, the risk
+    gate, the lifecycle stepper, the event/audit logs). Four queries here plus
+    three bounded ones inside the assembly — the page does not get slower as the
+    roster grows.
     """
+    from app.dashboard import company_overview
+    from app.models import ImportBatch
     from app.tenancy import active_tenant_id, is_platform_context, tenant_query
 
     if is_platform_context():
@@ -335,47 +344,26 @@ def company_dashboard():
         flash(f"Your company profile is unavailable. Contact {current_app.config['APP_BRAND_NAME']}.", "warning")
         return redirect(url_for("auth.logout"))
 
-    employee_count = tenant_query(Employee).count()
-    active_employee_count = tenant_query(Employee).filter(Employee.status == "Active").count()
+    employees = tenant_query(Employee).all()
     runs = tenant_query(PayrollRun).order_by(PayrollRun.created_at.desc()).all()
-    pending_runs = sum(1 for run in runs if run.status in PENDING_STATUSES)
-    # Risk holds on this company's own runs, from the same centralized rule the
-    # operator dashboard uses — so a release clears here on the next load too.
-    from app.risk import is_held
-
-    held_runs_count = sum(1 for run in runs if is_held(run))
-
-    from app.models import ImportBatch
-
+    expenses = tenant_query(Expense).all()
     draft_count = (
         tenant_query(ImportBatch)
         .filter(ImportBatch.payroll_run_id.is_(None), ImportBatch.status == "Draft")
         .count()
     )
 
-    # Executive analytics (trend / cost by month / cost mix / quick stats).
-    # Computed from the runs + expenses already scoped to this tenant, so the
-    # charts can never show another company's figures.
-    from app.analytics import client_dashboard_analytics
-
-    expense_total = sum(
-        expense.amount or 0 for expense in tenant_query(Expense).all()
-    )
-    analytics = client_dashboard_analytics(
-        runs, employee_count=employee_count, expense_total=expense_total
-    )
-
     return render_template(
         "client/dashboard.html",
         company=company,
-        employee_count=employee_count,
-        active_employee_count=active_employee_count,
-        run_count=len(runs),
-        pending_runs=pending_runs,
-        held_runs_count=held_runs_count,
-        draft_count=draft_count,
-        recent_runs=runs[:8],
-        analytics=analytics,
+        overview=company_overview(
+            company,
+            runs,
+            employees,
+            expenses,
+            role=getattr(current_user, "role", None),
+            draft_count=draft_count,
+        ),
     )
 
 
