@@ -156,32 +156,56 @@ PLATFORM_TIMELINE_ACTIONS = (
     "Statutory rate version added",
 )
 
-# title -> (Bootstrap icon class, semantic tone). Same layering as
-# app.payroll_status.status_badge_class: presentation mapping in Python so every
-# surface renders the same event identically.
+# title -> (icon name, tone), for BOTH feeds. Same layering as
+# app.payroll_status.status_badge_class: the presentation mapping lives in
+# Python so every surface renders the same event identically.
+#
+# One table, not two. Both timelines are drawn by the same component
+# (macros/dashboard.html::activity_item), so they need the same two vocabularies
+# it understands: an icon name from that file's inline SVG set, and a tone from
+# `ok | warn | danger | brand | muted`. The platform feed used to carry
+# Bootstrap Icons classes and Bootstrap colour words instead — neither of which
+# that component can render — so every operator-dashboard entry fell back to the
+# generic glyph with no tone. A second table is how those drifted apart; this is
+# one table so they cannot again.
 _TIMELINE_LOOKS = {
-    "Client company onboarded": ("bi-building-add", "success"),
-    "Client run imported": ("bi-file-earmark-arrow-up", "info"),
-    "Payroll import confirmed": ("bi-file-earmark-arrow-up", "info"),
-    "Payroll approval": ("bi-check2-circle", "success"),
-    "Payroll rejection": ("bi-x-circle", "danger"),
-    "Payroll processed": ("bi-flag", "primary"),
-    "Payslips distributed": ("bi-send-check", "primary"),
-    "Distribution completed": ("bi-send-check", "primary"),
-    "Distribution failed": ("bi-exclamation-octagon", "danger"),
-    "Distribution cancelled": ("bi-slash-circle", "warning"),
-    "Payroll run held for review": ("bi-shield-exclamation", "warning"),
-    "Payroll run released": ("bi-shield-check", "success"),
-    "Risk hold released": ("bi-shield-check", "success"),
-    "Payroll run auto-accepted": ("bi-shield-check", "info"),
-    "Expense recorded": ("bi-receipt", "secondary"),
-    "Statutory rate version added": ("bi-bank", "secondary"),
+    # Platform-plane milestones
+    "Client company onboarded": ("users", "ok"),
+    "Payroll import confirmed": ("upload", "muted"),
+    "Statutory rate version added": ("wallet", "muted"),
+    "Payslip retries exhausted": ("x-circle", "danger"),
+    "Distribution batch failed": ("x-circle", "danger"),
+    "Distribution SLA breach": ("alert-triangle", "warn"),
+    # Shared by both planes
+    "Payroll run held for review": ("shield-alert", "warn"),
+    "Payroll run released": ("shield-check", "ok"),
+    "Payroll run auto-accepted": ("shield-check", "ok"),
+    "Risk hold released": ("shield-check", "ok"),
+    "Payroll approval": ("check-circle", "ok"),
+    "Payroll rejection": ("x-circle", "danger"),
+    "Payroll processed": ("flag", "brand"),
+    "Payslips distributed": ("send", "brand"),
+    "Distribution completed": ("send", "brand"),
+    "Distribution failed": ("x-circle", "danger"),
+    "Distribution cancelled": ("alert-triangle", "warn"),
+    "Client run imported": ("upload", "muted"),
+    "Client import draft": ("upload", "muted"),
+    "Client import discarded": ("upload", "muted"),
+    "Employee saved": ("users", "muted"),
+    "Employee deactivated": ("users", "warn"),
+    "Employee reactivated": ("users", "muted"),
+    "Expense recorded": ("receipt", "muted"),
+    "Client payroll export": ("download", "muted"),
+    "Client bank listing export": ("download", "muted"),
+    "Branding updated": ("activity", "muted"),
 }
-_DEFAULT_LOOK = ("bi-dot", "secondary")
+# Neutral rather than absent: an event nobody has mapped yet still renders as a
+# real entry instead of a hole in the feed.
+_DEFAULT_LOOK = ("activity", "muted")
 
 
 def timeline_look(title):
-    """(icon class, tone) for a timeline entry; a sane default for anything new."""
+    """(icon name, tone) for a timeline entry; a sane default for anything new."""
     return _TIMELINE_LOOKS.get(title, _DEFAULT_LOOK)
 
 
@@ -269,39 +293,14 @@ TENANT_TIMELINE_ACTIONS = (
     "Branding updated",
 )
 
-# The portal shell carries no icon font (see the note at the top of portal.css),
-# so the tenant feed names an icon from the inline SVG set in
-# templates/macros/dashboard.html rather than a Bootstrap Icons class. Same
-# layering as _TIMELINE_LOOKS above: the mapping is in Python so every surface
-# renders the same event identically.
-_TENANT_LOOKS = {
-    "Payroll run held for review": ("shield-alert", "warn"),
-    "Payroll run released": ("shield-check", "ok"),
-    "Payroll run auto-accepted": ("shield-check", "ok"),
-    "Payroll approval": ("check-circle", "ok"),
-    "Payroll rejection": ("x-circle", "danger"),
-    "Payroll processed": ("flag", "brand"),
-    "Payslips distributed": ("send", "brand"),
-    "Distribution completed": ("send", "brand"),
-    "Distribution failed": ("x-circle", "danger"),
-    "Distribution cancelled": ("alert-triangle", "warn"),
-    "Client run imported": ("upload", "muted"),
-    "Client import draft": ("upload", "muted"),
-    "Client import discarded": ("upload", "muted"),
-    "Employee saved": ("users", "muted"),
-    "Employee deactivated": ("users", "warn"),
-    "Employee reactivated": ("users", "muted"),
-    "Expense recorded": ("receipt", "muted"),
-    "Client payroll export": ("download", "muted"),
-    "Client bank listing export": ("download", "muted"),
-    "Branding updated": ("activity", "muted"),
-}
-
-
 def tenant_look(title):
-    """(icon name, tone) for a tenant timeline entry; a neutral default for
-    anything new, so an unmapped event still renders."""
-    return _TENANT_LOOKS.get(title, ("activity", "muted"))
+    """(icon name, tone) for a tenant timeline entry.
+
+    The same lookup :func:`timeline_look` performs, against the same table — the
+    two feeds render through the same component, so an event that looks one way
+    to an operator must look that way to the company it happened to. Kept as its
+    own name because the tenant dashboard reads in these terms."""
+    return timeline_look(title)
 
 
 def as_utc(moment):

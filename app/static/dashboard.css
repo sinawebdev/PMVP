@@ -365,19 +365,27 @@
 .signal-detail { color: var(--ink-soft); font-size: 12.5px; line-height: 1.5; }
 
 .signal-link {
+    align-items: center;
     align-self: center;
     color: var(--brand);
+    display: inline-flex;
     flex: none;
     font-size: 12.5px;
     font-weight: 650;
+    gap: 2px;
     margin-left: auto;
     text-decoration: none;
+    transition: gap var(--ease), color var(--ease);
 }
 
-.signal-link:hover { text-decoration: underline; }
+.signal-link:hover { color: var(--brand-dark); gap: 5px; text-decoration: underline; }
 
 .signal--ok { background: var(--green-soft); border-color: #cbe8d7; border-left-color: var(--green); }
 .signal--ok .signal-ico { color: var(--green); }
+/* `info` — ordinary pending work. Deliberately the quietest of the four tones:
+   it is the one signal that resolves itself if the queue simply gets worked. */
+.signal--info { background: var(--brand-tint); border-left-color: var(--brand); }
+.signal--info .signal-ico { color: var(--brand); }
 .signal--warn { background: var(--warn-soft); border-color: #f3dcb4; border-left-color: var(--warn); }
 .signal--warn .signal-ico { color: var(--warn); }
 .signal--danger { background: var(--danger-soft); border-color: #f6cdd2; border-left-color: var(--danger); }

@@ -1,0 +1,677 @@
+/* ---------------------------------------------------------------------------
+   Payrolla — Operator (admin) dashboard workspace.
+
+   Loaded ONLY by app/templates/dashboard.html, on top of tokens.css +
+   styles.css + dashboard.css. Every selector below is either scoped under
+   `.ops` or named with an `ops-` prefix that exists nowhere else, so this file
+   cannot reach the company portal's dashboard (which shares dashboard.css with
+   this page), the rest of the admin shell, or any page a future feature adds.
+   A change here has exactly one blast radius: this page.
+
+   It holds the things the two dashboards do NOT share — the operator's 70/30
+   workspace grid, the consolidated company table, the period filter, and the
+   page's entrance motion. The components themselves (.xpanel, .kpi, .signal,
+   .timeline, .pill, .state) come from dashboard.css unchanged: one component
+   vocabulary across both dashboards, not two.
+
+   Four rules this file holds itself to:
+
+     1. Colour, radius, shadow and easing come from tokens.css. There is not one
+        raw colour value below — a brand change recolours the whole page.
+     2. Spacing comes from the scale declared on `.ops`, not from ad-hoc margin
+        utilities. Related things sit close; unrelated sections get a full
+        --space-section between them.
+     3. Motion is purposeful: it establishes hierarchy on entry (the KPI band
+        resolves first, then the workspace) and acknowledges interaction. It
+        never loops, never blocks, and never replays. The whole entrance
+        completes in ~610ms.
+     4. Status is never carried by colour alone — inherited from dashboard.css,
+        where every tone is paired with an icon and a word.
+
+   Written mobile-first: the base rules are the phone stack, min-width queries
+   build up to the desktop workspace, so the phone never overrides a desktop
+   rule it cannot see.
+   --------------------------------------------------------------------------- */
+
+.ops {
+    /* One spacing scale, three steps. Proximity does the grouping: --space-tight
+       inside a group, --space-panel between panels, --space-section between
+       parts of the page that answer different questions. */
+    --space-tight: 8px;
+    --space-panel: 16px;
+    --space-section: 22px;
+
+    --panel-pad: 20px;
+    --node: 26px;   /* .timeline in dashboard.css sizes its rail off these */
+    --rail: 13px;
+}
+
+.ops .nums { font-variant-numeric: tabular-nums; }
+
+/* --- Page header ---------------------------------------------------------
+   The shell's header is shared by every operator page and is not redesigned
+   here — with one subtraction. This page's <h1> IS the greeting, so the shell's
+   "Signed in as …" line repeats it word for word directly underneath. Scoped by
+   :has() to pages that contain the operator workspace, so no other page loses
+   its signed-in line, and a browser without :has() simply keeps the duplicate
+   rather than losing anything. The role is still on screen, in the sidebar. */
+
+body:has(.ops) .topbar .signed-in { display: none; }
+body:has(.ops) .topbar .page-intro { margin-bottom: 0; }
+
+/* --- Period filter -------------------------------------------------------
+   A filter, not a content panel: it sits directly on the shell with a hairline
+   and no elevation, so it reads as a setting for the page rather than as the
+   page's first section. Compact enough that the KPI band below it is the first
+   thing with visual weight. */
+
+.ops-filters {
+    align-items: flex-end;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: var(--space-section);
+    padding-bottom: 14px;
+}
+
+.ops-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+.ops-field label {
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.ops-field select {
+    appearance: none;
+    background: var(--surface);
+    /* The chevron is a gradient-drawn caret rather than an SVG data URI, so it
+       inherits the token palette instead of baking a colour into a URL. */
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: right 15px center, right 10px center;
+    background-repeat: no-repeat;
+    background-size: 5px 5px, 5px 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    min-height: 38px;
+    padding: 7px 30px 7px 12px;
+    transition: border-color var(--ease), box-shadow var(--ease);
+}
+
+.ops-field select:hover { border-color: var(--brand); }
+
+.ops-apply {
+    background: var(--brand);
+    border: 1px solid var(--brand);
+    border-radius: var(--radius-sm);
+    color: var(--surface);
+    cursor: pointer;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 650;
+    min-height: 38px;
+    padding: 8px 20px;
+    transition: background var(--ease), border-color var(--ease), transform var(--ease);
+}
+
+.ops-apply:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
+.ops-apply:active { transform: translateY(1px); }
+
+/* macros/dashboard.html::empty renders its call to action as `.btn.primary` —
+   the tenant portal's class pair, which portal.css styles and the operator
+   shell (Bootstrap + styles.css) does not, so an empty panel's only action
+   would render as bare bold text. Same treatment as Apply above, so the two
+   primary actions on the page are the same button. */
+.ops .state .btn {
+    background: var(--brand);
+    border: 1px solid var(--brand);
+    border-radius: var(--radius-sm);
+    color: var(--surface);
+    font-size: 13.5px;
+    font-weight: 650;
+    padding: 9px 18px;
+    text-decoration: none;
+    transition: background var(--ease), border-color var(--ease), transform var(--ease);
+}
+
+.ops .state .btn:hover { background: var(--brand-dark); border-color: var(--brand-dark); color: var(--surface); }
+.ops .state .btn:active { transform: translateY(1px); }
+
+.ops-filters-note {
+    color: var(--muted);
+    font-size: 12.5px;
+    margin: 0 0 9px auto;   /* pushed to the far end; baseline-aligned with the button */
+}
+
+/* --- KPI band ------------------------------------------------------------
+   Five tiles that must read as ONE band: equal columns, one gap, no tile with
+   its own accent. Hierarchy inside a tile comes from type and space only. */
+
+.ops-kpis { margin-bottom: var(--space-section); }
+
+/* Below a laptop the tiles reflow to whatever fits; from a laptop up they are
+   five equal columns, always. auto-fit alone drops to 4+1 at ~1280px, and a
+   band with one tile hanging off the end reads as a mistake, not a band. */
+.ops .kpi-band { gap: 12px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+
+@media (min-width: 1080px) {
+    .ops .kpi-band { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+/* Book-wide money runs to nine characters before the decimal ("GH₵ 212,742.62"),
+   which is a line and a half at the shared tile size. Smaller here than on the
+   tenant dashboard so the figure stays on ONE line — a number that wraps is a
+   number the eye has to reassemble, and the whole point of the band is that it
+   does not. */
+.ops .kpi-value { font-size: clamp(18px, 1.35vw, 21px); margin-top: 6px; white-space: nowrap; }
+.ops .kpi-label { font-size: 11px; }
+.ops .kpi-caption { font-size: 11.5px; margin-top: 8px; }
+
+/* The tile's sparkline shares a row with the value, so at 84px (the macro's
+   default, sized for a wide table cell) it takes the width the figure needs and
+   the amount wraps. Narrower here: it is a shape cue, and the shape survives. */
+.ops .kpi-spark { opacity: 0.75; }
+.ops .kpi-spark svg { height: 22px; width: 52px; }
+
+/* The reveal wrapper must not break the tiles' equal heights. */
+.ops .kpi-band .ops-reveal { display: flex; min-width: 0; }
+.ops .kpi-band .kpi { flex: 1 1 auto; }
+
+/* Lift on hover/focus — 2px, not a scale. A card that grows on hover shifts the
+   text under the cursor; a card that lifts does not. */
+.ops .kpi {
+    transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.ops .kpi:hover,
+.ops .kpi:focus-visible {
+    border-color: var(--brand);
+    box-shadow: var(--shadow);
+    transform: translateY(-2px);
+}
+
+.ops .kpi:active { transform: translateY(0); }
+
+/* --- Workspace grid ------------------------------------------------------
+   Named areas, not column spans: the layout intent is legible in the template-
+   areas block itself, and each breakpoint re-orders the workspace by rewriting
+   words rather than touching markup. */
+
+/* Grid and flex items default to min-width:auto — they refuse to shrink below
+   their content. Every ancestor of the wide table needs an explicit floor of
+   zero, and the table's own panel clips, or a 620px table on a 390px phone
+   scrolls the whole page sideways instead of scrolling inside its panel. */
+.ops, .ops-grid, .ops-support, .ops .xpanel { min-width: 0; }
+/* An opaque surface, so the table's scroll-cue gradients (which fade to
+   --surface) blend into the panel rather than sitting on the translucent white
+   .xpanel default. */
+.ops .area-table { background: var(--surface); overflow: hidden; }
+
+.ops-grid {
+    display: grid;
+    gap: var(--space-panel);
+    /* Phone order is an operator's order, not the desktop reading order: what
+       needs a decision comes first, then the money, then the companies, and the
+       supporting charts last — they are the least useful thing on a 390px
+       screen. This is the same call the tenant dashboard makes for the same
+       reason (see the phone block in dashboard.css). */
+    grid-template-areas: "risk" "primary" "table" "support" "activity";
+    grid-template-columns: minmax(0, 1fr);
+}
+
+/* Scoped, because dashboard.css declares .area-risk and .area-activity too (for
+   the tenant workspace, which loads that file and not this one). Same values,
+   but a bare redefinition here would be two files quietly owning one name. */
+.ops .area-primary { grid-area: primary; }
+.ops .area-support { grid-area: support; }
+.ops .area-table { grid-area: table; }
+.ops .area-risk { grid-area: risk; }
+.ops .area-activity { grid-area: activity; }
+
+/* Until the desktop breakpoint the rail is not a column at all: `contents`
+   dissolves the wrapper so its two panels become grid items in their own right
+   and can be placed independently — which is the whole reason the phone can put
+   Risk & action above the supporting charts while keeping the rail intact on a
+   wide screen. */
+.ops-rail { display: contents; }
+
+.ops-support { display: grid; gap: var(--space-panel); grid-template-columns: minmax(0, 1fr); }
+
+/* --- Panel weights -------------------------------------------------------
+   Three weights, so not every panel shouts. Primary: the strongest surface and
+   the only elevated one. Supporting: a plain surface with a hairline. Utility
+   (the rail): the quietest fill, because the rail earns attention from its
+   position and its words, not from a heavy container. */
+
+.ops .xpanel { gap: 0; padding: var(--panel-pad); }
+
+.ops .xpanel--primary {
+    background: var(--surface);
+    border-color: var(--line-strong);
+    box-shadow: var(--shadow);
+}
+
+.ops .area-risk,
+.ops .area-activity {
+    align-self: start;
+    background: var(--surface-alt);
+    box-shadow: none;
+}
+
+.ops .panel-head { margin-bottom: 14px; }
+.ops .panel-head h2 { font-size: 15.5px; }
+.ops .xpanel--primary .panel-head h2 { font-size: 17px; letter-spacing: -0.012em; }
+
+/* The primary panel's headline figure, aligned with its title. */
+.ops .panel-figure {
+    align-items: flex-end;
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.ops .panel-figure strong {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+}
+
+/* --- Risk rail: statutory strip ------------------------------------------
+   Two figures, quiet, at the foot of the panel. Not tiles: these are numbers an
+   operator reconciles at filing time, not a question they scan for. */
+
+.ops-statutory {
+    border-top: 1px solid var(--line);
+    margin: 16px 0 0;
+    padding-top: 12px;
+}
+
+.ops-statutory div { align-items: baseline; display: flex; gap: 10px; }
+.ops-statutory dt, .ops-statutory dd { margin: 0; }
+
+.ops-statutory-head {
+    margin-bottom: 8px;
+}
+
+.ops-statutory-head dt {
+    color: var(--ink-soft);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.ops-statutory-head dd { color: var(--muted); font-size: 11.5px; margin-left: auto; }
+
+.ops-statutory-row { padding: 3px 0; }
+.ops-statutory-row dt { color: var(--muted); font-size: 12.5px; }
+.ops-statutory-row dd { font-size: 13px; font-weight: 700; margin-left: auto; }
+
+/* --- Company payroll overview table --------------------------------------
+   Built for scanning: numbers right-aligned and tabular so magnitudes line up
+   column to column, dividers quiet enough to disappear when you are reading
+   across a row, and exactly one badge per row. */
+
+/* The table scrolls inside its own panel and never sideways-scrolls the page.
+   That needs three things together: a scroll container (overflow-x), a floor of
+   zero on every ancestor that would otherwise refuse to shrink below its
+   content (grid and flex items default to min-width:auto), and no negative
+   margin — a wrapper pulled out to the panel's edge reports its full content
+   width to the panel, and the page grows by the difference. */
+.ops-table-wrap {
+    margin: 0;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+
+    /* A scroll cue, so a phone user knows there are columns past the edge — a
+       table that silently hides its Pending column is a table that hides work.
+       Four layers, the standard local/scroll pairing: the two `local` covers
+       travel WITH the content, the two `scroll` shadows are pinned to the box,
+       so a shadow is only visible while there is something to scroll to on that
+       side. No JavaScript, and nothing shows at all when the table already
+       fits. */
+    background:
+        linear-gradient(to right, var(--surface), transparent) 0 0 / 22px 100% no-repeat local,
+        linear-gradient(to left, var(--surface), transparent) 100% 0 / 22px 100% no-repeat local,
+        linear-gradient(to right, var(--line-strong), transparent) 0 0 / 12px 100% no-repeat scroll,
+        linear-gradient(to left, var(--line-strong), transparent) 100% 0 / 12px 100% no-repeat scroll;
+}
+
+.ops-table {
+    border-collapse: collapse;
+    min-width: 620px;
+    width: 100%;
+}
+
+.ops-table th, .ops-table td {
+    padding: 12px var(--space-tight);
+    text-align: left;
+    vertical-align: middle;
+}
+
+.ops-table th:first-child, .ops-table td:first-child { padding-left: var(--panel-pad); }
+.ops-table th:last-child, .ops-table td:last-child { padding-right: var(--panel-pad); }
+
+.ops-table thead th {
+    border-bottom: 1px solid var(--line-strong);
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 650;
+    letter-spacing: 0.03em;
+    padding-bottom: 9px;
+    padding-top: 0;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.ops-th-note { font-weight: 500; letter-spacing: 0; text-transform: none; }
+
+.ops-table tbody tr { transition: background var(--ease); }
+.ops-table tbody tr + tr th, .ops-table tbody tr + tr td { border-top: 1px solid var(--line); }
+.ops-table tbody tr:hover { background: var(--brand-tint); }
+
+.ops-table .num { text-align: right; }
+.ops-table td.num {
+    font-variant-numeric: tabular-nums;
+    font-weight: 650;
+    /* A cedi figure must never break between its symbol and its digits. */
+    white-space: nowrap;
+}
+
+.ops-company {
+    color: var(--ink);
+    font-size: 13.5px;
+    font-weight: 700;
+    max-width: 26ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ops-move { align-items: center; display: flex; gap: 8px; white-space: nowrap; }
+/* The delta pill leads; the sparkline is secondary and drops out first when the
+   column is squeezed. */
+.ops-move .delta { font-size: 11.5px; padding: 2px 8px; }
+.ops-move .delta small { display: none; }
+
+.ops-pending {
+    background: var(--warn-soft);
+    border-radius: var(--radius-pill);
+    color: var(--warn);
+    display: inline-block;
+    font-size: 12.5px;
+    font-weight: 750;
+    min-width: 26px;
+    padding: 2px 9px;
+    text-align: center;
+    text-decoration: none;
+    transition: background var(--ease), color var(--ease);
+}
+
+.ops-pending:hover { background: var(--warn); color: var(--surface); }
+.ops-none { color: var(--line-strong); }
+
+/* --- Motion --------------------------------------------------------------
+   The entrance establishes hierarchy: the KPI band resolves first (--i 0-4),
+   then the workspace (--i 5-8). 24ms of stagger, 420ms per element, so the
+   last element finishes at ~610ms and the page is never waiting on itself.
+   Opacity plus 10px of travel — enough to read as arrival, too little to read
+   as movement. It runs once, on load; nothing here replays. */
+
+@keyframes ops-rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes ops-draw { to { stroke-dashoffset: 0; } }
+@keyframes ops-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ops-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+.ops-reveal {
+    animation: ops-rise 420ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    animation-delay: calc(var(--i, 0) * 24ms);
+}
+
+/* The shell already rises the whole content block on every page (.content-enter
+   in styles.css). Here the panels stage themselves, so the block-level rise is
+   suppressed rather than played underneath them — two entrances on the same
+   pixels is the "animation-heavy" failure the redesign exists to avoid. */
+.content-enter:has(.ops) { animation: none; }
+
+/* Charts draw once, on first render, to show how the data is built. The line
+   uses pathLength="1" (set in macros/charts.html), so the dash maths is
+   normalised and this works at any card width without measuring anything. */
+.ops .chart-line {
+    animation: ops-draw 620ms ease-out 180ms both;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+}
+
+.ops .chart-area { animation: ops-fade 520ms ease-out 380ms both; }
+.ops .chart-dot { animation: ops-fade 320ms ease-out 640ms both; }
+
+.ops .hbar-fill {
+    animation: ops-grow 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    transform-origin: left center;
+}
+
+/* Ranked bars arrive top-down, in the order they are ranked. */
+.ops .hbars li:nth-child(1) .hbar-fill { animation-delay: 200ms; }
+.ops .hbars li:nth-child(2) .hbar-fill { animation-delay: 240ms; }
+.ops .hbars li:nth-child(3) .hbar-fill { animation-delay: 280ms; }
+.ops .hbars li:nth-child(4) .hbar-fill { animation-delay: 320ms; }
+.ops .hbars li:nth-child(5) .hbar-fill { animation-delay: 360ms; }
+.ops .hbars li:nth-child(6) .hbar-fill { animation-delay: 400ms; }
+
+/* The donut fades as one piece: its slices are positioned BY stroke-dashoffset,
+   so animating them individually would move them, not reveal them. */
+.ops .donut-wrap { animation: ops-fade 520ms ease-out 240ms both; }
+
+/* Timeline entries reveal as they scroll in. The pending class is added by
+   script, so with JavaScript off (or reduced motion on) the items are simply
+   already visible — motion never gates access to a link. */
+.ops-timeline .tl-item {
+    opacity: 1;
+    transition: opacity 380ms ease-out, transform 380ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.ops-timeline .tl-item.tl-pending { opacity: 0; transform: translateY(8px); }
+
+/* Signals: a background shift and a small arrow travel on hover. No pulse, no
+   flash — a critical state is loud once, in its colour and its words, and then
+   it stays still. */
+.ops .signal { transition: background var(--ease), border-color var(--ease); }
+.ops .signal:hover { border-color: var(--line-strong); }
+
+/* In a 30%-wide rail there is not room for the icon, the sentence AND the
+   action side by side: the shared row layout squeezes the text to roughly one
+   word per line. Stack the action under the sentence instead — the rail is a
+   column, and an action that sits below what it acts on reads in the same
+   direction as everything else in it. */
+.ops .area-risk .signal {
+    align-items: start;
+    column-gap: 11px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 6px;
+}
+
+.ops .area-risk .signal-body { grid-column: 2; }
+
+.ops .area-risk .signal-link {
+    align-self: start;
+    grid-column: 2;
+    justify-self: start;
+    margin-left: 0;
+}
+
+/* --- Focus --------------------------------------------------------------- */
+
+.ops .ops-field select:focus-visible,
+.ops .ops-apply:focus-visible,
+.ops .ops-pending:focus-visible,
+.ops .ops-table tbody tr:focus-within {
+    outline: 3px solid var(--brand);
+    outline-offset: 2px;
+}
+
+.ops .ops-field select:focus-visible { box-shadow: none; }
+
+/* --- Tablet (>=860px) ----------------------------------------------------
+   Two columns. The primary chart takes the full width so its axis labels stay
+   readable, the rail's two panels pair up beneath it, and the table spans —
+   a six-column table in a half-width cell is a table nobody can read. */
+
+@media (min-width: 860px) {
+    .ops-grid {
+        grid-template-areas:
+            "primary primary"
+            "risk    activity"
+            "support support"
+            "table   table";
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .ops-support { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    /* Paired side by side, so they match heights rather than reading as two
+       cards of arbitrary length — and the statutory strip drops to the foot of
+       whatever height that turns out to be. */
+    .ops .area-risk, .ops .area-activity { align-self: stretch; }
+    .ops-statutory { margin-top: auto; }
+}
+
+/* --- Desktop (>=1180px) --------------------------------------------------
+   The 70/30 workspace. Left column: the analytical work, top to bottom in the
+   order it is read — the dominant trend, then the two supporting questions,
+   then the companies. Right column: the attention rail, its top aligned to the
+   primary chart's top, running the full height of the page. */
+
+@media (min-width: 1180px) {
+    .ops { --panel-pad: 22px; --space-panel: 18px; --space-section: 26px; }
+
+    .ops-grid {
+        grid-template-areas:
+            "primary rail"
+            "support rail"
+            "table   rail";
+        grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+    }
+
+    /* The rail becomes a real column here: one grid item spanning the three
+       workspace rows, with its own panels stacked inside it. That is what keeps
+       each left-hand panel at its natural height — while the rail was two
+       separate grid items, a tall risk panel set the height of row 1 and
+       stretched the chart panel beside it into a mostly empty box. */
+    .ops-rail {
+        align-self: start;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-panel);
+        grid-area: rail;
+        min-width: 0;
+    }
+
+    .ops .xpanel--primary { padding: 24px; }
+    .ops .kpi-band { gap: 14px; }
+}
+
+/* --- Phone (<=640px) -----------------------------------------------------
+   The KPI band becomes a snap row: five tiles stacked vertically is a screen
+   and a half of scrolling before the operator reaches anything actionable. */
+
+@media (max-width: 640px) {
+    .ops { --panel-pad: 16px; --space-panel: 14px; --space-section: 18px; }
+
+    .ops .kpi-band {
+        grid-auto-columns: 76%;
+        grid-auto-flow: column;
+        grid-template-columns: none;
+        overflow-x: auto;
+        padding: 2px 0 8px;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: thin;
+    }
+
+    .ops .kpi-band .ops-reveal { scroll-snap-align: start; }
+    .ops .kpi-value { font-size: 22px; }
+
+    .ops-filters { gap: 10px; }
+    .ops-field { flex: 1 1 130px; }
+    .ops-apply { flex: 1 1 100%; }
+    .ops-filters-note { flex: 1 1 100%; margin: 0; }
+
+    /* The table keeps its own horizontal scroll inside the panel rather than
+       pushing the page sideways — .ops-table-wrap already owns that overflow. */
+    .ops-table { min-width: 500px; }
+}
+
+/* The six columns need about 680px. The left column only clears that from
+   ~1400px up (0.7 × the content width), and below that the first thing to go is
+   the row sparkline: it is the only cell carrying no figure. The signed
+   percentage beside it says the same thing in words, so nothing is lost — which
+   is the test for whether a sparkline earns its row. */
+@media (max-width: 1400px) {
+    .ops-move .sparkline { display: none; }
+}
+
+@media (max-width: 900px) {
+    .ops-table th, .ops-table td { padding-left: 6px; padding-right: 6px; }
+    /* Same trade at the header: the comparison basis is a clarifier, and every
+       delta still carries it in its own tooltip. Dropping it here is what keeps
+       the Pending column — an actionable count — on screen without scrolling. */
+    .ops-th-note { display: none; }
+    .ops-table { min-width: 480px; }
+}
+
+/* --- Accessibility preferences -------------------------------------------
+   styles.css already clamps animation *durations* under reduced motion, but not
+   delays, and a 400ms delay on an instant animation is still a 400ms wait. This
+   removes the travel, the stagger and the chart drawing outright: every value
+   is present and readable on the first frame. */
+
+@media (prefers-reduced-motion: reduce) {
+    .ops-reveal,
+    .ops .chart-line,
+    .ops .chart-area,
+    .ops .chart-dot,
+    .ops .hbar-fill,
+    .ops .hbars li .hbar-fill,
+    .ops .donut-wrap {
+        animation: none !important;
+        animation-delay: 0ms !important;
+        opacity: 1;
+        transform: none;
+    }
+
+    .ops .chart-line { stroke-dasharray: none; stroke-dashoffset: 0; }
+
+    .ops-timeline .tl-item,
+    .ops-timeline .tl-item.tl-pending {
+        opacity: 1;
+        transform: none;
+        transition: none;
+        transition-delay: 0ms !important;
+    }
+
+    .ops .kpi:hover, .ops .kpi:focus-visible { transform: none; }
+    .ops-apply:active { transform: none; }
+}
+
+@media (prefers-contrast: more) {
+    .ops .xpanel, .ops .kpi, .ops-field select { border-color: var(--ink-soft); }
+    .ops-table thead th, .ops-field label, .ops-filters-note { color: var(--ink-soft); }
+    .ops-table tbody tr + tr th, .ops-table tbody tr + tr td { border-top-color: var(--line-strong); }
+}

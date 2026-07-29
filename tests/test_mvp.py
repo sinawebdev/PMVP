@@ -977,17 +977,27 @@ class MvpTestCase(unittest.TestCase):
         ]:
             self.assertNotIn(text, response.data)
 
-    def test_dashboard_has_month_filter_sparkbars_and_action_queue(self):
+    def test_dashboard_has_period_filter_and_company_movement_column(self):
         self.login_admin()
         response = self.client.get("/dashboard?month=May&year=2026")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"dashboard-controls", response.data)
-        # Cost Signal column renders a sparkbar when there is cost data, or a
-        # "no data" placeholder otherwise — assert the column itself is present.
-        self.assertIn(b"Cost Signal", response.data)
-        self.assertIn(b"Approval Queue", response.data)
-        self.assertIn(b"No run submitted", response.data)
+        # The period control is a compact filter toolbar now, not a content
+        # panel, and it no longer carries a second Approval Queue button — that
+        # is a header action, and offering it twice on one screen reads as two
+        # different actions until you check.
+        self.assertIn(b"ops-filters", response.data)
+        self.assertIn(b'name="month"', response.data)
+        self.assertIn(b'name="year"', response.data)
+        # The per-company sparkbar (share of the largest client) is gone: the
+        # "Companies by payroll cost" chart directly above the table already
+        # ranks companies against each other, so the bar restated it once per
+        # row. What replaced it answers a different question — which way is this
+        # company's cost moving.
+        self.assertIn(b"Cost movement", response.data)
+        self.assertNotIn(b"sparkbar", response.data)
+        # A company with no run in the period reads as such in its status cell.
+        self.assertIn(b"No run", response.data)
 
     def test_health_endpoint_is_available_for_render(self):
         response = self.client.get("/health")

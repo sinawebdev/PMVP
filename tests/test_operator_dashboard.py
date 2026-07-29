@@ -1,8 +1,9 @@
-"""Phase 2 — operator dashboard: held payrolls, recently completed, quick actions.
+"""Phase 2 — operator dashboard: a held payroll reaches the operator.
 
 Reuses existing state (risk_status/status + PayslipDelivery) — no new business
-logic. Verifies the dashboard surfaces held runs and completed runs and renders
-the shared lifecycle stepper.
+logic. Verifies a held run surfaces on the dashboard through the surfaces the
+redesign kept (the Risk & action panel and the consolidated company table)
+rather than through the three run lists it removed.
 """
 
 import os
@@ -51,17 +52,25 @@ class OperatorDashboardTestCase(unittest.TestCase):
         db.session.commit()
 
         html = self.client.get("/dashboard").get_data(as_text=True)
-        # The "Held Payrolls" stat card no longer exists — the executive
-        # dashboard redesign moved it into the Risk & Action signals panel
-        # (app/platform_dashboard.py::platform_risk_signals) alongside pending
-        # approvals and validation warnings, so a held count sits next to the
-        # action it implies rather than floating in a grid of numbers.
-        self.assertIn("payroll held for risk review", html)  # risk signal
-        self.assertIn("Held for Risk Review", html)    # held panel
-        self.assertIn("net pay variance", html)        # held reason surfaced
-        self.assertIn("Recently Completed", html)      # completed panel
-        self.assertIn("Risk Queue", html)              # quick action
-        self.assertIn("lifecycle-stepper", html)       # shared stepper
+        # Where a held run surfaces, after the operator dashboard redesign.
+        #
+        # There is no longer a "Held Payrolls" stat card, a "Held for Risk
+        # Review" list, a "Recent Payroll Runs" list or a "Recently Completed"
+        # list. Three lists of runs on a dashboard restated what the risk panel,
+        # the activity timeline and the company table already say, and each had
+        # a page of its own to live on. A hold now shows up in exactly two
+        # places here — as an action in the Risk & action panel, and as the
+        # company's latest run status in the table — plus a count on the header's
+        # Risk queue button. The detail (which run, why) lives one click away in
+        # the risk queue, which is where it can actually be acted on.
+        self.assertIn("payroll held for risk review", html)   # risk signal
+        self.assertIn("Review queue", html)                   # ...and its action
+        self.assertIn("Risk queue (1)", html)                 # header count
+        self.assertIn("Company payroll overview", html)       # consolidated table
+        self.assertIn("Held", html)                           # the run's status badge
+        for gone in ("Held for Risk Review", "Recently Completed", "Recent Payroll Runs"):
+            with self.subTest(panel=gone):
+                self.assertNotIn(gone, html)
 
 
 if __name__ == "__main__":

@@ -69,7 +69,12 @@
     {% if coords|length > 1 %}
     <polygon class="chart-area" fill="url(#chart-line-fill-{{ label|replace(' ', '') }})"
              points="{{ pad_x }},{{ pad_y + inner }} {% for c in coords %}{{ "%.2f"|format(c.x) }},{{ "%.2f"|format(c.y) }} {% endfor %}{{ w - pad_x }},{{ pad_y + inner }}"/>
-    <polyline class="chart-line" vector-effect="non-scaling-stroke"
+    {# pathLength="1" normalises the line's length to a single unit, so a
+       stylesheet can draw it on with stroke-dasharray/dashoffset without
+       measuring the geometry at render width. Purely a unit system: with no
+       dash pattern set (the default here, and everywhere but the operator
+       dashboard's entrance) it changes nothing about how the line looks. #}
+    <polyline class="chart-line" vector-effect="non-scaling-stroke" pathLength="1"
               points="{% for c in coords %}{{ "%.2f"|format(c.x) }},{{ "%.2f"|format(c.y) }} {% endfor %}"/>
     {% endif %}
     {% for c in coords %}

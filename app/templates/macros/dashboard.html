@@ -101,18 +101,26 @@
 {# --- Signal card (risk / compliance alert) ---------------------------------
    Tone drives the icon AND the wording, never colour alone. `ok` is a first-
    class tone on purpose: a risk panel that renders nothing when all is well
-   reads as broken, not as safe. #}
+   reads as broken, not as safe. `info` is the fourth tone: ordinary pending
+   work that is moving on its own and needs a clock, not an alarm — a warning
+   triangle on every queue item teaches an operator to ignore triangles.
+
+   `item.action` names the next step in the operator's own words ("Review
+   queue", "Approve"). Signals that carry no action — the tenant portal's, which
+   name a surface rather than a verb — keep the plain "Review" link they always
+   had, arrow included only where an action was named, so that page renders
+   exactly as it did before. #}
 {% macro signal(item, href="#") %}
 {% set tone = item.tone %}
 <li class="signal signal--{{ tone }}">
   <span class="signal-ico" aria-hidden="true">
-    {{ icon('shield-check' if tone == 'ok' else ('x-circle' if tone == 'danger' else 'alert-triangle')) }}
+    {{ icon('shield-check' if tone == 'ok' else ('x-circle' if tone == 'danger' else ('clock' if tone == 'info' else 'alert-triangle'))) }}
   </span>
   <span class="signal-body">
     <strong>{{ item.title }}</strong>
     <span class="signal-detail">{{ item.detail }}</span>
   </span>
-  {% if href != '#' %}<a class="signal-link" href="{{ href }}">Review<span class="sr-only"> {{ item.title }}</span></a>{% endif %}
+  {% if href != '#' %}<a class="signal-link" href="{{ href }}">{{ item.action or 'Review' }}<span class="sr-only"> — {{ item.title }}</span>{% if item.action %}{{ icon('arrow', 13) }}{% endif %}</a>{% endif %}
 </li>
 {% endmacro %}
 

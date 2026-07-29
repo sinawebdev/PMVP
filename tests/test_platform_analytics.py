@@ -7,6 +7,7 @@ assertion here — there is no client-side library to blame.
 """
 
 import os
+import re
 import unittest
 from datetime import datetime, timedelta, timezone
 
@@ -25,6 +26,23 @@ from app.analytics import (  # noqa: E402
 )
 from app.events import platform_activity  # noqa: E402
 from app.models import AuditTrail, ClientCompany, Employee, PayrollRun, User  # noqa: E402
+
+
+_MACRO_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "app", "templates", "macros", "dashboard.html",
+)
+
+
+def _icon_names_the_macro_can_draw():
+    """The icon names macros/dashboard.html::icon has a path for.
+
+    Read from the macro itself rather than duplicated here: an icon name the
+    macro does not know renders as the fallback glyph, silently, and a copy of
+    the list in this file would be the thing that let that happen.
+    """
+    with open(_MACRO_FILE, encoding="utf-8") as handle:
+        return set(re.findall(r"name == '([a-z-]+)'", handle.read()))
 
 
 class FakeRun:
@@ -172,14 +190,11 @@ class PlatformDashboardRenderTestCase(unittest.TestCase):
         self.ctx.pop()
 
     def test_dashboard_renders_every_executive_section(self):
-        # Updated for the executive dashboard redesign: the old two-row,
-        # sixteen-card stats grid was consolidated into a five-tile KPI band
-        # (one tile per distinct question) plus a Risk & Action signals panel
-        # for everything that implies an action rather than states a fact —
-        # see app/platform_dashboard.py for the reasoning. Some headings below
-        # are renamed rather than removed, to match the company portal's own
-        # vocabulary for the same concept (e.g. "Payroll cost trend",
-        # "Recent activity").
+        # The operator dashboard's information architecture, asserted as
+        # headings. Five KPI tiles (one per distinct question), one dominant
+        # chart plus two supporting ones, one consolidated company table, and a
+        # two-panel right rail — see app/platform_dashboard.py for the reasoning
+        # behind each split.
         page = self.client.get("/dashboard")
         self.assertEqual(page.status_code, 200)
         body = page.get_data(as_text=True)
@@ -193,12 +208,39 @@ class PlatformDashboardRenderTestCase(unittest.TestCase):
             "Payroll cost trend",
             "Companies by payroll cost",
             "Payroll status distribution",
-            "Client growth",
-            "Top Clients",
+            "Company payroll overview",
             "Recent activity",
+            "Statutory exposure",
         ):
             with self.subTest(heading=heading):
                 self.assertIn(heading, body)
+
+    def test_dashboard_carries_no_removed_or_duplicated_section(self):
+        """The redesign's subtractions, asserted so they cannot creep back.
+
+        Top Clients and Payroll Cost Per Client ranked the same companies by two
+        measures of the same money; they are one table now. Held / Recent /
+        Recently Completed were three run lists restating the risk panel, the
+        timeline and that table. Client growth is a board question, not one an
+        operator acts on during a payroll day — it survives as the caption on the
+        Client companies tile. And the Approval Queue button appeared twice on
+        one screen, which reads as two different actions until you check.
+        """
+        body = self.client.get("/dashboard").get_data(as_text=True)
+        for gone in (
+            "Top Clients",
+            "Payroll Cost Per Client",
+            "Held for Risk Review",
+            "Recent Payroll Runs",
+            "Recently Completed",
+            "Client growth",
+            "Approval Queue",
+        ):
+            with self.subTest(removed=gone):
+                self.assertNotIn(gone, body)
+        # Exactly three charts, and exactly five KPI tiles.
+        self.assertEqual(body.count('<figure class="chart'), 3)
+        self.assertEqual(body.count('class="kpi"'), 5)
 
     def test_charts_are_server_rendered_with_no_javascript_library(self):
         body = self.client.get("/dashboard").get_data(as_text=True)
@@ -252,10 +294,20 @@ class PlatformDashboardRenderTestCase(unittest.TestCase):
         self.assertEqual(len(items), 5)
         stamps = [item["at"] for item in items]
         self.assertEqual(stamps, sorted(stamps, reverse=True))
-        # Every item carries the presentation fields the template reads.
+        # Every item carries the presentation fields the template reads — in the
+        # vocabulary the component that reads them actually understands.
+        #
+        # This used to assert a "bi-" prefix (Bootstrap Icons). Nothing renders
+        # this feed that way: macros/dashboard.html::activity_item draws an
+        # inline SVG by name from its own icon set and tones the node from
+        # `ok | warn | danger | brand | muted`, so every operator-dashboard entry
+        # fell through to the generic glyph with no tone. Both feeds now read the
+        # one table in app/events.py, which is in those terms.
+        drawable = _icon_names_the_macro_can_draw()
         for item in items:
-            self.assertTrue(item["icon"].startswith("bi-"))
-            self.assertTrue(item["tone"])
+            self.assertFalse(item["icon"].startswith("bi-"))
+            self.assertIn(item["icon"], drawable)
+            self.assertIn(item["tone"], {"ok", "warn", "danger", "brand", "muted"})
 
     def test_dashboard_matches_the_underlying_records(self):
         page = self.client.get("/dashboard")
@@ -266,6 +318,40 @@ class PlatformDashboardRenderTestCase(unittest.TestCase):
         self.assertIn(f">{active_companies}<", body)
         self.assertIn(f">{active_employees}<", body)
         self.assertTrue(PayrollRun.query.count() >= 1)
+
+
+class TimelineLookTestCase(unittest.TestCase):
+    """Every timeline entry must be drawable by the component that draws it.
+
+    Both feeds render through macros/dashboard.html::activity_item, which takes
+    an icon NAME from its own inline SVG set and a tone from a fixed five. A
+    mapping in any other vocabulary does not fail loudly — it renders a generic
+    glyph with no tone, which is how the operator feed ran for a while.
+    """
+
+    TONES = {"ok", "warn", "danger", "brand", "muted"}
+
+    def test_every_mapped_title_renders(self):
+        from app.events import (
+            PLATFORM_TIMELINE_ACTIONS,
+            TENANT_TIMELINE_ACTIONS,
+            timeline_look,
+        )
+
+        drawable = _icon_names_the_macro_can_draw()
+        self.assertIn("shield-check", drawable)   # the helper found a real set
+        for title in sorted(set(PLATFORM_TIMELINE_ACTIONS) | set(TENANT_TIMELINE_ACTIONS)):
+            icon, tone = timeline_look(title)
+            with self.subTest(title=title):
+                self.assertIn(icon, drawable)
+                self.assertIn(tone, self.TONES)
+
+    def test_unmapped_title_falls_back_to_something_drawable(self):
+        from app.events import timeline_look
+
+        icon, tone = timeline_look("Some event nobody has mapped yet")
+        self.assertIn(icon, _icon_names_the_macro_can_draw())
+        self.assertIn(tone, self.TONES)
 
 
 if __name__ == "__main__":

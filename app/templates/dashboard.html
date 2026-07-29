@@ -1,310 +1,343 @@
 {% extends "base.html" %}
-{% import "macros/lifecycle.html" as lc %}
 {% import "macros/charts.html" as ch %}
 {% import "macros/dashboard.html" as ui %}
 {% block title %}Dashboard · {{ app_name }}{% endblock %}
 
-{# The executive workspace stylesheet loads only here, same rule as the company
-   portal's own dashboard: every other operator page is unaffected by it, and a
-   change here can never regress the rest of the admin shell. #}
+{# Two page-scoped stylesheets, loaded only here:
+
+     dashboard.css       the shared executive component vocabulary (.xpanel,
+                         .kpi, .signal, .timeline, .pill, .state) — the SAME
+                         file the company portal's dashboard loads, so the two
+                         dashboards cannot drift into two design systems.
+     admin-dashboard.css the operator workspace itself: the 70/30 grid, the
+                         company table, the entrance motion. Every rule in it is
+                         scoped under `.ops`, so it cannot reach the tenant
+                         dashboard, the rest of the admin shell, or anything a
+                         future page adds. #}
 {% block head %}
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin-dashboard.css') }}" />
 {% endblock %}
 
 {% block page_title %}{{ user_greeting }}{% endblock %}
-{% block page_intro %}A management view of client company payroll costs, pending approvals, statutory totals, expense exposure, and warning signals for {{ selected_month }} {{ selected_year }}.{% endblock %}
+{% block page_intro %}Payroll across every client company, for {{ period_label }}.{% endblock %}
 {% block page_actions %}
+{# One dominant action, two secondaries. Neither secondary is repeated in the
+   period toolbar below — an action offered twice on one screen reads as two
+   different actions until you check. #}
 <a class="btn btn-light btn-sm" href="{{ url_for('payroll.runs') }}"><i class="bi bi-file-earmark-arrow-up"></i>Create Payroll Run</a>
-<a class="btn btn-outline-light btn-sm" href="{{ url_for('payroll.runs', status='needs_approval') }}"><i class="bi bi-check2-square"></i>Review Approvals</a>
-<a class="btn btn-outline-light btn-sm" href="{{ url_for('oversight.risk_queue') }}"><i class="bi bi-shield-exclamation"></i>Risk Queue{% if held_count %} ({{ held_count }}){% endif %}</a>
+<a class="btn btn-outline-light btn-sm" href="{{ url_for('payroll.runs', status='needs_approval') }}"><i class="bi bi-check2-square"></i>Review approvals{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</a>
+<a class="btn btn-outline-light btn-sm" href="{{ url_for('oversight.risk_queue') }}"><i class="bi bi-shield-exclamation"></i>Risk queue{% if held_count %} ({{ held_count }}){% endif %}</a>
 {% endblock %}
 {% block header_visual %}
-{# Period only — the numbers that used to live here (cost, action count) now
-   have their own tile / their own panel below, so this does not say the same
-   thing twice. #}
-<div class="dashboard-signal" aria-label="Dashboard period summary">
-    <span class="signal-label">Current View</span>
-    <strong>{{ selected_month }} {{ selected_year }}</strong>
+{# Period only. The figures that used to sit here have their own tile in the
+   band below, and a number shown twice is a number two people can quote
+   differently. #}
+<div class="dashboard-signal" aria-label="Reporting period">
+    <span class="signal-label">Reporting on</span>
+    <strong>{{ selected_month }}</strong>
+    <small>{{ selected_year }}</small>
 </div>
 {% endblock %}
+
 {% block content %}
-<section class="panel dashboard-controls">
-    <form class="row g-3 align-items-end" method="get" action="{{ url_for('main.dashboard') }}">
-        <div class="col-md-4">
-            <label class="form-label" for="month">Payroll month</label>
-            <select class="form-select" id="month" name="month">
-                {% for month in month_options %}
-                    <option value="{{ month }}" {% if month == selected_month %}selected{% endif %}>{{ month }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label" for="year">Year</label>
-            <select class="form-select" id="year" name="year">
-                {% for year in year_options %}
-                    <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-5 d-flex gap-2 flex-wrap">
-            <button class="btn btn-primary" type="submit"><i class="bi bi-calendar3"></i>Apply View</button>
-            <a class="btn btn-outline-primary" href="{{ url_for('payroll.runs', status='needs_approval') }}"><i class="bi bi-hourglass-split"></i>Approval Queue</a>
-        </div>
-    </form>
-</section>
+<div class="ops">
 
-{# --- Executive KPIs -------------------------------------------------------
-   Five tiles, five distinct questions — the same "one tile per question, a
-   repeat does not get a second tile" rule the company portal's KPI band
-   follows (app/dashboard.py::executive_kpis). Held payrolls, pending
-   approvals, validation warnings and the PAYE/SSNIT figures are deliberately
-   NOT here: a count that implies an action belongs in the Risk & Action panel
-   next to that action, not floating in a grid of unrelated numbers. #}
-<section class="mt-4">
-    <div class="kpi-band">
-        {% for kpi in kpis %}{{ ui.kpi_card(kpi, url_for(kpi.endpoint)) }}{% endfor %}
-    </div>
-</section>
-
-{# --- Risk & action ----------------------------------------------------------
-   Held payrolls, pending approvals and validation warnings, reshaped from the
-   exact same counts the page used to spread across six tiles
-   (app/platform_dashboard.py::platform_risk_signals) — so this panel, the Held
-   list further down and the risk queue itself can never disagree. An all-clear
-   still renders one card: silence is not the same as reassurance. #}
-<section class="xpanel mt-4">
-    <div class="panel-head">
-        <div>
-            <h2>Risk &amp; action</h2>
-            <p class="panel-sub">What needs a decision, book-wide, for {{ selected_month }} {{ selected_year }}.</p>
-        </div>
-        <a class="link-action" href="{{ url_for('oversight.risk_queue') }}">Risk queue{{ ui.icon('arrow', 14) }}</a>
-    </div>
-    <ul class="signals">
-        {% for item in risk_signals %}
-        {% if item.tone == 'ok' %}{{ ui.signal(item) }}
-        {% else %}{{ ui.signal(item, url_for(item.endpoint)) }}{% endif %}
+  {# --- Period controls ----------------------------------------------------
+     A filter, not a panel: one row, sitting on the shell rather than on a card,
+     so it reads as a setting for the page below it. The duplicate Approval
+     Queue button that used to live here is gone — it is a header action, and
+     this control changes what you are looking at, not what you are doing. #}
+  <form class="ops-filters" method="get" action="{{ url_for('main.dashboard') }}"
+        aria-label="Choose reporting period">
+    <div class="ops-field">
+      <label for="month">Month</label>
+      <select id="month" name="month">
+        {% for month in month_options %}
+          <option value="{{ month }}" {% if month == selected_month %}selected{% endif %}>{{ month }}</option>
         {% endfor %}
-    </ul>
-</section>
-
-{% if analytics.has_data %}
-<section class="mt-4">
-    <div class="charts-grid">
-        <div class="xpanel">
-            <div class="panel-head">
-                <div>
-                    <h2>Payroll cost trend</h2>
-                    <p class="panel-sub">Total payroll processed across all companies.</p>
-                </div>
-            </div>
-            {{ ch.line_chart(analytics.revenue_trend, label="Payroll cost trend") }}
-        </div>
-
-        <div class="xpanel">
-            <div class="panel-head">
-                <div>
-                    <h2>Companies by payroll cost</h2>
-                    <p class="panel-sub">Gross pay + employer SSF over the charted months.</p>
-                </div>
-            </div>
-            {{ ch.hbar_chart(analytics.companies_by_cost, label="Companies by payroll cost") }}
-        </div>
-
-        <div class="xpanel">
-            <div class="panel-head">
-                <div>
-                    <h2>Payroll status distribution</h2>
-                    <p class="panel-sub">Where every run currently sits.</p>
-                </div>
-            </div>
-            {{ ch.donut(analytics.status_mix, label="Payroll status distribution", formatter="count", center_label="Runs") }}
-        </div>
-
-        <div class="xpanel">
-            <div class="panel-head">
-                <div>
-                    <h2>Client growth</h2>
-                    <p class="panel-sub">Companies onboarded, cumulative.</p>
-                </div>
-            </div>
-            {{ ch.line_chart(analytics.growth_trend, label="Client growth", formatter="count") }}
-        </div>
+      </select>
     </div>
-</section>
-{% else %}
-<section class="xpanel mt-4">
-    {{ ui.empty(
-         "No payroll processed yet",
-         "Onboard a client company and import their first payroll to populate the executive overview.",
-         "Onboard a Client Company",
-         url_for('main.add_client')) }}
-</section>
-{% endif %}
+    <div class="ops-field">
+      <label for="year">Year</label>
+      <select id="year" name="year">
+        {% for year in year_options %}
+          <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="ops-apply" type="submit">Apply</button>
+    <p class="ops-filters-note">Showing {{ period_label }}</p>
+  </form>
 
-<div class="row g-4 mt-1">
-    <div class="col-lg-7">
-        <section class="xpanel">
-            <div class="panel-head">
-                <div><h2>Top Clients</h2></div>
-                <a class="link-action" href="{{ url_for('main.clients') }}">All companies{{ ui.icon('arrow', 14) }}</a>
-            </div>
-            <div class="table-responsive">
-                <table class="table align-middle">
-                    <thead><tr><th>Company</th><th>Employees</th><th>Payroll</th><th>Last Run</th><th>Status</th></tr></thead>
-                    <tbody>
-                    {% for row in analytics.top_clients %}
-                        <tr>
-                            <td>{{ row.company }}{% if row.code %} <code class="text-muted">{{ row.code }}</code>{% endif %}</td>
-                            <td>{{ row.employees }}</td>
-                            <td>{{ row.payroll|cedis }}</td>
-                            <td>
-                                {% if row.last_run %}
-                                    {{ row.last_run }}
-                                    <span class="badge {{ status_badge_class(row.last_run_status) }}">{{ row.last_run_status }}</span>
-                                {% else %}
-                                    <span class="text-muted">No run yet</span>
-                                {% endif %}
-                            </td>
-                            <td><span class="badge text-bg-{{ 'success' if row.status == 'Active' else 'secondary' }}">{{ row.status }}</span></td>
-                        </tr>
-                    {% else %}
-                        <tr><td colspan="5" class="text-muted">No client companies onboarded yet.</td></tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </section>
+  {# --- KPI band — five tiles, five questions ------------------------------
+     Shaped by app/platform_dashboard.py::platform_kpis, which holds the rule:
+     one tile per genuinely different question, and a repeat does not get a
+     second tile. Held payrolls, pending approvals, warnings and the PAYE/SSNIT
+     figures are deliberately NOT here — a count that implies an action belongs
+     next to that action, which is the right rail. #}
+  <section class="ops-kpis" aria-labelledby="kpi-heading">
+    <h2 id="kpi-heading" class="sr-only">Platform summary for {{ period_label }}</h2>
+    <div class="kpi-band">
+      {% for kpi in kpis %}
+      <div class="ops-reveal" style="--i: {{ loop.index0 }}">{{ ui.kpi_card(kpi, url_for(kpi.endpoint)) }}</div>
+      {% endfor %}
     </div>
-    <div class="col-lg-5">
-        <section class="xpanel">
-            <div class="panel-head">
-                <div>
-                    <h2>Recent activity</h2>
-                    <p class="panel-sub">Every payroll action, on the record, across the book.</p>
-                </div>
-                <a class="link-action" href="{{ url_for('audit.audit_trail') }}">Full audit trail{{ ui.icon('arrow', 14) }}</a>
-            </div>
-            {% if activity %}
-            <ol class="timeline">
-                {% for item in activity %}{{ ui.activity_item(item) }}{% endfor %}
-            </ol>
-            {% else %}
-            {{ ui.empty("No activity yet", "Uploads, approvals, payslip runs and client changes are recorded here automatically.") }}
-            {% endif %}
-        </section>
-    </div>
-</div>
+  </section>
 
-<div class="row g-4 mt-4">
-    <div class="col-lg-7">
-        <section class="xpanel">
-            <div class="panel-head">
-                <div><h2>Payroll Cost Per Client</h2></div>
-                <div class="panel-header-signal">
-                    {% if portfolio_trend.periods_covered > 1 %}
-                        {{ ch.sparkline(portfolio_trend, label="Total payroll cost trend", width=104, height=28) }}
-                        {{ ch.delta(portfolio_trend.change, "vs previous month") }}
-                    {% endif %}
-                    {% if highest_client %}
-                        <span class="badge text-bg-info">Highest: {{ highest_client.client }}</span>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="table-responsive">
-                <table class="table align-middle">
-                    <thead><tr><th>Client</th><th>Workers</th><th>{{ selected_month }} Cost</th><th>Cost Signal</th><th>Status</th><th>Pending</th></tr></thead>
-                    <tbody>
-                    {% for item in client_costs %}
-                        <tr>
-                            <td>{{ item.client }}</td>
-                            <td>{{ item.workers }}</td>
-                            <td>{{ item.payroll_cost|cedis }}</td>
-                            <td>
-                                <div class="cost-signal">
-                                    {% if item.payroll_cost and item.bar_percent %}
-                                    <div class="sparkbar" title="{{ item.payroll_cost|cedis }} — {{ item.bar_percent }}% of the largest client this month">
-                                        <span style="width: {{ item.bar_percent }}%"></span>
-                                    </div>
-                                    {% else %}
-                                    <span class="text-muted" title="No payroll cost recorded yet">—</span>
-                                    {% endif %}
-                                    {% if item.trend.periods_covered > 1 %}
-                                    <div class="cost-signal-trend">
-                                        {{ ch.sparkline(item.trend, label=item.client ~ " cost trend") }}
-                                        {{ ch.delta(item.trend.change, "vs previous month") }}
-                                    </div>
-                                    {% endif %}
-                                </div>
-                            </td>
-                            <td><span class="badge {{ item.submission_class }}">{{ item.submission_status }}</span></td>
-                            <td>
-                                {% if item.pending %}
-                                    <a class="badge text-bg-warning text-decoration-none" href="{{ url_for('payroll.runs', status='needs_approval') }}">{{ item.pending }}</a>
-                                {% else %}
-                                    <span class="text-muted">0</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </section>
-    </div>
-    <div class="col-lg-5">
-        {% if held_runs %}
-        <section class="xpanel mb-4">
-            <div class="panel-head">
-                <div><h2>Held for Risk Review</h2></div>
-                <a class="link-action" href="{{ url_for('oversight.risk_queue') }}">{{ held_count }} held{{ ui.icon('arrow', 14) }}</a>
-            </div>
-            <div class="list-group list-group-flush">
-                {% for run in held_runs %}
-                    <a class="list-group-item list-group-item-action" href="{{ url_for('payroll.detail', run_id=run.id) }}">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <strong>{{ run.client_company.name if run.client_company else "No Client" }}</strong>
-                            {{ lc.status_pill(run.status) }}
-                        </div>
-                        <small>{{ run.month }} {{ run.year }} | {{ run.total_net_pay|cedis }}{% if run.risk_reasons %} · {{ run.risk_reasons }}{% endif %}</small>
-                    </a>
-                {% endfor %}
-            </div>
-        </section>
+  {# --- Workspace ----------------------------------------------------------
+     Named grid areas rather than column spans or Bootstrap rows: the layout
+     intent is legible in the grid-template-areas block in admin-dashboard.css,
+     and the phone re-orders the whole workspace (risk BEFORE the supporting
+     charts) by rewriting five words instead of touching any markup here. #}
+  <div class="ops-grid">
+
+    {# --- Primary analytics: the dominant panel on the page --------------- #}
+    <section class="xpanel xpanel--primary area-primary ops-reveal" style="--i: 5"
+             aria-labelledby="trend-heading">
+      <div class="panel-head">
+        <div>
+          <h2 id="trend-heading">Payroll cost trend</h2>
+          <p class="panel-sub">Total payroll processed across every client company.</p>
+        </div>
+        {% if portfolio_trend.periods_covered > 1 %}
+        <div class="panel-figure">
+          <strong class="nums">{{ current_month_total|cedis }}</strong>
+          {{ ch.delta(portfolio_trend.change, "vs previous month") }}
+        </div>
         {% endif %}
-        <section class="xpanel mb-4">
-            <div class="panel-head"><div><h2>Recent Payroll Runs</h2></div></div>
-            <div class="list-group list-group-flush">
-                {% for run in recent_runs %}
-                    <a class="list-group-item list-group-item-action" href="{{ url_for('payroll.detail', run_id=run.id) }}">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <strong>{{ run.client_company.name if run.client_company else "No Client" }}</strong>
-                            {{ lc.status_pill(run.status) }}
-                        </div>
-                        <small>{{ run.month }} {{ run.year }} | {{ run.total_net_pay|cedis }}</small>
-                        {{ lc.progress_stepper(run_progress(run, run.id in distributed_ids), compact=true) }}
-                    </a>
-                {% else %}
-                    <p class="text-muted mb-0">No payroll runs yet.</p>
-                {% endfor %}
-            </div>
-        </section>
-        <section class="xpanel">
-            <div class="panel-head"><div><h2>Recently Completed</h2></div></div>
-            <div class="list-group list-group-flush">
-                {% for run in recently_completed %}
-                    <a class="list-group-item list-group-item-action" href="{{ url_for('payroll.detail', run_id=run.id) }}">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <strong>{{ run.client_company.name if run.client_company else "No Client" }}</strong>
-                            {% if run.id in distributed_ids %}<span class="badge text-bg-primary">Distributed</span>{% else %}{{ lc.status_pill(run.status) }}{% endif %}
-                        </div>
-                        <small>{{ run.month }} {{ run.year }} | {{ run.total_net_pay|cedis }}</small>
-                    </a>
-                {% else %}
-                    <p class="text-muted mb-0">No completed runs yet.</p>
-                {% endfor %}
-            </div>
-        </section>
+      </div>
+      {% if analytics.has_data %}
+        {# height is the chart's viewBox height, not a pixel height: the SVG
+           scales to the panel's width, so this number sets the ASPECT RATIO.
+           104 against the macro's 320-wide box gives roughly 3:1 — wide enough
+           to be the dominant panel without becoming a wall of empty plot area
+           at desktop width. #}
+        {{ ch.line_chart(analytics.revenue_trend, label="Payroll cost trend", height=104) }}
+      {% else %}
+        {{ ui.empty(
+             "No payroll processed yet",
+             "Onboard a client company and import their first payroll to chart the book.",
+             "Onboard a client company",
+             url_for('main.add_client')) }}
+      {% endif %}
+    </section>
+
+    {# --- Supporting analytics: two panels, two other questions -----------
+       Client growth was cut rather than kept for having data: the size of the
+       book over time is a board question, not one an operator acts on during a
+       payroll day. It survives as context in the Client companies tile's
+       caption ("Active · N total on the book"). #}
+    <div class="area-support ops-support">
+      <section class="xpanel ops-reveal" style="--i: 6" aria-labelledby="ranking-heading">
+        <div class="panel-head">
+          <div>
+            <h2 id="ranking-heading">Companies by payroll cost</h2>
+            <p class="panel-sub">Gross pay plus employer SSF, over the charted months.</p>
+          </div>
+        </div>
+        {% if analytics.has_data %}
+          {{ ch.hbar_chart(analytics.companies_by_cost, label="Companies by payroll cost") }}
+        {% else %}
+          {{ ui.empty("Nothing to rank yet", "Company costs appear once a payroll has been processed.") }}
+        {% endif %}
+      </section>
+
+      <section class="xpanel ops-reveal" style="--i: 7" aria-labelledby="status-heading">
+        <div class="panel-head">
+          <div>
+            <h2 id="status-heading">Payroll status distribution</h2>
+            <p class="panel-sub">Where every run currently sits.</p>
+          </div>
+        </div>
+        {% if analytics.status_mix.total %}
+          {{ ch.donut(analytics.status_mix, label="Payroll status distribution",
+                      formatter="count", center_label="Runs", size=132, thickness=16) }}
+        {% else %}
+          {{ ui.empty("No runs in flight", "Statuses appear as soon as a payroll run is created.") }}
+        {% endif %}
+      </section>
     </div>
+
+    {# --- Company payroll overview ---------------------------------------
+       One table where Top Clients and Payroll Cost Per Client used to sit — the
+       two ranked the same companies by two measures of the same money, so an
+       operator had to read both to learn one thing. Six rows and a link out:
+       a company's own history belongs on the company page. #}
+    <section class="xpanel area-table ops-reveal" style="--i: 8" aria-labelledby="companies-heading">
+      <div class="panel-head">
+        <div>
+          <h2 id="companies-heading">Company payroll overview</h2>
+          <p class="panel-sub">
+            {% if company_total > company_table|length %}
+              Top {{ company_table|length }} of {{ company_total }} companies by {{ selected_month }} cost.
+            {% else %}
+              Every client company, by {{ selected_month }} cost.
+            {% endif %}
+          </p>
+        </div>
+        <a class="link-action" href="{{ url_for('main.clients') }}">View all companies{{ ui.icon('arrow', 14) }}</a>
+      </div>
+
+      {% if company_table %}
+      <div class="ops-table-wrap">
+        <table class="ops-table">
+          <caption class="sr-only">Client companies ranked by {{ period_label }} payroll cost</caption>
+          <thead>
+            <tr>
+              <th scope="col">Company</th>
+              <th scope="col" class="num">Workers</th>
+              <th scope="col" class="num">{{ selected_month }} cost</th>
+              {# The comparison basis is stated once, in the header, instead of
+                 being repeated verbatim in all six rows. #}
+              <th scope="col">Cost movement <span class="ops-th-note">vs last month</span></th>
+              <th scope="col">Latest run</th>
+              <th scope="col" class="num">Pending</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in company_table %}
+            <tr>
+              <th scope="row" class="ops-company" title="{{ row.company }}">{{ row.company }}</th>
+              <td class="num nums">{{ row.workers }}</td>
+              <td class="num nums">{{ row.cost|cedis }}</td>
+              {# The signed percentage leads and is always present; the
+                 sparkline is a small shape cue beside it, drawn only where
+                 there is more than one period to shape. #}
+              <td class="ops-move">
+                
+                {{ ch.delta(row.change, "vs last month") }}
+                {% if row.has_trend %}{{ ch.sparkline(row.trend, label=row.company ~ " cost trend", width=54, height=20) }}{% endif %}
+              </td>
+              <td>{{ ui.status_badge(row.status) }}</td>
+              <td class="num">
+                {% if row.pending %}
+                  <a class="ops-pending" href="{{ url_for('payroll.runs', status='needs_approval') }}">
+                    {{ row.pending }}<span class="sr-only"> run{{ '' if row.pending == 1 else 's' }} awaiting approval for {{ row.company }}</span>
+                  </a>
+                {% else %}
+                  <span class="ops-none" aria-label="Nothing pending">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      {{ ui.empty(
+           "No client companies yet",
+           "Onboard your first client company to start processing payroll for them.",
+           "Onboard a client company",
+           url_for('main.add_client')) }}
+      {% endif %}
+    </section>
+
+    {# --- The right rail --------------------------------------------------
+       One element holding both rail panels, so on desktop the rail is a single
+       column beside the workspace and its height is its own business: a tall
+       risk panel no longer stretches the chart panel next to it into a mostly
+       empty box. On tablet and phone this wrapper becomes `display: contents`
+       (see admin-dashboard.css) and the two panels drop back into the grid as
+       ordinary items, which is what lets the phone put Risk & action above the
+       supporting charts. #}
+    <aside class="ops-rail" aria-label="Attention">
+
+      {# --- Right rail 1: Risk & action ----------------------------------
+         The operator's attention column. Every item states what happened, why
+         it matters and what to do — reshaped from the exact same counts that
+         drive the header badges (platform_dashboard.py::platform_risk_signals),
+         so this panel and the risk queue can never disagree. An all-clear still
+         renders a card: silence is not the same as reassurance. #}
+      <section class="xpanel area-risk ops-reveal" style="--i: 5" aria-labelledby="risk-heading">
+        <div class="panel-head">
+          <div>
+            <h2 id="risk-heading">Risk &amp; action</h2>
+            <p class="panel-sub">What needs a decision, book-wide.</p>
+          </div>
+          <a class="link-action" href="{{ url_for('oversight.risk_queue') }}">Risk queue{{ ui.icon('arrow', 14) }}</a>
+        </div>
+        <ul class="signals">
+          {% for item in risk_signals %}
+            {% if item.endpoint %}{{ ui.signal(item, url_for(item.endpoint)) }}
+            {% else %}{{ ui.signal(item) }}{% endif %}
+          {% endfor %}
+        </ul>
+
+        {# Statutory exposure — a footnote to the risk panel, not a KPI tile. It
+           is what the period owes once these runs clear, which is the only
+           reason an operator wants it beside the queue. #}
+        <dl class="ops-statutory">
+          <div class="ops-statutory-head">
+            <dt>Statutory exposure</dt>
+            <dd>{{ statutory.period }}</dd>
+          </div>
+          {% for item in statutory.figures %}
+          <div class="ops-statutory-row">
+            <dt>{{ item.label }}</dt>
+            <dd class="nums">{{ item.value|cedis }}</dd>
+          </div>
+          {% endfor %}
+        </dl>
+      </section>
+
+      {# --- Right rail 2: Recent activity --------------------------------
+         The last panel on the page, by design. Held runs, recent runs and
+         completed runs used to be three lists below this; every one of those
+         events arrives here as it happens, and each has a page of its own for
+         the full list. #}
+      <section class="xpanel area-activity ops-reveal" style="--i: 6" aria-labelledby="activity-heading">
+        <div class="panel-head">
+          <div>
+            <h2 id="activity-heading">Recent activity</h2>
+            <p class="panel-sub">Every payroll action, on the record.</p>
+          </div>
+          <a class="link-action" href="{{ url_for('audit.audit_trail') }}">Full audit trail{{ ui.icon('arrow', 14) }}</a>
+        </div>
+        {% if activity %}
+        <ol class="timeline ops-timeline">
+          {% for item in activity %}{{ ui.activity_item(item) }}{% endfor %}
+        </ol>
+        {% else %}
+        {{ ui.empty("No activity yet", "Uploads, approvals, payslip runs and client changes are recorded here automatically.") }}
+        {% endif %}
+      </section>
+
+    </aside>
+
+  </div>
 </div>
+
+<script>
+(function () {
+  // Timeline entries reveal as they scroll into the rail. Everything else on
+  // this page animates from CSS alone; only this needs to know where the
+  // viewport is, and IntersectionObserver is the cheap way to ask.
+  //
+  // Three rules: reveal once (a list that re-animates on every scroll is a list
+  // nobody can read), never gate the content (the entrance class is *added* by
+  // this script, so with no JS the items are simply already visible), and stand
+  // down entirely for anyone who asked for less motion.
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var items = document.querySelectorAll('.ops-timeline .tl-item');
+  if (!items.length || reduced.matches || !('IntersectionObserver' in window)) return;
+
+  Array.prototype.forEach.call(items, function (item) { item.classList.add('tl-pending'); });
+
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) return;
+      var item = entry.target;
+      // Stagger within the batch that came into view together, capped so a long
+      // feed never queues up a visible wait at the bottom.
+      var index = Math.min(Array.prototype.indexOf.call(items, item), 7);
+      item.style.transitionDelay = (index * 40) + 'ms';
+      item.classList.remove('tl-pending');
+      observer.unobserve(item);
+    });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.1 });
+
+  Array.prototype.forEach.call(items, function (item) { observer.observe(item); });
+})();
+</script>
 {% endblock %}

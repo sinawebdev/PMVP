@@ -20,7 +20,17 @@ over "payslip sits in a portal" — see the comment on ``delivery_rate`` in
 *signal* below instead, not a number tile — the same reasoning that already
 keeps run status out of the tenant KPI band: a count that implies an action
 belongs next to that action, not floating in a grid of unrelated numbers.
+
+**Tier 2 (the operator's attention column).** :func:`platform_risk_signals` and
+:func:`statutory_summary` shape the right rail: what needs a decision, and what
+the period owes the state.
+
+**Tier 3 (the workspace).** :func:`company_rows` consolidates the two
+overlapping per-company tables this page used to render into the single table an
+operator scans to find the company that needs them.
 """
+
+from app.analytics import TOP_CLIENT_LIMIT
 
 
 def platform_kpis(
@@ -113,23 +123,36 @@ def platform_kpis(
 
 # --- Risk & action -------------------------------------------------------
 
-# Held payrolls and pending approvals reuse the tenant vocabulary's tone for
-# the same statuses (macros/dashboard.html::_STATUS_TONE has Held -> warn), so
-# a colour never means something different on this dashboard than it does on
-# the run it links to.
+# Held payrolls reuse the tenant vocabulary's tone for the same status
+# (macros/dashboard.html::_STATUS_TONE has Held -> warn), so a colour never
+# means something different on this dashboard than it does on the run it links
+# to. The three tones below are used strictly by what the item demands of the
+# reader, never for variety: `warn` is work that needs attention, `info` is
+# ordinary pending work moving through the pipeline on its own, and `ok` is a
+# real all-clear. Nothing here is `danger` — a danger tone is reserved for a
+# condition that blocks payroll outright, and none of these three do.
+
+# Ceiling on rendered signals. Three kinds exist today, so this never truncates
+# in practice; it is the guarantee that a future fourth and fifth signal cannot
+# turn the operator's attention column into a list nobody reads. The panel links
+# to the full risk queue either way.
+MAX_SIGNALS = 4
 
 
-def platform_risk_signals(held_count, pending_approvals, warning_count):
-    """Book-wide action items, worst first: ``[{tone, title, detail, endpoint}]``,
-    the exact contract ``macros/dashboard.html::signal`` renders.
+def platform_risk_signals(held_count, pending_approvals, warning_count, limit=MAX_SIGNALS):
+    """Book-wide action items, worst first: ``[{tone, title, detail, action,
+    endpoint}]``, the contract ``macros/dashboard.html::signal`` renders.
 
     These three counts are already computed once in ``routes.py`` (from
-    :func:`app.risk.risk_summary` and the period-scoped queries) for the KPI
-    counters, the old Action Required rows and the Held panel — this only
-    reshapes them, so the signal panel, the tiles it replaced and the risk
-    queue itself can never disagree. An all-clear returns one ``ok`` signal
-    rather than an empty panel, same principle as the tenant risk panel:
-    silence is not the same as reassurance.
+    :func:`app.risk.risk_summary` and the period-scoped queries) — this only
+    reshapes them, so the signal panel, the KPI band and the risk queue itself
+    can never disagree. An all-clear returns one ``ok`` signal rather than an
+    empty panel, same principle as the tenant risk panel: silence is not the
+    same as reassurance.
+
+    Every item carries what happened (``title``), why it matters (``detail``)
+    and what to do about it (``action``) — a count on its own tells an operator
+    nothing they can act on.
     """
     signals = []
 
@@ -137,32 +160,115 @@ def platform_risk_signals(held_count, pending_approvals, warning_count):
         signals.append({
             "tone": "warn",
             "title": f"{held_count} payroll{'' if held_count == 1 else 's'} held for risk review",
-            "detail": "Held by the risk gate pending Payrolla review.",
+            "detail": "The risk gate stopped these before approval. They stay unpaid until someone clears them.",
+            "action": "Review queue",
             "endpoint": "oversight.risk_queue",
-        })
-
-    if pending_approvals:
-        signals.append({
-            "tone": "warn",
-            "title": f"{pending_approvals} payroll{'' if pending_approvals == 1 else 's'} awaiting approval",
-            "detail": "Submitted and cleared the risk gate; needs Payrolla sign-off.",
-            "endpoint": "payroll.runs",
         })
 
     if warning_count:
         signals.append({
             "tone": "warn",
             "title": f"{warning_count} validation warning{'' if warning_count == 1 else 's'}",
-            "detail": "Flagged payroll lines across current runs need a second look.",
+            "detail": "Flagged payroll lines across current runs need a second look before sign-off.",
+            "action": "Open runs",
+            "endpoint": "payroll.runs",
+        })
+
+    if pending_approvals:
+        signals.append({
+            "tone": "info",
+            "title": f"{pending_approvals} payroll{'' if pending_approvals == 1 else 's'} awaiting approval",
+            "detail": "Submitted and past the risk gate. Ordinary queue work, waiting on Payrolla sign-off.",
+            "action": "Approve",
             "endpoint": "payroll.runs",
         })
 
     if not signals:
         signals.append({
             "tone": "ok",
-            "title": "Nothing waiting on you",
-            "detail": "No held payrolls, pending approvals or validation warnings right now.",
+            "title": "No urgent payroll risks",
+            "detail": "All current runs are within configured review thresholds, with nothing awaiting approval.",
+            "action": "",
             "endpoint": "",
         })
 
-    return signals
+    return signals[:limit]
+
+
+def statutory_summary(paye_total, ssnit_total, period_label):
+    """PAYE and SSNIT for the period as a compact two-figure strip.
+
+    Deliberately NOT KPI tiles. These are obligations an operator reconciles at
+    filing time, not a question they scan the dashboard to answer, so they ride
+    along the foot of the risk panel where the period's other liabilities are —
+    close enough to be found, quiet enough not to compete with the five tiles.
+
+    ``ssnit_total`` is the combined employee (5.5%) + employer (13%) SSF the
+    caller already sums, i.e. the amount actually remitted, which is why it is
+    labelled *payable* rather than *deducted*.
+    """
+    # `figures`, not `items`: Jinja resolves a dict's attribute access to the
+    # method of that name first, so `statutory.items` would hand the template
+    # dict.items and fail to iterate.
+    return {
+        "period": period_label,
+        "figures": [
+            {"label": "PAYE", "value": paye_total},
+            {"label": "SSNIT Payable", "value": ssnit_total},
+        ],
+    }
+
+
+# --- Company payroll overview ----------------------------------------------
+
+# How many companies the consolidated table lists before deferring to the full
+# client list. Bound to the ranking chart's limit rather than repeating the
+# number, so the table and the chart above it stay the same LENGTH and the page
+# never reads as a top-6 beside a top-8. They are not necessarily the same six
+# companies: the chart ranks by cost over the charted window, the table by cost
+# in the selected month.
+COMPANY_ROW_LIMIT = TOP_CLIENT_LIMIT
+
+
+def company_rows(client_costs, limit=COMPANY_ROW_LIMIT):
+    """The 'Company payroll overview' rows, biggest spender first.
+
+    Replaces the two overlapping tables this dashboard used to carry — Top
+    Clients and Payroll Cost Per Client — which ranked the same companies by two
+    different measures of the same money and made an operator read both to learn
+    one thing. One row now answers the five questions actually asked of a
+    company: how many workers, what this period cost, which way that is moving,
+    where its latest run stands, and whether anything is waiting on me.
+
+    ``client_costs`` is the list :func:`app.routes.dashboard` already builds from
+    the eager-loaded companies — no query and no new figure here. Returns
+    ``(rows, total)`` so the caller can say "showing 6 of 12" and link out for
+    the rest; per-company history belongs on the company page, not in a
+    dashboard row.
+    """
+    rows = []
+    for item in client_costs:
+        runs = item["runs"]
+        # Ordered by id, not created_at: SQLite hands back naive datetimes for a
+        # tz-aware default (see app.events.as_utc), and a row created earlier in
+        # the same request is still aware — max() over the mix raises. Ids are
+        # monotonic and answer the same question.
+        latest = max(runs, key=lambda run: run.id) if runs else None
+        trend = item["trend"]
+        rows.append(
+            {
+                "company": item["client"],
+                "workers": item["workers"],
+                "cost": item["payroll_cost"],
+                "trend": trend,
+                # Movement is stated as a signed percentage in every case; the
+                # sparkline beside it is additive and only drawn where there is
+                # more than one period to draw.
+                "change": trend["change"] if trend else None,
+                "has_trend": bool(trend and trend["periods_covered"] > 1),
+                "status": latest.status if latest else "No run",
+                "pending": item["pending"],
+            }
+        )
+    rows.sort(key=lambda row: row["cost"], reverse=True)
+    return rows[:limit], len(rows)
