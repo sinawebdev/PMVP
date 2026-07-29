@@ -26,7 +26,7 @@ from app.models import (
     User,
 )
 
-from app.payroll_status import PENDING_STATUSES, PROCESSED
+from app.payroll_status import PENDING_STATUSES
 
 main_bp = Blueprint("main", __name__)
 
@@ -174,31 +174,6 @@ def dashboard():
             selected_month,
         )
     )
-    max_cost = max((item["payroll_cost"] for item in client_costs), default=0)
-    for item in client_costs:
-        item["bar_percent"] = round((item["payroll_cost"] / max_cost) * 100, 1) if max_cost else 0
-        statuses = {run.status for run in item["runs"]}
-        if not item["runs"]:
-            item["submission_status"] = "No run submitted"
-            item["submission_class"] = "text-bg-light"
-        elif item["pending"]:
-            item["submission_status"] = "Needs approval"
-            item["submission_class"] = "text-bg-warning"
-        elif "Exported" in statuses:
-            item["submission_status"] = "Exported"
-            item["submission_class"] = "text-bg-success"
-        elif "Approved" in statuses:
-            item["submission_status"] = (
-                "Approved: GH\u20b5 0.00" if item["payroll_cost"] == 0 else "Approved"
-            )
-            item["submission_class"] = "text-bg-success"
-        else:
-            item["submission_status"] = "Submitted"
-            item["submission_class"] = "text-bg-secondary"
-
-    highest_client = max(client_costs, key=lambda item: item["payroll_cost"], default=None)
-    if highest_client and highest_client["payroll_cost"] <= 0:
-        highest_client = None
     known_years = {
         row[0]
         for row in db.session.query(PayrollRun.year).distinct().all()
@@ -226,45 +201,38 @@ def dashboard():
     )
     delivery_rate = round(payslips_delivered / payslips_total * 100) if payslips_total else 0
 
-    # Held payrolls (risk gate) and recently completed runs, plus the
-    # 'distributed' signal for the stepper — all reusing existing state.
+    # Held payrolls (risk gate). The risk signal, the Risk Queue badge in the
+    # page header and the queue page itself all count off the same predicate
+    # (app.risk.held_run_criterion) so they cannot disagree, and a release is
+    # reflected on the next render with no cache to clear.
     #
-    # The counter, the Action Required row, the Held panel, and the risk queue all
-    # come from this one call (app.risk.risk_summary) so they cannot disagree, and
-    # a release/approval is reflected on the next render with no cache to clear.
-    from app.risk import risk_summary
+    # The count, not risk_summary(): the Held / Recent Runs / Recently Completed
+    # *panels* that needed the run objects are gone — three lists of runs on a
+    # dashboard, restating what the Risk & action panel, the activity timeline
+    # and the company table already say, each with a page of its own to live on.
+    # Their queries went with them.
+    from app.risk import held_run_count
 
-    risk = risk_summary(limit=8)
-    held_count = risk["held_count"]
-    held_runs = risk["held_runs"]
-    recent_runs = (
-        PayrollRun.query.filter_by(month=selected_month, year=selected_year)
-        .order_by(PayrollRun.created_at.desc())
-        .limit(8)
-        .all()
-    )
-    recently_completed = (
-        PayrollRun.query.filter_by(status=PROCESSED)
-        .order_by(PayrollRun.created_at.desc())
-        .limit(6)
-        .all()
-    )
-    from app.payroll import distributed_run_ids
+    held_count = held_run_count()
 
-    dashboard_distributed_ids = distributed_run_ids(
-        [run.id for run in recent_runs]
-        + [run.id for run in held_runs]
-        + [run.id for run in recently_completed]
-    )
-
-    # Executive analytics (revenue trend / cost ranking / status mix / client
-    # growth / quick stats / top clients). Computed entirely from `all_clients`,
-    # which is already loaded with its employees and runs above — the whole
-    # section costs no additional queries, matching the tenant dashboard's
-    # "aggregate what you already have" approach.
+    # Executive analytics. Computed entirely from `all_clients`, which is
+    # already loaded with its employees and runs above — the whole section costs
+    # no additional queries, matching the tenant dashboard's "aggregate what you
+    # already have" approach.
+    #
+    # The bundle is a general-purpose one (app.analytics has its own tests for
+    # each series); this page renders three of them — the cost trend, the cost
+    # ranking and the status mix. `growth_trend` and `top_clients` are computed
+    # and not drawn: client growth is a board question rather than a payroll-day
+    # one, and top_clients was half of the table `company_rows` replaced.
     from app.analytics import platform_dashboard_analytics
     from app.events import platform_activity
-    from app.platform_dashboard import platform_kpis, platform_risk_signals
+    from app.platform_dashboard import (
+        company_rows,
+        platform_kpis,
+        platform_risk_signals,
+        statutory_summary,
+    )
 
     active_employees = Employee.query.filter_by(status="Active").count()
     # Summed in the database rather than by loading every Expense row — this
@@ -301,10 +269,19 @@ def dashboard():
         payslips_total,
         period_label,
     )
-    # Same three counts already driving the KPI counters below and the Held
-    # panel — reshaped, not recomputed, so this panel and those numbers can
-    # never disagree.
+    # Same three counts already driving the KPI band and the header's Risk Queue
+    # badge — reshaped, not recomputed, so the panel and those numbers can never
+    # disagree.
     risk_signals = platform_risk_signals(held_count, pending_approvals, warning_count)
+    # Combined employee (5.5%) + employer (13%) SSF — the figure actually
+    # remitted to SSNIT, not just the worker-side deduction.
+    ssnit_payable = sum(
+        run.total_ssnit + run.total_ssnit_employer for run in current_runs
+    )
+    paye_payable = sum(run.total_paye for run in current_runs)
+    # One consolidated table from the rows that used to feed two overlapping
+    # ones; `company_total` is what the "View all companies" link is counting.
+    company_table, company_total = company_rows(client_costs)
 
     return render_template(
         "dashboard.html",
@@ -313,29 +290,25 @@ def dashboard():
         total_clients=total_clients_count,
         current_month_total=current_month_total,
         pending_approvals=pending_approvals,
-        paye_total=sum(run.total_paye for run in current_runs),
-        # Combined employee (5.5%) + employer (13%) SSF — the figure actually
-        # remitted to SSNIT, not just the worker-side deduction.
-        ssnit_total=sum(
-            run.total_ssnit + run.total_ssnit_employer for run in current_runs
-        ),
+        paye_total=paye_payable,
+        ssnit_total=ssnit_payable,
         total_expenses=total_expenses,
         analytics=analytics,
         kpis=kpis,
         risk_signals=risk_signals,
-        activity=platform_activity(limit=10),
-        recent_runs=recent_runs,
-        held_runs=held_runs,
+        statutory=statutory_summary(paye_payable, ssnit_payable, period_label),
+        # Six to eight entries: enough to see the shape of the last few hours,
+        # short enough that the rail stays a summary and the audit trail stays
+        # the place you go for the record.
+        activity=platform_activity(limit=8),
         held_count=held_count,
-        recently_completed=recently_completed,
-        distributed_ids=dashboard_distributed_ids,
         warning_count=warning_count,
         delivery_rate=delivery_rate,
         payslips_delivered=payslips_delivered,
         payslips_total=payslips_total,
-        client_costs=client_costs,
+        company_table=company_table,
+        company_total=company_total,
         portfolio_trend=portfolio_trend,
-        highest_client=highest_client,
         selected_month=selected_month,
         selected_year=selected_year,
         period_label=period_label,

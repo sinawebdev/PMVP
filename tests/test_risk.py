@@ -188,10 +188,13 @@ class RiskOversightRoutesTestCase(unittest.TestCase):
         self._login("operator@payrolla.com")
         self.client.post(f"/oversight/runs/{self.run_id}/risk-check")
 
-        # Held: counted on the dashboard and listed in the queue.
+        # Held: counted on the dashboard and listed in the queue. The dashboard
+        # says so in its Risk & action panel — the standalone "Held for Risk
+        # Review" list was removed in the operator dashboard redesign, so the
+        # signal's own wording is what has to clear.
         self.assertEqual(held_run_count(), 1)
         dashboard = self.client.get("/dashboard").get_data(as_text=True)
-        self.assertIn("Held for Risk Review", dashboard)
+        self.assertIn("payroll held for risk review", dashboard)
         self.assertIn("Risk gate: Held", self.client.get(
             f"/payroll/runs/{self.run_id}").get_data(as_text=True))
 
@@ -212,7 +215,7 @@ class RiskOversightRoutesTestCase(unittest.TestCase):
             self.client.get("/oversight/risk").get_data(as_text=True),
         )
         dashboard = self.client.get("/dashboard").get_data(as_text=True)
-        self.assertNotIn("Held for Risk Review", dashboard)
+        self.assertNotIn("payroll held for risk review", dashboard)
         detail = self.client.get(f"/payroll/runs/{self.run_id}").get_data(as_text=True)
         self.assertIn("Risk gate: Released", detail)
         self.assertNotIn("Risk gate: Held", detail)
