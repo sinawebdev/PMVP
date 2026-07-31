@@ -26,8 +26,10 @@ from app.permissions import (
     DELETE_ROLES,
     EDIT_FIGURES_ROLES,
     MARK_PROCESSED_ROLES,
+    PAYROLL_IMPORT_ROLES,
     PAYROLL_ROLES,
     SUBMIT_APPROVAL_ROLES,
+    WAGE_RATE_ROLES,
     can_approve_run,
     can_distribute_run,
     can_reject_run,
@@ -546,6 +548,23 @@ def runs():
         query = query.filter(PayrollRun.status.in_(PENDING_STATUSES))
     elif status_filter:
         query = query.filter(PayrollRun.status == status_filter)
+    # Free-text filter. This used to hide rows in the browser, which silently
+    # contradicted the server-side pagination below: a run matching the term but
+    # sitting on page 2 simply did not exist as far as the user could tell. It is
+    # a query predicate now, so a match is found wherever it lives, and the term
+    # rides in the URL so a filtered list can be linked and reloaded.
+    search = (request.args.get("q") or "").strip()
+    if search:
+        like = f"%{search}%"
+        query = query.outerjoin(PayrollRun.client_company).filter(
+            db.or_(
+                PayrollRun.month.ilike(like),
+                PayrollRun.status.ilike(like),
+                db.cast(PayrollRun.year, db.String).ilike(like),
+                ClientCompany.name.ilike(like),
+                ClientCompany.company_code.ilike(like),
+            )
+        )
     page = request.args.get("page", 1, type=int)
     # Eager-load client_company (rendered per row) to avoid an N+1 across the page.
     pagination = (
@@ -562,6 +581,7 @@ def runs():
         pagination=pagination,
         selected_client=selected_client,
         status_filter=status_filter,
+        search=search,
         clients=clients,
         distributed_ids=distributed_ids,
         current_month=now.strftime("%B"),
@@ -571,7 +591,7 @@ def runs():
 
 
 @payroll_bp.route("/preview/<import_id>")
-@role_required("admin")
+@role_required(*PAYROLL_IMPORT_ROLES)
 def preview(import_id):
     payload = load_import_session(import_id)
     client = None
@@ -592,7 +612,7 @@ def preview(import_id):
 
 
 @payroll_bp.route("/preview/<import_id>/errors")
-@role_required("admin")
+@role_required(*PAYROLL_IMPORT_ROLES)
 def error_report(import_id):
     payload = load_import_session(import_id)
     file_path = export_import_error_report(payload, current_app.config["EXPORT_FOLDER"])
@@ -600,7 +620,7 @@ def error_report(import_id):
 
 
 @payroll_bp.route("/confirm/<import_id>", methods=["POST"])
-@role_required("admin")
+@role_required(*PAYROLL_IMPORT_ROLES)
 def confirm(import_id):
     payload = load_import_session(import_id)
     if payload.get("mode") == "multi_client":
@@ -922,11 +942,15 @@ def auto_calculate_on_confirm(payroll_run):
             payroll_run,
             f"{type(exc).__name__}: {exc}",
         )
+        # The exception repr and the hosting provider's name stay out of this
+        # message: it is read by a payroll clerk who has no access to logs and
+        # nothing to do with either. The traceback is already in the application
+        # log (above) and the audit trail carries the type for support to follow up.
         flash(
-            f"Payroll imported but statutory calculation failed ({type(exc).__name__}: {exc}). "
-            "Uploaded figures were kept (some items may be partially recalculated); check "
-            "Render logs for the full traceback, fix the underlying data/rate issue, then "
-            "use Calculate Pay to retry.",
+            "Payroll imported but the statutory calculation failed, so the figures "
+            "are not yet verified. Uploaded figures were kept (some items may be "
+            "partially recalculated). Use Calculate Pay to retry — if it keeps "
+            "failing, the run's activity trail records what went wrong.",
             "danger",
         )
         return
@@ -1415,7 +1439,7 @@ def edit_items(run_id):
 
 
 @payroll_bp.route("/clients/<int:client_id>/wage-rates", methods=["GET", "POST"])
-@role_required("admin")
+@role_required(*WAGE_RATE_ROLES)
 def wage_rates(client_id):
     """Admin-managed hourly rates per pay code for a raw/hourly client —
     client-wide defaults plus optional per-employee overrides."""
@@ -1816,7 +1840,7 @@ def delete_run(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/export")
-@role_required("admin", "md", "accounts_officer", "payroll_officer")
+@role_required(*PAYROLL_ROLES)
 def export(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     file_path = export_payroll_run(payroll_run, current_app.config["EXPORT_FOLDER"])
@@ -1827,7 +1851,7 @@ def export(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/export/bank-listing")
-@role_required("admin", "md", "accounts_officer", "payroll_officer")
+@role_required(*PAYROLL_ROLES)
 def export_bank_listing_route(run_id):
     """Bank transfer batch listing grouped by bank_name — generated from the
     run's items, not a hand-maintained sheet."""
@@ -1839,7 +1863,7 @@ def export_bank_listing_route(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/export/wages-sheet")
-@role_required("admin", "md", "accounts_officer", "payroll_officer")
+@role_required(*PAYROLL_ROLES)
 def export_wages_sheet_route(run_id):
     """Wages Sheet (ACS "WAGE SHT" layout) for the run — 17 columns plus
     totals, generated from the run's items."""
@@ -1851,7 +1875,7 @@ def export_wages_sheet_route(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/export/gra-paye")
-@role_required("admin", "md", "accounts_officer", "payroll_officer")
+@role_required(*PAYROLL_ROLES)
 def export_gra_paye_route(run_id):
     """GRA Employer's Monthly Tax Deductions Schedule (P.A.Y.E.) for the run."""
     payroll_run = db.get_or_404(PayrollRun, run_id)
@@ -1867,7 +1891,7 @@ def export_gra_paye_route(run_id):
 
 
 @payroll_bp.route("/items/<int:item_id>/payslip")
-@role_required("admin", "md", "accounts_officer", "payroll_officer")
+@role_required(*PAYROLL_ROLES)
 def payslip(item_id):
     payroll_item = db.get_or_404(PayrollItem, item_id)
     file_path = generate_payslip_pdf(payroll_item, current_app.config["EXPORT_FOLDER"])

@@ -194,6 +194,19 @@
       text.className = "cn-modal-text";
       text.textContent = question || "Are you sure?";
 
+      // Typed confirmation — the top tier of the consequence scale, for actions
+      // with no undo. Making the user reproduce the subject's name turns a reflex
+      // click into a deliberate one, and it cannot be muscle-memoried away.
+      var typed = null;
+      if (opts.requireTyped) {
+        typed = document.createElement("input");
+        typed.type = "text";
+        typed.className = "form-control form-control-sm cn-modal-input";
+        typed.setAttribute("aria-label", "Type " + opts.requireTyped + " to confirm");
+        typed.placeholder = opts.requireTyped;
+        typed.autocomplete = "off";
+      }
+
       var actions = document.createElement("div");
       actions.className = "cn-modal-actions";
       var cancel = document.createElement("button");
@@ -209,11 +222,21 @@
 
       modal.appendChild(title);
       modal.appendChild(text);
+      if (typed) modal.appendChild(typed);
       modal.appendChild(actions);
       backdrop.appendChild(modal);
       document.body.appendChild(backdrop);
       requestAnimationFrame(function () { backdrop.classList.add("cn-open"); });
-      ok.focus();
+
+      if (typed) {
+        ok.disabled = true;
+        typed.addEventListener("input", function () {
+          ok.disabled = typed.value.trim() !== opts.requireTyped;
+        });
+        typed.focus();
+      } else {
+        ok.focus();
+      }
 
       var done = false;
       function close(result) {
@@ -252,6 +275,50 @@
       if (ok) evt.detail.issueRequest(true);
     });
   });
+
+  // Plain (non-htmx) forms opt into the same styled modal with data-confirm.
+  // htmx elements already route through hx-confirm above; this is the other half,
+  // so no template ever needs window.confirm() — which blocks the renderer, can't
+  // be styled, and offers no consequence scaling.
+  //
+  //   data-confirm="Question?"        the prompt (required)
+  //   data-confirm-danger="1"         destructive styling + "Delete" button
+  //   data-confirm-title="…"          heading override
+  //   data-confirm-ok="…"             confirm-button label
+  //   data-confirm-typed="ACME"       require the user to type this first
+  //
+  // Capture phase, so it runs before the submit-feedback handler in base.html and
+  // a cancelled confirm never leaves a button stuck on "Working…".
+  // The attributes may sit on the form OR on the button that submitted it — a
+  // form with several submitters (bulk approve / reject / distribute, each with
+  // its own formaction) needs a different question per button.
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form || !form.matches) return;
+    var submitter = e.submitter && e.submitter.getAttribute("data-confirm")
+      ? e.submitter
+      : null;
+    var source = submitter || (form.matches("[data-confirm]") ? form : null);
+    if (!source) return;
+    if (form.getAttribute("data-confirmed") === "1") {
+      form.removeAttribute("data-confirmed");
+      return; // second pass: the user already said yes
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    payrollaConfirm(source.getAttribute("data-confirm"), {
+      danger: source.getAttribute("data-confirm-danger") === "1",
+      title: source.getAttribute("data-confirm-title") || undefined,
+      confirmText: source.getAttribute("data-confirm-ok") || undefined,
+      requireTyped: source.getAttribute("data-confirm-typed") || undefined
+    }).then(function (confirmed) {
+      if (!confirmed) return;
+      form.setAttribute("data-confirmed", "1");
+      // Re-submit through the same button so its formaction still applies.
+      if (form.requestSubmit) form.requestSubmit(submitter || undefined);
+      else form.submit();
+    });
+  }, true);
 
   // Delegated table filter (input[data-table-filter] -> #tableId). Delegation keeps
   // it working after htmx swaps replace the input and rows.
@@ -318,4 +385,72 @@
     drainFlashes();
     injectAllForms();
   }
+})();
+
+// --- Raw-hours import preview -----------------------------------------------
+// Blockers first, then counts, then a bounded warning summary. Shared by the
+// Payroll Runs upload panel and the standalone upload screen so a preview never
+// reads one way on one page and another way on the other — and so neither can
+// regress to dumping JSON.stringify(preview) at the user, which is what the
+// standalone screen used to do.
+window.payrollaRawPreview = (function () {
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function render(d) {
+    var p = d.preview || {};
+    var parts = [];
+    var blocked = p.blocked || [];
+    var warnings = p.warnings || [];
+
+    // What would stop this import, stated before anything else.
+    if (blocked.length) {
+      parts.push(
+        '<p class="mb-1 text-danger"><strong>' + blocked.length +
+        " worker" + (blocked.length === 1 ? "" : "s") +
+        " not on the roster</strong> — add them first or they will be skipped: " +
+        esc(blocked.slice(0, 10).join(", ")) +
+        (blocked.length > 10 ? " and " + (blocked.length - 10) + " more" : "") +
+        "</p>"
+      );
+    }
+
+    if (d.mode === "seed") {
+      parts.push(
+        "<p class=\"mb-1\">" + p.employees + " employees found — " + p.hourly +
+        " hourly, " + p.salaried + " salaried — " + p.icu_members +
+        " ICU members.</p>"
+      );
+    } else {
+      parts.push(
+        "<p class=\"mb-1\">" + p.employees + " rows in the file — " + p.matched +
+        " matched to the roster.</p>"
+      );
+    }
+
+    parts.push(
+      warnings.length
+        ? '<p class="small text-muted mb-0">' + warnings.length + " warning" +
+          (warnings.length === 1 ? "" : "s") + ": " +
+          esc(warnings.slice(0, 5).join("; ")) +
+          (warnings.length > 5 ? " …" : "") + "</p>"
+        : '<p class="small text-success mb-0">No warnings.</p>'
+    );
+
+    return (
+      '<div class="alert ' + (blocked.length ? "alert-warning" : "alert-info") + '">' +
+      "<div class=\"mb-2\"><strong>" +
+      (d.mode === "seed" ? "Seed preview" : "Monthly preview") + "</strong> — " +
+      esc(d.client_name) + " · " + esc(d.period) + "</div>" +
+      parts.join("") +
+      '<button class="btn btn-success mt-2" id="raw_confirm_btn" type="button" ' +
+      "onclick=\"rawConfirm('" + d.token + "')\">Confirm " +
+      (d.mode === "seed" ? "seed" : "monthly run") + "</button></div>"
+    );
+  }
+
+  return { render: render, esc: esc };
 })();

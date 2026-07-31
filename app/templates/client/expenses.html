@@ -1,7 +1,7 @@
 {% extends "client/base.html" %}
 {% import "macros/charts.html" as ch %}
 {% block title %}Expenses{% endblock %}
-{% set may_record = can_record_expenses(current_user.role) %}
+{% set may_record = can_record_expenses(role) %}
 {% block body %}
   <div class="toolbar">
     <div class="page-head">
@@ -76,7 +76,7 @@
             <div class="actions end">
               <a class="btn sm" href="{{ url_for('client.expense_edit', expense_id=x.id) }}">Edit</a>
               <form method="post" action="{{ url_for('client.expense_delete', expense_id=x.id) }}"
-                    onsubmit="return confirm('Delete this expense? This cannot be undone.');">
+                    data-confirm="Delete this expense? This cannot be undone." data-confirm-danger="1">
                 <button class="btn sm danger" type="submit">Delete</button>
               </form>
             </div>

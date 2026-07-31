@@ -2,7 +2,6 @@
 {% import "macros/breadcrumbs.html" as bc %}
 {% block title %}{{ client.name }} onboarded · {{ app_name }}{% endblock %}
 {% block page_title %}{{ client.name }} is onboarded{% endblock %}
-{% block page_intro %}The company record is saved and immediately visible in Client Companies. One manual step remains before the client can sign in.{% endblock %}
 {% block breadcrumbs %}
 {{ bc.trail([
     ("Dashboard", url_for('main.dashboard')),

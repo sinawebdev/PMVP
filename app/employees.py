@@ -40,7 +40,10 @@ from app.raw_import import normalise_emp_id
 employees_bp = Blueprint("employees", __name__, url_prefix="/employees")
 
 # Operator reps only — md is always allowed by role_required; client_user is blocked.
-from app.permissions import REP_ROLES  # canonical operator capability group
+from app.permissions import (  # canonical operator capability groups
+    REP_ROLES,
+    ROSTER_DELETE_ROLES,
+)
 
 ACTIVE = "Active"
 INACTIVE = "Inactive"
@@ -333,7 +336,7 @@ def employee_delete_blockers(emp):
 # permanently — so it is restricted to admin and MD, unlike the rep-wide
 # deactivate/reactivate actions.
 @employees_bp.route("/clients/<int:client_id>/delete/<int:emp_id>", methods=["POST"])
-@role_required("admin", "md")
+@role_required(*ROSTER_DELETE_ROLES)
 def delete(client_id, emp_id):
     emp = Employee.query.filter_by(id=emp_id, client_company_id=client_id).first_or_404()
     blockers = employee_delete_blockers(emp)

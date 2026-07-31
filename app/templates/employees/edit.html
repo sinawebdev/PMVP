@@ -1,7 +1,16 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Edit {{ emp.full_name }} · {{ client.name }}{% endblock %}
 {% block page_title %}Edit Employee — {{ client.name }}{% endblock %}
-{% block page_intro %}Update contact and roster details. These are the details used when distributing payslips.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Client Companies", url_for('main.clients')),
+    (client.name, url_for('main.client_detail', client_id=client.id)),
+    ("Employee Roster", url_for('employees.roster', client_id=client.id)),
+    (emp.full_name, None),
+]) }}
+{% endblock %}
 {% block content %}
 {# `submitted` carries the attempted values back on a pay_type confirm re-render #}
 {% set s = submitted or {} %}
@@ -46,6 +55,7 @@
         </div>
         <div class="col-md-6">
             <label class="form-label" for="email">Email</label>
+            <small class="text-muted d-block mb-1">Payslips are delivered here — never to an address from a payroll upload.</small>
             <input class="form-control" id="email" name="email" type="email" value="{{ s.get('email', emp.email or '') }}">
         </div>
         <div class="col-md-6">

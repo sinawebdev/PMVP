@@ -1,7 +1,14 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Add Statutory Rate Version · {{ app_name }}{% endblock %}
 {% block page_title %}Add Statutory Rate Version{% endblock %}
-{% block page_intro %}Record a new effective-dated SSNIT/PAYE version from the GRA circular. Existing versions are never edited — runs before the new effective date keep using the old rates.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Statutory Rates", url_for('statutory.index')),
+    ("Add Rate Version", None),
+]) }}
+{% endblock %}
 {% block content %}
 <section class="panel form-panel">
     <form method="post" class="row g-3">
@@ -67,6 +74,7 @@
             <input class="form-control" type="text" id="notes" name="notes" placeholder="e.g. GRA circular ref, gazette date">
         </div>
         <div class="col-12 d-flex gap-2">
+            <p class="mini-note"><i class="bi bi-shield-check"></i> Versions are never edited in place. Runs dated before this version's effective date keep using the old rates.</p>
             <button class="btn btn-primary" type="submit"><i class="bi bi-save"></i>Save Rate Version</button>
             <a class="btn btn-outline-secondary" href="{{ url_for('statutory.index') }}">Cancel</a>
         </div>

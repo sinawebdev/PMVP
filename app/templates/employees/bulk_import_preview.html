@@ -1,7 +1,17 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Preview Import · {{ client.name }}{% endblock %}
 {% block page_title %}Preview Import — {{ client.name }}{% endblock %}
-{% block page_intro %}Review the changes below. Nothing is saved until you confirm.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Client Companies", url_for('main.clients')),
+    (client.name, url_for('main.client_detail', client_id=client.id)),
+    ("Employee Roster", url_for('employees.roster', client_id=client.id)),
+    ("Bulk Import", url_for('employees.bulk_import', client_id=client.id)),
+    ("Preview", None),
+]) }}
+{% endblock %}
 {% block content %}
 {% set has_valid = to_create or to_update %}
 
@@ -66,6 +76,7 @@
             <form method="post" action="{{ url_for('employees.bulk_import_confirm', client_id=client.id) }}">
                 <input type="hidden" name="token" value="{{ token }}">
                 <button class="btn btn-success" type="submit"><i class="bi bi-check2-circle"></i>Confirm Import</button>
+                <small class="text-muted d-block mt-2">Nothing has been saved yet — confirming applies the changes above.</small>
             </form>
             <a class="btn btn-outline-secondary" href="{{ url_for('employees.roster', client_id=client.id) }}">Cancel</a>
         </div>

@@ -1,7 +1,15 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Wage Rates · {{ client.name }} · {{ app_name }}{% endblock %}
 {% block page_title %}Wage Rates — {{ client.name }}{% endblock %}
-{% block page_intro %}Hourly rate per pay code used to turn imported raw hours into gross pay. Client-wide defaults apply to every worker; an employee row overrides the default for that worker only.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Client Companies", url_for('main.clients')),
+    (client.name, url_for('main.client_detail', client_id=client.id)),
+    ("Wage Rates", None),
+]) }}
+{% endblock %}
 {% block content %}
 {% if missing_codes %}
 <div class="alert alert-warning">
@@ -50,6 +58,7 @@
 </section>
 <section class="panel">
     <div class="panel-header"><h2><i class="bi bi-table"></i>Configured Rates</h2><span>{{ profiles|length }} rates</span></div>
+    <p class="mini-note"><i class="bi bi-info-circle"></i> A client-wide rate applies to every worker; a row naming an employee overrides it for that worker only.</p>
     {% if not profiles %}
         <p class="text-muted mb-0">No wage rates configured for this client yet.</p>
     {% else %}

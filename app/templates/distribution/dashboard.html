@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% import "macros/breadcrumbs.html" as bc %}
+{% import "macros/delivery.html" as dm %}
 {% block title %}Distribution Monitor · {{ app_name }}{% endblock %}
 {% block page_title %}Distribution Monitor{% endblock %}
-{% block page_intro %}Live health of the payslip delivery system — batches, deliveries, retries, backlog, throughput, and worker status across every client.{% endblock %}
 {% block breadcrumbs %}
 {{ bc.trail([("Dashboard", url_for('main.dashboard')), ("Distribution Monitor", None)]) }}
 {% endblock %}
@@ -11,5 +11,8 @@
 <a class="btn btn-outline-light btn-sm" href="{{ url_for('distribution.history') }}"><i class="bi bi-clock-history"></i>History</a>
 {% endblock %}
 {% block content %}
+{# Outside the polling fragment on purpose — this is a standing fact about the
+   deployment, not a live metric, so it must not be re-rendered every 5s. #}
+{{ dm.simulated_notice() }}
 {% include "distribution/_dashboard_fragment.html" %}
 {% endblock %}

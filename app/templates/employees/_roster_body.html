@@ -23,6 +23,7 @@
         </div>
         <div class="excel-grid-wrap">
             <table id="roster-table" class="table table-sm align-middle excel-grid">
+                <caption class="dt-note">Payslips are delivered to the email and phone held here — never to contact data from a payroll upload.</caption>
                 <thead><tr><th scope="col">Employee ID</th><th scope="col">Full Name</th><th scope="col">Email</th><th scope="col">Phone</th><th scope="col">Department</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
                 <tbody>
                 {% for emp in employees %}
@@ -57,7 +58,7 @@
                                         <button class="btn btn-sm btn-outline-success" type="submit">Reactivate</button>
                                     </form>
                                 {% endif %}
-                                {% if current_user.role in ['admin', 'md'] %}
+                                {% if can_delete_employee(role) %}
                                     <form method="post" action="{{ url_for('employees.delete', client_id=client.id, emp_id=emp.id) }}"
                                           hx-post="{{ url_for('employees.delete', client_id=client.id, emp_id=emp.id) }}"
                                           hx-target="#roster-body" hx-swap="outerHTML"

@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Statutory Rates · {{ app_name }}{% endblock %}
 {% block page_title %}Statutory Rates{% endblock %}
-{% block page_intro %}Versioned SSNIT split and PAYE bands. Payroll calculations always use the version in force for the run's period, so adding a new version never changes past runs.{% endblock %}
 {% block content %}
 <div class="toolbar">
     <a class="btn btn-primary" href="{{ url_for('statutory.new') }}"><i class="bi bi-plus-circle"></i>Add Rate Version</a>
 </div>
 <section class="panel">
     <div class="panel-header"><h2><i class="bi bi-bank"></i>Rate Versions</h2><span>{{ rates|length }} versions</span></div>
+    <p class="mini-note"><i class="bi bi-shield-check"></i> A run always uses the version in force for its own period, so adding a version never changes a past run.</p>
     {% if not rates %}
         <p class="text-muted mb-0">No statutory rate versions yet. Add the current GRA/SSNIT rates to enable payroll calculation.</p>
     {% else %}

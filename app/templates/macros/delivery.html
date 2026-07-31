@@ -1,0 +1,22 @@
+{# Honest-state disclosure for payslip delivery.
+
+   Every channel currently ships a console backend whose send() returns success,
+   so a "delivered" payslip is really a line in the server log: the status tables
+   show a green Sent badge and a 100% success rate either way. Any screen that
+   reports send outcomes has to say so, or it tells the user their workers were
+   paid-slip-notified when nobody was.
+
+   One macro, both portals — the wrapper class is passed in because the operator
+   console is Bootstrap-styled and the tenant portal is not. Renders nothing at
+   all once a real provider is configured, so there is no cleanup to remember.
+#}
+{% macro simulated_notice(wrapper="alert alert-warning") %}
+{%- if delivery_is_simulated() %}
+<div class="{{ wrapper }}" role="status">
+    <strong>Delivery channels are not connected yet.</strong>
+    Payslips are generated and recorded, but nothing is actually sent over
+    {{ simulated_channel_labels()|join(", ") }} — a &ldquo;Sent&rdquo; status here means the
+    payslip was prepared and written to the server log, not received by the worker.
+</div>
+{%- endif %}
+{% endmacro %}

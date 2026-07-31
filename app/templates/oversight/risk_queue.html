@@ -1,7 +1,14 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Risk Queue · {{ app_name }}{% endblock %}
 {% block page_title %}Risk Review Queue{% endblock %}
-{% block page_intro %}Payroll runs the risk gate has held for {{ app_brand_name }} review, across every client company. Open a run to see why it was held, then release it into the approval queue or reject it.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Payroll Runs", url_for('payroll.runs')),
+    ("Risk Review Queue", None),
+]) }}
+{% endblock %}
 {% block content %}
 {% if held_runs %}
 <div class="mini-note mb-3">

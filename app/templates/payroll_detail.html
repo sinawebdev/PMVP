@@ -3,7 +3,6 @@
 {% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Payroll Detail · {{ app_name }}{% endblock %}
 {% block page_title %}Payroll Detail{% endblock %}
-{% block page_intro %}Review totals, imported worker counts, duplicates, statutory figures, and row-level warnings before exporting or approving payroll.{% endblock %}
 {% block breadcrumbs %}
 {{ bc.trail([
     ("Dashboard", url_for('main.dashboard')),
@@ -53,7 +52,6 @@
         {# Lifecycle action gating (role x run-status) lives in app/permissions.py —
            see can_*_run below — so these buttons and the routes they hit share one
            source of truth. #}
-        {% set role = current_user.role %}
         {# Label + tone come from app.risk.risk_badge (the persisted verdict), so a
            released run reads "Released" here instead of staying "Held" forever. #}
         {% set badge = risk_badge(payroll_run) %}
@@ -74,7 +72,7 @@
         {% if can_edit_run_figures(role) %}
             <a class="btn btn-outline-primary" href="{{ url_for('payroll.edit_items', run_id=payroll_run.id) }}"><i class="bi bi-pencil-square"></i>Edit Figures</a>
         {% endif %}
-        {% if current_user.role == "admin" and payroll_run.upload_type == 'raw' and payroll_run.client_company %}
+        {% if can_manage_wage_rates(role) and payroll_run.upload_type == 'raw' and payroll_run.client_company %}
             <a class="btn btn-outline-secondary" href="{{ url_for('payroll.wage_rates', client_id=payroll_run.client_company_id) }}"><i class="bi bi-cash"></i>Wage Rates</a>
         {% endif %}
         {% if can_submit_run_for_approval(role, payroll_run) %}
@@ -92,18 +90,24 @@
         {% if can_distribute_run(role, payroll_run) %}
             <a class="btn btn-primary" href="{{ url_for('distribution.run_status', run_id=payroll_run.id) }}"><i class="bi bi-send-check"></i>Distribute Payslips</a>
         {% endif %}
-        {% if current_user.role in ["admin", "md", "payroll_officer", "accounts_officer"] %}
+        {% if can_operate_payroll(role) %}
             <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export', run_id=payroll_run.id) }}"><i class="bi bi-download"></i>Export Payroll</a>
             <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export_bank_listing_route', run_id=payroll_run.id) }}"><i class="bi bi-bank2"></i>Bank Listing</a>
             <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export_wages_sheet_route', run_id=payroll_run.id) }}"><i class="bi bi-table"></i>Wages Sheet</a>
             <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export_gra_paye_route', run_id=payroll_run.id) }}"><i class="bi bi-receipt"></i>GRA PAYE Schedule</a>
         {% endif %}
-        {% if current_user.role == "admin" and payroll_run.upload_type == 'raw' %}
+        {% if can_use_raw_engine(role) and payroll_run.upload_type == 'raw' %}
             <a class="btn btn-outline-primary" href="{{ url_for('raw_engine.run_exports', run_id=payroll_run.id) }}"><i class="bi bi-box-seam"></i>Generate Raw Exports (ZIP)</a>
         {% endif %}
         {% if can_delete_run(role, payroll_run) %}
+            {# Top of the consequence scale: a hard delete with no undo, so the
+               operator has to type the period to proceed rather than click through. #}
             <form method="post" action="{{ url_for('payroll.delete_run', run_id=payroll_run.id) }}"
-                  onsubmit="return confirm('PERMANENTLY delete the {{ payroll_run.client_company.name if payroll_run.client_company else '' }} {{ payroll_run.month }} {{ payroll_run.year }} payroll run and all {{ payroll_run.total_workers or 0 }} worker rows?\n\nThis is a HARD delete — there is no undo and no recycle bin. Only an audit log entry will remain.');">
+                  data-confirm="Permanently delete the {{ payroll_run.client_company.name if payroll_run.client_company else '' }} {{ payroll_run.month }} {{ payroll_run.year }} payroll run and all {{ payroll_run.total_workers or 0 }} worker rows? There is no undo and no recycle bin — only an audit log entry remains. Type the period below to confirm."
+                  data-confirm-danger="1"
+                  data-confirm-title="Delete this payroll run"
+                  data-confirm-ok="Delete run"
+                  data-confirm-typed="{{ payroll_run.month }} {{ payroll_run.year }}">
                 <button class="btn btn-danger"><i class="bi bi-trash3"></i>Delete Run</button>
             </form>
         {% endif %}

@@ -13,13 +13,14 @@ from flask_login import current_user
 from app import db
 from app.audit import record_audit
 from app.auth import role_required
+from app.permissions import STATUTORY_ROLES
 from app.models import StatutoryRate
 
 statutory_bp = Blueprint("statutory", __name__, url_prefix="/statutory-rates")
 
 
 @statutory_bp.route("/")
-@role_required("admin")
+@role_required(*STATUTORY_ROLES)
 def index():
     rates = StatutoryRate.query.order_by(StatutoryRate.effective_from.desc()).all()
     active = StatutoryRate.active_for(date.today())
@@ -44,7 +45,7 @@ def _parse_bands(raw):
 
 
 @statutory_bp.route("/new", methods=["GET", "POST"])
-@role_required("admin")
+@role_required(*STATUTORY_ROLES)
 def new():
     latest = StatutoryRate.query.order_by(StatutoryRate.effective_from.desc()).first()
     if request.method == "POST":

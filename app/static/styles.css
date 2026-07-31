@@ -93,90 +93,6 @@ body {
     color: #fff;
 }
 
-.client-tabs {
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-    margin-top: 18px;
-    padding-top: 16px;
-}
-
-.client-tabs-title {
-    align-items: center;
-    color: #a7f3d0;
-    display: flex;
-    font-size: 12px;
-    font-weight: 800;
-    gap: 8px;
-    margin-bottom: 10px;
-    text-transform: uppercase;
-}
-
-.client-tab {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 999px;
-    color: #d1fae5;
-    display: block;
-    font-size: 13px;
-    margin-bottom: 8px;
-    padding: 8px 12px;
-    text-decoration: none;
-    transition: transform 180ms ease, background 180ms ease;
-}
-
-.client-tab:hover {
-    background: rgba(23, 195, 178, 0.2);
-    color: #fff;
-    transform: translateX(4px);
-}
-
-/* Expanded client tab: name row + Overview/Employees sub-links (server-side only) */
-.client-tab-group {
-    margin-bottom: 8px;
-}
-
-.client-tab-group .client-tab {
-    margin-bottom: 0;
-}
-
-.client-tab--active {
-    background: rgba(23, 195, 178, 0.18);
-    border-color: rgba(23, 195, 178, 0.45);
-    color: #fff;
-    font-weight: 700;
-}
-
-.client-tab-sub {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 4px 0 2px;
-    padding-left: 18px;
-}
-
-.client-subtab {
-    border-radius: 6px;
-    color: #d1fae5;
-    font-size: 12px;
-    opacity: 0.75;
-    padding: 4px 10px;
-    text-decoration: none;
-    transition: opacity 150ms ease, background 150ms ease;
-}
-
-.client-subtab:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
-    opacity: 1;
-}
-
-.client-subtab--active {
-    color: var(--gold);
-    font-weight: 700;
-    opacity: 1;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-}
-
 .main-content {
     padding: 30px;
     /* Grid items default to min-width:auto, which lets a wide .excel-grid
@@ -206,27 +122,6 @@ body {
 /* Collapse the visual column entirely when a page provides no illustration */
 .topbar-visual:empty {
     display: none;
-}
-
-.compact-topbar {
-    grid-template-columns: minmax(0, 1fr) 240px;
-    margin-bottom: 18px;
-    padding: 18px 22px;
-}
-
-.compact-topbar h1 {
-    font-size: clamp(24px, 3vw, 34px);
-}
-
-.compact-topbar .page-intro {
-    font-size: 14px;
-    line-height: 1.5;
-    margin-bottom: 8px;
-}
-
-.compact-topbar .dashboard-signal {
-    min-height: 118px;
-    padding: 16px;
 }
 
 .finance-signal strong {
@@ -264,23 +159,6 @@ body {
     font-weight: 800;
     line-height: 1.1;
     margin: 0 0 5px;
-}
-
-.page-intro {
-    color: #d1fae5;
-    font-size: 14px;
-    line-height: 1.5;
-    /* Cap the measure so intros don't stretch the full hero width — keeps the
-       right-hand space looking intentional rather than empty (B3/B4). */
-    max-width: 68ch;
-    margin: 0 0 6px;
-    max-width: 760px;
-}
-
-.signed-in {
-    color: #e6fffb;
-    font-size: 13px;
-    font-weight: 600;
 }
 
 .topbar-actions {
@@ -884,8 +762,7 @@ body {
     border-radius: 6px;
 }
 
-.sidebar a:focus-visible,
-.client-tab:focus-visible {
+.sidebar a:focus-visible {
     outline: 2px solid var(--gold);
     outline-offset: 2px;
 }
@@ -902,14 +779,8 @@ body {
 
 /* Touch-friendly target sizes (keep dense table btn-sm compact) */
 .sidebar .nav-link,
-.client-tab,
 .btn:not(.btn-sm) {
     min-height: 44px;
-}
-
-.client-tab {
-    align-items: center;
-    display: flex;
 }
 
 .btn:not(.btn-sm) {
@@ -958,26 +829,6 @@ body {
 
 .sidebar-search .form-control::placeholder {
     color: #cbd5e1;
-}
-
-/* Collapsible client tabs (details/summary) */
-.client-tabs summary {
-    cursor: pointer;
-    list-style: none;
-}
-
-.client-tabs summary::-webkit-details-marker {
-    display: none;
-}
-
-.client-tabs-caret {
-    color: var(--gold);
-    margin-left: auto;
-    transition: transform 180ms ease;
-}
-
-.client-tabs[open] .client-tabs-caret {
-    transform: rotate(180deg);
 }
 
 @keyframes cnPulse {
@@ -1247,6 +1098,9 @@ body {
 }
 .cn-modal-title .bi { color: var(--danger); font-size: 20px; }
 .cn-modal-text { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+/* Typed confirmation (top of the consequence scale) — the user reproduces the
+   subject's name before the confirm button enables. */
+.cn-modal-input { margin: -8px 0 18px; font-family: var(--font-mono, monospace); }
 .cn-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 @media (prefers-reduced-motion: reduce) {
     .cn-modal-backdrop, .cn-modal { transition: none; }

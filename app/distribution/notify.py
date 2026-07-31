@@ -130,10 +130,23 @@ def notify_sla_breach(breaches):
 
 def notify_worker_stopped(error):
     """The worker loop exited unexpectedly — alert platform admins. Stages a
-    DomainEvent + notifications; the caller commits."""
+    DomainEvent + notifications; the caller commits.
+
+    ``error`` is deliberately NOT interpolated into the summary. This lands in a
+    business user's in-app Notification inbox, and a raw driver exception carries
+    the failing SQL, its bound parameters and the internal hostname — none of
+    which that surface should ever render. The full detail is written to the
+    application log instead (here, and again by the caller in
+    :func:`app.distribution.queue.run_worker`), which is where an engineer looks.
+    """
+    current_app.logger.error("Distribution worker stopped unexpectedly: %s", error)
     record_event(
         "distribution.worker_stopped",
-        summary=f"The payslip distribution worker stopped unexpectedly: {error}",
+        summary=(
+            "The payslip distribution worker stopped unexpectedly. Queued payslips "
+            "will not be sent until it restarts. Technical detail has been written "
+            "to the application log."
+        ),
         subject=None,
         level="warning",
         recipients=platform_admins(),

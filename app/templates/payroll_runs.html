@@ -1,15 +1,13 @@
 {% extends "base.html" %}
 {% import "macros/lifecycle.html" as lc %}
-{% set role = current_user.role %}
 {% set bulk_visible = can_bulk_approve_reject(role) or can_operate_payroll(role) %}
 {% block title %}Payroll Runs · {{ app_name }}{% endblock %}
 {% block page_title %}Payroll Runs{% endblock %}
-{% block page_intro %}Monitor every company-specific payroll run, including worker totals, source Excel files, review status, approvals, and export actions.{% endblock %}
 {% block content %}
 {% if selected_client %}
 <div class="mini-note mb-3">
     <i class="bi bi-building-check"></i>
-    Showing payroll runs imported for <strong>{{ selected_client.name }}</strong>. Use the client tabs in the left pane to switch companies.
+    Showing payroll runs imported for <strong>{{ selected_client.name }}</strong>.
 </div>
 {% elif status_filter == "needs_approval" %}
 <div class="mini-note mb-3">
@@ -19,11 +17,12 @@
 {% else %}
 <div class="mini-note mb-3">
     <i class="bi bi-grid"></i>
-    Showing payroll runs for all client companies. Select a client company tab in the left pane to focus the payroll list.
+    Showing payroll runs for all client companies. Filter below, or open a company from Client Companies.
 </div>
 {% endif %}
 <div class="toolbar">
     <a class="btn btn-outline-primary" href="{{ url_for('payroll.runs', status='needs_approval') }}"><i class="bi bi-check2-square"></i>Approval Queue</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('oversight.risk_queue') }}"><i class="bi bi-shield-exclamation"></i>Risk Queue</a>
     {% if status_filter %}
         <a class="btn btn-outline-secondary" href="{{ url_for('payroll.runs') }}"><i class="bi bi-x-circle"></i>Clear Filter</a>
     {% endif %}
@@ -40,7 +39,7 @@
         <span>Upload inside Payroll Runs</span>
     </div>
 
-    {% if wrong_tab == "raw" and current_user.role == "admin" %}
+    {% if wrong_tab == "raw" and can_use_raw_engine(role) %}
     <div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2" role="alert">
         <span><i class="bi bi-exclamation-triangle"></i> This workbook appears to be a <strong>Raw Hours</strong> workbook. Please upload it using <strong>Raw Hour Upload</strong> instead.</span>
         <button type="button" class="btn btn-sm btn-warning" onclick="document.getElementById('tab-raw').click()"><i class="bi bi-clock-history"></i> Go to Raw Hour Upload</button>
@@ -49,7 +48,7 @@
 
     <div class="upload-tabs" role="tablist" aria-label="Choose upload type">
         <button type="button" class="upload-tab is-active" role="tab" aria-selected="true" id="tab-standard" data-tab-target="standard"><i class="bi bi-file-earmark-spreadsheet"></i>Standard Upload</button>
-        {% if current_user.role == "admin" %}
+        {% if can_use_raw_engine(role) %}
         <button type="button" class="upload-tab" role="tab" aria-selected="false" id="tab-raw" data-tab-target="raw"><i class="bi bi-clock-history"></i>Raw Hour Upload</button>
         {% endif %}
     </div>
@@ -88,7 +87,7 @@
         </form>
     </div>
 
-    {% if current_user.role == "admin" %}
+    {% if can_use_raw_engine(role) %}
     <div class="upload-panel" data-panel="raw" role="tabpanel" aria-labelledby="tab-raw" hidden>
         <p class="raw-notice"><i class="bi bi-info-circle"></i><span>Hourly-rate clients. An unseeded client's first upload is the rich <strong>RAW DATA</strong> workbook (seed); a seeded client uploads the monthly thin template. Nothing is written until you confirm the preview.</span></p>
         <div class="row g-3">
@@ -139,30 +138,10 @@ function esc(s) {
         return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c];
     });
 }
+// One implementation, in app.js — this screen and the standalone upload screen
+// render an import preview the same way (blockers first, bounded warnings).
 function rawPreviewHTML(d) {
-    var p = d.preview || {};
-    var head = '<div class="mb-1"><strong>' + (d.mode === 'seed' ? 'Seed preview' : 'Monthly preview')
-        + '</strong> — ' + esc(d.client_name) + ' · ' + esc(d.period) + '</div>';
-    var body;
-    if (d.mode === 'seed') {
-        body = '<div>' + p.employees + ' employees found — ' + p.hourly + ' hourly, '
-            + p.salaried + ' salaried · ' + p.icu_members + ' ICU members</div>';
-    } else {
-        var blocked = p.blocked || [];
-        body = '<div>' + p.employees + ' workers in the file — ' + p.matched + ' matched to the roster'
-            + (blocked.length ? ', ' + blocked.length + ' not on the roster' : '') + '</div>';
-        if (blocked.length) {
-            body += '<div class="small text-muted mt-1">Not on roster: ' + esc(blocked.join(', ')) + '</div>';
-        }
-    }
-    var warns = p.warnings || [];
-    var warnHtml = warns.length
-        ? '<div class="small text-muted mt-1">' + warns.length + ' warning(s): '
-          + esc(warns.slice(0, 5).join('; ')) + (warns.length > 5 ? ' …' : '') + '</div>'
-        : '<div class="small text-success mt-1">No warnings.</div>';
-    return '<div class="alert alert-info">' + head + body + warnHtml
-        + '<button class="btn btn-success mt-2" id="raw_confirm_btn" type="button" onclick="rawConfirm(\'' + d.token + '\')">'
-        + '<i class="bi bi-check2-circle"></i>Confirm ' + (d.mode === 'seed' ? 'seed' : 'monthly run') + '</button></div>';
+    return window.payrollaRawPreview.render(d);
 }
 async function rawUpload() {
     var btn = document.getElementById('raw_upload_btn');
@@ -239,10 +218,24 @@ function rawTemplate(ev) {
 }
 </script>
 <section class="panel">
-    <div class="toolbar">
+    {# Server-side filter. The previous input hid rows in the browser while the
+       list was paginated on the server, so a match on any page but this one read
+       as "no results". Submitting to the route means the term is part of the
+       query and part of the URL. #}
+    <form class="toolbar" method="get" action="{{ url_for('payroll.runs') }}" role="search">
+        {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+        {% if selected_client %}<input type="hidden" name="client_id" value="{{ selected_client.id }}">{% endif %}
         <label class="visually-hidden" for="runs-filter">Filter payroll runs</label>
-        <input id="runs-filter" class="form-control" type="search" placeholder="Filter runs by client, month, or status…" data-table-filter="runs-table">
-    </div>
+        <input id="runs-filter" name="q" class="form-control" type="search" value="{{ search or '' }}"
+               placeholder="Filter runs by client, month, year, or status…">
+        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-search"></i>Filter</button>
+        {% if search %}
+        <a class="btn btn-link" href="{{ url_for('payroll.runs', status=(status_filter or None), client_id=(selected_client.id if selected_client else None)) }}">Clear</a>
+        {% endif %}
+    </form>
+    {% if search %}
+    <p class="mini-note mb-2"><i class="bi bi-funnel"></i> Showing runs matching &ldquo;{{ search }}&rdquo; — {{ pagination.total }} match{{ "" if pagination.total == 1 else "es" }} across all pages.</p>
+    {% endif %}
     <form method="post" id="bulk-actions-form" action="{{ url_for('payroll.bulk_approve') }}">
         <input type="hidden" name="status" value="{{ status_filter }}">
         <input type="hidden" name="client_id" value="{{ selected_client.id if selected_client else '' }}">
@@ -251,11 +244,11 @@ function rawTemplate(ev) {
             <span class="small text-muted" id="bulk-selected-count">0 selected</span>
             {% if can_bulk_approve_reject(role) %}
             <button type="submit" formaction="{{ url_for('payroll.bulk_approve') }}" class="btn btn-sm btn-success" data-bulk-action-btn disabled><i class="bi bi-patch-check"></i>Bulk Approve</button>
-            <button type="submit" formaction="{{ url_for('payroll.bulk_reject') }}" class="btn btn-sm btn-outline-danger" data-bulk-action-btn disabled onclick="return bulkConfirm('reject')"><i class="bi bi-x-octagon"></i>Bulk Reject</button>
+            <button type="submit" formaction="{{ url_for('payroll.bulk_reject') }}" class="btn btn-sm btn-outline-danger" data-bulk-action-btn disabled data-confirm="Reject the selected payroll runs? Runs not eligible for rejection are skipped and reported afterwards." data-confirm-danger="1" data-confirm-title="Reject selected runs" data-confirm-ok="Reject runs"><i class="bi bi-x-octagon"></i>Bulk Reject</button>
             <input type="text" name="notes" class="form-control form-control-sm" style="max-width: 220px;" placeholder="Rejection note (optional, applies to all)">
             {% endif %}
             {% if can_operate_payroll(role) %}
-            <button type="submit" formaction="{{ url_for('payroll.bulk_distribute') }}" class="btn btn-sm btn-primary" data-bulk-action-btn disabled onclick="return bulkConfirm('distribute')"><i class="bi bi-send-check"></i>Bulk Distribute</button>
+            <button type="submit" formaction="{{ url_for('payroll.bulk_distribute') }}" class="btn btn-sm btn-primary" data-bulk-action-btn disabled data-confirm="Distribute payslips for the selected payroll runs? Runs not eligible for distribution are skipped and reported afterwards." data-confirm-title="Distribute selected runs" data-confirm-ok="Distribute"><i class="bi bi-send-check"></i>Bulk Distribute</button>
             {% endif %}
         </div>
         <p class="mini-note mb-2"><i class="bi bi-info-circle"></i> Bulk actions only apply to selected runs currently eligible for that action (matching status); anything else is skipped and reported after.</p>
@@ -294,11 +287,11 @@ function rawTemplate(ev) {
         <nav aria-label="Payroll runs pages" class="mt-2">
             <ul class="pagination pagination-sm mb-0">
                 <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
-                    <a class="page-link" href="{{ url_for('payroll.runs', page=pagination.prev_num, client_id=(selected_client.id if selected_client else None), status=(status_filter or None)) }}">Previous</a>
+                    <a class="page-link" href="{{ url_for('payroll.runs', page=pagination.prev_num, client_id=(selected_client.id if selected_client else None), status=(status_filter or None), q=(search or None)) }}">Previous</a>
                 </li>
                 <li class="page-item disabled"><span class="page-link">Page {{ pagination.page }} of {{ pagination.pages }}</span></li>
                 <li class="page-item {{ 'disabled' if not pagination.has_next }}">
-                    <a class="page-link" href="{{ url_for('payroll.runs', page=pagination.next_num, client_id=(selected_client.id if selected_client else None), status=(status_filter or None)) }}">Next</a>
+                    <a class="page-link" href="{{ url_for('payroll.runs', page=pagination.next_num, client_id=(selected_client.id if selected_client else None), status=(status_filter or None), q=(search or None)) }}">Next</a>
                 </li>
             </ul>
         </nav>
@@ -333,11 +326,5 @@ function rawTemplate(ev) {
     });
     refresh();
 })();
-
-function bulkConfirm(action) {
-    var checked = document.querySelectorAll('.run-select-checkbox:checked').length;
-    var verb = action === 'reject' ? 'Reject' : 'Distribute payslips for';
-    return confirm(verb + ' ' + checked + ' selected payroll run(s)?');
-}
 </script>
 {% endblock %}

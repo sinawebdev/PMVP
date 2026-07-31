@@ -11,6 +11,10 @@ from sqlalchemy.orm import selectinload
 from app import db
 from app.audit import record_audit
 from app.auth import role_required
+from app.permissions import (
+    CLIENT_MANAGEMENT_ROLES,
+    PLATFORM_OPS_ROLES,
+)
 from app.tenancy import platform_required
 from app.models import (
     AuditTrail,
@@ -52,7 +56,7 @@ def health():
 
 
 @main_bp.route("/db-health")
-@role_required("admin")
+@role_required(*PLATFORM_OPS_ROLES)
 def db_health_json():
     uri = current_app.config.get("SQLALCHEMY_DATABASE_URI", "")
     database_type = current_app.config.get("DATABASE_TYPE_LABEL") or db.engine.name.title()
@@ -71,7 +75,7 @@ def db_health_json():
 
 
 @main_bp.route("/admin/db-health")
-@role_required("admin")
+@role_required(*PLATFORM_OPS_ROLES)
 def db_health():
     database_type = current_app.config.get("DATABASE_TYPE_LABEL") or db.engine.name.title()
     sqlite_on_render_warning = (
@@ -460,13 +464,13 @@ def validate_client_form(form, client=None):
 
 
 @main_bp.route("/clients/add", methods=["GET", "POST"])
-@role_required("admin")
+@role_required(*CLIENT_MANAGEMENT_ROLES)
 def add_client():
     return client_form()
 
 
 @main_bp.route("/clients/<int:client_id>/edit", methods=["GET", "POST"])
-@role_required("admin")
+@role_required(*CLIENT_MANAGEMENT_ROLES)
 def edit_client(client_id):
     client = db.get_or_404(ClientCompany, client_id)
     return client_form(client)

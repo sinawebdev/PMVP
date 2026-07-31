@@ -26,9 +26,15 @@ from app.models import (
     DELIVERY_FAILED,
     DELIVERY_PENDING,
     DELIVERY_SENT,
+    WORKER_STATUS_RUNNING,
     DistributionBatch,
     PayslipDelivery,
 )
+
+# A heartbeat older than this belongs to a process that is no longer running.
+# Generous relative to the poll interval so a worker inside a long send is never
+# counted dead.
+WORKER_LIVE_WINDOW_SECONDS = 300
 
 
 def _status_counts(model):
@@ -112,10 +118,33 @@ def _worker_health(batch_counts, backlog, last_processed_at, worker_last_poll):
     return {"status": status, "heartbeat_age_seconds": int(age) if age is not None else None}
 
 
+def _worker_fleet(heartbeats):
+    """Plain-language liveness summary for the operator's Worker panel.
+
+    The raw heartbeat rows are engineering detail. Because each deploy gives the
+    process a new hostname, they accumulate one row per past container and read
+    as a wall of pod names and PIDs to the business user this screen is for. The
+    panel states whether a worker is running; the rows stay reachable behind an
+    explicit disclosure for whoever actually needs them.
+    """
+    now = datetime.now(timezone.utc)
+    live = 0
+    for hb in heartbeats:
+        polled = as_aware(hb.last_poll_at)
+        if (
+            hb.status == WORKER_STATUS_RUNNING
+            and polled is not None
+            and (now - polled).total_seconds() <= WORKER_LIVE_WINDOW_SECONDS
+        ):
+            live += 1
+    return {"live": live, "known": len(heartbeats), "retired": len(heartbeats) - live}
+
+
 def collect_dashboard_stats(recent_limit=10):
     """Every metric the monitoring dashboard needs, in one call."""
     from app.distribution.queue import worker_last_poll, worker_statuses  # avoid import cycle
 
+    heartbeats = worker_statuses()
     batch_counts = _status_counts(DistributionBatch)
     delivery_counts = _status_counts(PayslipDelivery)
 
@@ -200,7 +229,7 @@ def collect_dashboard_stats(recent_limit=10):
             batch_counts, backlog, last_processed_at, worker_last_poll()
         ),
         "worker_inline": bool(current_app.config.get("DISTRIBUTION_WORKER_INLINE")),
-        "workers": worker_statuses(),
+        "worker_fleet": _worker_fleet(heartbeats),
         "sla": _sla_snapshot(),
     }
 

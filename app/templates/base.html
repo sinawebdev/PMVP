@@ -13,6 +13,9 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    {# Shared component layer (states, data table, decision header, action bar) —
+       one implementation for both shells; see app/static/components.css. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='components.css') }}">
     {# Empty by default — a page-specific stylesheet loaded ONLY where it is used
        (see app/static/dashboard.css's own header comment for why), so it can
        never regress a page that does not opt in. #}
@@ -37,61 +40,30 @@
             <label class="visually-hidden" for="global-search">Search</label>
             <input id="global-search" class="form-control form-control-sm" type="search" name="q" placeholder="Search workers, clients…" value="{{ request.args.get('q', '') if request.endpoint == 'main.search' else '' }}">
         </form>
+        {# Seven domain nouns, and the active item comes from the request's own
+           blueprint (app/navigation.py) rather than a path.startswith() test per
+           link — so a new route needs no edit here. The per-client list that used
+           to sit below is gone: a sidebar whose length grows with the customer
+           count is not navigation. Clients live on the Client Companies page. #}
         <nav class="nav flex-column gap-1">
-            {% set role = current_user.role %}
-            {% set can_payroll = can_operate_payroll(role) %}
-            {% set path = request.path %}
-            <a class="nav-link" {% if path == '/' or path.startswith('/dashboard') %}aria-current="page"{% endif %} href="{{ url_for('main.dashboard') }}"><i class="bi bi-speedometer2"></i>Dashboard</a>
-            <a class="nav-link" {% if path.startswith('/clients') %}aria-current="page"{% endif %} href="{{ url_for('main.clients') }}"><i class="bi bi-buildings"></i>Client Companies</a>
-            {% if can_payroll %}
-            <a class="nav-link" {% if path.startswith('/payroll') %}aria-current="page"{% endif %} href="{{ url_for('payroll.runs') }}"><i class="bi bi-cash-stack"></i>Payroll Runs</a>
-            {% endif %}
-            {% if can_operate_payroll(role) %}
-            <a class="nav-link" {% if path.startswith('/payslip') %}aria-current="page"{% endif %} href="{{ url_for('payslip.index') }}"><i class="bi bi-file-earmark-person"></i>Payslips</a>
-            <a class="nav-link" {% if path.startswith('/distribution/dashboard') or path.startswith('/distribution/history') %}aria-current="page"{% endif %} href="{{ url_for('distribution.dashboard') }}"><i class="bi bi-hdd-network"></i>Distribution</a>
-            {% endif %}
-            {% if can_view_audit(role) %}
-            <a class="nav-link" {% if path.startswith('/audit') %}aria-current="page"{% endif %} href="{{ url_for('audit.audit_trail') }}"><i class="bi bi-activity"></i>Expenses &amp; Audit</a>
-            {% endif %}
-            {% if can_manage_statutory(role) %}
-            <a class="nav-link" {% if path.startswith('/statutory-rates') %}aria-current="page"{% endif %} href="{{ url_for('statutory.index') }}"><i class="bi bi-bank"></i>Statutory Rates</a>
-            {% endif %}
-            <a class="nav-link" {% if path.startswith('/oversight/risk') %}aria-current="page"{% endif %} href="{{ url_for('oversight.risk_queue') }}"><i class="bi bi-shield-exclamation"></i>Risk Queue</a>
-            <a class="nav-link" {% if path.startswith('/notifications') %}aria-current="page"{% endif %} href="{{ url_for('notifications.inbox') }}"><i class="bi bi-bell"></i>Notifications{% if notif_unread %} <span class="badge bg-warning text-dark">{{ notif_unread }}</span>{% endif %}</a>
+            {% for item in visible_nav(role) %}
+            <a class="nav-link" {% if item.key == active_nav %}aria-current="page"{% endif %}
+               href="{{ url_for(item.endpoint) }}"><i class="bi {{ item.icon }}"></i>{{ item.label }}{% if item.key == 'notifications' and notif_unread %} <span class="badge bg-warning text-dark">{{ notif_unread }}</span>{% endif %}</a>
+            {% endfor %}
             <a class="nav-link logout-link" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-left"></i>Logout</a>
         </nav>
-        <details class="client-tabs" open>
-            <summary class="client-tabs-title"><i class="bi bi-building-check"></i> Client Payroll Tabs <i class="bi bi-chevron-down client-tabs-caret"></i></summary>
-            <a class="client-tab" href="{{ url_for('payroll.runs') }}">All Clients</a>
-            {% for sidebar_client in sidebar_clients %}
-                {# Active when viewing this client's detail or its employee roster. Compare
-                   on full path segments so /clients/1 doesn't match /clients/10. #}
-                {% set client_prefix = '/clients/' ~ sidebar_client.id %}
-                {% set emp_prefix = '/employees/clients/' ~ sidebar_client.id %}
-                {% set client_active = request.path == client_prefix or request.path.startswith(client_prefix ~ '/') %}
-                {% set emp_active = request.path == emp_prefix or request.path.startswith(emp_prefix ~ '/') %}
-                {% set is_active = client_active or emp_active %}
-                <div class="client-tab-group">
-                    <a class="client-tab {% if is_active %}client-tab--active{% endif %}" href="{{ url_for('main.client_detail', client_id=sidebar_client.id) }}">{{ sidebar_client.name }}</a>
-                    {% if is_active %}
-                    <div class="client-tab-sub">
-                        <a class="client-subtab {% if client_active %}client-subtab--active{% endif %}" href="{{ url_for('main.client_detail', client_id=sidebar_client.id) }}">Overview</a>
-                        <a class="client-subtab {% if emp_active %}client-subtab--active{% endif %}" href="{{ url_for('employees.roster', client_id=sidebar_client.id) }}">Employees</a>
-                    </div>
-                    {% endif %}
-                </div>
-            {% endfor %}
-        </details>
     </aside>
     <main id="main-content" class="main-content" tabindex="-1">
         {% block breadcrumbs %}{% endblock %}
         <header class="topbar page-enter {% block topbar_class %}{% endblock %}">
+            {# Page header: what this page is, and what you can do on it. No
+               standing prose — a paragraph that never changes is read once and
+               skipped forever, but it costs vertical space on every visit. Copy
+               that genuinely helps now sits beside the control it describes.
+               The signed-in greeting moved out for the same reason: it is the
+               same on all 30+ pages, and the dashboard already opens with it. #}
             <div class="topbar-copy">
                 <h1>{% block page_title %}Dashboard{% endblock %}</h1>
-                <p class="page-intro">{% block page_intro %}Track payroll, approvals, client costs, and finance work from one calm command center.{% endblock %}</p>
-                {# Personalised greeting on every operator page — one resolution
-                   rule (app.resolve_display_name) shared with the tenant portal. #}
-                <p class="signed-in mb-0">{{ user_greeting }} · {{ current_user.role|role_label }}</p>
                 <div class="topbar-actions">
                     {% block page_actions %}{% endblock %}
                 </div>

@@ -1,6 +1,6 @@
 {% extends "client/base.html" %}
 {% block title %}{{ expense.description }}{% endblock %}
-{% set may_record = can_record_expenses(current_user.role) %}
+{% set may_record = can_record_expenses(role) %}
 {% block body %}
   <div class="toolbar">
     <div class="page-head">
@@ -72,7 +72,7 @@
           <a class="btn primary" href="{{ url_for('client.expense_receipt_download', expense_id=expense.id) }}">Download</a>
           {% if may_record %}
           <form method="post" action="{{ url_for('client.expense_receipt_delete', expense_id=expense.id) }}"
-                onsubmit="return confirm('Remove this receipt? This cannot be undone.');">
+                data-confirm="Remove this receipt? This cannot be undone." data-confirm-danger="1">
             <button class="btn sm danger" type="submit">Remove receipt</button>
           </form>
           {% endif %}

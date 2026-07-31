@@ -151,6 +151,121 @@ def lifecycle_steps(status, calculated=False, distributed=False, held=False):
     return steps
 
 
+# --- What to do next --------------------------------------------------------
+# PENDING_STATUSES / SENDABLE_STATUSES / DELETABLE_STATUSES all answer the same
+# question — "is this allowed?" — which is why a Draft run can legitimately offer
+# Calculate, Submit, Approve, Reject and Delete at once: five permitted actions
+# and nothing saying which one actually moves the run forward.
+#
+# This answers the other question: given the run's real state, what is the ONE
+# next step? It is deliberately role-blind — it describes what the *run* needs,
+# not what a given user may do. Callers intersect it with the permission
+# predicates in app/permissions.py, so neither concern quietly absorbs the other.
+#
+# Presentation-free too: it returns a key and a plain-language label, never
+# markup or a URL, so the same answer serves the operator console, the tenant
+# portal and any test.
+
+ACTION_CALCULATE = "calculate"
+ACTION_FIX_IMPORT = "fix_import"
+ACTION_SUBMIT = "submit"
+ACTION_AWAIT_RISK = "await_risk"
+ACTION_REVIEW_HOLD = "review_hold"
+ACTION_APPROVE = "approve"
+ACTION_MARK_PROCESSED = "mark_processed"
+ACTION_DISTRIBUTE = "distribute"
+ACTION_RESOLVE_REJECTION = "resolve_rejection"
+
+# key -> (label, why). `why` is the one-line justification a Decision Header
+# shows under the action, so the user is told the reason and not just the verb.
+_ACTION_COPY = {
+    ACTION_FIX_IMPORT: (
+        "Fix the import",
+        "This run has no worker rows — the uploaded workbook produced nothing to pay.",
+    ),
+    ACTION_CALCULATE: (
+        "Calculate pay",
+        "Statutory figures have not been computed for this run yet.",
+    ),
+    ACTION_SUBMIT: (
+        "Submit for approval",
+        "Figures are calculated and the run is ready for sign-off.",
+    ),
+    ACTION_AWAIT_RISK: (
+        "Awaiting risk check",
+        "The risk gate is still scoring this run; no action is needed yet.",
+    ),
+    ACTION_REVIEW_HOLD: (
+        "Review the risk hold",
+        "A risk rule tripped — release the run into approval or reject it.",
+    ),
+    ACTION_APPROVE: (
+        "Approve",
+        "The run is waiting for sign-off before payslips can go out.",
+    ),
+    ACTION_MARK_PROCESSED: (
+        "Mark processed",
+        "Approved — close the run once payment has been settled.",
+    ),
+    ACTION_DISTRIBUTE: (
+        "Distribute payslips",
+        "The run is finalized and its workers have not been sent their payslips.",
+    ),
+    ACTION_RESOLVE_REJECTION: (
+        "Resolve the rejection",
+        "This run was rejected — correct and re-upload it, or delete it.",
+    ),
+}
+
+
+def _action(key):
+    label, why = _ACTION_COPY[key]
+    return {"key": key, "label": label, "why": why}
+
+
+def recommended_action_for(run, distributed=False):
+    """The single next step for ``run``, as ``{key, label, why}`` — or ``None``
+    when the run needs nothing further (fully distributed).
+
+    ``distributed`` is passed in rather than queried, for the same N+1 reason
+    :func:`run_progress` takes it: list pages precompute one membership test.
+    """
+    status = run.status
+    has_workers = (getattr(run, "total_workers", 0) or 0) > 0
+
+    if status == REJECTED:
+        return _action(ACTION_RESOLVE_REJECTION)
+    if status == DRAFT:
+        if not has_workers:
+            return _action(ACTION_FIX_IMPORT)
+        if not _is_calculated(run):
+            return _action(ACTION_CALCULATE)
+        return _action(ACTION_SUBMIT)
+    if status == SUBMITTED:
+        return _action(ACTION_AWAIT_RISK)
+    if status == HELD:
+        return _action(ACTION_REVIEW_HOLD)
+    if status in (AUTO_ACCEPTED, PENDING_APPROVAL):
+        return _action(ACTION_APPROVE)
+    if status == APPROVED:
+        return _action(ACTION_MARK_PROCESSED)
+    if status == PROCESSED:
+        return None if distributed else _action(ACTION_DISTRIBUTE)
+    return None
+
+
+def _is_calculated(run):
+    """Whether statutory figures exist for the run.
+
+    ``total_workers > 0`` says rows were imported, not that they were costed, so
+    this keys on money having been computed. Falls back to the worker count only
+    when the totals column is absent (a stub in a test)."""
+    total_net = getattr(run, "total_net_pay", None)
+    if total_net is None:
+        return (getattr(run, "total_workers", 0) or 0) > 0
+    return (total_net or 0) > 0
+
+
 def run_progress(run, distributed=False):
     """Convenience wrapper: derive ``calculated`` and ``held`` from a run's scalar
     columns (no extra query) and return :func:`lifecycle_steps`. ``distributed``

@@ -2,7 +2,6 @@
 {% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Distribution #{{ batch.id }} · {{ app_name }}{% endblock %}
 {% block page_title %}Distribution #{{ batch.id }}{% endblock %}
-{% block page_intro %}A single distribution batch — who initiated it, its outcome, and the per-worker deliveries it produced.{% endblock %}
 {% block breadcrumbs %}
 {{ bc.trail([
     ("Dashboard", url_for('main.dashboard')),

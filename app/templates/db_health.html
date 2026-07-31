@@ -1,6 +1,12 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block page_title %}Database Health{% endblock %}
-{% block page_intro %}Confirm the deployed app is using persistent database storage and that core records are being saved to SQL tables.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Database Health", None),
+]) }}
+{% endblock %}
 {% block content %}
 <section class="stats-grid">
     <div class="stat-card"><i class="bi bi-database-check stat-icon"></i><span>Database Type</span><strong>{{ database_type }}</strong></div>

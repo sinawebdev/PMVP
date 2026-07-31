@@ -1,0 +1,191 @@
+/* ---------------------------------------------------------------------------
+   Payrolla shared components — the one implementation of the interface
+   primitives, loaded by BOTH shells on EVERY page:
+
+     base.html        (operator app — Bootstrap + styles.css)
+     client/base.html (tenant portal — portal.css, no Bootstrap)
+
+   This layer exists because there was nowhere for a genuinely shared component
+   to live: tokens.css is values only (it says so), styles.css is operator-side,
+   portal.css is tenant-side, and dashboard.css is page-scoped to the two
+   dashboards — which is where the empty/loading/error states were stranded,
+   unusable by the other ~30 authenticated pages that needed them.
+
+   Rules here must work in both shells, so they lean on tokens.css variables and
+   never assume Bootstrap. Markup lives in templates/macros/ui.html.
+   --------------------------------------------------------------------------- */
+
+/* --- Empty / loading / error states -------------------------------------- */
+
+.state {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 26px 18px;
+    text-align: center;
+}
+
+.state-ico { color: var(--muted); line-height: 0; }
+.state-title { font-size: 13.5px; font-weight: 700; margin: 0; }
+.state-detail { color: var(--muted); font-size: 12.5px; line-height: 1.55; margin: 0; max-width: 42ch; }
+.state .btn { margin-top: 6px; }
+
+.state--empty .state-ico { color: var(--line-strong); }
+.state--error .state-ico { color: var(--danger); }
+
+/* Skeleton: matches the height of what it replaces, so an async swap cannot
+   shift the layout. Shimmer travels rather than pulsing — a pulsing block at
+   0.2Hz is exactly the frequency reduced-motion exists to suppress. */
+.state--loading { align-items: stretch; gap: 10px; padding: 4px 0; }
+
+.sk-line {
+    background: linear-gradient(90deg, var(--surface-alt) 25%, var(--shell) 37%, var(--surface-alt) 63%);
+    background-size: 400% 100%;
+    border-radius: var(--radius-sm);
+    display: block;
+    height: 13px;
+}
+
+.sk-line:nth-child(even) { width: 72%; }
+
+@media (prefers-reduced-motion: no-preference) {
+    .sk-line { animation: sk-shimmer 1.4s linear infinite; }
+}
+
+@keyframes sk-shimmer {
+    from { background-position: 100% 0; }
+    to { background-position: 0 0; }
+}
+
+.sr-only {
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+
+/* --- Data table ------------------------------------------------------------
+   The one table. Server-paginated, server-filtered, server-sorted — a table that
+   hides rows in the browser while the server paginates will confidently show
+   "no results" for a row sitting on page 2, which is the defect this replaces.
+   Horizontal overflow is owned by the wrapper so a wide table scrolls itself
+   instead of the page. */
+
+.dt-wrap { overflow-x: auto; width: 100%; }
+
+.dt {
+    border-collapse: collapse;
+    font-size: 13.5px;
+    width: 100%;
+}
+
+.dt th,
+.dt td {
+    border-bottom: 1px solid var(--line);
+    padding: 9px 12px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.dt thead th {
+    background: var(--surface-alt);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    position: sticky;
+    text-transform: uppercase;
+    top: 0;
+    white-space: nowrap;
+    z-index: 1;
+}
+
+.dt tbody tr:hover { background: var(--surface-alt); }
+.dt .num, .dt .nums { font-variant-numeric: tabular-nums; text-align: right; }
+.dt-actions { text-align: right; white-space: nowrap; }
+
+/* A table caption used for the one sentence a reader needs to trust the data in
+   it — relocated instructional copy (Task 3.1), not decoration. Left-aligned and
+   quiet: it explains the table, it does not title it. */
+.dt-note, table > caption.dt-note {
+    caption-side: top;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.5;
+    padding: 0 0 8px;
+    text-align: left;
+}
+
+/* Sortable headers carry the direction in the link itself, so sort state is a
+   URL the user can copy, not hidden client state. */
+.dt-sort { color: inherit; display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+.dt-sort:hover { color: var(--brand-deep); }
+.dt-sort-ind { opacity: 0.45; }
+.dt-sort[aria-sort] .dt-sort-ind, .dt-sort.is-active .dt-sort-ind { opacity: 1; }
+
+/* --- Pagination ----------------------------------------------------------- */
+
+.dt-foot {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: space-between;
+    padding: 10px 2px 0;
+}
+
+.dt-count { color: var(--muted); font-size: 12.5px; }
+.dt-pages { display: flex; gap: 6px; }
+.dt-page { border: 1px solid var(--line); border-radius: var(--radius-sm); color: inherit;
+           padding: 4px 10px; text-decoration: none; font-size: 12.5px; }
+.dt-page:hover { border-color: var(--line-strong); }
+.dt-page[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
+.dt-page.is-current { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-deep); font-weight: 700; }
+
+/* --- Decision header -------------------------------------------------------
+   Subject, state, the ONE recommended next action, and the few figures that
+   justify it. Everything else on a decision page goes one interaction deeper. */
+
+.dh { border-bottom: 1px solid var(--line); display: grid; gap: 14px; padding-bottom: 16px; }
+.dh-top { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.dh-subject { display: grid; gap: 4px; }
+.dh-title { font-size: 19px; font-weight: 700; margin: 0; }
+.dh-sub { color: var(--muted); font-size: 13px; margin: 0; }
+.dh-why { color: var(--muted); font-size: 13px; margin: 0; max-width: 62ch; }
+
+.dh-figures { display: flex; flex-wrap: wrap; gap: 22px; }
+.dh-figure { display: grid; gap: 2px; }
+.dh-figure dt { color: var(--muted); font-size: 11.5px; letter-spacing: 0.02em; text-transform: uppercase; }
+.dh-figure dd { font-size: 16px; font-weight: 700; margin: 0; font-variant-numeric: tabular-nums; }
+
+/* --- Action bar ------------------------------------------------------------
+   Exactly one visually primary action per screen: the recommended one. Everything
+   else is secondary or folded behind "More", so rank is expressed by appearance
+   and not left to the reader. */
+
+.ab { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.ab-more { margin-left: auto; position: relative; }
+.ab-more > summary { cursor: pointer; list-style: none; }
+.ab-more > summary::-webkit-details-marker { display: none; }
+.ab-menu {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md, 0 8px 24px rgba(0,0,0,.12));
+    display: grid;
+    min-width: 210px;
+    padding: 6px;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 20;
+}
+.ab-menu a, .ab-menu button {
+    background: none; border: 0; border-radius: var(--radius-sm); color: inherit;
+    font: inherit; padding: 7px 10px; text-align: left; text-decoration: none; width: 100%;
+}
+.ab-menu a:hover, .ab-menu button:hover { background: var(--surface-alt); }

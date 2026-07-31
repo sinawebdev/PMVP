@@ -5,6 +5,7 @@ from flask_login import current_user
 
 from app import db
 from app.auth import role_required
+from app.permissions import AUDIT_ROLES
 from app.models import AuditTrail, ClientCompany, Expense, PayrollRun
 
 audit_bp = Blueprint("audit", __name__, url_prefix="/audit")
@@ -32,7 +33,7 @@ def record_audit(action, related_record=None, notes=""):
 
 
 @audit_bp.route("")
-@role_required("admin", "md")
+@role_required(*AUDIT_ROLES)
 def audit_trail():
     entries = AuditTrail.query.order_by(AuditTrail.created_at.desc()).limit(250).all()
     expenses = Expense.query.order_by(Expense.created_at.desc()).limit(250).all()
@@ -49,7 +50,7 @@ def audit_trail():
 
 
 @audit_bp.route("/expenses", methods=["POST"])
-@role_required("admin", "md")
+@role_required(*AUDIT_ROLES)
 def add_expense():
     expense_date = parse_date(request.form.get("expense_date")) or date.today()
     title = (request.form.get("title") or "").strip()

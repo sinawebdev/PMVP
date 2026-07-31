@@ -1,7 +1,14 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Edit Figures · Payroll Run · {{ app_name }}{% endblock %}
 {% block page_title %}Edit Figures — {{ payroll_run.client_company.name if payroll_run.client_company else "Run" }} {{ payroll_run.month }} {{ payroll_run.year }}{% endblock %}
-{% block page_intro %}Correct raw input figures for a few employees without a full re-upload. Computed figures (gross, PAYE, SSNIT, net) only ever come from Calculate Pay — they cannot be typed in here.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Payroll Runs", url_for('payroll.runs')),
+] + ([(payroll_run.client_company.name, url_for('main.client_detail', client_id=payroll_run.client_company_id))] if payroll_run.client_company else [])
+    + [(payroll_run.month ~ " " ~ payroll_run.year, url_for('payroll.detail', run_id=payroll_run.id)), ("Edit Figures", None)]) }}
+{% endblock %}
 {% block content %}
 {% if not editable %}
 <div class="alert alert-warning">
@@ -42,6 +49,7 @@
     </div>
     {% else %}
     <div class="panel-header"><h2><i class="bi bi-pencil-square"></i>Employee Figures</h2><span>{{ payroll_run.items|length }} rows</span></div>
+    <p class="mini-note"><i class="bi bi-info-circle"></i> Raw input figures only. Gross, PAYE, SSNIT and net are always produced by Calculate Pay and cannot be typed in here.</p>
     <div class="excel-grid-wrap">
         <table class="table table-sm align-middle excel-grid">
             <thead>

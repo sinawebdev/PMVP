@@ -1,7 +1,16 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Bulk Import Employees · {{ client.name }}{% endblock %}
 {% block page_title %}Bulk Import Employees — {{ client.name }}{% endblock %}
-{% block page_intro %}Upload a spreadsheet of employees for {{ client.name }}. You'll preview the changes before anything is saved.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Client Companies", url_for('main.clients')),
+    (client.name, url_for('main.client_detail', client_id=client.id)),
+    ("Employee Roster", url_for('employees.roster', client_id=client.id)),
+    ("Bulk Import", None),
+]) }}
+{% endblock %}
 {% block content %}
 <section class="panel form-panel">
     <div class="mini-note mb-3">
@@ -20,6 +29,7 @@
         </div>
         <div class="col-12 d-flex gap-2 align-items-center">
             <button class="btn btn-primary" type="submit"><i class="bi bi-eye"></i>Preview Import</button>
+            <small class="text-muted d-block mt-2">You will review every change before anything is saved.</small>
             <a class="btn btn-outline-secondary" href="{{ url_for('employees.roster', client_id=client.id) }}">Cancel</a>
             <a class="ms-auto" href="{{ url_for('employees.roster_template', client_id=client.id) }}"><i class="bi bi-download"></i> Download Excel template</a>
         </div>

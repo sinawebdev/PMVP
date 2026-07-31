@@ -187,31 +187,22 @@
 {% endmacro %}
 
 {# --- States ---------------------------------------------------------------
-   Empty, loading and error are components rather than one-off markup, so every
-   panel fails and waits the same way. `skeleton` matches the height of the card
-   it replaces so an async swap cannot shift the layout (CLS). #}
+   Forwarded, not redefined. The implementations moved to macros/ui.html (with
+   their CSS to the shared components.css) so all ~30 authenticated pages can use
+   them, not just the two dashboards. These three thin wrappers exist only so the
+   dashboards' existing `ui.empty(...)` calls keep resolving — Jinja does not
+   expose {% raw %}{% from %}{% endraw %}-imported names on a module, so a plain
+   re-export silently yields Undefined. One implementation, one hop. #}
+{% import "macros/ui.html" as _ui %}
+
 {% macro empty(title, detail="", action_label="", action_href="") %}
-<div class="state state--empty">
-  <span class="state-ico" aria-hidden="true">{{ icon('activity', 22) }}</span>
-  <p class="state-title">{{ title }}</p>
-  {% if detail %}<p class="state-detail">{{ detail }}</p>{% endif %}
-  {% if action_label %}<a class="btn primary" href="{{ action_href }}">{{ action_label }}</a>{% endif %}
-</div>
+{{- _ui.empty(title, detail, action_label, action_href) -}}
 {% endmacro %}
 
 {% macro error_state(title, detail="", retry_href="") %}
-<div class="state state--error" role="alert">
-  <span class="state-ico" aria-hidden="true">{{ icon('alert-triangle', 22) }}</span>
-  <p class="state-title">{{ title }}</p>
-  {% if detail %}<p class="state-detail">{{ detail }}</p>{% endif %}
-  {% if retry_href %}<a class="btn" href="{{ retry_href }}">Try again</a>{% endif %}
-</div>
+{{- _ui.error_state(title, detail, retry_href) -}}
 {% endmacro %}
 
 {% macro skeleton(lines=3, height=0) %}
-<div class="state state--loading" aria-busy="true" aria-live="polite"
-     {% if height %}style="min-height: {{ height }}px"{% endif %}>
-  <span class="sr-only">Loading</span>
-  {% for _ in range(lines) %}<span class="sk-line" aria-hidden="true"></span>{% endfor %}
-</div>
+{{- _ui.skeleton(lines, height) -}}
 {% endmacro %}

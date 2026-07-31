@@ -1,7 +1,14 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Payroll Preview · {{ app_name }}{% endblock %}
 {% block page_title %}Payroll Preview{% endblock %}
-{% block page_intro %}Check the selected client, detected company name, smart field mapping, unique worker count, duplicates, and row warnings before saving this payroll run.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Payroll Runs", url_for('payroll.runs')),
+    ("Import Preview", None),
+]) }}
+{% endblock %}
 {% block content %}
 {% if client and unregistered %}
 <div class="alert alert-warning d-flex gap-2" role="alert">

@@ -654,11 +654,23 @@ def _do_client_send(run, only_failed):
         flash("A distribution is already in progress for this run.", "warning")
     else:
         note = " (already queued)" if replayed else ""
-        flash(
-            f"Distribution queued{note}: {summary['total']} payslip(s) will be sent shortly. "
-            f"{current_app.config['APP_BRAND_NAME']} oversight will be notified once it completes.",
-            "success",
-        )
+        # While the channels are console-backed a send is logged, not delivered,
+        # so the confirmation must not promise the worker will receive anything.
+        # The page itself carries the fuller disclosure (macros/delivery.html).
+        from app.distribution.channels import delivery_is_simulated
+
+        if delivery_is_simulated():
+            outcome = (
+                "delivery channels are not yet connected for your account, so the "
+                "payslips will be prepared and recorded but not actually sent."
+            )
+        else:
+            outcome = (
+                f"{summary['total']} payslip(s) will be sent shortly. "
+                f"{current_app.config['APP_BRAND_NAME']} oversight will be notified "
+                "once it completes."
+            )
+        flash(f"Distribution queued{note}: {outcome}", "success")
     return redirect(url_for("client.distribute", run_id=run.id))
 
 

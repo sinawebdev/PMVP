@@ -30,6 +30,7 @@ from flask_login import current_user
 
 from app import db
 from app.auth import role_required
+from app.permissions import RAW_ENGINE_ROLES
 from app.models import (
     ClientCompany,
     Employee,
@@ -109,7 +110,7 @@ def _sweep_stale_staging(max_age_seconds=STAGING_MAX_AGE_SECONDS):
 
 
 @raw_engine_bp.route("/upload", methods=["POST"])
-@role_required("admin")
+@role_required(*RAW_ENGINE_ROLES)
 def upload():
     _sweep_stale_staging()  # opportunistically clear abandoned preview files
     client_id = request.form.get("client_company_id")
@@ -235,7 +236,7 @@ def upload():
 
 
 @raw_engine_bp.route("/confirm", methods=["POST"])
-@role_required("admin")
+@role_required(*RAW_ENGINE_ROLES)
 def confirm():
     token = request.form.get("token")
     if not token or session.get("raw_web_token") != token:
@@ -311,7 +312,7 @@ def confirm():
 
 
 @raw_engine_bp.route("/clients/<int:client_id>/template")
-@role_required("admin")
+@role_required(*RAW_ENGINE_ROLES)
 def download_template(client_id):
     db.get_or_404(ClientCompany, client_id)  # 404 guard for an unknown client
     if not company_is_seeded(client_id):
@@ -328,7 +329,7 @@ def download_template(client_id):
 
 
 @raw_engine_bp.route("/runs/<int:run_id>/exports")
-@role_required("admin")
+@role_required(*RAW_ENGINE_ROLES)
 def run_exports(run_id):
     run = db.get_or_404(PayrollRun, run_id)
     if run.upload_type != "raw":
@@ -353,7 +354,7 @@ def run_exports(run_id):
 
 
 @raw_engine_bp.route("/archive/<int:archive_id>")
-@role_required("admin")
+@role_required(*RAW_ENGINE_ROLES)
 def download_archive(archive_id):
     archive = db.get_or_404(RawUploadArchive, archive_id)
     import hashlib
