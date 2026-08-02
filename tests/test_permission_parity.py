@@ -191,15 +191,25 @@ class AffordanceParityTests(unittest.TestCase):
     def _payroll_detail(self):
         return self.client.get(f"/payroll/runs/{self.run.id}").get_data(as_text=True)
 
+    def _export_markers(self):
+        base = f"/payroll/runs/{self.run.id}"
+        return (
+            f'href="{base}/export"',
+            f'href="{base}/export/bank-listing"',
+            f'href="{base}/export/wages-sheet"',
+            f'href="{base}/export/gra-paye"',
+        )
+
     def test_payroll_detail_affordances_match_capabilities(self):
         """The exports and raw-hours controls the audit found missing for
         payrolla_admin and md, checked for every seeded role."""
+        # Matched on the href, not the button text: an affordance is the route it
+        # reaches, and a copy change (Phase 4 relabelled these to sentence case)
+        # must not read as a permission regression. The closing quote matters —
+        # ".../export" is a prefix of ".../export/bank-listing".
         cases = [
-            # (marker in the rendered page, predicate over the role)
-            ("Export Payroll", perms.can_operate_payroll),
-            ("Bank Listing", perms.can_operate_payroll),
-            ("Wages Sheet", perms.can_operate_payroll),
-            ("GRA PAYE Schedule", perms.can_operate_payroll),
+            (marker, perms.can_operate_payroll)
+            for marker in self._export_markers()
         ]
         for _name, email, role in PLATFORM_USERS:
             with self.subTest(role=role):
@@ -225,12 +235,7 @@ class AffordanceParityTests(unittest.TestCase):
                 self.assertTrue(perms.can_operate_payroll(role))
                 self._login(email)
                 body = self._payroll_detail()
-                for marker in (
-                    "Export Payroll",
-                    "Bank Listing",
-                    "Wages Sheet",
-                    "GRA PAYE Schedule",
-                ):
+                for marker in self._export_markers():
                     self.assertIn(marker, body, f"{role} cannot see {marker}")
                 self._logout()
 

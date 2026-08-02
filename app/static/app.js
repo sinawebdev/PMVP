@@ -454,3 +454,64 @@ window.payrollaRawPreview = (function () {
 
   return { render: render, esc: esc };
 })();
+
+
+/* --- Tabs -------------------------------------------------------------------
+   Claims any [data-tabs] tablist rendered by macros/ui.html::tabs.
+
+   The panels arrive VISIBLE — this script is what hides them, so a browser that
+   never runs it shows the whole page in document order rather than one panel
+   and three dead buttons. The deep link (#tab-rows-panel) and the browser's own
+   in-page search both still work because the target panel is opened on load and
+   whenever the hash changes. */
+(function () {
+  var lists = document.querySelectorAll("[data-tabs]");
+  if (!lists.length) return;
+
+  Array.prototype.forEach.call(lists, function (list) {
+    var tabs = Array.prototype.slice.call(list.querySelectorAll('[role="tab"]'));
+    var panels = tabs.map(function (tab) {
+      return document.getElementById(tab.getAttribute("aria-controls"));
+    });
+    if (panels.some(function (p) { return !p; })) return; // markup mismatch: leave it alone
+
+    function select(index, focus) {
+      tabs.forEach(function (tab, i) {
+        var on = i === index;
+        tab.setAttribute("aria-selected", on ? "true" : "false");
+        // Roving tabindex: the tablist is ONE tab stop, arrows move within it.
+        tab.tabIndex = on ? 0 : -1;
+        panels[i].hidden = !on;
+      });
+      if (focus) tabs[index].focus();
+    }
+
+    tabs.forEach(function (tab, i) {
+      tab.addEventListener("click", function () { select(i); });
+      tab.addEventListener("keydown", function (e) {
+        var next = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1
+                 : e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : null;
+        if (next === null) return;
+        e.preventDefault();
+        select((next + tabs.length) % tabs.length, true);
+      });
+    });
+
+    function openFromHash() {
+      if (!window.location.hash) return false;
+      var target = window.location.hash.slice(1);
+      for (var i = 0; i < tabs.length; i++) {
+        // Match the panel itself, or anything inside it — an in-page link to a
+        // row deep in a hidden panel must open the panel that holds it.
+        if (panels[i].id === target || panels[i].querySelector("#" + CSS.escape(target))) {
+          select(i);
+          return true;
+        }
+      }
+      return false;
+    }
+
+    if (!openFromHash()) select(0);
+    window.addEventListener("hashchange", openFromHash);
+  });
+})();

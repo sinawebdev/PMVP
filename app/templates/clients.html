@@ -25,6 +25,15 @@
                         <span class="badge text-bg-{{ 'success' if client.status == 'Active' else 'danger' }}">
                             {{ client.status }}
                         </span>
+                        {# Onboarded, but nobody there can sign in. Payrolla
+                           never mints auth identities itself, so this state is
+                           invisible until the client complains — the badge is
+                           derived from the User table, never stored. #}
+                        {% if client.id in awaiting_credentials %}
+                        <span class="badge text-bg-warning" title="No login identity is linked to this company yet — provision credentials before they can sign in.">
+                            Awaiting credentials
+                        </span>
+                        {% endif %}
                     </td>
                     <td class="text-nowrap">
                         <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.edit_client', client_id=client.id) }}">Edit</a>

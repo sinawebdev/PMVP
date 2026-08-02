@@ -164,10 +164,37 @@
 <form method="post" action="{{ a.href }}"
       {% if a.confirm %}data-confirm="{{ a.confirm }}"{% endif %}
       {% if a.danger %}data-confirm-danger="1"{% endif %}
+      {% if a.confirm_title %}data-confirm-title="{{ a.confirm_title }}"{% endif %}
+      {% if a.confirm_ok %}data-confirm-ok="{{ a.confirm_ok }}"{% endif %}
       {% if a.confirm_typed %}data-confirm-typed="{{ a.confirm_typed }}"{% endif %}>
   <button class="{{ cls }}" type="submit">{{ a.label }}</button>
 </form>
 {% else %}
 <a class="{{ cls }}" href="{{ a.href }}">{{ a.label }}</a>
 {% endif %}
+{% endmacro %}
+
+
+{# --- Tabs -------------------------------------------------------------------
+   Renders the tablist only. The caller writes each panel itself:
+
+       <div class="tabpanel" id="tab-rows-panel" role="tabpanel"
+            aria-labelledby="tab-rows"> … </div>
+
+   Panels are emitted WITHOUT `hidden`. app.js hides the inactive ones on load,
+   so a browser with no JS shows every panel in document order instead of
+   showing one and burying the rest behind buttons that do nothing.
+
+   items: [{id, label, count}]  — `id` keys the panel as `tab-<id>-panel`.
+#}
+{% macro tabs(items, label="Sections") %}
+<div class="tabs" role="tablist" aria-label="{{ label }}" data-tabs>
+  {% for t in items %}
+  <button class="tab" type="button" role="tab" id="tab-{{ t.id }}"
+          aria-controls="tab-{{ t.id }}-panel"
+          aria-selected="{{ 'true' if loop.first else 'false' }}">
+    {{ t.label }}{% if t.count is not none %}<span class="tab-count">{{ t.count }}</span>{% endif %}
+  </button>
+  {% endfor %}
+</div>
 {% endmacro %}

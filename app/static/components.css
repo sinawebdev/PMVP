@@ -189,3 +189,45 @@
     font: inherit; padding: 7px 10px; text-align: left; text-decoration: none; width: 100%;
 }
 .ab-menu a:hover, .ab-menu button:hover { background: var(--surface-alt); }
+
+
+/* --- Tabs -------------------------------------------------------------------
+   A page whose secondary content is one interaction deeper, not deleted. The
+   panels are rendered VISIBLE and the tablist is inert until app.js claims it
+   (see macros/ui.html::tabs) — so with no JS the page degrades to the long
+   scroll it used to be rather than to four unreachable sections. */
+
+.tabs {
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: 2px;
+    margin: 18px 0 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    padding: 9px 14px;
+    white-space: nowrap;
+}
+.tab:hover { color: var(--brand-deep); }
+.tab[aria-selected="true"] { border-bottom-color: var(--brand); color: var(--brand-deep); }
+.tab-count {
+    background: var(--surface-alt);
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    margin-left: 6px;
+    padding: 1px 7px;
+}
+.tab[aria-selected="true"] .tab-count { background: var(--brand-soft); }
+.tabpanel { padding-top: 18px; }
+.tabpanel[hidden] { display: none; }

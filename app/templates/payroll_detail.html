@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% import "macros/lifecycle.html" as lc %}
 {% import "macros/breadcrumbs.html" as bc %}
-{% block title %}Payroll Detail · {{ app_name }}{% endblock %}
+{% import "macros/ui.html" as ui %}
+{% block title %}{{ payroll_run.month }} {{ payroll_run.year }} payroll · {{ app_name }}{% endblock %}
 {% block page_title %}Payroll Detail{% endblock %}
 {% block breadcrumbs %}
 {{ bc.trail([
@@ -11,12 +12,38 @@
     + [(payroll_run.month ~ " " ~ payroll_run.year, None)]) }}
 {% endblock %}
 {% block content %}
-<section class="panel mb-3">
-    <div class="panel-header"><h2><i class="bi bi-signpost-split"></i>Payroll Progress</h2>{{ lc.status_pill(payroll_run.status) }}</div>
-    {{ lc.progress_stepper(run_progress(payroll_run, run_distributed)) }}
-</section>
+
+{# --- The decision ----------------------------------------------------------
+   What this run is, what state it is in, the ONE thing to do next and why, and
+   the five figures that justify doing it. The page used to open with a progress
+   stepper, eight stat tiles, eight more fields and a flat row of up to fourteen
+   equally-weighted buttons — every one of which the reader had to price before
+   finding the one that mattered. The ranking is computed server-side in
+   app/payroll.py::_run_actions, which intersects "what the run needs"
+   (payroll_status.recommended_action_for) with "what this role may do"
+   (permissions.can_*_run); this template renders the answer and decides
+   nothing. #}
+{% set status_html %}{{ lc.status_pill(payroll_run.status) }}{% set badge = risk_badge(payroll_run) %}{% if badge %} <span class="badge {{ 'bg-warning text-dark' if badge.tone == 'warning' else ('bg-info text-dark' if badge.tone == 'info' else 'bg-success') }}" title="{{ badge.reasons }}">Risk gate: {{ badge.label }}</span>{% endif %}{% endset %}
+{% set action_html %}{{ ui.action_bar(actions) }}{% endset %}
+{{ ui.decision_header(
+     (payroll_run.client_company.name if payroll_run.client_company else "Payroll run"),
+     subtitle=(payroll_run.month ~ " " ~ payroll_run.year),
+     status_html=status_html,
+     action=recommended,
+     action_html=action_html,
+     figures=[
+       {"label": "Workers", "value": payroll_run.total_workers or 0},
+       {"label": "Gross pay", "value": payroll_run.total_gross_pay|cedis},
+       {"label": "Deductions", "value": payroll_run.total_deductions|cedis},
+       {"label": "Net pay", "value": payroll_run.total_net_pay|cedis},
+       {"label": "Flagged rows", "value": payroll_run.warning_count},
+     ]) }}
+
+{# A possible double-payment is not a "section" — it stays above the fold and
+   outside the tabs, because the reader must see it before acting on anything
+   the header just recommended. #}
 {% if duplicates %}
-<div class="alert alert-warning d-flex align-items-start gap-2 mb-3" role="alert">
+<div class="alert alert-warning d-flex align-items-start gap-2 mt-3" role="alert">
     <i class="bi bi-exclamation-triangle-fill mt-1"></i>
     <div>
         <strong>Possible duplicate payroll.</strong>
@@ -26,229 +53,164 @@
     </div>
 </div>
 {% endif %}
-<section class="stats-grid">
-    <div class="stat-card"><i class="bi bi-building stat-icon"></i><span>Client Company</span><strong>{{ payroll_run.client_company.name if payroll_run.client_company else "" }}</strong></div>
-    <div class="stat-card"><i class="bi bi-calendar2-week stat-icon"></i><span>Payroll Month</span><strong>{{ payroll_run.month }} {{ payroll_run.year }}</strong></div>
-    <div class="stat-card"><i class="bi bi-table stat-icon"></i><span>Total Rows Imported</span><strong>{{ payroll_run.total_rows_imported }}</strong></div>
-    <div class="stat-card"><i class="bi bi-person-check stat-icon"></i><span>Total Unique Workers</span><strong>{{ payroll_run.total_workers }}</strong></div>
-    <div class="stat-card"><i class="bi bi-copy stat-icon"></i><span>Duplicate Workers Found</span><strong>{{ payroll_run.duplicate_workers_found }}</strong></div>
-    <div class="stat-card"><i class="bi bi-person-fill-check stat-icon"></i><span>Active Workers</span><strong>{{ payroll_run.active_workers or 0 }}</strong></div>
-    <div class="stat-card"><i class="bi bi-person-dash stat-icon"></i><span>Inactive / Terminated</span><strong>{{ (payroll_run.inactive_workers or 0) + (payroll_run.terminated_workers or 0) }}</strong></div>
-    <div class="stat-card"><i class="bi bi-cash-coin stat-icon"></i><span>Total Net Pay</span><strong>{{ payroll_run.total_net_pay|cedis }}</strong></div>
-</section>
 
-<section class="panel mt-3">
-    <div class="row g-3">
-        <div class="col-md-3"><strong>Source Excel File</strong><p>{{ payroll_run.source_filename }}</p></div>
-        <div class="col-md-3"><strong>Source Sheet</strong><p>{{ payroll_run.source_sheet_name or "Default sheet" }}</p></div>
-        <div class="col-md-3"><strong>Detected Header Row</strong><p>{{ payroll_run.detected_header_row or 1 }}</p></div>
-        <div class="col-md-3"><strong>Total Gross Pay</strong><p>{{ payroll_run.total_gross_pay|cedis }}</p></div>
-        <div class="col-md-3"><strong>PAYE Total</strong><p>{{ payroll_run.total_paye|cedis }}</p></div>
-        <div class="col-md-3"><strong>SSNIT Total</strong><p>{{ payroll_run.total_ssnit|cedis }}</p></div>
-        <div class="col-md-3"><strong>Total Deductions</strong><p>{{ payroll_run.total_deductions|cedis }}</p></div>
-        <div class="col-md-3"><strong>On Leave / Unknown</strong><p>{{ payroll_run.on_leave_workers or 0 }} / {{ payroll_run.unknown_status_workers or 0 }}</p></div>
-    </div>
-    <div class="d-flex flex-wrap gap-2 mt-2">
-        {# Lifecycle action gating (role x run-status) lives in app/permissions.py —
-           see can_*_run below — so these buttons and the routes they hit share one
-           source of truth. #}
-        {# Label + tone come from app.risk.risk_badge (the persisted verdict), so a
-           released run reads "Released" here instead of staying "Held" forever. #}
-        {% set badge = risk_badge(payroll_run) %}
-        {% if badge %}
-            <span class="badge {{ 'bg-warning text-dark' if badge.tone == 'warning' else ('bg-info text-dark' if badge.tone == 'info' else 'bg-success') }}" title="{{ badge.reasons }}">
-                Risk gate: {{ badge.label }}
-            </span>
-        {% endif %}
-        {% if payroll_run.status in ["Draft", "Pending Approval", "Submitted", "Held", "Auto-Accepted"] %}
-            <form method="post" action="{{ url_for('oversight.risk_check', run_id=payroll_run.id) }}"><button class="btn btn-outline-secondary"><i class="bi bi-shield-check"></i>Run Risk Check</button></form>
-        {% endif %}
-        {% if payroll_run.status == "Held" %}
-            <form method="post" action="{{ url_for('oversight.release_hold', run_id=payroll_run.id) }}"><button class="btn btn-outline-success"><i class="bi bi-unlock"></i>Release Hold</button></form>
-        {% endif %}
-        {% if can_calculate_run(role, payroll_run) %}
-            <form method="post" action="{{ url_for('payroll.calculate', run_id=payroll_run.id) }}"><button class="btn btn-outline-primary"><i class="bi bi-calculator"></i>Calculate Pay</button></form>
-        {% endif %}
-        {% if can_edit_run_figures(role) %}
-            <a class="btn btn-outline-primary" href="{{ url_for('payroll.edit_items', run_id=payroll_run.id) }}"><i class="bi bi-pencil-square"></i>Edit Figures</a>
-        {% endif %}
-        {% if can_manage_wage_rates(role) and payroll_run.upload_type == 'raw' and payroll_run.client_company %}
-            <a class="btn btn-outline-secondary" href="{{ url_for('payroll.wage_rates', client_id=payroll_run.client_company_id) }}"><i class="bi bi-cash"></i>Wage Rates</a>
-        {% endif %}
-        {% if can_submit_run_for_approval(role, payroll_run) %}
-            <form method="post" action="{{ url_for('payroll.submit_for_approval', run_id=payroll_run.id) }}"><button class="btn btn-primary"><i class="bi bi-clipboard-check"></i>Submit for Approval</button></form>
-        {% endif %}
-        {% if can_approve_run(role, payroll_run) %}
-            <form method="post" action="{{ url_for('payroll.approve', run_id=payroll_run.id) }}"><button class="btn btn-success"><i class="bi bi-patch-check"></i>Approve Payroll</button></form>
-        {% endif %}
-        {% if can_reject_run(role, payroll_run) %}
-            <form method="post" action="{{ url_for('payroll.reject', run_id=payroll_run.id) }}"><button class="btn btn-outline-danger"><i class="bi bi-x-octagon"></i>Reject Payroll</button></form>
-        {% endif %}
-        {% if can_mark_run_processed(role, payroll_run) %}
-            <form method="post" action="{{ url_for('payroll.mark_paid', run_id=payroll_run.id) }}"><button class="btn btn-warning"><i class="bi bi-check2-circle"></i>Mark Processed</button></form>
-        {% endif %}
-        {% if can_distribute_run(role, payroll_run) %}
-            <a class="btn btn-primary" href="{{ url_for('distribution.run_status', run_id=payroll_run.id) }}"><i class="bi bi-send-check"></i>Distribute Payslips</a>
-        {% endif %}
-        {% if can_operate_payroll(role) %}
-            <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export', run_id=payroll_run.id) }}"><i class="bi bi-download"></i>Export Payroll</a>
-            <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export_bank_listing_route', run_id=payroll_run.id) }}"><i class="bi bi-bank2"></i>Bank Listing</a>
-            <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export_wages_sheet_route', run_id=payroll_run.id) }}"><i class="bi bi-table"></i>Wages Sheet</a>
-            <a class="btn btn-outline-secondary" href="{{ url_for('payroll.export_gra_paye_route', run_id=payroll_run.id) }}"><i class="bi bi-receipt"></i>GRA PAYE Schedule</a>
-        {% endif %}
-        {% if can_use_raw_engine(role) and payroll_run.upload_type == 'raw' %}
-            <a class="btn btn-outline-primary" href="{{ url_for('raw_engine.run_exports', run_id=payroll_run.id) }}"><i class="bi bi-box-seam"></i>Generate Raw Exports (ZIP)</a>
-        {% endif %}
-        {% if can_delete_run(role, payroll_run) %}
-            {# Top of the consequence scale: a hard delete with no undo, so the
-               operator has to type the period to proceed rather than click through. #}
-            <form method="post" action="{{ url_for('payroll.delete_run', run_id=payroll_run.id) }}"
-                  data-confirm="Permanently delete the {{ payroll_run.client_company.name if payroll_run.client_company else '' }} {{ payroll_run.month }} {{ payroll_run.year }} payroll run and all {{ payroll_run.total_workers or 0 }} worker rows? There is no undo and no recycle bin — only an audit log entry remains. Type the period below to confirm."
-                  data-confirm-danger="1"
-                  data-confirm-title="Delete this payroll run"
-                  data-confirm-ok="Delete run"
-                  data-confirm-typed="{{ payroll_run.month }} {{ payroll_run.year }}">
-                <button class="btn btn-danger"><i class="bi bi-trash3"></i>Delete Run</button>
-            </form>
-        {% endif %}
-    </div>
-</section>
+<div class="mt-3">{{ lc.progress_stepper(run_progress(payroll_run, run_distributed)) }}</div>
 
-{% if comparison.previous %}
-<section class="panel mt-3">
-    <div class="panel-header"><h2><i class="bi bi-bar-chart-steps"></i>Compared to Previous Run</h2><span>vs {{ comparison.previous.month }} {{ comparison.previous.year }}</span></div>
-    <div class="table-responsive">
-        <table class="table align-middle mb-0">
-            <thead><tr><th>Metric</th><th class="text-end">This run</th><th class="text-end">Previous</th><th class="text-end">Change</th></tr></thead>
-            <tbody>
-            {% for row in comparison.rows %}
-                <tr class="{{ 'table-warning' if row.flag }}">
-                    <td>{{ row.label }}{% if row.flag %} <i class="bi bi-exclamation-triangle text-warning" title="Unusual change vs previous run"></i>{% endif %}</td>
-                    <td class="text-end">{% if row.is_money %}{{ row.current|cedis }}{% else %}{{ row.current }}{% endif %}</td>
-                    <td class="text-end">{% if row.is_money %}{{ row.previous|cedis }}{% else %}{{ row.previous }}{% endif %}</td>
-                    <td class="text-end">
-                        {% if row.signed_pct is not none %}{{ "%+.1f"|format(row.signed_pct * 100) }}%
-                        {% elif row.is_money %}{{ row.delta|cedis }}
-                        {% else %}{{ "%+d"|format(row.delta) }}{% endif %}
-                    </td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    <p class="mini-note mt-2 mb-0"><i class="bi bi-info-circle"></i> Changes beyond the risk thresholds (net/gross/deductions/tax ±15%, headcount ±20%) are flagged — the same signals the risk gate uses.</p>
-</section>
-{% endif %}
+{{ ui.tabs([
+     {"id": "rows",       "label": "Rows",              "count": payroll_run.item_count},
+     {"id": "risk",       "label": "Risk & validation", "count": payroll_run.warning_count or none},
+     {"id": "comparison", "label": "Comparison",        "count": none},
+     {"id": "timeline",   "label": "Timeline",          "count": activity|length},
+     {"id": "source",     "label": "Source & totals",   "count": none},
+   ], label="Payroll run sections") }}
 
-<section class="panel mt-3">
-    <div class="panel-header">
-        <h2><i class="bi bi-shield-check"></i>Risk &amp; Validation Summary</h2>
-        {# The standing verdict (persisted), NOT a second live re-score — this
-           badge and the one in the action bar above are the same value. #}
-        {% set summary_badge = risk_badge(payroll_run) %}
-        {% if summary_badge %}
-        <span class="badge {{ 'bg-warning text-dark' if summary_badge.tone == 'warning' else ('bg-info text-dark' if summary_badge.tone == 'info' else 'bg-success') }}">{{ summary_badge.label }}</span>
-        {% else %}
-        <span class="badge bg-secondary">Not scored</span>
-        {% endif %}
-    </div>
-    {% if summary_badge and summary_badge.tone != 'warning' and risk_verdict.held %}
-    <p class="mini-note mb-3"><i class="bi bi-info-circle"></i>
-        The rules below still trip on the current figures — the gate verdict above
-        stands because the run was reviewed and cleared. Use <strong>Run Risk Check</strong>
-        to re-score it against today's figures.
-    </p>
-    {% endif %}
-    <div class="row g-3">
-        <div class="col-md-6">
-            <h3 class="h6">Risk gate checks</h3>
-            <ul class="list-unstyled mb-0">
-                {% for check in risk_verdict.checks %}
-                <li class="mb-1">
-                    <i class="bi {{ 'bi-exclamation-triangle-fill text-warning' if check.tripped else 'bi-check-circle-fill text-success' }}"></i>
-                    <strong>{{ check.name }}</strong> — {{ check.detail }}
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        <div class="col-md-6">
-            <h3 class="h6">Row-level warnings</h3>
-            {% if payroll_run.warning_count %}
-            <p class="mb-0"><i class="bi bi-exclamation-triangle text-warning"></i>
-                {{ payroll_run.warning_count }} of {{ payroll_run.items|length }} row(s) flagged.
-                <a href="#payroll-items-grid">Jump to the Payroll Items Grid</a>.
-            </p>
-            {% else %}
-            <p class="text-success mb-0"><i class="bi bi-check-circle"></i> No row-level validation warnings.</p>
-            {% endif %}
-        </div>
-    </div>
-    {% if recommendations %}
-    <hr>
-    <h3 class="h6">Recommendations</h3>
-    <ul class="mb-0">
-        {% for rec in recommendations %}<li>{{ rec }}</li>{% endfor %}
-    </ul>
-    {% endif %}
-</section>
+{# --- Rows ---------------------------------------------------------------- #}
+<div class="tabpanel" id="tab-rows-panel" role="tabpanel" aria-labelledby="tab-rows">
+  {% if payroll_run.upload_type == 'raw' and payroll_run.item_count == 0 %}
+  <div class="raw-notice mb-3">
+      <i class="bi bi-clock-history"></i>
+      <span>This run was created from a <strong>raw hours upload</strong> (billable add-on) with
+      {{ payroll_run.raw_entries|length }} imported line items. Gross pay has <strong>not</strong> been
+      calculated yet — a {{ app_brand_name }} operator will process the hours into payroll items.</span>
+  </div>
+  {% endif %}
+  {# A page of rows, not the run: a 400-worker payroll used to build a 400-row
+     table on every view of this page, including views whose only purpose was to
+     click Approve. Ordering is explicit — a paginated query with no ORDER BY can
+     return the same worker on two pages. #}
+  {% call ui.data_table(
+       [{"label": "Staff ID"}, {"label": "Name"},
+        {"label": "Gross", "align": "num"}, {"label": "PAYE", "align": "num"},
+        {"label": "SSNIT", "align": "num"}, {"label": "Deductions", "align": "num"},
+        {"label": "Net pay", "align": "num"},
+        {"label": "Status"}, {"label": "Warnings"}, {"label": "Payslip"}],
+       page=items,
+       caption="Payroll rows for " ~ payroll_run.month ~ " " ~ payroll_run.year,
+       empty_title="No payroll items were imported",
+       empty_detail="The uploaded workbook produced no worker rows for this run.",
+       table_id="payroll-items-grid") %}
+    {% for item in items.items %}
+    <tr>
+      <td>{{ item.staff_id }}</td>
+      <td>{{ item.full_name }}</td>
+      <td class="num">{{ item.gross_pay|cedis }}</td>
+      <td class="num">{{ item.paye|cedis }}</td>
+      <td class="num">{{ item.ssnit|cedis }}</td>
+      <td class="num">{{ item.total_deductions|cedis }}</td>
+      <td class="num">{{ item.net_pay|cedis }}</td>
+      <td>{{ item.status or "Unknown" }} <span class="badge text-bg-{{ 'warning' if item.validation_status == 'Warning' else 'success' }}">{{ item.validation_status }}</span></td>
+      <td>{{ item.warning_notes }}</td>
+      <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.payslip', item_id=item.id) }}"><i class="bi bi-file-earmark-pdf"></i>Payslip</a></td>
+    </tr>
+    {% endfor %}
+  {% endcall %}
+</div>
 
-<section class="panel mt-3">
-    <div class="panel-header"><h2><i class="bi bi-clock-history"></i>Activity &amp; Approval Timeline</h2><span>{{ activity|length }} event{{ "" if activity|length == 1 else "s" }}</span></div>
-    {% if activity %}
-    <ol class="activity-timeline">
-        {% for a in activity %}
-        <li class="activity-item activity-item--{{ a.kind }}">
-            <div class="activity-head">
-                <strong>{{ a.title }}</strong>
-                <span class="activity-meta">{{ a.actor }}{% if a.at %} · {{ a.at.strftime('%Y-%m-%d %H:%M') }}{% endif %}</span>
-            </div>
-            {% if a.detail %}<div class="activity-detail">{{ a.detail }}</div>{% endif %}
-        </li>
-        {% endfor %}
-    </ol>
-    {% else %}
-    <p class="text-muted mb-0">No recorded activity yet.</p>
-    {% endif %}
-</section>
+{# --- Risk & validation --------------------------------------------------- #}
+<div class="tabpanel" id="tab-risk-panel" role="tabpanel" aria-labelledby="tab-risk">
+  {% set summary_badge = risk_badge(payroll_run) %}
+  {% if summary_badge and summary_badge.tone != 'warning' and risk_verdict.held %}
+  <p class="mini-note mb-3"><i class="bi bi-info-circle"></i>
+      The rules below still trip on the current figures — the gate verdict stands
+      because the run was reviewed and cleared. Use <strong>Run risk check</strong>
+      to re-score it against today's figures.
+  </p>
+  {% endif %}
+  <div class="row g-3">
+      <div class="col-md-6">
+          <h3 class="h6">Risk gate checks</h3>
+          <ul class="list-unstyled mb-0">
+              {% for check in risk_verdict.checks %}
+              <li class="mb-1">
+                  <i class="bi {{ 'bi-exclamation-triangle-fill text-warning' if check.tripped else 'bi-check-circle-fill text-success' }}"></i>
+                  <strong>{{ check.name }}</strong> — {{ check.detail }}
+              </li>
+              {% endfor %}
+          </ul>
+      </div>
+      <div class="col-md-6">
+          <h3 class="h6">Row-level warnings</h3>
+          {% if payroll_run.warning_count %}
+          <p class="mb-0"><i class="bi bi-exclamation-triangle text-warning"></i>
+              {{ payroll_run.warning_count }} of {{ payroll_run.item_count }} row(s) flagged.
+              <a href="#tab-rows-panel">Open the Rows tab</a>.
+          </p>
+          {% else %}
+          <p class="text-success mb-0"><i class="bi bi-check-circle"></i> No row-level validation warnings.</p>
+          {% endif %}
+      </div>
+  </div>
+  {% if recommendations %}
+  <hr>
+  <h3 class="h6">Recommendations</h3>
+  <ul class="mb-0">
+      {% for rec in recommendations %}<li>{{ rec }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</div>
 
-{% if payroll_run.upload_type == 'raw' and payroll_run.items|length == 0 %}
-<section class="panel mt-3">
-    <div class="raw-notice">
-        <i class="bi bi-clock-history"></i>
-        <span>This run was created from a <strong>raw hours upload</strong> (billable add-on) with
-        {{ payroll_run.raw_entries|length }} imported line items. Gross pay has <strong>not</strong> been
-        calculated yet — a {{ app_brand_name }} operator will process the hours into payroll items.</span>
-    </div>
-</section>
-{% endif %}
+{# --- Comparison ---------------------------------------------------------- #}
+<div class="tabpanel" id="tab-comparison-panel" role="tabpanel" aria-labelledby="tab-comparison">
+  {% if comparison.previous %}
+  <div class="table-responsive">
+      <table class="table align-middle mb-0">
+          <caption class="sr-only">This run compared to {{ comparison.previous.month }} {{ comparison.previous.year }}</caption>
+          <thead><tr><th>Metric</th><th class="text-end">This run</th><th class="text-end">{{ comparison.previous.month }} {{ comparison.previous.year }}</th><th class="text-end">Change</th></tr></thead>
+          <tbody>
+          {% for row in comparison.rows %}
+              <tr class="{{ 'table-warning' if row.flag }}">
+                  <td>{{ row.label }}{% if row.flag %} <i class="bi bi-exclamation-triangle text-warning" title="Unusual change vs previous run"></i>{% endif %}</td>
+                  <td class="text-end">{% if row.is_money %}{{ row.current|cedis }}{% else %}{{ row.current }}{% endif %}</td>
+                  <td class="text-end">{% if row.is_money %}{{ row.previous|cedis }}{% else %}{{ row.previous }}{% endif %}</td>
+                  <td class="text-end">
+                      {% if row.signed_pct is not none %}{{ "%+.1f"|format(row.signed_pct * 100) }}%
+                      {% elif row.is_money %}{{ row.delta|cedis }}
+                      {% else %}{{ "%+d"|format(row.delta) }}{% endif %}
+                  </td>
+              </tr>
+          {% endfor %}
+          </tbody>
+      </table>
+  </div>
+  <p class="mini-note mt-2 mb-0"><i class="bi bi-info-circle"></i> Changes beyond the risk thresholds (net/gross/deductions/tax ±15%, headcount ±20%) are flagged — the same signals the risk gate uses.</p>
+  {% else %}
+  {{ ui.empty("Nothing to compare against", "This is the first payroll run recorded for this company.") }}
+  {% endif %}
+</div>
 
-<section class="panel mt-3" id="payroll-items-grid">
-    <div class="panel-header"><h2><i class="bi bi-grid-3x3-gap"></i>Payroll Items Grid</h2><span>{{ payroll_run.items|length }} rows</span></div>
-    <div class="mini-note mb-3"><i class="bi bi-table"></i> This section is styled as an Excel-like grid for scanning payroll rows, totals, warnings, and payslip actions.</div>
-    {% if not payroll_run.items %}
-        <p class="text-muted mb-0">No payroll items were imported for this payroll run.</p>
-    {% else %}
-    <div class="excel-grid-wrap">
-        <table class="table table-sm align-middle excel-grid">
-            <thead><tr><th scope="col">Staff ID</th><th scope="col">Name</th><th scope="col">Gross</th><th scope="col">PAYE</th><th scope="col">SSNIT</th><th scope="col">Deductions</th><th scope="col">Net Pay</th><th scope="col">Status</th><th scope="col">Warnings</th><th scope="col">Payslip</th></tr></thead>
-            <tbody>
-            {% for item in payroll_run.items %}
-                <tr>
-                    <td>{{ item.staff_id }}</td>
-                    <td>{{ item.full_name }}</td>
-                    <td class="money-cell">{{ item.gross_pay|cedis }}</td>
-                    <td class="money-cell">{{ item.paye|cedis }}</td>
-                    <td class="money-cell">{{ item.ssnit|cedis }}</td>
-                    <td class="money-cell">{{ item.total_deductions|cedis }}</td>
-                    <td class="money-cell">{{ item.net_pay|cedis }}</td>
-                    <td>{{ item.status or "Unknown" }} <span class="badge text-bg-{{ 'warning' if item.validation_status == 'Warning' else 'success' }}">{{ item.validation_status }}</span></td>
-                    <td>{{ item.warning_notes }}</td>
-                    <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.payslip', item_id=item.id) }}"><i class="bi bi-file-earmark-pdf"></i>Payslip</a></td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
-</section>
+{# --- Timeline ------------------------------------------------------------ #}
+<div class="tabpanel" id="tab-timeline-panel" role="tabpanel" aria-labelledby="tab-timeline">
+  {% if activity %}
+  <ol class="activity-timeline">
+      {% for a in activity %}
+      <li class="activity-item activity-item--{{ a.kind }}">
+          <div class="activity-head">
+              <strong>{{ a.title }}</strong>
+              <span class="activity-meta">{{ a.actor }}{% if a.at %} · {{ a.at.strftime('%Y-%m-%d %H:%M') }}{% endif %}</span>
+          </div>
+          {% if a.detail %}<div class="activity-detail">{{ a.detail }}</div>{% endif %}
+      </li>
+      {% endfor %}
+  </ol>
+  {% else %}
+  {{ ui.empty("No recorded activity yet", "Calculations, approvals and distribution are recorded here as they happen.") }}
+  {% endif %}
+</div>
+
+{# --- Source & totals ----------------------------------------------------- #}
+<div class="tabpanel" id="tab-source-panel" role="tabpanel" aria-labelledby="tab-source">
+  <div class="row g-3">
+      <div class="col-md-3"><strong>Source Excel file</strong><p class="mb-0 text-muted">{{ payroll_run.source_filename }}</p></div>
+      <div class="col-md-3"><strong>Source sheet</strong><p class="mb-0 text-muted">{{ payroll_run.source_sheet_name or "Default sheet" }}</p></div>
+      <div class="col-md-3"><strong>Detected header row</strong><p class="mb-0 text-muted">{{ payroll_run.detected_header_row or 1 }}</p></div>
+      {# Two different numbers that look like one: what the importer SAW in the
+         workbook, and what actually landed as payroll rows. #}
+      <div class="col-md-3"><strong>Rows read from file</strong><p class="mb-0 text-muted">{{ payroll_run.total_rows_imported }} → {{ payroll_run.item_count }} imported</p></div>
+      <div class="col-md-3"><strong>PAYE total</strong><p class="mb-0 text-muted">{{ payroll_run.total_paye|cedis }}</p></div>
+      <div class="col-md-3"><strong>SSNIT total</strong><p class="mb-0 text-muted">{{ payroll_run.total_ssnit|cedis }}</p></div>
+      <div class="col-md-3"><strong>Duplicate workers found</strong><p class="mb-0 text-muted">{{ payroll_run.duplicate_workers_found }}</p></div>
+      <div class="col-md-3"><strong>Active / inactive</strong><p class="mb-0 text-muted">{{ payroll_run.active_workers or 0 }} / {{ (payroll_run.inactive_workers or 0) + (payroll_run.terminated_workers or 0) }}</p></div>
+      <div class="col-md-3"><strong>On leave / unknown</strong><p class="mb-0 text-muted">{{ payroll_run.on_leave_workers or 0 }} / {{ payroll_run.unknown_status_workers or 0 }}</p></div>
+  </div>
+</div>
 {% endblock %}

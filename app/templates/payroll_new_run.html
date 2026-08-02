@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
+{% block title %}New payroll run · {{ app_name }}{% endblock %}
+{% block page_title %}New payroll run{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Payroll Runs", url_for('payroll.runs')),
+    ("New payroll run", None),
+]) }}
+{% endblock %}
+{% block page_actions %}
+<a class="btn btn-outline-light btn-sm" href="{{ url_for('payroll.runs') }}"><i class="bi bi-x-lg"></i>Cancel</a>
+{% endblock %}
+{% block content %}
+
+{# Step 1 of upload → preview → confirm. This form used to sit permanently open
+   above the runs list, so every visit to Payroll Runs opened on a wizard the
+   reader had not asked for and pushed the list itself below the fold. Nothing
+   is written until the preview is confirmed. #}
+<p class="mini-note mb-3">
+    <i class="bi bi-1-circle"></i>
+    Upload a workbook to preview it. No payroll run is created until you confirm
+    the preview on the next screen.
+</p>
+
+<section class="panel form-panel" style="position: relative;">
+    <div class="upload-overlay" id="run-upload-overlay">
+        <div class="spinner-border" role="status" aria-hidden="true"></div>
+        <div class="upload-stage-msg">Reading workbook…</div>
+        <div class="upload-progress"><div class="upload-progress-bar"></div></div>
+        <div class="upload-note">This can take up to a minute — please don't re-click.</div>
+    </div>
+
+    {% if wrong_tab == "raw" and can_use_raw_engine(role) %}
+    <div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2" role="alert">
+        <span><i class="bi bi-exclamation-triangle"></i> This workbook appears to be a <strong>Raw Hours</strong> workbook. Please upload it using <strong>Raw Hour Upload</strong> instead.</span>
+        <button type="button" class="btn btn-sm btn-warning" onclick="document.getElementById('tab-raw').click()"><i class="bi bi-clock-history"></i> Go to Raw Hour Upload</button>
+    </div>
+    {% endif %}
+
+    <div class="upload-tabs" role="tablist" aria-label="Choose upload type">
+        <button type="button" class="upload-tab is-active" role="tab" aria-selected="true" id="tab-standard" data-tab-target="standard"><i class="bi bi-file-earmark-spreadsheet"></i>Standard Upload</button>
+        {% if can_use_raw_engine(role) %}
+        <button type="button" class="upload-tab" role="tab" aria-selected="false" id="tab-raw" data-tab-target="raw"><i class="bi bi-clock-history"></i>Raw Hour Upload</button>
+        {% endif %}
+    </div>
+
+    <div class="upload-panel is-active" data-panel="standard" role="tabpanel" aria-labelledby="tab-standard">
+        <form method="post" enctype="multipart/form-data" class="row g-3" data-staged-loader="run-upload-overlay">
+            <div class="col-md-4">
+                <label class="form-label" for="import_mode">Import Mode</label>
+                <select class="form-select" id="import_mode" name="import_mode">
+                    <option value="single_client">Single Client Import</option>
+                    <option value="multi_client">Multi-Client Workbook Import</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="client_company_id">Client Company</label>
+                <select class="form-select" id="client_company_id" name="client_company_id">
+                    <option value="">Choose client company</option>
+                    {% for client in clients %}
+                        <option value="{{ client.id }}">{{ client.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" for="month">Month</label>
+                <select class="form-select" id="month" name="month" required>
+                    {% for m in ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] %}
+                    <option value="{{ m }}" {% if current_month == m %}selected{% endif %}>{{ m }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2"><label class="form-label" for="year">Year</label><input class="form-control" id="year" type="number" name="year" value="{{ current_year }}" required></div>
+            <div class="col-md-8"><label class="form-label" for="payroll_file">Payroll Excel File</label><input class="form-control" id="payroll_file" type="file" name="payroll_file" accept=".xlsx,.xls,.csv" required></div>
+            <div class="col-md-4 d-flex align-items-end">
+                <button class="btn btn-primary w-100"><i class="bi bi-upload"></i>Upload and Preview</button>
+            </div>
+        </form>
+    </div>
+
+    {% if can_use_raw_engine(role) %}
+    <div class="upload-panel" data-panel="raw" role="tabpanel" aria-labelledby="tab-raw" hidden>
+        <p class="raw-notice"><i class="bi bi-info-circle"></i><span>Hourly-rate clients. An unseeded client's first upload is the rich <strong>RAW DATA</strong> workbook (seed); a seeded client uploads the monthly thin template. Nothing is written until you confirm the preview.</span></p>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label" for="raw_client">Client Company</label>
+                <select class="form-select" id="raw_client">
+                    <option value="">Choose client company</option>
+                    {% for client in clients %}<option value="{{ client.id }}">{{ client.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3"><label class="form-label" for="raw_month">Month</label><input class="form-control" id="raw_month" value="{{ current_month }}"></div>
+            <div class="col-md-3"><label class="form-label" for="raw_year">Year</label><input class="form-control" type="number" id="raw_year" value="{{ current_year }}"></div>
+            <div class="col-md-8"><label class="form-label" for="raw_file">Raw / Thin File (.xlsx)</label><input class="form-control" type="file" id="raw_file" accept=".xlsx"></div>
+            <div class="col-md-4 d-flex align-items-end gap-2">
+                <button class="btn btn-primary" id="raw_upload_btn" type="button" onclick="rawUpload()"><i class="bi bi-upload"></i>Upload &amp; Preview</button>
+                <a class="btn btn-outline-secondary" href="#" onclick="rawTemplate(event)"><i class="bi bi-download"></i>Template</a>
+            </div>
+            <div class="col-12"><div id="raw_result"></div></div>
+        </div>
+    </div>
+    {% endif %}
+</section>
+
+<script>
+(function () {
+    // Upload-type tabs: activate the clicked button and reveal its matching panel.
+    var tabs = document.querySelectorAll('.upload-tab');
+    var panels = document.querySelectorAll('.upload-panel');
+    tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            var target = tab.getAttribute('data-tab-target');
+            tabs.forEach(function (t) {
+                var on = t === tab;
+                t.classList.toggle('is-active', on);
+                t.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            panels.forEach(function (p) {
+                var on = p.getAttribute('data-panel') === target;
+                p.classList.toggle('is-active', on);
+                p.hidden = !on;
+            });
+        });
+    });
+})();
+
+function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+        return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c];
+    });
+}
+// One implementation, in app.js — this screen and the standalone upload screen
+// render an import preview the same way (blockers first, bounded warnings).
+function rawPreviewHTML(d) {
+    return window.payrollaRawPreview.render(d);
+}
+async function rawUpload() {
+    var btn = document.getElementById('raw_upload_btn');
+    var cid = document.getElementById('raw_client').value;
+    var file = document.getElementById('raw_file').files[0];
+    var out = document.getElementById('raw_result');
+    if (!cid || !file) { out.innerHTML = '<div class="alert alert-warning">Choose a client and a file.</div>'; return; }
+    var fd = new FormData();
+    fd.append('client_company_id', cid);
+    fd.append('month', document.getElementById('raw_month').value);
+    fd.append('year', document.getElementById('raw_year').value);
+    fd.append('file', file);
+    var original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Uploading…';
+    // Staged loader (C1): motion + reassuring copy over the panel while parsing.
+    var loader = window.payrollaStagedLoader
+        ? window.payrollaStagedLoader(document.getElementById('run-upload-overlay'))
+        : { stop: function () {} };
+    try {
+        var r = await fetch('{{ url_for("raw_engine.upload") }}', {method: 'POST', body: fd});
+        var d = await r.json();
+        if (!r.ok) {
+            // Shape Guard: a Standard Payroll workbook lands here by mistake — show
+            // the friendly redirect with a button back to the Standard Upload tab.
+            if (d.wrong_tab === 'standard') {
+                out.innerHTML = '<div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2">'
+                    + '<span>' + esc(d.error || 'Wrong workbook type.') + '</span>'
+                    + '<button class="btn btn-sm btn-warning" type="button" onclick="document.getElementById(\'tab-standard\').click()"><i class="bi bi-file-earmark-spreadsheet"></i> Go to Standard Upload</button>'
+                    + '</div>';
+                return;
+            }
+            out.innerHTML = '<div class="alert alert-danger">' + esc(d.error || 'Upload failed') + '</div>';
+            return;
+        }
+        out.innerHTML = rawPreviewHTML(d);
+    } catch (e) {
+        out.innerHTML = '<div class="alert alert-danger">Network error — the workbook may still be processing on the server. Wait a moment and check before retrying.</div>';
+    } finally {
+        loader.stop();
+        btn.disabled = false;
+        btn.innerHTML = original;
+    }
+}
+async function rawConfirm(token) {
+    var out = document.getElementById('raw_result');
+    var btn = document.getElementById('raw_confirm_btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving…';
+    }
+    var loader = window.payrollaStagedLoader
+        ? window.payrollaStagedLoader(document.getElementById('run-upload-overlay'),
+            {messages: ['Saving records…', 'Computing PAYE & SSNIT…', 'Finalizing…', 'Almost done…']})
+        : { stop: function () {} };
+    var fd = new FormData(); fd.append('token', token);
+    try {
+        var r = await fetch('{{ url_for("raw_engine.confirm") }}', {method: 'POST', body: fd});
+        var d = await r.json();
+        if (!r.ok) { loader.stop(); out.innerHTML = '<div class="alert alert-danger">' + esc(d.error || 'Confirm failed') + '</div>'; return; }
+        window.location = d.redirect; // loader stays up through navigation
+    } catch (e) {
+        loader.stop();
+        out.innerHTML = '<div class="alert alert-danger">Network error during confirm — check Payroll Runs before retrying so you don\'t double-post.</div>';
+    }
+}
+function rawTemplate(ev) {
+    ev.preventDefault();
+    var cid = document.getElementById('raw_client').value;
+    if (!cid) { document.getElementById('raw_result').innerHTML = '<div class="alert alert-warning">Choose a seeded client first.</div>'; return; }
+    var m = encodeURIComponent(document.getElementById('raw_month').value);
+    var y = encodeURIComponent(document.getElementById('raw_year').value);
+    window.location = '/raw/clients/' + cid + '/template?month=' + m + '&year=' + y;
+}
+</script>
+{% endblock %}

@@ -276,7 +276,12 @@ def dashboard():
     # Same three counts already driving the KPI band and the header's Risk Queue
     # badge — reshaped, not recomputed, so the panel and those numbers can never
     # disagree.
-    risk_signals = platform_risk_signals(held_count, pending_approvals, warning_count)
+    risk_signals = platform_risk_signals(
+        held_count,
+        pending_approvals,
+        warning_count,
+        awaiting_credentials=len(ClientCompany.ids_awaiting_credentials()),
+    )
     # Combined employee (5.5%) + employer (13%) SSF — the figure actually
     # remitted to SSNIT, not just the worker-side deduction.
     ssnit_payable = sum(
@@ -378,7 +383,15 @@ def company_dashboard():
 @platform_required
 def clients():
     clients = ClientCompany.query.order_by(ClientCompany.name).all()
-    return render_template("clients.html", clients=clients)
+    return render_template(
+        "clients.html",
+        clients=clients,
+        # One query for the whole page — the per-company property would be an
+        # N+1 here. See ClientCompany.ids_awaiting_credentials.
+        awaiting_credentials=ClientCompany.ids_awaiting_credentials(
+            [c.id for c in clients]
+        ),
+    )
 
 
 # --- Client onboarding ------------------------------------------------------

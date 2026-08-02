@@ -683,7 +683,7 @@ class MvpTestCase(unittest.TestCase):
             client_id = client_company.id
 
         response = self.client.post(
-            "/payroll/runs",
+            "/payroll/runs/new",
             data={
                 "client_company_id": str(client_id),
                 "month": "February",
@@ -717,7 +717,7 @@ class MvpTestCase(unittest.TestCase):
             client_id = client_company.id
 
         response = self.client.post(
-            "/payroll/runs",
+            "/payroll/runs/new",
             data={
                 "client_company_id": str(client_id),
                 "month": "May",
@@ -739,7 +739,9 @@ class MvpTestCase(unittest.TestCase):
         preview_response = self.client.get(response.headers["Location"])
         self.assertEqual(preview_response.status_code, 200)
         self.assertIn(b"MSC_Ghana_Ltd", preview_response.data)
-        self.assertIn(b"Detected Header Row", preview_response.data)
+        # Phase 4: the header row moved into the Column mapping tab, stated as a
+        # sentence rather than as one of thirteen equally-weighted stat tiles.
+        self.assertIn(b"header detected on row", preview_response.data)
 
     def test_upload_rejects_workbook_with_no_valid_payroll_rows(self):
         self.login_admin()
@@ -759,7 +761,7 @@ class MvpTestCase(unittest.TestCase):
             original_batches = ImportBatch.query.count()
 
         response = self.client.post(
-            "/payroll/runs",
+            "/payroll/runs/new",
             data={
                 "client_company_id": str(client_id),
                 "month": "June",
@@ -780,7 +782,7 @@ class MvpTestCase(unittest.TestCase):
         from app.models import ImportBatch
 
         response = self.client.post(
-            "/payroll/runs",
+            "/payroll/runs/new",
             data={
                 "import_mode": "multi_client",
                 "month": "April",
@@ -794,7 +796,8 @@ class MvpTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         preview_response = self.client.get(response.headers["Location"])
         self.assertEqual(preview_response.status_code, 200)
-        self.assertIn(b"Confirm and Create Payroll Runs", preview_response.data)
+        self.assertIn(b"Confirm and create", preview_response.data)
+        self.assertIn(b"payroll run", preview_response.data)
         self.assertIn(b"MSC_Ghana_Ltd", preview_response.data)
         self.assertIn(b"Acme_Manufacturing_Ltd", preview_response.data)
         self.assertIn(b"Unknown_Client_Payroll", preview_response.data)
@@ -815,7 +818,7 @@ class MvpTestCase(unittest.TestCase):
         self.login_admin()
 
         response = self.client.post(
-            "/payroll/runs",
+            "/payroll/runs/new",
             data={
                 "import_mode": "multi_client",
                 "month": "July",
@@ -866,7 +869,7 @@ class MvpTestCase(unittest.TestCase):
             client_id = client_company.id
 
         response = self.client.post(
-            "/payroll/runs",
+            "/payroll/runs/new",
             data={
                 "client_company_id": str(client_id),
                 "month": "August",
@@ -910,7 +913,7 @@ class MvpTestCase(unittest.TestCase):
             ).count()
 
         upload_response = self.client.post(
-            "/payroll/runs",
+            "/payroll/runs/new",
             data={
                 "client_company_id": str(client_id),
                 "month": "May",
@@ -940,7 +943,7 @@ class MvpTestCase(unittest.TestCase):
         for path in [
             "/dashboard",
             "/clients",
-            "/payroll/runs",
+            "/payroll/runs/new",
             "/payslip",
             "/audit",
         ]:
@@ -1010,7 +1013,9 @@ class MvpTestCase(unittest.TestCase):
         response = self.client.get("/payroll/runs?status=needs_approval")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Approval queue", response.data)
+        # The filtered list retitles itself; the note below it names the states.
+        self.assertIn(b"Approval Queue", response.data)
+        self.assertIn(b"awaiting sign-off", response.data)
         self.assertNotIn(b"Approved</span>", response.data)
 
     def test_approval_updates_status_and_logs_audit_without_finance_records(self):
@@ -1160,7 +1165,9 @@ class MvpTestCase(unittest.TestCase):
         self.assertTrue(response.data.startswith(b"%PDF"))
         response.close()
 
-    def test_payroll_detail_uses_excel_grid_and_cedis_format(self):
+    def test_payroll_detail_uses_the_data_table_and_cedis_format(self):
+        # Phase 4 moved the items grid onto the shared Data Table component, so
+        # the one-off `excel-grid` class this used to assert is gone from here.
         self.login_admin()
         with self.app.app_context():
             payroll_run = PayrollRun.query.first()
@@ -1169,7 +1176,7 @@ class MvpTestCase(unittest.TestCase):
         response = self.client.get(f"/payroll/runs/{run_id}")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"excel-grid", response.data)
+        self.assertIn(b'id="payroll-items-grid"', response.data)
         self.assertIn("GH₵ 8,044.50".encode("utf-8"), response.data)
 
     def test_inactive_client_status_is_red(self):
@@ -1191,7 +1198,7 @@ class MvpTestCase(unittest.TestCase):
             client_id = client_company.id
 
         upload_response = self.client.post(
-            "/payroll/runs",
+            "/payroll/runs/new",
             data={
                 "client_company_id": str(client_id),
                 "month": "January",
@@ -1236,16 +1243,33 @@ class MvpTestCase(unittest.TestCase):
         self.assertIn(b"MSC Limited", response.data)
         self.assertNotIn(b"stellar.xlsx", response.data)
 
-    def test_payroll_runs_page_contains_embedded_upload_form(self):
+    def test_payroll_runs_page_is_the_list_and_nothing_else(self):
+        """Phase 4, Task 4.2 — inverted deliberately.
+
+        The upload form used to be embedded here, which this test used to
+        assert. It now lives on its own page: visiting Payroll Runs must show
+        the runs, and offer creation as one link rather than an open wizard."""
         self.login_admin()
         response = self.client.get("/payroll/runs")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Create Payroll Run", response.data)
+        self.assertNotIn(b'name="payroll_file"', response.data)
+        self.assertNotIn(b'name="import_mode"', response.data)
+        self.assertIn(b'href="/payroll/runs/new"', response.data)
+        self.assertIn(b'id="runs-table"', response.data)
+        self.assertNotIn(b'href="/payroll/upload"', response.data)
+
+    def test_new_run_page_holds_the_upload_form(self):
+        self.login_admin()
+        response = self.client.get("/payroll/runs/new")
+
+        self.assertEqual(response.status_code, 200)
         self.assertIn(b'name="payroll_file"', response.data)
         self.assertIn(b'name="client_company_id"', response.data)
-        self.assertIn(b"excel-grid", response.data)
-        self.assertNotIn(b'href="/payroll/upload"', response.data)
+
+    def test_runs_list_no_longer_accepts_an_upload(self):
+        self.login_admin()
+        self.assertEqual(self.client.post("/payroll/runs").status_code, 405)
 
     def test_payslip_module_selects_client_run_and_generates_view(self):
         self.login_admin()

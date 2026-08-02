@@ -61,6 +61,44 @@ class ClientCompany(db.Model):
     payroll_runs = db.relationship("PayrollRun", back_populates="client_company")
     proposals = db.relationship("Proposal", back_populates="client_company")
 
+    # --- Awaiting credentials (Phase 4, Task 4.5) ---------------------------
+    # Onboarding creates the company record and nothing else: Payrolla never
+    # mints an auth identity itself (see the note above main.add_client), so a
+    # company can sit fully onboarded and completely unable to sign in, with
+    # nothing on any screen saying so.
+    #
+    # DERIVED, deliberately. A stored "awaiting credentials" column would be a
+    # second answer to a question the User table already answers, and it would
+    # go stale the moment an identity is created or revoked outside this app —
+    # which is exactly how credentials are provisioned here.
+
+    @property
+    def awaiting_credentials(self):
+        """True when no login identity points at this company yet."""
+        if self.id is None:
+            return True
+        return not db.session.query(
+            db.session.query(User.id)
+            .filter(User.client_company_id == self.id)
+            .exists()
+        ).scalar()
+
+    @staticmethod
+    def ids_awaiting_credentials(company_ids=None):
+        """The subset of ``company_ids`` with no login identity, as a set.
+
+        One query for a whole list page. ``awaiting_credentials`` above is the
+        single-company form; calling it per row would be an N+1."""
+        query = db.session.query(ClientCompany.id).outerjoin(
+            User, User.client_company_id == ClientCompany.id
+        ).filter(User.id.is_(None))
+        if company_ids is not None:
+            ids = list(company_ids)
+            if not ids:
+                return set()
+            query = query.filter(ClientCompany.id.in_(ids))
+        return {row[0] for row in query.all()}
+
 
 class Employee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -207,7 +245,44 @@ class PayrollRun(db.Model):
 
     @property
     def warning_count(self):
-        return sum(1 for item in self.items if item.validation_status == "Warning")
+        """How many imported rows carry a validation warning.
+
+        A COUNT, not a scan. This is read from list surfaces — app/routes.py's
+        client detail page sums it across *every* run of a company — and
+        iterating ``self.items`` there pulled every payroll row of every run
+        into memory to produce one integer.
+
+        An unsaved run has no rows in the table yet, so it falls back to the
+        pending collection; ``db.session.query`` autoflushes, so a run that has
+        been added and flushed counts correctly either way.
+        """
+        if self.id is None:
+            return sum(1 for item in self.items if item.validation_status == "Warning")
+        return (
+            db.session.query(db.func.count(PayrollItem.id))
+            .filter(
+                PayrollItem.payroll_run_id == self.id,
+                PayrollItem.validation_status == "Warning",
+            )
+            .scalar()
+            or 0
+        )
+
+    @property
+    def item_count(self):
+        """Imported row count, without loading the rows.
+
+        ``total_rows_imported`` is what the importer *saw* in the workbook;
+        this is what actually landed as payroll items. The detail page states
+        both, and they are not always the same number."""
+        if self.id is None:
+            return len(self.items)
+        return (
+            db.session.query(db.func.count(PayrollItem.id))
+            .filter(PayrollItem.payroll_run_id == self.id)
+            .scalar()
+            or 0
+        )
 
 
 class PayrollItem(db.Model):
