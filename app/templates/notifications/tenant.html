@@ -1,4 +1,5 @@
 {% extends "client/base.html" %}
+{% import "macros/ui.html" as ui %}
 {% block title %}Notifications{% endblock %}
 {% block body %}
   <div class="toolbar">
@@ -13,28 +14,12 @@
     {% endif %}
   </div>
 
+  {# Same macro as the operator inbox. `view_endpoint` is the tenant's own
+     distribute page: this portal previously had no click-through at all, so a
+     company told that its payslips had failed was told only that. #}
   {% if items %}
   <div class="panel">
-    <table>
-      <thead><tr><th></th><th>Notification</th><th>Detail</th><th>When</th><th></th></tr></thead>
-      <tbody>
-        {% for n in items %}
-        <tr {% if not n.read_at %}class="is-unread"{% endif %}>
-          <td>{% if not n.read_at %}<span class="badge {{ 'warn' if n.level=='warning' else 'ok' if n.level=='success' }}">New</span>{% endif %}</td>
-          <td>{{ n.title }}</td>
-          <td class="muted">{{ n.body or '' }}</td>
-          <td class="muted nums">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '—' }}</td>
-          <td class="right">
-            {% if not n.read_at %}
-            <form method="post" action="{{ url_for('notifications.mark_read', note_id=n.id) }}" class="inline">
-              <button class="btn sm" type="submit">Mark read</button>
-            </form>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    {{ ui.notification_rows(items, scope="tenant", view_endpoint="client.distribute") }}
   </div>
   {% else %}
   <div class="empty-state">No notifications yet.</div>

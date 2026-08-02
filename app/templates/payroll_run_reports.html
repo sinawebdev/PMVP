@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
+{% import "macros/reports.html" as rp %}
+{% import "macros/ui.html" as ui %}
+{% set run = payroll_run %}
+{% block title %}{{ run.month }} {{ run.year }} reports · {{ app_name }}{% endblock %}
+{% block page_title %}Reports &amp; exports{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Payroll Runs", url_for('payroll.runs')),
+] + ([(run.client_company.name, url_for('main.client_detail', client_id=run.client_company.id))] if run.client_company else [])
+    + [(run.month ~ " " ~ run.year, url_for('payroll.detail', run_id=run.id)), ("Reports", None)]) }}
+{% endblock %}
+{% block page_actions %}
+<a class="btn btn-outline-light btn-sm" href="{{ url_for('payroll.detail', run_id=run.id) }}"><i class="bi bi-arrow-left"></i>Back to run</a>
+{% endblock %}
+{% block content %}
+
+{{ ui.decision_header(
+     (run.client_company.name if run.client_company else "Payroll run"),
+     subtitle=run.month ~ " " ~ run.year,
+     figures=[
+       {"label": "Workers", "value": run.total_workers or 0},
+       {"label": "Gross", "value": run.total_gross_pay|cedis},
+       {"label": "PAYE", "value": run.total_paye|cedis},
+       {"label": "SSNIT", "value": run.total_ssnit|cedis},
+       {"label": "Net pay", "value": run.total_net_pay|cedis},
+     ]) }}
+
+{# The one thing that stops a report being worth downloading is having no rows
+   to put in it. Stated once here, and repeated as each report's reason. #}
+{% set empty_reason = none if has_rows else "This run has no payroll rows, so the workbook would be empty." %}
+
+{% call rp.report(
+     "Payroll export",
+     "The full payroll workbook — every worker's basic, allowances, gross, PAYE, SSNIT,
+      deductions and net pay, with run totals.",
+     href=(url_for('payroll.export', run_id=run.id) if has_rows else none),
+     reason=empty_reason,
+     label="Download and mark processed") %}
+  {# Named for what it does. This route sets the run to Processed as a side
+     effect of the download — it is a lifecycle action wearing a download's
+     clothes, and on a page of four similar-looking buttons that was invisible. #}
+  <p class="rp-blocked">Downloading this <strong>marks the run Processed</strong>. The other exports on this
+    page do not change the run.</p>
+{% endcall %}
+
+{% call rp.report(
+     "Bank listing",
+     "Bank transfer batch listing — workers grouped by bank with a subtotal per bank.",
+     href=(url_for('payroll.export_bank_listing_route', run_id=run.id) if has_rows else none),
+     reason=empty_reason) %}
+  {{ rp.bank_listing_preview(bank_groups, bank_grand_total, run.total_workers) }}
+{% endcall %}
+
+{{ rp.report(
+     "Wages sheet",
+     "The signable wages sheet — one line per worker, ordered by name, for payout
+      confirmation and physical filing.",
+     href=(url_for('payroll.export_wages_sheet_route', run_id=run.id) if has_rows else none),
+     reason=empty_reason) }}
+
+{% call rp.report(
+     "GRA PAYE schedule",
+     "The official GRA Employer's Monthly Tax Deductions Schedule (P.A.Y.E.) for
+      " ~ run.month ~ " " ~ run.year ~ ", stamped with the bureau as employer of record.",
+     href=(url_for('payroll.export_gra_paye_route', run_id=run.id) if has_rows else none),
+     reason=empty_reason) %}
+  {{ rp.gra_preview(employer_name, run) }}
+{% endcall %}
+
+{% if can_use_raw_engine(role) and run.upload_type == 'raw' %}
+{{ rp.report(
+     "Raw hours exports",
+     "The raw-hours engine's own output pack for this run (billable add-on) — the
+      per-worker hour breakdowns behind the calculated figures.",
+     href=url_for('raw_engine.run_exports', run_id=run.id),
+     label="Download ZIP") }}
+{% endif %}
+{% endblock %}

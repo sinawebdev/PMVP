@@ -191,6 +191,15 @@ class AffordanceParityTests(unittest.TestCase):
     def _payroll_detail(self):
         return self.client.get(f"/payroll/runs/{self.run.id}").get_data(as_text=True)
 
+    def _run_reports(self):
+        """Phase 5, Task 5.3 moved the exports off the run page onto a Reports
+        page of their own. The affordance being guarded here is unchanged — the
+        four export routes reachable by anyone `can_operate_payroll` — so the
+        check follows them rather than being deleted with the buttons."""
+        return self.client.get(
+            f"/payroll/runs/{self.run.id}/reports"
+        ).get_data(as_text=True)
+
     def _export_markers(self):
         base = f"/payroll/runs/{self.run.id}"
         return (
@@ -211,10 +220,22 @@ class AffordanceParityTests(unittest.TestCase):
             (marker, perms.can_operate_payroll)
             for marker in self._export_markers()
         ]
+        reports_link = f"/payroll/runs/{self.run.id}/reports"
         for _name, email, role in PLATFORM_USERS:
             with self.subTest(role=role):
                 self._login(email)
-                body = self._payroll_detail()
+                # The run page must still route there — an export nobody can
+                # navigate to is the same regression as an export nobody can see.
+                self.assertEqual(
+                    reports_link in self._payroll_detail(),
+                    perms.can_operate_payroll(role),
+                    f"{role}: Reports link visibility disagrees with "
+                    "can_operate_payroll",
+                )
+                if not perms.can_operate_payroll(role):
+                    self._logout()
+                    continue
+                body = self._run_reports()
                 for marker, predicate in cases:
                     self.assertEqual(
                         marker in body,
@@ -234,7 +255,7 @@ class AffordanceParityTests(unittest.TestCase):
             with self.subTest(role=role):
                 self.assertTrue(perms.can_operate_payroll(role))
                 self._login(email)
-                body = self._payroll_detail()
+                body = self._run_reports()
                 for marker in self._export_markers():
                     self.assertIn(marker, body, f"{role} cannot see {marker}")
                 self._logout()

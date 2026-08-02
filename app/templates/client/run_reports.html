@@ -1,4 +1,5 @@
 {% extends "client/base.html" %}
+{% import "macros/reports.html" as rp %}
 {% block title %}{{ run.month }} {{ run.year }} reports{% endblock %}
 {% block body %}
   <div class="toolbar">
@@ -25,70 +26,32 @@
     <div class="card stat-card"><span class="n">{{ run.total_net_pay | cedis }}</span><span class="l">Net pay</span></div>
   </div>
 
-  {# --- Payroll workbook --------------------------------------------------- #}
-  <div class="toolbar">
-    <h2>Payroll export</h2>
-    {% if completed %}
-    <a class="btn primary" href="{{ url_for('client.download_payroll', run_id=run.id) }}">Download Excel</a>
-    {% else %}
-    <button class="btn" type="button" disabled>Download Excel</button>
-    {% endif %}
-  </div>
-  <p class="sub">The full payroll workbook — every worker's basic, allowances, gross,
-    PAYE, SSNIT, deductions and net pay, with run totals. The same workbook operators export.</p>
+  {# Grouped by purpose, each with a preview and a stated reason when it is not
+     downloadable — now from macros/reports.html, which the operator console
+     renders too (Phase 5, Task 5.3). #}
+  {% set locked = none if completed else "This run is " ~ run.status ~ ". Downloads unlock once it is approved." %}
 
-  {# --- Bank listing (preview grouped by bank) ----------------------------- #}
-  <div class="toolbar">
-    <h2>Bank listing</h2>
-    {% if completed %}
-    <a class="btn primary" href="{{ url_for('client.download_bank_listing', run_id=run.id) }}">Download Excel</a>
-    {% else %}
-    <button class="btn" type="button" disabled>Download Excel</button>
-    {% endif %}
-  </div>
-  <p class="sub">Bank transfer batch listing — workers grouped by bank with a subtotal per bank.</p>
-  {% if bank_groups %}
-  <div class="panel">
-    <table>
-      <thead><tr><th>Bank</th><th class="right">Workers</th><th class="right">Subtotal (net)</th></tr></thead>
-      <tbody>
-        {% for group in bank_groups %}
-        <tr>
-          {# group['items'] via subscript — group.items would hit dict.items() #}
-          <td>{{ group['bank'] }}</td>
-          <td class="right nums">{{ group['items'] | length }}</td>
-          <td class="right nums">{{ group['subtotal'] | cedis }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-      <tfoot>
-        <tr><th>Grand total</th><th class="right nums">{{ run.total_workers }}</th><th class="right nums">{{ bank_grand_total | cedis }}</th></tr>
-      </tfoot>
-    </table>
-  </div>
-  {% else %}
-  <div class="empty-state">No payslip lines on this run yet.</div>
-  {% endif %}
+  {{ rp.report(
+       "Payroll export",
+       "The full payroll workbook — every worker's basic, allowances, gross, PAYE,
+        SSNIT, deductions and net pay, with run totals. The same workbook operators export.",
+       href=(url_for('client.download_payroll', run_id=run.id) if completed else none),
+       reason=locked) }}
 
-  {# --- GRA PAYE schedule -------------------------------------------------- #}
-  <div class="toolbar">
-    <h2>GRA PAYE schedule</h2>
-    {% if completed %}
-    <a class="btn primary" href="{{ url_for('client.download_gra_paye', run_id=run.id) }}">Download Excel</a>
-    {% else %}
-    <button class="btn" type="button" disabled>Download Excel</button>
-    {% endif %}
-  </div>
-  <p class="sub">The official GRA Employer's Monthly Tax Deductions Schedule (P.A.Y.E.)
-    for {{ run.month }} {{ run.year }} — the same statutory form and calculation engine operators use.</p>
-  <div class="panel">
-    <table>
-      <tbody>
-        <tr><td>Employer</td><td class="right">{{ employer_name }}</td></tr>
-        <tr><td>Employees</td><td class="right nums">{{ run.total_workers }}</td></tr>
-        <tr><td>Total PAYE</td><td class="right nums">{{ run.total_paye | cedis }}</td></tr>
-        <tr><td>Total employee SSF</td><td class="right nums">{{ run.total_ssnit | cedis }}</td></tr>
-      </tbody>
-    </table>
-  </div>
+  {% call rp.report(
+       "Bank listing",
+       "Bank transfer batch listing — workers grouped by bank with a subtotal per bank.",
+       href=(url_for('client.download_bank_listing', run_id=run.id) if completed else none),
+       reason=locked) %}
+    {{ rp.bank_listing_preview(bank_groups, bank_grand_total, run.total_workers) }}
+  {% endcall %}
+
+  {% call rp.report(
+       "GRA PAYE schedule",
+       "The official GRA Employer's Monthly Tax Deductions Schedule (P.A.Y.E.) for
+        " ~ run.month ~ " " ~ run.year ~ " — the same statutory form and calculation engine operators use.",
+       href=(url_for('client.download_gra_paye', run_id=run.id) if completed else none),
+       reason=locked) %}
+    {{ rp.gra_preview(employer_name, run) }}
+  {% endcall %}
 {% endblock %}

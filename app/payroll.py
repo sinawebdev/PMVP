@@ -1282,18 +1282,13 @@ def _run_actions(run, role, distributed, recommended):
             url_for("payroll.wage_rates", client_id=run.client_company_id),
             overflow=True)
 
-    # Exports are never the decision — they are what you do once it is made.
+    # Exports are never the decision — they are what you do once it is made, and
+    # they now have a page of their own (Phase 5, Task 5.3). Four identical
+    # buttons in this bar told nobody which file they wanted; the Reports page
+    # groups them by purpose, previews each, and says why one is unavailable.
     if can_operate_payroll(role):
-        for label, endpoint in (
-            ("Export payroll", "payroll.export"),
-            ("Bank listing", "payroll.export_bank_listing_route"),
-            ("Wages sheet", "payroll.export_wages_sheet_route"),
-            ("GRA PAYE schedule", "payroll.export_gra_paye_route"),
-        ):
-            add(None, label, url_for(endpoint, run_id=run.id), overflow=True)
-    if can_use_raw_engine(role) and run.upload_type == "raw":
-        add(None, "Generate raw exports (ZIP)",
-            url_for("raw_engine.run_exports", run_id=run.id), overflow=True)
+        add(None, "Reports & exports",
+            url_for("payroll.run_reports", run_id=run.id), overflow=True)
     if can_delete_run(role, run):
         company = run.client_company.name if run.client_company else ""
         add(None, "Delete run", url_for("payroll.delete_run", run_id=run.id), "POST",
@@ -2011,6 +2006,35 @@ def delete_run(run_id):
     db.session.commit()
     flash(f"Payroll run {label} permanently deleted.", "success")
     return redirect(url_for("payroll.runs"))
+
+
+# --- Reports & exports --------------------------------------------------------
+# Phase 5, Task 5.3. The operator's four exports used to be four identically
+# weighted buttons on the run page with no grouping, no preview and — when an
+# export was going to produce a thin or empty workbook — no reason given.
+# client/run_reports.html already had the right pattern; this is the same
+# pattern, from the same macros (macros/reports.html).
+
+
+@payroll_bp.route("/runs/<int:run_id>/reports")
+@role_required(*PAYROLL_ROLES)
+def run_reports(run_id):
+    from app.excel_utils import bank_listing_groups
+
+    run = db.get_or_404(PayrollRun, run_id)
+    bank_groups, bank_grand_total = bank_listing_groups(run)
+    return render_template(
+        "payroll_run_reports.html",
+        payroll_run=run,
+        bank_groups=bank_groups,
+        bank_grand_total=bank_grand_total,
+        # The bureau is the employer of record on operator-side exports; the
+        # tenant's own copy carries the tenant's name instead (see
+        # app/client/reports.py::_employer_name). Same engine, different
+        # letterhead, and that difference is deliberate.
+        employer_name=current_app.config["APP_BRAND_NAME"],
+        has_rows=run.item_count > 0,
+    )
 
 
 @payroll_bp.route("/runs/<int:run_id>/export")

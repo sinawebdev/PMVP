@@ -198,3 +198,59 @@
   {% endfor %}
 </div>
 {% endmacro %}
+
+
+{# --- Notification inbox -----------------------------------------------------
+   ONE implementation, both shells (Phase 5, Task 5.2).
+
+   notifications/platform.html and notifications/tenant.html rendered the same
+   five-column table from the same `items`, in two hand-maintained copies. They
+   had drifted where it mattered: only the operator copy carried the "View" link
+   that jumps from a distribution notification to the run it is about, so a
+   company told its payslips had failed had no way to click through to them.
+   That link is scope-aware now (each portal has its own distribution route),
+   not operator-only.
+
+   scope: "operator" adds the Company column, since the operator reads across
+   every tenant and the tenant reads only itself.
+#}
+{% macro notification_rows(items, scope="tenant", view_endpoint=none) %}
+{% set operator = scope == "operator" %}
+<div class="dt-wrap">
+  <table class="dt">
+    <caption class="sr-only">Notifications, newest first</caption>
+    <thead>
+      <tr>
+        <th scope="col"></th>
+        <th scope="col">Notification</th>
+        <th scope="col">Detail</th>
+        {% if operator %}<th scope="col">Company</th>{% endif %}
+        <th scope="col">When</th>
+        <th scope="col"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for n in items %}
+      <tr class="{{ 'is-unread' if not n.read_at }}">
+        <td>{% if not n.read_at %}<span class="ds-pill ds-pill--{{ 'warn' if n.level == 'warning' else 'ok' if n.level == 'success' else 'info' }}">New</span>{% endif %}</td>
+        <td>{{ n.title }}</td>
+        <td class="dt-note">{{ n.body or '' }}</td>
+        {% if operator %}<td class="dt-note">{{ n.event.client_company.name if n.event and n.event.client_company else '—' }}</td>{% endif %}
+        <td class="dt-note">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '—' }}</td>
+        <td class="dt-actions">
+          {% if view_endpoint and n.event and n.event.subject_type == 'PayrollRun'
+                and n.event.subject_id and n.event.event_type.startswith('distribution') %}
+          <a class="btn" href="{{ url_for(view_endpoint, run_id=n.event.subject_id) }}">View</a>
+          {% endif %}
+          {% if not n.read_at %}
+          <form method="post" action="{{ url_for('notifications.mark_read', note_id=n.id) }}">
+            <button class="btn" type="submit">Mark read</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}

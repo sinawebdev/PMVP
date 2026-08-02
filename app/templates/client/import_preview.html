@@ -1,4 +1,6 @@
 {% extends "client/base.html" %}
+{% import "macros/ui.html" as ui %}
+{% import "macros/import_preview.html" as ip %}
 {% block title %}Import preview{% endblock %}
 {% block body %}
   <div class="toolbar">
@@ -9,104 +11,58 @@
     <a class="btn" href="{{ url_for('client.runs') }}">Back to runs</a>
   </div>
 
-  {% if blocking %}
-  <div class="flash danger" role="alert">
-    <strong>This upload can't be imported yet:</strong>
+  {# Blockers first, then the decision, then the evidence — the same order the
+     operator console uses, from the same macros (Phase 5, Task 5.2). This page
+     used to open on a six-tile stat grid with the blocking list above it and
+     the roster notes four sections below, so "can I confirm this?" was answered
+     in three places at three different weights. #}
+  {% set invalid = payload.import_summary.invalid_rows or 0 %}
+  {% if blocking or invalid or unregistered or no_contact or payload.validation.summary_warnings or period_exists %}
+  <div class="panel ip-blockers">
+    <h2>Check before you confirm</h2>
     <ul>
-      {% for message in blocking %}<li>{{ message }}</li>{% endfor %}
+      {% for message in blocking %}
+      <li><strong>{{ message }}</strong> — fix this in your workbook and upload it again.</li>
+      {% endfor %}
+      {% if invalid %}
+      <li>
+        <strong>{{ invalid }} row{{ "" if invalid == 1 else "s" }} failed validation</strong> and will not
+        produce payslips. {{ payload.import_summary.valid_rows }} row{{ "" if payload.import_summary.valid_rows == 1 else "s" }} will import.
+        <a href="{{ url_for('client.import_errors', import_id=batch.id) }}">Download the error report</a>.
+      </li>
+      {% endif %}
+      {% if unregistered %}
+      <li>
+        <strong>{{ unregistered|length }} staff ID{{ "" if unregistered|length == 1 else "s" }} have no employee record</strong>
+        ({{ unregistered|join(", ") }}). They import fine but cannot receive payslips until added.
+        <a href="{{ url_for('client.employees') }}">Manage employees</a>.
+      </li>
+      {% endif %}
+      {% if no_contact %}
+      <li>
+        <strong>{{ no_contact|length }} employee{{ "" if no_contact|length == 1 else "s" }} have no email or phone</strong>
+        ({{ no_contact|map(attribute="name")|join(", ") }}), so payslips cannot be delivered to them.
+      </li>
+      {% endif %}
+      {% if period_exists and replace_blocked %}
+      <li><strong>A {{ payload.month }} {{ payload.year }} payroll already exists and can't be replaced here</strong>: {{ replace_blocked }}. Contact {{ app_brand_name }}.</li>
+      {% elif period_exists %}
+      <li><strong>A {{ payload.month }} {{ payload.year }} payroll already exists.</strong> Confirming will <strong>replace</strong> it.</li>
+      {% endif %}
+      {% for warning in payload.validation.summary_warnings %}
+      <li>{{ warning }}</li>
+      {% endfor %}
     </ul>
-    Fix the highlighted issues in your workbook and upload it again.
-  </div>
-  {% endif %}
-
-  <div class="grid">
-    <div class="card stat-card"><span class="n">{{ payload.worker_stats.total_unique_workers }}</span><span class="l">Unique workers</span></div>
-    <div class="card stat-card"><span class="n">{{ payload.import_summary.valid_rows }}</span><span class="l">Valid rows</span></div>
-    <div class="card stat-card"><span class="n">{{ payload.import_summary.invalid_rows }}</span><span class="l">Rows with warnings</span></div>
-    <div class="card stat-card"><span class="n">{{ payload.worker_stats.duplicate_count }}</span><span class="l">Duplicate entries</span></div>
-    <div class="card stat-card"><span class="n">{{ payload.import_summary.gross_total | cedis }}</span><span class="l">Gross (as uploaded)</span></div>
-    <div class="card stat-card"><span class="n">{{ payload.import_summary.net_total | cedis }}</span><span class="l">Net (as uploaded)</span></div>
-  </div>
-  <p class="sub muted">PAYE and SSNIT are recalculated by Payrolla when you confirm — any statutory figures in the file are preview-only.</p>
-
-  {% if period_exists %}
-    {% if replace_blocked %}
-    <div class="flash warning" role="status">
-      A {{ payload.month }} {{ payload.year }} payroll already exists and can't be replaced here: {{ replace_blocked }}. Contact {{ app_brand_name }}.
-    </div>
-    {% else %}
-    <div class="flash info" role="status">
-      A {{ payload.month }} {{ payload.year }} payroll already exists. Confirming will <strong>replace</strong> it.
-    </div>
-    {% endif %}
-  {% endif %}
-
-  {% if payload.validation.summary_warnings %}
-  <div class="panel">
-    <h2>Upload warnings</h2>
-    <ul>
-      {% for warning in payload.validation.summary_warnings %}<li>{{ warning }}</li>{% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-
-  {% if unregistered or no_contact %}
-  <div class="panel">
-    <h2>Roster notes</h2>
-    {% if unregistered %}<p class="sub">{{ unregistered|length }} staff ID(s) in this file have no employee record yet: {{ unregistered|join(", ") }}. They import fine but can't receive payslips until added. <a href="{{ url_for('client.employees') }}">Manage employees →</a></p>{% endif %}
-    {% if no_contact %}<p class="sub">{{ no_contact|length }} employee(s) have no email or phone on record, so payslips can't be delivered to them: {{ no_contact|map(attribute="name")|join(", ") }}.</p>{% endif %}
-  </div>
-  {% endif %}
-
-  <div class="toolbar"><h2>Field mapping</h2></div>
-  <div class="panel">
-    <table>
-      <thead><tr><th>Your column</th><th>Mapped to</th></tr></thead>
-      <tbody>
-        {% for original, mapped in payload.mapping.items() %}
-        <tr><td>{{ original }}</td><td><span class="badge {{ 'warn' if mapped == 'unmapped' }}">{{ mapped }}</span></td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="toolbar">
-    <h2>Row warnings</h2>
-    {% if payload.validation.per_row_warnings %}
-    <a class="btn sm" href="{{ url_for('client.import_errors', import_id=batch.id) }}">Download error report</a>
-    {% endif %}
-  </div>
-  {% if payload.validation.per_row_warnings %}
-  <div class="panel">
-    <table>
-      <thead><tr><th class="right">Row</th><th>Warnings</th></tr></thead>
-      <tbody>
-        {% for row_number, warnings in payload.validation.per_row_warnings.items() %}
-        <tr><td class="right nums">{{ row_number }}</td><td>{{ warnings|join("; ") }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
   </div>
   {% else %}
-  <div class="empty-state">No row-level warnings.</div>
+  <p class="ip-note">Nothing blocking — every row read from this workbook validated.</p>
   {% endif %}
 
-  <div class="toolbar"><h2>First rows</h2></div>
-  <div class="panel">
-    <table>
-      <thead><tr>{% for column in payload.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
-      <tbody>
-        {% for row in payload.preview_rows %}
-        <tr>{% for column in payload.columns %}<td>{{ row[column] }}</td>{% endfor %}</tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  {{ ip.figures(payload, batch.original_filename,
+                subtitle=payload.month ~ " " ~ payload.year) }}
+  {{ ip.rows_vs_workers(payload) }}
 
   <div class="toolbar end">
-    <form method="post" action="{{ url_for('client.import_discard', import_id=batch.id) }}">
-      <button class="btn" type="submit">Discard draft</button>
-    </form>
     {% if blocking or replace_blocked %}
     <a class="btn primary" href="{{ url_for('client.run_upload') }}">Re-upload corrected file</a>
     {% else %}
@@ -114,5 +70,34 @@
       <button class="btn primary" type="submit">{% if period_exists %}Confirm &amp; replace run{% else %}Confirm &amp; create run{% endif %}</button>
     </form>
     {% endif %}
+    <form method="post" action="{{ url_for('client.import_discard', import_id=batch.id) }}">
+      <button class="btn" type="submit">Discard draft</button>
+    </form>
+  </div>
+
+  {# The evidence, one interaction deeper — same tabs, same macros as the
+     operator console. #}
+  {{ ui.tabs([
+       {"id": "warnings", "label": "Row warnings", "count": payload.validation.per_row_warnings|length or none},
+       {"id": "mapping",  "label": "Field mapping", "count": payload.mapping|length},
+       {"id": "raw",      "label": "First rows", "count": none},
+       {"id": "totals",   "label": "Totals", "count": none},
+     ], label="Import preview detail") }}
+
+  <div class="tabpanel" id="tab-warnings-panel" role="tabpanel" aria-labelledby="tab-warnings">
+    {{ ip.row_warnings(payload.validation.per_row_warnings,
+                       error_report_href=url_for('client.import_errors', import_id=batch.id)) }}
+  </div>
+
+  <div class="tabpanel" id="tab-mapping-panel" role="tabpanel" aria-labelledby="tab-mapping">
+    {{ ip.mapping_table(payload.mapping) }}
+  </div>
+
+  <div class="tabpanel" id="tab-raw-panel" role="tabpanel" aria-labelledby="tab-raw">
+    {{ ip.raw_rows(payload.columns, payload.preview_rows) }}
+  </div>
+
+  <div class="tabpanel" id="tab-totals-panel" role="tabpanel" aria-labelledby="tab-totals">
+    {{ ip.totals(payload) }}
   </div>
 {% endblock %}

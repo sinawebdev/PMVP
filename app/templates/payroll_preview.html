@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% import "macros/breadcrumbs.html" as bc %}
 {% import "macros/ui.html" as ui %}
+{% import "macros/import_preview.html" as ip %}
 {% block title %}Import preview · {{ app_name }}{% endblock %}
 {% block page_title %}Import preview{% endblock %}
 {% block breadcrumbs %}
@@ -120,25 +121,8 @@
 <div class="mini-note mb-3"><i class="bi bi-check-circle"></i> Nothing blocking — every row read from this workbook validated.</div>
 {% endif %}
 
-{# `total_rows` is what the importer READ from the file; `total_unique_workers`
-   is how many distinct people it recognised in them. They were two adjacent
-   tiles of thirteen, which invited reading them as the same number twice. #}
-{{ ui.decision_header(
-     client.name,
-     subtitle=payload.month ~ " " ~ payload.year,
-     figures=[
-       {"label": "Rows read from file", "value": payload.worker_stats.total_rows},
-       {"label": "Workers recognised", "value": payload.worker_stats.total_unique_workers},
-       {"label": "Rows importing", "value": payload.import_summary.valid_rows},
-       {"label": "Rows failing", "value": invalid},
-       {"label": "Total net pay", "value": payload.import_summary.net_total|cedis},
-     ]) }}
-<p class="mini-note mt-2">
-    <i class="bi bi-info-circle"></i>
-    {{ payload.worker_stats.total_rows }} row{{ "" if payload.worker_stats.total_rows == 1 else "s" }} in the
-    file resolved to {{ payload.worker_stats.total_unique_workers }} unique worker{{ "" if payload.worker_stats.total_unique_workers == 1 else "s" }}
-    ({{ payload.worker_stats.duplicate_count }} duplicate entr{{ "y" if payload.worker_stats.duplicate_count == 1 else "ies" }}).
-</p>
+{{ ip.figures(payload, client.name, subtitle=payload.month ~ ' ' ~ payload.year) }}
+{{ ip.rows_vs_workers(payload) }}
 
 <form method="post" action="{{ url_for('payroll.confirm', import_id=import_id) }}" class="mt-3">
     {% if payload.validation.summary_warnings %}
@@ -164,60 +148,21 @@
    ], label="Import preview detail") }}
 
 <div class="tabpanel" id="tab-warnings-panel" role="tabpanel" aria-labelledby="tab-warnings">
-  {% if payload.validation.per_row_warnings %}
-  <div class="excel-grid-wrap">
-      <table class="table table-sm excel-grid">
-          <thead><tr><th>Row</th><th>Warnings</th></tr></thead>
-          <tbody>
-          {% for row_number, warnings in payload.validation.per_row_warnings.items() %}
-              <tr><td>{{ row_number }}</td><td>{{ warnings|join("; ") }}</td></tr>
-          {% endfor %}
-          </tbody>
-      </table>
-  </div>
-  {% else %}
-  {{ ui.empty("No row-level warnings", "Every row read from this workbook passed validation.") }}
-  {% endif %}
+  {{ ip.row_warnings(payload.validation.per_row_warnings,
+                     error_report_href=url_for('payroll.error_report', import_id=import_id)) }}
 </div>
 
 <div class="tabpanel" id="tab-mapping-panel" role="tabpanel" aria-labelledby="tab-mapping">
-  <div class="excel-grid-wrap">
-      <table class="table table-sm excel-grid">
-          <thead><tr><th>Original column</th><th>Mapped field</th></tr></thead>
-          <tbody>
-          {% for original, mapped in payload.mapping.items() %}
-              <tr><td>{{ original }}</td><td><span class="badge text-bg-{{ 'secondary' if mapped == 'unmapped' else 'primary' }}">{{ mapped }}</span></td></tr>
-          {% endfor %}
-          </tbody>
-      </table>
-  </div>
-  <p class="mini-note mt-2 mb-0"><i class="bi bi-info-circle"></i> Matched sheet <strong>{{ payload.matched_sheet_name or "Default sheet" }}</strong>, header detected on row {{ payload.detected_header_row or 1 }}.</p>
+  {{ ip.mapping_table(payload.mapping, matched_sheet=payload.matched_sheet_name,
+                      header_row=payload.detected_header_row) }}
 </div>
 
 <div class="tabpanel" id="tab-raw-panel" role="tabpanel" aria-labelledby="tab-raw">
-  <div class="excel-grid-wrap">
-      <table class="table table-sm excel-grid">
-          <thead><tr>{% for column in payload.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
-          <tbody>
-          {% for row in payload.preview_rows %}
-              <tr>{% for column in payload.columns %}<td>{{ row[column] }}</td>{% endfor %}</tr>
-          {% endfor %}
-          </tbody>
-      </table>
-  </div>
+  {{ ip.raw_rows(payload.columns, payload.preview_rows) }}
 </div>
 
 <div class="tabpanel" id="tab-totals-panel" role="tabpanel" aria-labelledby="tab-totals">
-  <div class="row g-3">
-      <div class="col-md-3"><strong>Gross total</strong><p class="mb-0 text-muted">{{ payload.import_summary.gross_total|cedis }}</p></div>
-      <div class="col-md-3"><strong>PAYE total</strong><p class="mb-0 text-muted">{{ payload.import_summary.paye_total|cedis }}</p></div>
-      <div class="col-md-3"><strong>SSNIT total</strong><p class="mb-0 text-muted">{{ payload.import_summary.ssnit_total|cedis }}</p></div>
-      <div class="col-md-3"><strong>Net total</strong><p class="mb-0 text-muted">{{ payload.import_summary.net_total|cedis }}</p></div>
-      <div class="col-md-3"><strong>Active workers</strong><p class="mb-0 text-muted">{{ payload.status_breakdown.active if payload.status_breakdown else 0 }}</p></div>
-      <div class="col-md-3"><strong>Inactive / terminated</strong><p class="mb-0 text-muted">{{ (payload.status_breakdown.inactive if payload.status_breakdown else 0) + (payload.status_breakdown.terminated if payload.status_breakdown else 0) }}</p></div>
-      <div class="col-md-3"><strong>Duplicate entries</strong><p class="mb-0 text-muted">{{ payload.worker_stats.duplicate_count }}</p></div>
-      <div class="col-md-3"><strong>Source file</strong><p class="mb-0 text-muted">{{ payload.matched_sheet_name or "Default sheet" }}</p></div>
-  </div>
+  {{ ip.totals(payload) }}
 </div>
 {% endif %}
 {% endblock %}

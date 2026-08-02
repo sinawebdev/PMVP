@@ -45,6 +45,7 @@ from app.distribution.queue import (
     enqueue_distribution,
 )
 from app.distribution.service import resolve_channel
+from app.distribution.status import delivery_status_context
 from app.excel_utils import allowed_excel_file, export_import_error_report, mapping_conflicts
 from app.models import (
     CHANNEL_AUTO,
@@ -565,49 +566,13 @@ def audit():
 # configured. Sending is client_admin-only; viewing/downloading is any tenant
 # user. A run is fetched via tenant_get_or_404 so a client can only ever
 # distribute their own run.
-def _latest_delivery(item_id):
-    return (
-        PayslipDelivery.query.filter_by(payroll_item_id=item_id)
-        .order_by(PayslipDelivery.created_at.desc())
-        .first()
-    )
-
-
-def _latest_batch(run_id):
-    return (
-        DistributionBatch.query.filter_by(payroll_run_id=run_id)
-        .order_by(DistributionBatch.created_at.desc())
-        .first()
-    )
-
-
-def _distribute_context(run):
-    """Shared by the full page and its auto-refreshing fragment."""
-    rows = [
-        {"item": it, "delivery": _latest_delivery(it.id), "suggested": resolve_channel(it)}
-        for it in run.items
-    ]
-    sent = sum(1 for r in rows if r["delivery"] and r["delivery"].status == DELIVERY_SENT)
-    failed = sum(1 for r in rows if r["delivery"] and r["delivery"].status == DELIVERY_FAILED)
-    batch = _latest_batch(run.id)
-    # A pending automatic retry keeps the page live even after the batch reached a
-    # terminal state, so the operator watches recovery happen.
-    pending_retry = any(
-        r["delivery"] and r["delivery"].status == DELIVERY_FAILED and r["delivery"].next_retry_at
-        for r in rows
-    )
-    batch_active = batch is not None and batch.status in ("queued", "running")
-    return {
-        "run": run,
-        "rows": rows,
-        "channels": DELIVERY_CHANNELS,
-        "sendable": run.status in SENDABLE_STATUSES,
-        "sent_count": sent,
-        "failed_count": failed,
-        "batch": batch,
-        "in_flight": batch_active or pending_retry,
-        "cancellable": (batch is not None and batch.status == "queued") or pending_retry,
-    }
+# One implementation, shared with the operator console (Phase 5, Task 5.1).
+# What used to be here was the operator's builder copied verbatim and then
+# left behind: it never computed `scheduled`, so this portal rendered a Queue
+# status card with no status line for a scheduled batch, and it polled on
+# `in_flight` rather than `live`, re-fetching every three seconds until a
+# batch scheduled days out finally ran.
+_distribute_context = delivery_status_context
 
 
 @client_bp.route("/runs/<int:run_id>/distribute")
