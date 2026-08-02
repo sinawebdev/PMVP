@@ -9,7 +9,7 @@
     </div>
     <div class="actions">
       {% if may_record %}
-      <a class="btn primary" href="{{ url_for('client.expense_edit', expense_id=expense.id) }}">Edit</a>
+      <a class="btn" href="{{ url_for('client.expense_edit', expense_id=expense.id) }}">Edit</a>
       {% endif %}
       <a class="btn" href="{{ url_for('client.expenses') }}">Back to expenses</a>
     </div>

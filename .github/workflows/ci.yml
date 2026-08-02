@@ -1,0 +1,44 @@
+name: CI
+
+# Phase 7, Task 7.3. The constitution's checkable clauses run here so a PR that
+# reintroduces one fails on its own, rather than depending on a reviewer
+# remembering a rule that was enforced by hand eight phases ago.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  constitution:
+    name: Constitution lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      # Fast and dependency-light: these read templates and stylesheets off
+      # disk, so they finish in under a second and give a PR its first answer
+      # long before the suite does.
+      - name: Checkable clauses
+        run: python -m pytest tests/test_constitution_lint.py -q
+
+  tests:
+    name: Test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: pytest
+        env:
+          SKIP_DOTENV: "true"
+          DATABASE_URL: "sqlite:///:memory:"
+          SEED_DEMO_DATA: "true"
+          PERSISTENCE_REQUIRED: "false"
+        run: python -m pytest tests/ -q

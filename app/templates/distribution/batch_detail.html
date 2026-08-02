@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "macros/ui.html" as ui %}
 {% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Distribution #{{ batch.id }} · {{ app_name }}{% endblock %}
 {% block page_title %}Distribution #{{ batch.id }}{% endblock %}
@@ -41,7 +42,7 @@
         <table class="table table-sm align-middle excel-grid">
             <thead><tr><th>Employee</th><th>Recipient</th><th>Channel</th><th>Status</th><th>Attempts</th><th>Latest error</th></tr></thead>
             <tbody>
-            {% for d in deliveries %}
+            {% for d in page.items %}
                 <tr>
                     <td>{{ d.payroll_item.staff_id if d.payroll_item }} · {{ d.payroll_item.full_name if d.payroll_item }}</td>
                     <td>{{ d.recipient or "—" }}</td>
@@ -62,6 +63,7 @@
             {% endfor %}
             </tbody>
         </table>
+        {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
     </div>
     {% else %}
     <div class="empty-state"><i class="bi bi-inbox"></i><p class="mb-0">No deliveries recorded for this batch{% if batch.status in ("queued", "cancelled") %} (it never ran){% endif %}.</p></div>

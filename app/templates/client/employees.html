@@ -15,7 +15,7 @@
     <table>
       <thead><tr><th>Staff ID</th><th>Name</th><th>Job title</th><th>Contact</th><th>Bank</th><th class="right">Basic</th><th>Status</th><th></th></tr></thead>
       <tbody>
-        {% for e in employees %}
+        {% for e in page.items %}
         <tr>
           <td>{{ e.staff_id }}</td>
           <td>{{ e.full_name }}</td>
@@ -42,6 +42,7 @@
       </tbody>
     </table>
   </div>
+  {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
   {% else %}
   <div class="empty-state">No employees yet. Add your first with the button above.</div>
   {% endif %}

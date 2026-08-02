@@ -44,6 +44,7 @@ from app.distribution.queue import (
     cancel_flash_message,
     enqueue_distribution,
 )
+from app.paging import paginate
 from app.distribution.service import resolve_channel
 from app.distribution.status import delivery_status_context
 from app.excel_utils import allowed_excel_file, export_import_error_report, mapping_conflicts
@@ -112,8 +113,10 @@ def _parse_money(value):
 @client_bp.route("/employees")
 @tenant_required
 def employees():
-    rows = tenant_query(Employee).order_by(Employee.full_name).all()
-    return render_template("client/employees.html", company=_company(), employees=rows)
+    page = paginate(tenant_query(Employee).order_by(Employee.full_name))
+    return render_template(
+        "client/employees.html", company=_company(), employees=page.items, page=page
+    )
 
 
 @client_bp.route("/employees/add", methods=["GET", "POST"])
@@ -221,7 +224,8 @@ def _save_employee(employee, company):
 @client_bp.route("/runs")
 @tenant_required
 def runs():
-    rows = tenant_query(PayrollRun).order_by(PayrollRun.created_at.desc()).all()
+    page = paginate(tenant_query(PayrollRun).order_by(PayrollRun.created_at.desc()))
+    rows = page.items
     # In-progress import drafts (uploaded but not yet confirmed) are resumable —
     # the client can pick one back up (preview) or discard it.
     drafts = (
@@ -230,15 +234,26 @@ def runs():
         .order_by(ImportBatch.uploaded_at.desc())
         .all()
     )
-    return render_template("client/runs.html", company=_company(), runs=rows, drafts=drafts)
+    return render_template(
+        "client/runs.html", company=_company(), runs=rows, drafts=drafts, page=page
+    )
 
 
 @client_bp.route("/runs/<int:run_id>")
 @tenant_required
 def run_detail(run_id):
     run = tenant_get_or_404(PayrollRun, run_id)  # 404 if another tenant's run
+    page = paginate(
+        PayrollItem.query.filter_by(payroll_run_id=run.id).order_by(
+            PayrollItem.full_name.asc(), PayrollItem.id.asc()
+        )
+    )
     return render_template(
-        "client/run_detail.html", company=_company(), run=run, items=run.items
+        "client/run_detail.html",
+        company=_company(),
+        run=run,
+        items=page.items,
+        page=page,
     )
 
 

@@ -1,4 +1,5 @@
 {% extends "client/base.html" %}
+{% import "macros/ui.html" as ui %}
 {% import "macros/charts.html" as ch %}
 {% block title %}Expenses{% endblock %}
 {% set may_record = can_record_expenses(role) %}
@@ -62,7 +63,7 @@
         </tr>
       </thead>
       <tbody>
-        {% for x in expenses %}
+        {% for x in page.items %}
         <tr>
           <td class="nums">{{ x.expense_date }}</td>
           <td>{{ x.category }}</td>
@@ -87,11 +88,12 @@
       </tbody>
     </table>
   </div>
+  {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
   {% else %}
   <div class="empty-state">
     <p>No expenses recorded for your company yet.</p>
     {% if may_record %}
-    <a class="btn primary" href="{{ url_for('client.expense_add') }}">+ Add Expense</a>
+    <a class="btn" href="{{ url_for('client.expense_add') }}">+ Add Expense</a>
     {% endif %}
   </div>
   {% endif %}

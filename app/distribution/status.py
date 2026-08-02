@@ -24,6 +24,7 @@ which is a shell concern and lives in ``macros/distribution.html``.
 from datetime import datetime, timezone
 
 from app.models import DELIVERY_CHANNELS, DistributionBatch, PayslipDelivery
+from app.paging import paginate_list
 from app.payroll_status import SENDABLE_STATUSES
 
 from .service import resolve_channel
@@ -108,7 +109,11 @@ def delivery_status_context(run, now=None):
 
     return {
         "run": run,
+        # `rows` stays whole because the sent/failed counts above are counts of
+        # ALL of it; `rows_page` is what the table renders. A 400-worker run
+        # otherwise drew 400 rows every three seconds while the batch was live.
         "rows": rows,
+        "rows_page": paginate_list(rows),
         "channels": DELIVERY_CHANNELS,
         "sendable": run.status in SENDABLE_STATUSES,
         "sent_count": sent,

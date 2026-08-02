@@ -221,6 +221,18 @@ def collect_dashboard_stats(recent_limit=10):
             "failure_rate": _pct(failed, attempted),
         },
         "backlog": backlog,
+        # Is anything actually moving? Phase 7, Task 7.2 — the monitor used to
+        # poll every five seconds for as long as the tab was open, by design
+        # ("there is no terminal state"). A monitor of an idle queue is a
+        # five-second heartbeat against the database forever, on every open tab.
+        # It polls while there is work in flight and stops when there is not;
+        # the page then offers a manual refresh, so nothing is hidden — only the
+        # polling stops.
+        "live": bool(
+            batch_counts.get(BATCH_QUEUED, 0)
+            or batch_counts.get(BATCH_RUNNING, 0)
+            or active_retries
+        ),
         "recent_batches": recent_batches,
         "running_batches": [_running_batch_progress(b) for b in running],
         "throughput": _throughput(completed_recent),

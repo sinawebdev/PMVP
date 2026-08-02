@@ -44,6 +44,7 @@ from .queue import (
 )
 from .service import resolve_channel
 from .status import delivery_status_context
+from app.paging import paginate
 from .tokens import verify_payslip_token
 
 distribution_bp = Blueprint("distribution", __name__, url_prefix="/distribution")
@@ -148,13 +149,16 @@ def batch_detail(batch_id):
 
     batch = db.get_or_404(DistributionBatch, batch_id)
     run = db.session.get(PayrollRun, batch.payroll_run_id)
-    deliveries = (
-        PayslipDelivery.query.filter_by(distribution_batch_id=batch.id)
-        .order_by(PayslipDelivery.updated_at.desc())
-        .all()
+    # A batch holds one delivery per worker, so this is the payroll's size.
+    page = paginate(
+        PayslipDelivery.query.filter_by(distribution_batch_id=batch.id).order_by(
+            PayslipDelivery.updated_at.desc()
+        )
     )
+    deliveries = page.items
     return render_template(
         "distribution/batch_detail.html",
+        page=page,
         batch=batch,
         run=run,
         deliveries=deliveries,

@@ -1,10 +1,25 @@
-{# Live-refreshing monitoring dashboard body. Polls every 5s via htmx and
-   swaps itself; there is no terminal state, so it polls for as long as the
-   page is open. #}
+{# Live-refreshing monitoring dashboard body.
+
+   Phase 7, Task 7.2: this used to poll every five seconds for as long as the
+   tab was open — stated in this comment as "there is no terminal state" — so an
+   idle queue still got a five-second heartbeat against the database from every
+   open tab, indefinitely. It now polls only while `stats.live` (something
+   queued, running or retrying) and stops when the queue drains, exactly like
+   the run-status fragment beside it. The trigger filter also stands the poll
+   down while the tab is hidden, so a backgrounded monitor costs nothing. #}
 <div id="distribution-monitor"
+     {% if stats.live %}
      hx-get="{{ url_for('distribution.dashboard_fragment') }}"
-     hx-trigger="every 5s"
-     hx-swap="outerHTML">
+     hx-trigger="every 5s [document.visibilityState === 'visible']"
+     hx-swap="outerHTML"
+     {% endif %}>
+{% if not stats.live %}
+<p class="mini-note mb-3">
+    <i class="bi bi-pause-circle"></i>
+    Nothing in flight — live updates are paused.
+    <a href="{{ url_for('distribution.dashboard') }}">Refresh</a> to check again.
+</p>
+{% endif %}
 
 {% set d = stats.deliveries %}
 {% set b = stats.batches %}

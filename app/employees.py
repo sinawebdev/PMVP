@@ -34,6 +34,7 @@ from app import db
 from app.audit import record_audit
 from app.auth import role_required
 from app.htmx_utils import wants_htmx, with_toast
+from app.paging import paginate
 from app.models import ClientCompany, Employee, PayrollItem, WageRateProfile
 from app.raw_import import normalise_emp_id
 
@@ -62,17 +63,27 @@ def _roster_context(client_id):
     """Shared data for the roster page and its HTMX partial: the client plus its
     employees (active first, then inactive, each alphabetical) and the counts."""
     client = db.get_or_404(ClientCompany, client_id)
-    employees = (
-        Employee.query.filter_by(client_company_id=client_id)
-        .order_by((Employee.status == ACTIVE).desc(), Employee.full_name)
-        .all()
+    # Paged: a roster is the one collection that grows without limit for a
+    # single customer, and this partial is re-rendered on every add/deactivate.
+    page = paginate(
+        Employee.query.filter_by(client_company_id=client_id).order_by(
+            (Employee.status == ACTIVE).desc(), Employee.full_name
+        )
     )
-    active_count = sum(1 for e in employees if e.status == ACTIVE)
+    employees = page.items
+    # Counts describe the whole roster, not the page — they are the reason to
+    # look at the page, so they must not shrink when you turn it.
+    active_count = Employee.query.filter_by(
+        client_company_id=client_id, status=ACTIVE
+    ).count()
     return {
         "client": client,
         "employees": employees,
+        "page": page,
         "active_count": active_count,
-        "inactive_count": len(employees) - active_count,
+        "inactive_count": Employee.query.filter_by(client_company_id=client_id)
+        .filter(Employee.status != ACTIVE)
+        .count(),
     }
 
 

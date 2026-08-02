@@ -12,7 +12,7 @@
 <div id="distribute-status"
      {% if live %}
      hx-get="{{ url_for('client.distribute_status_fragment', run_id=run.id) }}"
-     hx-trigger="every 3s"
+     hx-trigger="every 3s [document.visibilityState === 'visible']"
      hx-swap="outerHTML"
      {% endif %}>
 
@@ -24,7 +24,7 @@
 <h2>Per-worker delivery</h2>
 {% if rows %}
   <div class="panel">
-{{ ds.delivery_table(rows, in_flight=in_flight, scope="tenant") }}
+{{ ds.delivery_table(rows_page, in_flight=in_flight, scope="tenant") }}
   </div>
 {% else %}
 <div class="empty-state">No payslip lines on this run yet.</div>

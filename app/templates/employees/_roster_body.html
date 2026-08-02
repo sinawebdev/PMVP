@@ -27,7 +27,7 @@
                 <caption class="dt-note">Payslips are delivered to the email and phone held here — never to contact data from a payroll upload.</caption>
                 <thead><tr><th scope="col">Employee ID</th><th scope="col">Full Name</th><th scope="col">Email</th><th scope="col">Phone</th><th scope="col">Department</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
                 <tbody>
-                {% for emp in employees %}
+                {% for emp in page.items %}
                     <tr id="emp-row-{{ emp.id }}">
                         <td>{{ emp.staff_id }}</td>
                         <td>
@@ -75,6 +75,7 @@
                 </tbody>
             </table>
         </div>
+        {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
         <p class="text-muted mt-2 mb-0">{{ active_count }} active · {{ inactive_count }} inactive</p>
     {% endif %}
 </section>

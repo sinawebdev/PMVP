@@ -45,6 +45,7 @@ from app import db
 from app.analytics import expense_summary
 from app.audit import record_audit
 from app.client import _company, client_bp
+from app.paging import paginate
 from app.models import Expense
 from app.permissions import EXPENSE_ROLES
 from app.receipts import (
@@ -200,16 +201,20 @@ def expenses():
     The same figures feed the dashboard (via :func:`app.analytics.expense_summary`
     and the dashboard's expense total), so the two surfaces can never disagree.
     """
-    rows = (
-        tenant_query(Expense)
-        .order_by(Expense.expense_date.desc(), Expense.id.desc())
-        .all()
+    query = tenant_query(Expense).order_by(
+        Expense.expense_date.desc(), Expense.id.desc()
     )
+    page = paginate(query)
+    # The summary is a whole-ledger figure, so it is computed over every row
+    # while the TABLE renders one page. (The remaining unbounded read here is
+    # expense_summary's own scan — a fixed-size output, but still an O(ledger)
+    # query. Worth turning into SQL aggregates when the ledger justifies it.)
     return render_template(
         "client/expenses.html",
         company=_company(),
-        expenses=rows,
-        summary=expense_summary(rows),
+        expenses=page.items,
+        page=page,
+        summary=expense_summary(query.all()),
     )
 
 

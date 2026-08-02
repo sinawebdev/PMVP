@@ -11,7 +11,7 @@
 <div id="distribution-status"
      {% if live %}
      hx-get="{{ url_for('distribution.run_status_fragment', run_id=run.id) }}"
-     hx-trigger="every 3s"
+     hx-trigger="every 3s [document.visibilityState === 'visible']"
      hx-swap="outerHTML"
      {% endif %}>
 
@@ -34,6 +34,6 @@
         <h2><i class="bi bi-send-check"></i>Delivery status</h2>
         <span>{{ rows|length }} workers</span>
     </div>
-    {{ ds.delivery_table(rows, in_flight=in_flight, scope="operator", channels=channels) }}
+    {{ ds.delivery_table(rows_page, in_flight=in_flight, scope="operator", channels=channels, live=live) }}
 </section>
 </div>

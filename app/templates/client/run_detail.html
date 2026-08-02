@@ -1,4 +1,5 @@
 {% extends "client/base.html" %}
+{% import "macros/ui.html" as ui %}
 {% block title %}{{ run.month }} {{ run.year }} payroll{% endblock %}
 {% block body %}
   <div class="page-bar">
@@ -34,7 +35,7 @@
     <table>
       <thead><tr><th>Staff ID</th><th>Name</th><th class="right">Gross</th><th class="right">PAYE</th><th class="right">SSNIT</th><th class="right">Net</th><th></th></tr></thead>
       <tbody>
-        {% for it in items %}
+        {% for it in page.items %}
         <tr>
           <td>{{ it.staff_id }}</td>
           <td>{{ it.full_name }}</td>
@@ -48,6 +49,7 @@
       </tbody>
     </table>
   </div>
+  {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
   {% else %}
   <div class="empty-state">No payslip lines on this run yet.</div>
   {% endif %}

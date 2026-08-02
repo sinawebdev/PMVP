@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "macros/ui.html" as ui %}
 {% block title %}Client Companies · {{ app_name }}{% endblock %}
 {% block page_title %}Client Companies{% endblock %}
 {% block content %}
@@ -6,15 +7,21 @@
     <a class="btn btn-primary" href="{{ url_for('main.add_client') }}"><i class="bi bi-building-add"></i>Add Client Company</a>
 </div>
 <section class="panel">
-    <div class="toolbar">
+    <form class="toolbar" method="get" action="{{ url_for('main.clients') }}" role="search">
         <label class="visually-hidden" for="clients-filter">Filter client companies</label>
-        <input id="clients-filter" class="form-control" type="search" placeholder="Filter clients by name, code, contact, or location…" data-table-filter="clients-table">
-    </div>
+        <input id="clients-filter" name="q" class="form-control" type="search" value="{{ search or '' }}"
+               placeholder="Filter clients by name, code, contact, or location…">
+        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-search"></i>Filter</button>
+        {% if search %}<a class="btn btn-link" href="{{ url_for('main.clients') }}">Clear</a>{% endif %}
+    </form>
+    {% if search %}
+    <p class="mini-note mb-2"><i class="bi bi-funnel"></i> {{ page.total }} compan{{ "y" if page.total == 1 else "ies" }} matching &ldquo;{{ search }}&rdquo;.</p>
+    {% endif %}
     <div class="excel-grid-wrap">
         <table id="clients-table" class="table table-sm align-middle excel-grid">
             <thead><tr><th scope="col">Name</th><th scope="col">Code</th><th scope="col">Contact</th><th scope="col">Email</th><th scope="col">Location</th><th scope="col">Status</th><th scope="col"></th></tr></thead>
             <tbody>
-            {% for client in clients %}
+            {% for client in page.items %}
                 <tr>
                     <td><a href="{{ url_for('main.client_detail', client_id=client.id) }}">{{ client.name }}</a></td>
                     <td>{% if client.company_code %}<code>{{ client.company_code }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</td>
@@ -46,5 +53,6 @@
             </tbody>
         </table>
     </div>
+    {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
 </section>
 {% endblock %}

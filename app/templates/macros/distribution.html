@@ -1,3 +1,4 @@
+{% import "macros/ui.html" as ui %}
 {# ---------------------------------------------------------------------------
    Payslip delivery status — ONE implementation, both shells (Phase 5, Task 5.1).
 
@@ -116,8 +117,19 @@
 {# --- Per-worker delivery table ----------------------------------------------
    scope: "operator" adds the preferred-channel control, the recipient address
    and net pay; "tenant" gets neither the control nor the address. #}
-{% macro delivery_table(rows, in_flight=false, scope="tenant", channels=[]) %}
+{# `live` matters as much as `scope`: while the region is polling it swaps
+   itself every three seconds, so a <select> inside it is a control that
+   vanishes under the cursor mid-interaction. Routing is frozen during a send
+   anyway — you cannot retarget a payslip that is already going out — so while
+   live the operator sees the resolved channel as text, and gets the control
+   back the moment the batch settles. (Phase 7, Task 7.2: a polling region
+   contains no focusable controls.) #}
+{% macro delivery_table(page, in_flight=false, scope="tenant", channels=[], live=false) %}
 {% set operator = scope == "operator" %}
+{# Columns are a scope question; the CONTROL is a polling question. Keeping
+   them separate matters: gating the columns on `live` too would make the table
+   change width the moment a send starts. #}
+{% set can_retarget = operator and not live %}
 <section class="ds-table-wrap">
   <table class="ds-table">
     <caption class="sr-only">Per-worker payslip delivery status</caption>
@@ -125,7 +137,7 @@
       <tr>
         <th scope="col">Staff ID</th>
         <th scope="col">Worker</th>
-        <th scope="col">{{ "Preferred" if operator else "Suggested" }}</th>
+        <th scope="col">{{ "Preferred" if can_retarget else "Suggested" }}</th>
         <th scope="col">Channel</th>
         {% if operator %}<th scope="col">Recipient</th>{% endif %}
         <th scope="col">Status</th>
@@ -135,14 +147,14 @@
       </tr>
     </thead>
     <tbody>
-      {% for row in rows %}
+      {% for row in page.items %}
       {% set item = row.item %}
       {% set d = row.delivery %}
       <tr>
         <td>{{ item.staff_id }}</td>
         <td>{{ item.full_name }}</td>
         <td>
-          {% if operator %}
+          {% if can_retarget %}
           <form method="post" action="{{ url_for('distribution.set_preferred_channel', item_id=item.id) }}">
             <select class="ds-select" name="preferred_channel" onchange="this.form.submit()"
                     aria-label="Preferred channel for {{ item.full_name }}"
@@ -155,7 +167,7 @@
             </select>
           </form>
           {% else %}
-          <span class="ds-muted">{{ row.suggested|capitalize }}</span>
+          <span class="ds-muted">{{ (item.employee.preferred_channel if item.employee and item.employee.preferred_channel else row.suggested)|capitalize }}</span>
           {% endif %}
         </td>
         <td>{% if d %}<span class="ds-pill ds-pill--muted">{{ d.channel }}</span>{% else %}<span class="ds-muted">—</span>{% endif %}</td>
@@ -173,4 +185,5 @@
     </tbody>
   </table>
 </section>
+{% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
 {% endmacro %}
