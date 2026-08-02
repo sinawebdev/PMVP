@@ -1,6 +1,5 @@
 import os
 import re
-import socket
 import threading
 import time
 from datetime import timedelta
@@ -464,12 +463,19 @@ def create_app():
         can_approve_run,
         can_bulk_approve_reject,
         can_calculate_run,
+        can_delete_employee,
         can_delete_run,
         can_distribute_run,
         can_edit_run_figures,
+        can_import_payroll,
+        can_manage_clients,
         can_manage_statutory,
+        can_manage_wage_rates,
         can_maintain_roster,
+        can_manage_branding,
         can_mark_run_processed,
+        can_use_raw_engine,
+        can_view_platform_ops,
         can_operate_payroll,
         can_record_expenses,
         can_reject_run,
@@ -480,8 +486,18 @@ def create_app():
     from app.payroll_status import run_progress, status_badge_class
     from app.risk import risk_badge
     from app.distribution.service import retry_state as delivery_retry_state
+    from app.distribution.channels import (
+        delivery_is_simulated,
+        simulated_channel_labels,
+    )
 
     app.jinja_env.globals.update(
+        # Whether payslip "delivery" is still the console no-op. A console send
+        # reports success, so without this the status screens show "Sent" for
+        # messages that never left the system — the distribution surfaces gate an
+        # honest disclosure on it.
+        delivery_is_simulated=delivery_is_simulated,
+        simulated_channel_labels=simulated_channel_labels,
         # Risk-gate verdict badge (label + semantic tone) from the run's persisted
         # risk_status — one mapping in app/risk.py for the operator run page and
         # the tenant portal, so a released run stops reading as held in both.
@@ -508,8 +524,18 @@ def create_app():
         can_mark_run_processed=can_mark_run_processed,
         can_distribute_run=can_distribute_run,
         can_delete_run=can_delete_run,
-        # Tenant-plane capability (client portal): who may record expenses.
+        # Capability groups that used to be literal role tuples in a decorator —
+        # unreadable by a template, which is how route access and the UI drifted
+        # apart (Task 1.1). Now both sides call these.
+        can_delete_employee=can_delete_employee,
+        can_import_payroll=can_import_payroll,
+        can_manage_wage_rates=can_manage_wage_rates,
+        can_use_raw_engine=can_use_raw_engine,
+        can_manage_clients=can_manage_clients,
+        can_view_platform_ops=can_view_platform_ops,
+        # Tenant-plane capabilities (client portal).
         can_record_expenses=can_record_expenses,
+        can_manage_branding=can_manage_branding,
     )
 
     from app.audit import audit_bp
@@ -576,6 +602,23 @@ def create_app():
         }
 
     @app.context_processor
+    def inject_current_role():
+        # `role` in every template, so a conditional never reaches for
+        # current_user.role itself. Three templates already opened with a
+        # {% set role = current_user.role %} line; hoisting it here makes the
+        # convention universal and makes "no role literal in a template" a rule
+        # a grep can actually enforce (Phase 7, Task 7.3). Predicates still take
+        # the role string, so a template asks can_x(role, ...) — the same call
+        # the route makes. Never raises: this renders on the login/error pages,
+        # where there is no authenticated user.
+        from flask_login import current_user
+
+        try:
+            return {"role": current_user.role if current_user.is_authenticated else None}
+        except Exception:  # noqa: BLE001 - context processors must never raise
+            return {"role": None}
+
+    @app.context_processor
     def inject_notification_count():
         # Unread badge for both plane navbars. Never raise from a context
         # processor (it renders on the error page too) — fail soft to 0.
@@ -588,28 +631,19 @@ def create_app():
             return {"notif_unread": 0}
 
     @app.context_processor
-    def inject_sidebar_clients():
-        from app.models import ClientCompany
-        from app.tenancy import active_tenant_id
+    def inject_navigation():
+        # The operator sidebar, declared in app/navigation.py. Active state comes
+        # from the request's own blueprint rather than a path.startswith() test
+        # per link, so adding a route needs no template edit (Task 3.2). The
+        # per-client list this replaced queried every client on every page —
+        # including the branded 500 page, where a dead DB connection made the
+        # error handler re-error. Nothing here can raise.
+        from app.navigation import active_nav_key, visible_nav
 
-        # Rendered on every authenticated page — including the branded 500 page.
-        # If the DB connection is the very thing that failed, this query would
-        # raise again and turn the friendly error page into a raw crash, so fail
-        # soft to an empty sidebar rather than let the error handler re-error.
-        #
-        # Tenant-scoped: a client user must never see other tenants' company
-        # names in the sidebar, so a tenant user's list is limited to their own
-        # company; platform (operator) users see all active clients.
-        try:
-            query = ClientCompany.query.filter_by(status="Active")
-            tenant_id = active_tenant_id()
-            if tenant_id is not None:
-                query = query.filter(ClientCompany.id == tenant_id)
-            clients = query.order_by(ClientCompany.name).all()
-        except Exception:  # noqa: BLE001 - context processors must never raise
-            db.session.rollback()
-            clients = []
-        return {"sidebar_clients": clients}
+        return {
+            "visible_nav": visible_nav,
+            "active_nav": active_nav_key(request.endpoint, request.blueprint),
+        }
 
     # Branded error pages (A4). DEBUG is False under gunicorn in production (it
     # imports run:app, so app.run(debug=...) never executes), which is what lets
@@ -716,6 +750,12 @@ def create_app():
                 )
             click.echo("Demo reset complete.")
 
+    # Opt-in development corpus (dozens of clients, a 400-worker run) — kept out
+    # of SEED_DEMO_DATA so the demo fixture the test suite pins stays untouched.
+    from app.seed_scale import register_cli as register_seed_scale_cli
+
+    register_seed_scale_cli(app)
+
     @app.cli.command("distribution-worker")
     @click.option("--once", is_flag=True, help="Process the queue once and exit (cron mode).")
     def distribution_worker_command(once):
@@ -794,11 +834,14 @@ def _start_inline_distribution_worker(app):
     Guarded by the caller against Werkzeug's debug-reloader parent process, so this
     starts exactly once per running app instance.
     """
-    from app.distribution.queue import run_worker
+    from app.distribution.queue import INLINE_WORKER_NAME, run_worker
 
     # A distinct heartbeat name so an inline (web) worker and a separate worker
-    # process on the same host don't overwrite each other's heartbeat row.
-    inline_name = f"{socket.gethostname()}-web-inline"
+    # process don't overwrite each other's row — distinct by ROLE, not by host.
+    # It used to include socket.gethostname(), which on Render changes with every
+    # deploy, so the "upsert one row per worker" design silently became "insert a
+    # new row per release" and the table grew without bound.
+    inline_name = INLINE_WORKER_NAME
 
     def _target():
         with app.app_context():

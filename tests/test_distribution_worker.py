@@ -15,12 +15,14 @@ os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from app import create_app, db  # noqa: E402
 from app.distribution.dashboard import collect_dashboard_stats  # noqa: E402
+from app.distribution.notify import notify_worker_stopped  # noqa: E402
 from app.distribution.queue import (  # noqa: E402
     drain_once,
     enqueue_distribution,
     record_heartbeat,
     run_worker,
     run_worker_loop,
+    safe_batch_error,
     worker_last_poll,
     worker_statuses,
 )
@@ -28,6 +30,7 @@ from app.models import (  # noqa: E402
     WORKER_STATUS_RUNNING,
     WORKER_STATUS_STOPPED,
     DistributionWorkerHeartbeat,
+    DomainEvent,
     PayrollRun,
     PayslipDelivery,
     User,
@@ -70,6 +73,36 @@ class WorkerHardeningTestCase(unittest.TestCase):
         self.assertGreaterEqual(rows[0].last_poll_at, first_poll)
         self.assertEqual(rows[0].status, WORKER_STATUS_RUNNING)
 
+    def test_worker_identity_is_stable_across_restarts(self):
+        """The heartbeat table grew one dead row per deploy because identity was
+        the pod hostname. Identity is per-role now, so a redeploy (a new host,
+        a new pid) updates the same row instead of adding one."""
+        import socket
+        from unittest import mock
+
+        from app.distribution.queue import default_worker_name
+
+        self.assertNotIn(socket.gethostname(), default_worker_name())
+
+        name = default_worker_name()
+        record_heartbeat(name)
+        with mock.patch.object(socket, "gethostname", return_value="pod-after-deploy"):
+            with mock.patch("os.getpid", return_value=99999):
+                record_heartbeat(name)
+
+        rows = DistributionWorkerHeartbeat.query.filter_by(worker_name=name).all()
+        self.assertEqual(len(rows), 1, "a redeploy must not add a heartbeat row")
+        self.assertEqual(rows[0].host, "pod-after-deploy")  # forensics still recorded
+        self.assertEqual(rows[0].pid, 99999)
+
+    def test_inline_and_standalone_workers_stay_distinct(self):
+        from app.distribution.queue import INLINE_WORKER_NAME, default_worker_name
+
+        self.assertNotEqual(INLINE_WORKER_NAME, default_worker_name())
+        record_heartbeat(default_worker_name())
+        record_heartbeat(INLINE_WORKER_NAME)
+        self.assertEqual(DistributionWorkerHeartbeat.query.count(), 2)
+
     def test_worker_last_poll_is_max_across_workers(self):
         self.assertIsNone(worker_last_poll())
         record_heartbeat("w1")
@@ -101,8 +134,58 @@ class WorkerHardeningTestCase(unittest.TestCase):
         # makes the dashboard's worker health live (not blind).
         record_heartbeat("external-worker")
         stats = collect_dashboard_stats()
-        self.assertTrue(any(w.worker_name == "external-worker" for w in stats["workers"]))
+        # The dashboard reports liveness as a count, not as a list of process rows —
+        # the per-process detail is engineering-only (see _worker_fleet).
+        self.assertEqual(stats["worker_fleet"]["live"], 1)
+        self.assertEqual(stats["worker_fleet"]["known"], 1)
         self.assertIsNotNone(stats["last_processed_at"] or worker_last_poll())
+
+    def test_dashboard_does_not_expose_worker_hostnames(self):
+        # Regression guard for the Notifications/Monitor internals leak: the stats
+        # payload backing the operator dashboard must carry no per-process rows.
+        record_heartbeat("external-worker")
+        self.assertNotIn("workers", collect_dashboard_stats())
+
+
+class InternalsStayOutOfUserFacingTextTests(unittest.TestCase):
+    """Phase 0, Task 0.4 — a raw driver exception must never reach a surface a
+    business user reads: the in-app Notifications inbox, or the distribution status
+    panel the *tenant* sees (which renders ``DistributionBatch.error``). Detail
+    belongs in the application log. Written against the shape of the exception that
+    actually leaked, so it guards the class of bug, not the one instance."""
+
+    LEAKY = (
+        '(psycopg2.errors.UndefinedTable) relation "distribution_worker_heartbeat" '
+        "does not exist\nLINE 2: FROM distribution_worker_heartbeat\n"
+        "[SQL: SELECT max(distribution_worker_heartbeat.last_poll_at) AS max_1]\n"
+        "[parameters: {'worker': 'srv-d9cvkbgk1i2s73cm6phg-hibernate-596c77cc6f'}]"
+    )
+    FORBIDDEN = ("psycopg2", "UndefinedTable", "[SQL:", "parameters:", "srv-", "LINE 2")
+
+    def setUp(self):
+        self.app = create_app()
+        self.app.config["TESTING"] = True
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+
+    def tearDown(self):
+        db.session.remove()
+        self.ctx.pop()
+
+    def _assert_clean(self, text):
+        for token in self.FORBIDDEN:
+            self.assertNotIn(token, text, f"{token!r} leaked into user-facing text")
+
+    def test_worker_stopped_notification_carries_no_exception_detail(self):
+        notify_worker_stopped(self.LEAKY)
+        db.session.commit()
+        event = DomainEvent.query.filter_by(
+            event_type="distribution.worker_stopped"
+        ).one()
+        self._assert_clean(event.summary)
+
+    def test_batch_error_carries_no_exception_detail(self):
+        self._assert_clean(safe_batch_error(RuntimeError(self.LEAKY)))
 
 
 class WorkerCliTestCase(unittest.TestCase):

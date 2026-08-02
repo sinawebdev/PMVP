@@ -1,7 +1,8 @@
 {% extends "client/base.html" %}
+{% import "macros/ui.html" as ui %}
 {% block title %}Payroll runs{% endblock %}
 {% block body %}
-  <div class="toolbar">
+  <div class="page-bar">
     <div class="page-head">
       <h1>Payroll runs</h1>
       <p class="sub">Payroll runs for {{ company.name }}. Approval happens with {{ app_brand_name }} oversight.</p>
@@ -10,8 +11,8 @@
   </div>
 
   {% if drafts %}
-  <div class="toolbar"><h2>In-progress imports</h2></div>
-  <div class="panel">
+  <div class="page-bar"><h2>In-progress imports</h2></div>
+  <div class="panel dt-wrap">
     <table>
       <thead><tr><th>Period</th><th>File</th><th class="right">Workers</th><th class="right">Net (as uploaded)</th><th></th></tr></thead>
       <tbody>
@@ -35,11 +36,11 @@
   {% endif %}
 
   {% if runs %}
-  <div class="panel">
+  <div class="panel dt-wrap">
     <table>
       <thead><tr><th>Period</th><th>Status</th><th class="right">Workers</th><th class="right">Gross</th><th class="right">Net pay</th><th></th></tr></thead>
       <tbody>
-        {% for run in runs %}
+        {% for run in page.items %}
         <tr>
           <td>{{ run.month }} {{ run.year }}</td>
           <td><span class="badge">{{ run.status }}</span></td>
@@ -52,6 +53,7 @@
       </tbody>
     </table>
   </div>
+  {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
   {% else %}
   <div class="empty-state">No payroll runs yet.</div>
   {% endif %}

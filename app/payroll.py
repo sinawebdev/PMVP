@@ -9,6 +9,7 @@ from flask import (
     Blueprint,
     current_app,
     flash,
+    make_response,
     redirect,
     render_template,
     request,
@@ -26,12 +27,23 @@ from app.permissions import (
     DELETE_ROLES,
     EDIT_FIGURES_ROLES,
     MARK_PROCESSED_ROLES,
+    PAYROLL_IMPORT_ROLES,
     PAYROLL_ROLES,
     SUBMIT_APPROVAL_ROLES,
+    WAGE_RATE_ROLES,
     can_approve_run,
+    can_calculate_run,
+    can_delete_run,
     can_distribute_run,
+    can_edit_run_figures,
+    can_manage_wage_rates,
+    can_mark_run_processed,
+    can_operate_payroll,
     can_reject_run,
+    can_submit_run_for_approval,
+    can_use_raw_engine,
 )
+from app.htmx_utils import wants_htmx, with_toast
 from app.tenancy import platform_required
 from app.excel_utils import (
     allowed_excel_file,
@@ -63,13 +75,23 @@ from app.models import (
     WageRateProfile,
 )
 from app.payroll_status import (
+    ACTION_APPROVE,
+    ACTION_AWAIT_RISK,
+    ACTION_CALCULATE,
+    ACTION_DISTRIBUTE,
+    ACTION_MARK_PROCESSED,
+    ACTION_REVIEW_HOLD,
+    ACTION_SUBMIT,
     APPROVED,
     DELETABLE_STATUSES,
     DRAFT,
+    HELD,
     PENDING_APPROVAL,
     PENDING_STATUSES,
     PROCESSED,
     REJECTED,
+    RISK_GATED_STATUSES,
+    recommended_action_for,
 )
 from app.pdf_service import generate_payslip_pdf
 from app.raw_engine.detection import looks_like_raw_hours
@@ -442,17 +464,17 @@ def handle_payroll_upload(now):
     client_id = request.form.get("client_company_id")
     if import_mode == "single_client" and not client_id:
         flash("Select a client company before uploading payroll.", "warning")
-        return redirect(url_for("payroll.runs"))
+        return redirect(url_for("payroll.new_run"))
 
     month = request.form.get("month") or now.strftime("%B")
     year = int(request.form.get("year") or now.year)
     file_storage = request.files.get("payroll_file")
     if not file_storage or not file_storage.filename:
         flash("Choose an Excel file to upload.", "warning")
-        return redirect(url_for("payroll.runs"))
+        return redirect(url_for("payroll.new_run"))
     if not allowed_excel_file(file_storage.filename):
         flash("Only .xlsx, .xls, or .csv files are supported.", "warning")
-        return redirect(url_for("payroll.runs"))
+        return redirect(url_for("payroll.new_run"))
 
     source_filename = file_storage.filename
     file_path = save_temporary_upload(file_storage)
@@ -464,7 +486,7 @@ def handle_payroll_upload(now):
         # falls through to the existing importer unchanged. The friendly message
         # + "Go to Raw Hour Upload" button render from the wrong_tab flag.
         if looks_like_raw_hours(file_path):
-            return redirect(url_for("payroll.runs", wrong_tab="raw"))
+            return redirect(url_for("payroll.new_run", wrong_tab="raw"))
         if import_mode == "multi_client":
             payload, error = build_multi_client_payload(file_path, source_filename, month, year)
             client_for_batch = None
@@ -480,7 +502,7 @@ def handle_payroll_upload(now):
 
     if error:
         flash(error, "danger")
-        return redirect(url_for("payroll.runs"))
+        return redirect(url_for("payroll.new_run"))
 
     batch_client_id = (
         client_for_batch.id
@@ -525,16 +547,54 @@ def handle_payroll_upload(now):
 RUNS_PER_PAGE = 50
 
 
-@payroll_bp.route("/runs", methods=["GET", "POST"])
-@platform_required
-def runs():
+# --- Creating a run ----------------------------------------------------------
+# Its own page, and its own route (Phase 4, Task 4.2). The upload wizard used to
+# sit permanently open ABOVE the runs list, so the most common visit to this
+# section — "show me the runs" — opened on a form nobody had asked for, and the
+# list, the thing named in the sidebar, started below the fold.
+#
+# The gate is `can_import_payroll`, not the `role != "admin"` literal that used
+# to guard the list route's POST. That literal disagreed with
+# PAYROLL_IMPORT_ROLES, which `preview` and `confirm` are decorated with: a
+# superuser was authorized to preview and confirm an import, but not to start
+# the upload that produces one.
+
+
+@payroll_bp.route("/runs/new", methods=["GET", "POST"])
+@role_required(*PAYROLL_IMPORT_ROLES)
+def new_run():
     now = datetime.now()
     if request.method == "POST":
-        if current_user.role != "admin":
-            flash("Only admins can create payroll runs.", "danger")
-            return redirect(url_for("payroll.runs"))
         return handle_payroll_upload(now)
+    return render_template(
+        "payroll_new_run.html",
+        clients=ClientCompany.query.filter_by(status="Active")
+        .order_by(ClientCompany.name)
+        .all(),
+        current_month=now.strftime("%B"),
+        current_year=now.year,
+        wrong_tab=request.args.get("wrong_tab"),
+    )
 
+
+@payroll_bp.route("/runs")
+@platform_required
+def runs():
+    return render_template("payroll_runs.html", **_runs_context())
+
+
+def _runs_body_response(category, message):
+    """Re-render just the runs table body and attach a toast — the answer to an
+    in-place approve/reject, so the operator stays on the queue they are working
+    through instead of being bounced to the run they just cleared and back.
+
+    Same shape as employees._roster_body_response, deliberately: one partial-swap
+    pattern in the codebase, not two."""
+    body = render_template("payroll/_runs_body.html", **_runs_context())
+    return with_toast(make_response(body), category, message)
+
+
+def _runs_context():
     selected_client = None
     query = PayrollRun.query
     client_id = request.args.get("client_id")
@@ -546,6 +606,23 @@ def runs():
         query = query.filter(PayrollRun.status.in_(PENDING_STATUSES))
     elif status_filter:
         query = query.filter(PayrollRun.status == status_filter)
+    # Free-text filter. This used to hide rows in the browser, which silently
+    # contradicted the server-side pagination below: a run matching the term but
+    # sitting on page 2 simply did not exist as far as the user could tell. It is
+    # a query predicate now, so a match is found wherever it lives, and the term
+    # rides in the URL so a filtered list can be linked and reloaded.
+    search = (request.args.get("q") or "").strip()
+    if search:
+        like = f"%{search}%"
+        query = query.outerjoin(PayrollRun.client_company).filter(
+            db.or_(
+                PayrollRun.month.ilike(like),
+                PayrollRun.status.ilike(like),
+                db.cast(PayrollRun.year, db.String).ilike(like),
+                ClientCompany.name.ilike(like),
+                ClientCompany.company_code.ilike(like),
+            )
+        )
     page = request.args.get("page", 1, type=int)
     # Eager-load client_company (rendered per row) to avoid an N+1 across the page.
     pagination = (
@@ -554,24 +631,27 @@ def runs():
         .paginate(page=page, per_page=RUNS_PER_PAGE, error_out=False)
     )
     payroll_runs = pagination.items
-    clients = ClientCompany.query.filter_by(status="Active").order_by(ClientCompany.name).all()
     distributed_ids = distributed_run_ids([run.id for run in payroll_runs])
-    return render_template(
-        "payroll_runs.html",
-        payroll_runs=payroll_runs,
-        pagination=pagination,
-        selected_client=selected_client,
-        status_filter=status_filter,
-        clients=clients,
-        distributed_ids=distributed_ids,
-        current_month=now.strftime("%B"),
-        current_year=now.year,
-        wrong_tab=request.args.get("wrong_tab"),
-    )
+    return {
+        "payroll_runs": payroll_runs,
+        "pagination": pagination,
+        "selected_client": selected_client,
+        "status_filter": status_filter,
+        "search": search,
+        "distributed_ids": distributed_ids,
+        # Query args to preserve across page links in the Data Table.
+        "table_params": {
+            k: v for k, v in (
+                ("client_id", selected_client.id if selected_client else None),
+                ("status", status_filter or None),
+                ("q", search or None),
+            ) if v is not None
+        },
+    }
 
 
 @payroll_bp.route("/preview/<import_id>")
-@role_required("admin")
+@role_required(*PAYROLL_IMPORT_ROLES)
 def preview(import_id):
     payload = load_import_session(import_id)
     client = None
@@ -592,7 +672,7 @@ def preview(import_id):
 
 
 @payroll_bp.route("/preview/<import_id>/errors")
-@role_required("admin")
+@role_required(*PAYROLL_IMPORT_ROLES)
 def error_report(import_id):
     payload = load_import_session(import_id)
     file_path = export_import_error_report(payload, current_app.config["EXPORT_FOLDER"])
@@ -600,7 +680,7 @@ def error_report(import_id):
 
 
 @payroll_bp.route("/confirm/<import_id>", methods=["POST"])
-@role_required("admin")
+@role_required(*PAYROLL_IMPORT_ROLES)
 def confirm(import_id):
     payload = load_import_session(import_id)
     if payload.get("mode") == "multi_client":
@@ -922,11 +1002,15 @@ def auto_calculate_on_confirm(payroll_run):
             payroll_run,
             f"{type(exc).__name__}: {exc}",
         )
+        # The exception repr and the hosting provider's name stay out of this
+        # message: it is read by a payroll clerk who has no access to logs and
+        # nothing to do with either. The traceback is already in the application
+        # log (above) and the audit trail carries the type for support to follow up.
         flash(
-            f"Payroll imported but statutory calculation failed ({type(exc).__name__}: {exc}). "
-            "Uploaded figures were kept (some items may be partially recalculated); check "
-            "Render logs for the full traceback, fix the underlying data/rate issue, then "
-            "use Calculate Pay to retry.",
+            "Payroll imported but the statutory calculation failed, so the figures "
+            "are not yet verified. Uploaded figures were kept (some items may be "
+            "partially recalculated). Use Calculate Pay to retry — if it keeps "
+            "failing, the run's activity trail records what went wrong.",
             "danger",
         )
         return
@@ -1136,15 +1220,97 @@ def create_or_update_employee_from_import(
     return employee
 
 
+# How many payroll rows the detail page renders at once. The grid used to render
+# the whole run, so a 400-worker payroll built a 400-row table on every view of
+# the page — including views whose only purpose was to click Approve.
+ITEMS_PER_PAGE = 50
+
+
+def _run_actions(run, role, distributed, recommended):
+    """The run's lifecycle controls, ranked, for ``macros/ui.html::action_bar``.
+
+    Two independent questions are intersected here and nowhere else: *what does
+    this run need next* (``recommended_action_for``, role-blind) and *what may
+    this person do* (the ``can_*`` predicates, run-state-aware). Exactly one
+    control comes back marked ``primary`` — the recommended one, when the role
+    is allowed to take it — and the long tail of exports and the delete go to
+    ``overflow`` so the bar states a decision instead of a menu.
+    """
+    recommended_key = recommended["key"] if recommended else None
+    actions = []
+
+    def add(key, label, href, method=None, **extra):
+        actions.append({
+            "label": label,
+            "href": href,
+            "method": method,
+            "primary": key is not None and key == recommended_key,
+            **extra,
+        })
+
+    if run.status in RISK_GATED_STATUSES:
+        add(ACTION_AWAIT_RISK, "Run risk check",
+            url_for("oversight.risk_check", run_id=run.id), "POST")
+    if run.status == HELD:
+        add(ACTION_REVIEW_HOLD, "Release hold",
+            url_for("oversight.release_hold", run_id=run.id), "POST")
+    if can_calculate_run(role, run):
+        add(ACTION_CALCULATE, "Calculate pay",
+            url_for("payroll.calculate", run_id=run.id), "POST")
+    if can_submit_run_for_approval(role, run):
+        add(ACTION_SUBMIT, "Submit for approval",
+            url_for("payroll.submit_for_approval", run_id=run.id), "POST")
+    if can_approve_run(role, run):
+        add(ACTION_APPROVE, "Approve payroll",
+            url_for("payroll.approve", run_id=run.id), "POST")
+    if can_reject_run(role, run):
+        add(None, "Reject payroll", url_for("payroll.reject", run_id=run.id), "POST",
+            danger=True,
+            confirm=f"Reject the {run.month} {run.year} payroll run? "
+                    "It goes back to the preparer and cannot be approved until resubmitted.",
+            confirm_title="Reject this payroll run", confirm_ok="Reject run")
+    if can_mark_run_processed(role, run):
+        add(ACTION_MARK_PROCESSED, "Mark processed",
+            url_for("payroll.mark_paid", run_id=run.id), "POST")
+    if can_distribute_run(role, run):
+        add(ACTION_DISTRIBUTE, "Distribute payslips",
+            url_for("distribution.run_status", run_id=run.id))
+    if can_edit_run_figures(role):
+        add(None, "Edit figures", url_for("payroll.edit_items", run_id=run.id))
+    if can_manage_wage_rates(role) and run.upload_type == "raw" and run.client_company:
+        add(None, "Wage rates",
+            url_for("payroll.wage_rates", client_id=run.client_company_id),
+            overflow=True)
+
+    # Exports are never the decision — they are what you do once it is made, and
+    # they now have a page of their own (Phase 5, Task 5.3). Four identical
+    # buttons in this bar told nobody which file they wanted; the Reports page
+    # groups them by purpose, previews each, and says why one is unavailable.
+    if can_operate_payroll(role):
+        add(None, "Reports & exports",
+            url_for("payroll.run_reports", run_id=run.id), overflow=True)
+    if can_delete_run(role, run):
+        company = run.client_company.name if run.client_company else ""
+        add(None, "Delete run", url_for("payroll.delete_run", run_id=run.id), "POST",
+            danger=True, overflow=True,
+            confirm=f"Permanently delete the {company} {run.month} {run.year} payroll run "
+                    f"and all {run.total_workers or 0} worker rows? There is no undo and no "
+                    "recycle bin — only an audit log entry remains. Type the period to confirm.",
+            confirm_title="Delete this payroll run", confirm_ok="Delete run",
+            confirm_typed=f"{run.month} {run.year}")
+
+    return actions
+
+
 @payroll_bp.route("/runs/<int:run_id>")
 @platform_required
 def detail(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
 
     # The delete button (and every other lifecycle action) is gated by the
-    # can_*_run predicates in app/permissions.py, exposed as Jinja globals — the
-    # template no longer needs the status set passed in, and the predicate and
-    # the delete route share DELETABLE_STATUSES so they can't drift apart.
+    # can_*_run predicates in app/permissions.py — the ranked bar is assembled in
+    # _run_actions above, so the predicate and the delete route share
+    # DELETABLE_STATUSES and can't drift apart.
     from app.events import run_activity
     from app.risk import build_recommendations, compare_to_previous, evaluate_run, find_possible_duplicates
 
@@ -1152,6 +1318,21 @@ def detail(run_id):
     comparison = compare_to_previous(payroll_run)
     duplicates = find_possible_duplicates(payroll_run)
     risk_verdict = evaluate_run(payroll_run)
+    role = getattr(current_user, "role", None)
+    recommended = recommended_action_for(payroll_run, distributed=run_distributed)
+
+    # The grid is a page of rows, not the run. Ordered explicitly because a
+    # paginated query with no ORDER BY may return the same row on two pages.
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    items = (
+        PayrollItem.query.filter_by(payroll_run_id=payroll_run.id)
+        .order_by(PayrollItem.full_name.asc(), PayrollItem.id.asc())
+        .paginate(page=page, per_page=ITEMS_PER_PAGE, error_out=False)
+    )
+
     return render_template(
         "payroll_detail.html",
         payroll_run=payroll_run,
@@ -1161,6 +1342,9 @@ def detail(run_id):
         duplicates=duplicates,
         risk_verdict=risk_verdict,
         recommendations=build_recommendations(payroll_run, risk_verdict, comparison, duplicates),
+        recommended=recommended,
+        actions=_run_actions(payroll_run, role, run_distributed, recommended),
+        items=items,
     )
 
 
@@ -1415,7 +1599,7 @@ def edit_items(run_id):
 
 
 @payroll_bp.route("/clients/<int:client_id>/wage-rates", methods=["GET", "POST"])
-@role_required("admin")
+@role_required(*WAGE_RATE_ROLES)
 def wage_rates(client_id):
     """Admin-managed hourly rates per pay code for a raw/hourly client —
     client-wide defaults plus optional per-employee overrides."""
@@ -1530,7 +1714,13 @@ def approve(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     _approve_run(payroll_run)
     db.session.commit()
-    flash("Payroll approved.", "success")
+    message = f"{payroll_run.month} {payroll_run.year} payroll approved."
+    # Approving from the queue swaps the row in place; approving from the run's
+    # own page still lands on the run. Same route, same mutation, same audit
+    # entry — only the reply differs.
+    if wants_htmx():
+        return _runs_body_response("success", message)
+    flash(message, "success")
     return redirect(url_for("payroll.detail", run_id=run_id))
 
 
@@ -1540,7 +1730,10 @@ def reject(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     _reject_run(payroll_run, request.form.get("notes"))
     db.session.commit()
-    flash("Payroll rejected.", "warning")
+    message = f"{payroll_run.month} {payroll_run.year} payroll rejected."
+    if wants_htmx():
+        return _runs_body_response("warning", message)
+    flash(message, "warning")
     return redirect(url_for("payroll.detail", run_id=run_id))
 
 
@@ -1815,8 +2008,37 @@ def delete_run(run_id):
     return redirect(url_for("payroll.runs"))
 
 
+# --- Reports & exports --------------------------------------------------------
+# Phase 5, Task 5.3. The operator's four exports used to be four identically
+# weighted buttons on the run page with no grouping, no preview and — when an
+# export was going to produce a thin or empty workbook — no reason given.
+# client/run_reports.html already had the right pattern; this is the same
+# pattern, from the same macros (macros/reports.html).
+
+
+@payroll_bp.route("/runs/<int:run_id>/reports")
+@role_required(*PAYROLL_ROLES)
+def run_reports(run_id):
+    from app.excel_utils import bank_listing_groups
+
+    run = db.get_or_404(PayrollRun, run_id)
+    bank_groups, bank_grand_total = bank_listing_groups(run)
+    return render_template(
+        "payroll_run_reports.html",
+        payroll_run=run,
+        bank_groups=bank_groups,
+        bank_grand_total=bank_grand_total,
+        # The bureau is the employer of record on operator-side exports; the
+        # tenant's own copy carries the tenant's name instead (see
+        # app/client/reports.py::_employer_name). Same engine, different
+        # letterhead, and that difference is deliberate.
+        employer_name=current_app.config["APP_BRAND_NAME"],
+        has_rows=run.item_count > 0,
+    )
+
+
 @payroll_bp.route("/runs/<int:run_id>/export")
-@role_required("admin", "md", "accounts_officer", "payroll_officer")
+@role_required(*PAYROLL_ROLES)
 def export(run_id):
     payroll_run = db.get_or_404(PayrollRun, run_id)
     file_path = export_payroll_run(payroll_run, current_app.config["EXPORT_FOLDER"])
@@ -1827,7 +2049,7 @@ def export(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/export/bank-listing")
-@role_required("admin", "md", "accounts_officer", "payroll_officer")
+@role_required(*PAYROLL_ROLES)
 def export_bank_listing_route(run_id):
     """Bank transfer batch listing grouped by bank_name — generated from the
     run's items, not a hand-maintained sheet."""
@@ -1839,7 +2061,7 @@ def export_bank_listing_route(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/export/wages-sheet")
-@role_required("admin", "md", "accounts_officer", "payroll_officer")
+@role_required(*PAYROLL_ROLES)
 def export_wages_sheet_route(run_id):
     """Wages Sheet (ACS "WAGE SHT" layout) for the run — 17 columns plus
     totals, generated from the run's items."""
@@ -1851,7 +2073,7 @@ def export_wages_sheet_route(run_id):
 
 
 @payroll_bp.route("/runs/<int:run_id>/export/gra-paye")
-@role_required("admin", "md", "accounts_officer", "payroll_officer")
+@role_required(*PAYROLL_ROLES)
 def export_gra_paye_route(run_id):
     """GRA Employer's Monthly Tax Deductions Schedule (P.A.Y.E.) for the run."""
     payroll_run = db.get_or_404(PayrollRun, run_id)
@@ -1867,7 +2089,7 @@ def export_gra_paye_route(run_id):
 
 
 @payroll_bp.route("/items/<int:item_id>/payslip")
-@role_required("admin", "md", "accounts_officer", "payroll_officer")
+@role_required(*PAYROLL_ROLES)
 def payslip(item_id):
     payroll_item = db.get_or_404(PayrollItem, item_id)
     file_path = generate_payslip_pdf(payroll_item, current_app.config["EXPORT_FOLDER"])

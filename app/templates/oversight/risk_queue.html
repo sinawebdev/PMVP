@@ -1,12 +1,20 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
+{% import "macros/ui.html" as ui %}
 {% block title %}Risk Queue · {{ app_name }}{% endblock %}
 {% block page_title %}Risk Review Queue{% endblock %}
-{% block page_intro %}Payroll runs the risk gate has held for {{ app_brand_name }} review, across every client company. Open a run to see why it was held, then release it into the approval queue or reject it.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Payroll Runs", url_for('payroll.runs')),
+    ("Risk Review Queue", None),
+]) }}
+{% endblock %}
 {% block content %}
 {% if held_runs %}
 <div class="mini-note mb-3">
     <i class="bi bi-shield-exclamation"></i>
-    {{ held_runs|length }} run(s) held for review. A run is held when it is one of a client's first two runs, its total net pay moves more than 15% from the previous run, or its worker count moves more than 20%.
+    {{ total }} run(s) held for review. A run is held when it is one of a client's first two runs, its total net pay moves more than 15% from the previous run, or its worker count moves more than 20%.
 </div>
 <section class="panel">
     <div class="table-responsive">
@@ -15,7 +23,7 @@
                 <tr><th>Company</th><th>Period</th><th class="text-end">Workers</th><th class="text-end">Net pay</th><th>Why held</th><th>Checked</th><th></th></tr>
             </thead>
             <tbody>
-                {% for run in held_runs %}
+                {% for run in page.items %}
                 <tr>
                     <td>{{ run.client_company.name if run.client_company else '—' }}</td>
                     <td>{{ run.month }} {{ run.year }}</td>
@@ -29,6 +37,7 @@
             </tbody>
         </table>
     </div>
+    {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
 </section>
 {% else %}
 <div class="mini-note mb-3">

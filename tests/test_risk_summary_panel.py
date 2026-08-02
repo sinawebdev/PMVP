@@ -153,7 +153,10 @@ class RiskSummaryPanelRenderTestCase(unittest.TestCase):
     def test_panel_renders_on_detail_page(self):
         run = self._run(total_workers=5, total_net_pay=1000)
         html = self.client.get(f"/payroll/runs/{run.id}").get_data(as_text=True)
-        self.assertIn("Risk &amp; Validation Summary", html)
+        # Phase 4 moved the panel behind the detail page's "Risk & validation"
+        # tab. Still one interaction away, still rendered in the response.
+        self.assertIn("Risk &amp; validation", html)
+        self.assertIn('id="tab-risk-panel"', html)
         self.assertIn("Risk gate checks", html)
 
     def test_panel_shows_no_warnings_when_none(self):
@@ -168,7 +171,10 @@ class RiskSummaryPanelRenderTestCase(unittest.TestCase):
         db.session.commit()
         html = self.client.get(f"/payroll/runs/{run.id}").get_data(as_text=True)
         self.assertIn("1 of 2 row(s) flagged", html)
-        self.assertIn('href="#payroll-items-grid"', html)
+        # The grid moved into the Rows tab, so the cross-reference points at the
+        # panel (which app.js opens on hash) rather than at the table element.
+        self.assertIn('href="#tab-rows-panel"', html)
+        self.assertIn('id="tab-rows-panel"', html)
         self.assertIn('id="payroll-items-grid"', html)
 
     def test_panel_lists_recommendations_when_present(self):

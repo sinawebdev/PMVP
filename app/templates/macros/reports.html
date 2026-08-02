@@ -1,0 +1,77 @@
+{# ---------------------------------------------------------------------------
+   Reports & exports — ONE implementation, both shells (Phase 5, Task 5.3).
+
+   client/run_reports.html was the correct pattern and the operator console had
+   nothing like it: four identically-styled buttons in a row, no grouping, no
+   preview, and — when an export was not going to work — no reason, just a
+   download that produced a thin or empty workbook.
+
+   The pattern is three things per report:
+
+     purpose      a heading and a sentence saying what the file IS
+     availability a download, or a disabled control WITH the reason
+     preview      the figures the file will contain, so it can be sanity-checked
+                  before anyone opens Excel
+
+   Bootstrap is NOT available here — client/base.html does not load it.
+   --------------------------------------------------------------------------- #}
+
+
+{% macro report(title, description, href=none, reason=none, label="Download Excel") %}
+<section class="rp">
+  <div class="rp-head">
+    <h2>{{ title }}</h2>
+    {% if href %}
+    <a class="btn primary" href="{{ href }}">{{ label }}</a>
+    {% else %}
+    {# Disabled WITH the reason beside it. A control that does nothing and says
+       nothing is the thing this pattern exists to replace. #}
+    <button class="btn" type="button" disabled aria-describedby="rp-why-{{ title|lower|replace(' ', '-') }}">{{ label }}</button>
+    {% endif %}
+  </div>
+  <p class="rp-why">{{ description }}</p>
+  {% if reason %}
+  <p class="rp-blocked" id="rp-why-{{ title|lower|replace(' ', '-') }}">{{ reason }}</p>
+  {% endif %}
+  {{ caller() if caller is defined }}
+</section>
+{% endmacro %}
+
+
+{# --- Bank listing preview: workers grouped by bank, with subtotals ---------- #}
+{% macro bank_listing_preview(bank_groups, grand_total, total_workers) %}
+{% if bank_groups %}
+<div class="dt-wrap">
+  <table class="dt">
+    <caption class="sr-only">Net pay grouped by bank</caption>
+    <thead><tr><th scope="col">Bank</th><th scope="col" class="num">Workers</th><th scope="col" class="num">Subtotal (net)</th></tr></thead>
+    <tbody>
+      {% for group in bank_groups %}
+      {# group['items'] via subscript — group.items would hit dict.items() #}
+      <tr>
+        <td>{{ group['bank'] }}</td>
+        <td class="num">{{ group['items']|length }}</td>
+        <td class="num">{{ group['subtotal']|cedis }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr><th scope="row">Grand total</th><td class="num">{{ total_workers }}</td><td class="num">{{ grand_total|cedis }}</td></tr>
+    </tfoot>
+  </table>
+</div>
+{% else %}
+<p class="rp-blocked">No payslip lines on this run yet, so there is nothing to pay out.</p>
+{% endif %}
+{% endmacro %}
+
+
+{# --- GRA PAYE schedule preview ---------------------------------------------- #}
+{% macro gra_preview(employer_name, run) %}
+<dl class="ds-totals">
+  <div class="ds-total"><dt>Employer</dt><dd>{{ employer_name }}</dd></div>
+  <div class="ds-total"><dt>Employees</dt><dd>{{ run.total_workers }}</dd></div>
+  <div class="ds-total"><dt>Total PAYE</dt><dd>{{ run.total_paye|cedis }}</dd></div>
+  <div class="ds-total"><dt>Total employee SSF</dt><dd>{{ run.total_ssnit|cedis }}</dd></div>
+</dl>
+{% endmacro %}

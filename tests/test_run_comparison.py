@@ -83,7 +83,10 @@ class RunComparisonTestCase(unittest.TestCase):
         current = self._run(status="Draft", net=1200, workers=10, month="January")
         db.session.commit()
         html = self.client.get(f"/payroll/runs/{current.id}").get_data(as_text=True)
-        self.assertIn("Compared to Previous Run", html)
+        # Phase 4 moved this behind the detail page's "Comparison" tab; the
+        # caption names the period it is compared against.
+        self.assertIn('id="tab-comparison-panel"', html)
+        self.assertIn("This run compared to December", html)
 
 
 if __name__ == "__main__":

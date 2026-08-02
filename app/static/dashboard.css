@@ -642,58 +642,6 @@
 .pill--warn { background: var(--warn-soft); color: var(--warn); }
 .pill--danger { background: var(--danger-soft); color: #991b1b; }
 
-/* --- Empty / loading / error states -------------------------------------- */
-
-.state {
-    align-items: center;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 26px 18px;
-    text-align: center;
-}
-
-.state-ico { color: var(--muted); line-height: 0; }
-.state-title { font-size: 13.5px; font-weight: 700; margin: 0; }
-.state-detail { color: var(--muted); font-size: 12.5px; line-height: 1.55; margin: 0; max-width: 42ch; }
-.state .btn { margin-top: 6px; }
-
-.state--empty .state-ico { color: var(--line-strong); }
-.state--error .state-ico { color: var(--danger); }
-
-/* Skeleton: matches the height of what it replaces, so an async swap cannot
-   shift the layout. Shimmer travels rather than pulsing — a pulsing block at
-   0.2Hz is exactly the frequency reduced-motion exists to suppress. */
-.state--loading { align-items: stretch; gap: 10px; padding: 4px 0; }
-
-.sk-line {
-    background: linear-gradient(90deg, var(--surface-alt) 25%, var(--shell) 37%, var(--surface-alt) 63%);
-    background-size: 400% 100%;
-    border-radius: var(--radius-sm);
-    display: block;
-    height: 13px;
-}
-
-.sk-line:nth-child(even) { width: 72%; }
-
-@media (prefers-reduced-motion: no-preference) {
-    .sk-line { animation: sk-shimmer 1.4s linear infinite; }
-}
-
-@keyframes sk-shimmer {
-    from { background-position: 100% 0; }
-    to { background-position: 0 0; }
-}
-
-.sr-only {
-    clip: rect(0 0 0 0);
-    clip-path: inset(50%);
-    height: 1px;
-    overflow: hidden;
-    position: absolute;
-    white-space: nowrap;
-    width: 1px;
-}
 
 /* --- Focus --------------------------------------------------------------
    Interactive dashboard surfaces are large; the ring is drawn OUTSIDE them with

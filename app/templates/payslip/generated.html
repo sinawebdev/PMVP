@@ -1,7 +1,14 @@
 {% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Generated Payslips · {{ app_name }}{% endblock %}
 {% block page_title %}Generated Payslips{% endblock %}
-{% block page_intro %}Printable payslip preview generated from saved payroll run records. Individual PDF downloads are available per employee.{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Payslips", url_for('payslip.index')),
+    ("Generated Payslips", None),
+]) }}
+{% endblock %}
 {% block content %}
 <div class="toolbar">
     <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer"></i>Print</button>

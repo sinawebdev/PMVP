@@ -1,0 +1,130 @@
+{# ---------------------------------------------------------------------------
+   Import preview sections — ONE implementation, both shells (Phase 5, Task 5.2).
+
+   The operator's payroll_preview.html and the tenant's client/import_preview.html
+   render the same workbook analysis from the same `payload`: what the columns
+   were mapped to, which rows warned, what the first rows look like, and the
+   handful of figures that decide whether to confirm. They were two hand-written
+   copies, and they had drifted into saying different things about the same
+   numbers — the tenant called `invalid_rows` "Rows with warnings", the operator
+   called it "Invalid Rows", and neither explained why "rows" and "workers" are
+   two different counts.
+
+   What legitimately differs is not the analysis but the TRANSACTION around it:
+   the operator has a multi-client mode, a wrong-workbook guard and an error
+   report; the tenant has a draft it can discard and a replace-existing rule.
+   Those stay in their own pages. Everything below is the analysis.
+
+   Bootstrap is NOT available here — client/base.html does not load it.
+   --------------------------------------------------------------------------- #}
+{% import "macros/ui.html" as ui %}
+
+
+{# --- The figures that decide --------------------------------------------------
+   `total_rows` is what the importer READ from the file; `total_unique_workers`
+   is how many distinct people it recognised in them. Presented as two of
+   thirteen equal stat tiles, they invited being read as the same number twice. #}
+{% macro figures(payload, title, subtitle="") %}
+{% set invalid = payload.import_summary.invalid_rows or 0 %}
+{{ ui.decision_header(
+     title,
+     subtitle=subtitle,
+     figures=[
+       {"label": "Rows read from file", "value": payload.worker_stats.total_rows},
+       {"label": "Workers recognised", "value": payload.worker_stats.total_unique_workers},
+       {"label": "Rows importing", "value": payload.import_summary.valid_rows},
+       {"label": "Rows failing", "value": invalid},
+       {"label": "Total net pay", "value": payload.import_summary.net_total|cedis},
+     ]) }}
+{% endmacro %}
+
+
+{# The sentence that makes the two counts legible as different questions. #}
+{% macro rows_vs_workers(payload) %}
+<p class="ip-note">
+  {{ payload.worker_stats.total_rows }} row{{ "" if payload.worker_stats.total_rows == 1 else "s" }}
+  in the file resolved to {{ payload.worker_stats.total_unique_workers }}
+  unique worker{{ "" if payload.worker_stats.total_unique_workers == 1 else "s" }}
+  ({{ payload.worker_stats.duplicate_count }} duplicate
+  entr{{ "y" if payload.worker_stats.duplicate_count == 1 else "ies" }}).
+  PAYE and SSNIT are recalculated on confirm — statutory figures in the file are preview-only.
+</p>
+{% endmacro %}
+
+
+{# --- Column mapping --------------------------------------------------------- #}
+{% macro mapping_table(mapping, matched_sheet=none, header_row=none) %}
+<div class="dt-wrap">
+  <table class="dt">
+    <caption class="sr-only">How each column in the workbook was mapped</caption>
+    <thead><tr><th scope="col">Column in your file</th><th scope="col">Mapped to</th></tr></thead>
+    <tbody>
+      {% for original, mapped in mapping.items() %}
+      <tr>
+        <td>{{ original }}</td>
+        <td><span class="ds-pill ds-pill--{{ 'warn' if mapped == 'unmapped' else 'info' }}">{{ mapped }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if matched_sheet or header_row %}
+<p class="ip-note">Matched sheet <strong>{{ matched_sheet or "Default sheet" }}</strong>, header detected on row {{ header_row or 1 }}.</p>
+{% endif %}
+{% endmacro %}
+
+
+{# --- Row-level warnings ------------------------------------------------------ #}
+{% macro row_warnings(per_row_warnings, error_report_href=none) %}
+{% if per_row_warnings %}
+{% if error_report_href %}
+<p class="ip-note"><a href="{{ error_report_href }}">Download the error report</a> to work through these in the workbook itself.</p>
+{% endif %}
+<div class="dt-wrap">
+  <table class="dt">
+    <caption class="sr-only">Validation warnings by row</caption>
+    <thead><tr><th scope="col" class="num">Row</th><th scope="col">Warnings</th></tr></thead>
+    <tbody>
+      {% for row_number, warnings in per_row_warnings.items() %}
+      <tr><td class="num">{{ row_number }}</td><td>{{ warnings|join("; ") }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+{{ ui.empty("No row-level warnings", "Every row read from this workbook passed validation.") }}
+{% endif %}
+{% endmacro %}
+
+
+{# --- The raw rows -------------------------------------------------------------
+   Last, and behind a tab, in both portals. It is evidence, not reading. #}
+{% macro raw_rows(columns, preview_rows) %}
+<div class="dt-wrap">
+  <table class="dt">
+    <caption class="sr-only">The first rows of the workbook, as uploaded</caption>
+    <thead><tr>{% for column in columns %}<th scope="col">{{ column }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for row in preview_rows %}
+      <tr>{% for column in columns %}<td>{{ row[column] }}</td>{% endfor %}</tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+
+
+{# --- Totals ------------------------------------------------------------------- #}
+{% macro totals(payload) %}
+<dl class="ds-totals">
+  <div class="ds-total"><dt>Gross</dt><dd>{{ payload.import_summary.gross_total|cedis }}</dd></div>
+  <div class="ds-total"><dt>PAYE</dt><dd>{{ payload.import_summary.paye_total|cedis }}</dd></div>
+  <div class="ds-total"><dt>SSNIT</dt><dd>{{ payload.import_summary.ssnit_total|cedis }}</dd></div>
+  <div class="ds-total"><dt>Net</dt><dd>{{ payload.import_summary.net_total|cedis }}</dd></div>
+  {% if payload.status_breakdown %}
+  <div class="ds-total"><dt>Active</dt><dd>{{ payload.status_breakdown.active or 0 }}</dd></div>
+  <div class="ds-total"><dt>Inactive / terminated</dt><dd>{{ (payload.status_breakdown.inactive or 0) + (payload.status_breakdown.terminated or 0) }}</dd></div>
+  {% endif %}
+  <div class="ds-total"><dt>Duplicate entries</dt><dd>{{ payload.worker_stats.duplicate_count }}</dd></div>
+</dl>
+{% endmacro %}

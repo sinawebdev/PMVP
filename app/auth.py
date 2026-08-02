@@ -13,14 +13,18 @@ from flask import (
 from flask_login import current_user, login_required, login_user, logout_user
 
 from app.models import User
-from app.roles import PAYROLLA_ADMIN, normalise_role
+from app.roles import normalise_role
 
 auth_bp = Blueprint("auth", __name__)
 
-# Operator superusers: any role_required check passes for these. ``md`` is the
-# legacy bureau superuser; ``payrolla_admin`` is the SaaS-era platform admin,
-# granted full operator access (confirmed with Sina).
-OPERATOR_SUPERUSERS = ("md", PAYROLLA_ADMIN)
+# Superuser access is NOT a special case here (Phase 1, Task 1.1). ``md`` and
+# ``payrolla_admin`` used to short-circuit every check below, which meant a route
+# could authorize them for an action whose button the template — reading
+# app/permissions.py — never showed. Both are now members of every capability
+# group in app.permissions instead, so one predicate answers for the route and
+# the affordance alike. Effective access did not change; see
+# tests/test_permission_parity.py. Gate new routes on a group from
+# app.permissions, never a literal role tuple.
 
 
 def role_required(*roles):
@@ -41,14 +45,17 @@ def role_required(*roles):
             # decorator argument) still using a pre-rename alias resolves to the
             # same role, so the rename cannot cost anyone access.
             role = normalise_role(current_user.role)
-            if role in OPERATOR_SUPERUSERS:
-                return view(*args, **kwargs)
             has_direct_role = role in {normalise_role(r) for r in roles}
             if not has_direct_role:
                 flash("You do not have permission to access that page.", "warning")
                 return redirect(url_for("main.dashboard"))
             return view(*args, **kwargs)
 
+        # Publish the canonical role set this route accepts. The parity test
+        # (tests/test_permission_parity.py) walks every view function and asserts
+        # each guard is a named group from app.permissions that both superusers
+        # belong to — the drift that Task 1.1 removed cannot come back silently.
+        wrapped._required_roles = frozenset(normalise_role(r) for r in roles)
         return wrapped
 
     return decorator

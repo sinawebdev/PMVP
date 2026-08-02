@@ -8,7 +8,11 @@ import unittest
 
 os.environ["SKIP_DOTENV"] = "true"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
-os.environ["SEED_DEMO_DATA"] = "false"
+# These tests only inspect the built schema and never read a seeded row, but the
+# value must still be "true": pytest imports every test module at collection
+# time, so a module-scope "false" here leaks into the whole run and unseeds
+# unrelated files (see tests/test_suite_hygiene.py).
+os.environ["SEED_DEMO_DATA"] = "true"
 os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 import sqlalchemy as sa  # noqa: E402

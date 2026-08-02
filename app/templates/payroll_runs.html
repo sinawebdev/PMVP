@@ -1,343 +1,58 @@
 {% extends "base.html" %}
-{% import "macros/lifecycle.html" as lc %}
-{% set role = current_user.role %}
-{% set bulk_visible = can_bulk_approve_reject(role) or can_operate_payroll(role) %}
 {% block title %}Payroll Runs · {{ app_name }}{% endblock %}
-{% block page_title %}Payroll Runs{% endblock %}
-{% block page_intro %}Monitor every company-specific payroll run, including worker totals, source Excel files, review status, approvals, and export actions.{% endblock %}
+{% block page_title %}{% if status_filter == "needs_approval" %}Approval Queue{% else %}Payroll Runs{% endif %}{% endblock %}
+{% block page_actions %}
+{# One primary action. The creation wizard used to sit permanently open above
+   the list, so the page named "Payroll Runs" in the sidebar opened on a form
+   and pushed the runs below the fold. It is a page of its own now. #}
+{% if can_import_payroll(role) %}
+<a class="btn btn-light btn-sm" href="{{ url_for('payroll.new_run') }}"><i class="bi bi-plus-lg"></i>New payroll run</a>
+{% endif %}
+<a class="btn btn-outline-light btn-sm" href="{{ url_for('oversight.risk_queue') }}"><i class="bi bi-shield-exclamation"></i>Risk Queue</a>
+{% endblock %}
 {% block content %}
+
 {% if selected_client %}
 <div class="mini-note mb-3">
     <i class="bi bi-building-check"></i>
-    Showing payroll runs imported for <strong>{{ selected_client.name }}</strong>. Use the client tabs in the left pane to switch companies.
+    Showing payroll runs imported for <strong>{{ selected_client.name }}</strong>.
 </div>
 {% elif status_filter == "needs_approval" %}
 <div class="mini-note mb-3">
     <i class="bi bi-hourglass-split"></i>
-    Approval queue showing Draft and Pending Approval payroll runs that still need approval.
+    Draft and Pending Approval runs still awaiting sign-off. Where a run is held,
+    the reason is stated in the row — you do not need to open it to see why.
 </div>
 {% else %}
 <div class="mini-note mb-3">
     <i class="bi bi-grid"></i>
-    Showing payroll runs for all client companies. Select a client company tab in the left pane to focus the payroll list.
+    Showing payroll runs for all client companies. Filter below, or open a company from Client Companies.
 </div>
 {% endif %}
-<div class="toolbar">
-    <a class="btn btn-outline-primary" href="{{ url_for('payroll.runs', status='needs_approval') }}"><i class="bi bi-check2-square"></i>Approval Queue</a>
-    {% if status_filter %}
-        <a class="btn btn-outline-secondary" href="{{ url_for('payroll.runs') }}"><i class="bi bi-x-circle"></i>Clear Filter</a>
-    {% endif %}
-</div>
-<section class="panel form-panel mb-3" style="position: relative;">
-    <div class="upload-overlay" id="run-upload-overlay">
-        <div class="spinner-border" role="status" aria-hidden="true"></div>
-        <div class="upload-stage-msg">Reading workbook…</div>
-        <div class="upload-progress"><div class="upload-progress-bar"></div></div>
-        <div class="upload-note">This can take up to a minute — please don't re-click.</div>
-    </div>
-    <div class="panel-header">
-        <h2><i class="bi bi-file-earmark-spreadsheet"></i>Create Payroll Run</h2>
-        <span>Upload inside Payroll Runs</span>
-    </div>
 
-    {% if wrong_tab == "raw" and current_user.role == "admin" %}
-    <div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2" role="alert">
-        <span><i class="bi bi-exclamation-triangle"></i> This workbook appears to be a <strong>Raw Hours</strong> workbook. Please upload it using <strong>Raw Hour Upload</strong> instead.</span>
-        <button type="button" class="btn btn-sm btn-warning" onclick="document.getElementById('tab-raw').click()"><i class="bi bi-clock-history"></i> Go to Raw Hour Upload</button>
-    </div>
-    {% endif %}
-
-    <div class="upload-tabs" role="tablist" aria-label="Choose upload type">
-        <button type="button" class="upload-tab is-active" role="tab" aria-selected="true" id="tab-standard" data-tab-target="standard"><i class="bi bi-file-earmark-spreadsheet"></i>Standard Upload</button>
-        {% if current_user.role == "admin" %}
-        <button type="button" class="upload-tab" role="tab" aria-selected="false" id="tab-raw" data-tab-target="raw"><i class="bi bi-clock-history"></i>Raw Hour Upload</button>
-        {% endif %}
-    </div>
-
-    <div class="upload-panel is-active" data-panel="standard" role="tabpanel" aria-labelledby="tab-standard">
-        <form method="post" enctype="multipart/form-data" class="row g-3" data-staged-loader="run-upload-overlay">
-            <div class="col-md-4">
-                <label class="form-label">Import Mode</label>
-                <select class="form-select" name="import_mode">
-                    <option value="single_client">Single Client Import</option>
-                    <option value="multi_client">Multi-Client Workbook Import</option>
-                </select>
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Client Company</label>
-                <select class="form-select" name="client_company_id">
-                    <option value="">Choose client company</option>
-                    {% for client in clients %}
-                        <option value="{{ client.id }}" {% if selected_client and selected_client.id == client.id %}selected{% endif %}>{{ client.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label" for="month">Month</label>
-                <select class="form-select" id="month" name="month" required>
-                    {% for m in ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] %}
-                    <option value="{{ m }}" {% if current_month == m %}selected{% endif %}>{{ m }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-2"><label class="form-label">Year</label><input class="form-control" type="number" name="year" value="{{ current_year }}" required></div>
-            <div class="col-md-8"><label class="form-label">Payroll Excel File</label><input class="form-control" type="file" name="payroll_file" accept=".xlsx,.xls,.csv" required></div>
-            <div class="col-md-4 d-flex align-items-end">
-                <button class="btn btn-primary w-100"><i class="bi bi-upload"></i>Upload and Preview</button>
-            </div>
-        </form>
-    </div>
-
-    {% if current_user.role == "admin" %}
-    <div class="upload-panel" data-panel="raw" role="tabpanel" aria-labelledby="tab-raw" hidden>
-        <p class="raw-notice"><i class="bi bi-info-circle"></i><span>Hourly-rate clients. An unseeded client's first upload is the rich <strong>RAW DATA</strong> workbook (seed); a seeded client uploads the monthly thin template. Nothing is written until you confirm the preview.</span></p>
-        <div class="row g-3">
-            <div class="col-md-6">
-                <label class="form-label" for="raw_client">Client Company</label>
-                <select class="form-select" id="raw_client">
-                    <option value="">Choose client company</option>
-                    {% for client in clients %}<option value="{{ client.id }}">{{ client.name }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="col-md-3"><label class="form-label" for="raw_month">Month</label><input class="form-control" id="raw_month" value="{{ current_month }}"></div>
-            <div class="col-md-3"><label class="form-label" for="raw_year">Year</label><input class="form-control" type="number" id="raw_year" value="{{ current_year }}"></div>
-            <div class="col-md-8"><label class="form-label" for="raw_file">Raw / Thin File (.xlsx)</label><input class="form-control" type="file" id="raw_file" accept=".xlsx"></div>
-            <div class="col-md-4 d-flex align-items-end gap-2">
-                <button class="btn btn-primary" id="raw_upload_btn" type="button" onclick="rawUpload()"><i class="bi bi-upload"></i>Upload &amp; Preview</button>
-                <a class="btn btn-outline-secondary" href="#" onclick="rawTemplate(event)"><i class="bi bi-download"></i>Template</a>
-            </div>
-            <div class="col-12"><div id="raw_result"></div></div>
-        </div>
-    </div>
-    {% endif %}
-</section>
-
-<script>
-(function () {
-    // Upload-type tabs: activate the clicked button and reveal its matching panel.
-    var tabs = document.querySelectorAll('.upload-tab');
-    var panels = document.querySelectorAll('.upload-panel');
-    tabs.forEach(function (tab) {
-        tab.addEventListener('click', function () {
-            var target = tab.getAttribute('data-tab-target');
-            tabs.forEach(function (t) {
-                var on = t === tab;
-                t.classList.toggle('is-active', on);
-                t.setAttribute('aria-selected', on ? 'true' : 'false');
-            });
-            panels.forEach(function (p) {
-                var on = p.getAttribute('data-panel') === target;
-                p.classList.toggle('is-active', on);
-                p.hidden = !on;
-            });
-        });
-    });
-})();
-
-function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
-        return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c];
-    });
-}
-function rawPreviewHTML(d) {
-    var p = d.preview || {};
-    var head = '<div class="mb-1"><strong>' + (d.mode === 'seed' ? 'Seed preview' : 'Monthly preview')
-        + '</strong> — ' + esc(d.client_name) + ' · ' + esc(d.period) + '</div>';
-    var body;
-    if (d.mode === 'seed') {
-        body = '<div>' + p.employees + ' employees found — ' + p.hourly + ' hourly, '
-            + p.salaried + ' salaried · ' + p.icu_members + ' ICU members</div>';
-    } else {
-        var blocked = p.blocked || [];
-        body = '<div>' + p.employees + ' workers in the file — ' + p.matched + ' matched to the roster'
-            + (blocked.length ? ', ' + blocked.length + ' not on the roster' : '') + '</div>';
-        if (blocked.length) {
-            body += '<div class="small text-muted mt-1">Not on roster: ' + esc(blocked.join(', ')) + '</div>';
-        }
-    }
-    var warns = p.warnings || [];
-    var warnHtml = warns.length
-        ? '<div class="small text-muted mt-1">' + warns.length + ' warning(s): '
-          + esc(warns.slice(0, 5).join('; ')) + (warns.length > 5 ? ' …' : '') + '</div>'
-        : '<div class="small text-success mt-1">No warnings.</div>';
-    return '<div class="alert alert-info">' + head + body + warnHtml
-        + '<button class="btn btn-success mt-2" id="raw_confirm_btn" type="button" onclick="rawConfirm(\'' + d.token + '\')">'
-        + '<i class="bi bi-check2-circle"></i>Confirm ' + (d.mode === 'seed' ? 'seed' : 'monthly run') + '</button></div>';
-}
-async function rawUpload() {
-    var btn = document.getElementById('raw_upload_btn');
-    var cid = document.getElementById('raw_client').value;
-    var file = document.getElementById('raw_file').files[0];
-    var out = document.getElementById('raw_result');
-    if (!cid || !file) { out.innerHTML = '<div class="alert alert-warning">Choose a client and a file.</div>'; return; }
-    var fd = new FormData();
-    fd.append('client_company_id', cid);
-    fd.append('month', document.getElementById('raw_month').value);
-    fd.append('year', document.getElementById('raw_year').value);
-    fd.append('file', file);
-    var original = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Uploading…';
-    // Staged loader (C1): motion + reassuring copy over the panel while parsing.
-    var loader = window.payrollaStagedLoader
-        ? window.payrollaStagedLoader(document.getElementById('run-upload-overlay'))
-        : { stop: function () {} };
-    try {
-        var r = await fetch('{{ url_for("raw_engine.upload") }}', {method: 'POST', body: fd});
-        var d = await r.json();
-        if (!r.ok) {
-            // Shape Guard: a Standard Payroll workbook lands here by mistake — show
-            // the friendly redirect with a button back to the Standard Upload tab.
-            if (d.wrong_tab === 'standard') {
-                out.innerHTML = '<div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2">'
-                    + '<span>' + esc(d.error || 'Wrong workbook type.') + '</span>'
-                    + '<button class="btn btn-sm btn-warning" type="button" onclick="document.getElementById(\'tab-standard\').click()"><i class="bi bi-file-earmark-spreadsheet"></i> Go to Standard Upload</button>'
-                    + '</div>';
-                return;
-            }
-            out.innerHTML = '<div class="alert alert-danger">' + esc(d.error || 'Upload failed') + '</div>';
-            return;
-        }
-        out.innerHTML = rawPreviewHTML(d);
-    } catch (e) {
-        out.innerHTML = '<div class="alert alert-danger">Network error — the workbook may still be processing on the server. Wait a moment and check before retrying.</div>';
-    } finally {
-        loader.stop();
-        btn.disabled = false;
-        btn.innerHTML = original;
-    }
-}
-async function rawConfirm(token) {
-    var out = document.getElementById('raw_result');
-    var btn = document.getElementById('raw_confirm_btn');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving…';
-    }
-    var loader = window.payrollaStagedLoader
-        ? window.payrollaStagedLoader(document.getElementById('run-upload-overlay'),
-            {messages: ['Saving records…', 'Computing PAYE & SSNIT…', 'Finalizing…', 'Almost done…']})
-        : { stop: function () {} };
-    var fd = new FormData(); fd.append('token', token);
-    try {
-        var r = await fetch('{{ url_for("raw_engine.confirm") }}', {method: 'POST', body: fd});
-        var d = await r.json();
-        if (!r.ok) { loader.stop(); out.innerHTML = '<div class="alert alert-danger">' + esc(d.error || 'Confirm failed') + '</div>'; return; }
-        window.location = d.redirect; // loader stays up through navigation
-    } catch (e) {
-        loader.stop();
-        out.innerHTML = '<div class="alert alert-danger">Network error during confirm — check Payroll Runs before retrying so you don\'t double-post.</div>';
-    }
-}
-function rawTemplate(ev) {
-    ev.preventDefault();
-    var cid = document.getElementById('raw_client').value;
-    if (!cid) { document.getElementById('raw_result').innerHTML = '<div class="alert alert-warning">Choose a seeded client first.</div>'; return; }
-    var m = encodeURIComponent(document.getElementById('raw_month').value);
-    var y = encodeURIComponent(document.getElementById('raw_year').value);
-    window.location = '/raw/clients/' + cid + '/template?month=' + m + '&year=' + y;
-}
-</script>
 <section class="panel">
-    <div class="toolbar">
+    {# Server-side filter. The previous input hid rows in the browser while the
+       list was paginated on the server, so a match on any page but this one read
+       as "no results". Submitting to the route means the term is part of the
+       query and part of the URL. #}
+    <form class="toolbar" method="get" action="{{ url_for('payroll.runs') }}" role="search">
+        {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+        {% if selected_client %}<input type="hidden" name="client_id" value="{{ selected_client.id }}">{% endif %}
         <label class="visually-hidden" for="runs-filter">Filter payroll runs</label>
-        <input id="runs-filter" class="form-control" type="search" placeholder="Filter runs by client, month, or status…" data-table-filter="runs-table">
-    </div>
-    <form method="post" id="bulk-actions-form" action="{{ url_for('payroll.bulk_approve') }}">
-        <input type="hidden" name="status" value="{{ status_filter }}">
-        <input type="hidden" name="client_id" value="{{ selected_client.id if selected_client else '' }}">
-        {% if bulk_visible %}
-        <div class="toolbar bulk-actions-toolbar d-flex flex-wrap align-items-center gap-2 mb-2">
-            <span class="small text-muted" id="bulk-selected-count">0 selected</span>
-            {% if can_bulk_approve_reject(role) %}
-            <button type="submit" formaction="{{ url_for('payroll.bulk_approve') }}" class="btn btn-sm btn-success" data-bulk-action-btn disabled><i class="bi bi-patch-check"></i>Bulk Approve</button>
-            <button type="submit" formaction="{{ url_for('payroll.bulk_reject') }}" class="btn btn-sm btn-outline-danger" data-bulk-action-btn disabled onclick="return bulkConfirm('reject')"><i class="bi bi-x-octagon"></i>Bulk Reject</button>
-            <input type="text" name="notes" class="form-control form-control-sm" style="max-width: 220px;" placeholder="Rejection note (optional, applies to all)">
-            {% endif %}
-            {% if can_operate_payroll(role) %}
-            <button type="submit" formaction="{{ url_for('payroll.bulk_distribute') }}" class="btn btn-sm btn-primary" data-bulk-action-btn disabled onclick="return bulkConfirm('distribute')"><i class="bi bi-send-check"></i>Bulk Distribute</button>
-            {% endif %}
-        </div>
-        <p class="mini-note mb-2"><i class="bi bi-info-circle"></i> Bulk actions only apply to selected runs currently eligible for that action (matching status); anything else is skipped and reported after.</p>
+        <input id="runs-filter" name="q" class="form-control" type="search" value="{{ search or '' }}"
+               placeholder="Filter runs by client, month, year, or status…">
+        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-search"></i>Filter</button>
+        {% if search or status_filter %}
+        <a class="btn btn-link" href="{{ url_for('payroll.runs') }}">Clear</a>
         {% endif %}
-        <div class="excel-grid-wrap">
-            <table id="runs-table" class="table table-sm align-middle excel-grid">
-                <thead><tr>
-                    {% if bulk_visible %}<th scope="col"><input type="checkbox" id="select-all-runs" aria-label="Select all runs"></th>{% endif %}
-                    <th scope="col">Payroll Month</th><th scope="col">Client Company</th><th scope="col">Total Workers</th><th scope="col">Gross Pay</th><th scope="col">Deductions</th><th scope="col">Net Pay</th><th scope="col">Status</th><th scope="col">Uploaded File</th><th scope="col">Actions</th></tr></thead>
-                <tbody>
-                {% for run in payroll_runs %}
-                    <tr>
-                        {% if bulk_visible %}
-                        <td><input type="checkbox" name="run_ids" value="{{ run.id }}" class="run-select-checkbox" aria-label="Select {{ run.month }} {{ run.year }} {{ run.client_company.name if run.client_company else '' }}"></td>
-                        {% endif %}
-                        <td>{{ run.month }} {{ run.year }}</td>
-                        <td>{{ run.client_company.name if run.client_company else "" }}</td>
-                        <td>{{ run.total_workers }}</td>
-                        <td>{{ run.total_gross_pay|cedis }}</td>
-                        <td>{{ run.total_deductions|cedis }}</td>
-                        <td>{{ run.total_net_pay|cedis }}</td>
-                        <td>
-                            {{ lc.status_pill(run.status) }}
-                            {{ lc.progress_stepper(run_progress(run, run.id in distributed_ids), compact=true) }}
-                        </td>
-                        <td>{{ run.source_filename }}</td>
-                        <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.detail', run_id=run.id) }}">View</a></td>
-                    </tr>
-                {% else %}
-                    <tr><td colspan="{{ 10 if bulk_visible else 9 }}" class="text-muted">No payroll runs yet.</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% if pagination and pagination.pages > 1 %}
-        <nav aria-label="Payroll runs pages" class="mt-2">
-            <ul class="pagination pagination-sm mb-0">
-                <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
-                    <a class="page-link" href="{{ url_for('payroll.runs', page=pagination.prev_num, client_id=(selected_client.id if selected_client else None), status=(status_filter or None)) }}">Previous</a>
-                </li>
-                <li class="page-item disabled"><span class="page-link">Page {{ pagination.page }} of {{ pagination.pages }}</span></li>
-                <li class="page-item {{ 'disabled' if not pagination.has_next }}">
-                    <a class="page-link" href="{{ url_for('payroll.runs', page=pagination.next_num, client_id=(selected_client.id if selected_client else None), status=(status_filter or None)) }}">Next</a>
-                </li>
-            </ul>
-        </nav>
+        {% if not status_filter %}
+        <a class="btn btn-outline-primary ms-auto" href="{{ url_for('payroll.runs', status='needs_approval') }}"><i class="bi bi-check2-square"></i>Approval Queue</a>
         {% endif %}
     </form>
+    {% if search %}
+    <p class="mini-note mb-2"><i class="bi bi-funnel"></i> Showing runs matching &ldquo;{{ search }}&rdquo; — {{ pagination.total }} match{{ "" if pagination.total == 1 else "es" }} across all pages.</p>
+    {% endif %}
+
+    {% include "payroll/_runs_body.html" %}
 </section>
-<script>
-(function () {
-    var form = document.getElementById('bulk-actions-form');
-    if (!form) return;
-    var selectAll = document.getElementById('select-all-runs');
-    var countEl = document.getElementById('bulk-selected-count');
-    var buttons = form.querySelectorAll('[data-bulk-action-btn]');
-
-    function checkboxes() { return form.querySelectorAll('.run-select-checkbox'); }
-
-    function refresh() {
-        var checked = form.querySelectorAll('.run-select-checkbox:checked').length;
-        if (countEl) countEl.textContent = checked + ' selected';
-        buttons.forEach(function (btn) { btn.disabled = checked === 0; });
-        if (selectAll) selectAll.checked = checked > 0 && checked === checkboxes().length;
-    }
-
-    if (selectAll) {
-        selectAll.addEventListener('change', function () {
-            checkboxes().forEach(function (cb) { cb.checked = selectAll.checked; });
-            refresh();
-        });
-    }
-    form.addEventListener('change', function (e) {
-        if (e.target.classList.contains('run-select-checkbox')) refresh();
-    });
-    refresh();
-})();
-
-function bulkConfirm(action) {
-    var checked = document.querySelectorAll('.run-select-checkbox:checked').length;
-    var verb = action === 'reject' ? 'Reject' : 'Distribute payslips for';
-    return confirm(verb + ' ' + checked + ' selected payroll run(s)?');
-}
-</script>
 {% endblock %}

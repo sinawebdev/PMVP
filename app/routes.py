@@ -11,7 +11,12 @@ from sqlalchemy.orm import selectinload
 from app import db
 from app.audit import record_audit
 from app.auth import role_required
+from app.permissions import (
+    CLIENT_MANAGEMENT_ROLES,
+    PLATFORM_OPS_ROLES,
+)
 from app.tenancy import platform_required
+from app.paging import paginate
 from app.models import (
     AuditTrail,
     ClientCompany,
@@ -52,7 +57,7 @@ def health():
 
 
 @main_bp.route("/db-health")
-@role_required("admin")
+@role_required(*PLATFORM_OPS_ROLES)
 def db_health_json():
     uri = current_app.config.get("SQLALCHEMY_DATABASE_URI", "")
     database_type = current_app.config.get("DATABASE_TYPE_LABEL") or db.engine.name.title()
@@ -71,7 +76,7 @@ def db_health_json():
 
 
 @main_bp.route("/admin/db-health")
-@role_required("admin")
+@role_required(*PLATFORM_OPS_ROLES)
 def db_health():
     database_type = current_app.config.get("DATABASE_TYPE_LABEL") or db.engine.name.title()
     sqlite_on_render_warning = (
@@ -272,7 +277,12 @@ def dashboard():
     # Same three counts already driving the KPI band and the header's Risk Queue
     # badge — reshaped, not recomputed, so the panel and those numbers can never
     # disagree.
-    risk_signals = platform_risk_signals(held_count, pending_approvals, warning_count)
+    risk_signals = platform_risk_signals(
+        held_count,
+        pending_approvals,
+        warning_count,
+        awaiting_credentials=len(ClientCompany.ids_awaiting_credentials()),
+    )
     # Combined employee (5.5%) + employer (13%) SSF — the figure actually
     # remitted to SSNIT, not just the worker-side deduction.
     ssnit_payable = sum(
@@ -373,8 +383,37 @@ def company_dashboard():
 @main_bp.route("/clients")
 @platform_required
 def clients():
-    clients = ClientCompany.query.order_by(ClientCompany.name).all()
-    return render_template("clients.html", clients=clients)
+    # Paged: the operator client list grows with the business, and a list whose
+    # length is a function of the customer count is the thing Phase 3 already
+    # took out of the sidebar for the same reason.
+    # Server-side, for the same reason the payroll runs filter is: this input
+    # used to hide rows in the browser, and the moment the list is paged a match
+    # on page 2 reads as "no results".
+    search = (request.args.get("q") or "").strip()
+    query = ClientCompany.query
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            db.or_(
+                ClientCompany.name.ilike(like),
+                ClientCompany.company_code.ilike(like),
+                ClientCompany.contact_person.ilike(like),
+                ClientCompany.location.ilike(like),
+            )
+        )
+    page = paginate(query.order_by(ClientCompany.name))
+    clients = page.items
+    return render_template(
+        "clients.html",
+        page=page,
+        search=search,
+        clients=clients,
+        # One query for the whole page — the per-company property would be an
+        # N+1 here. See ClientCompany.ids_awaiting_credentials.
+        awaiting_credentials=ClientCompany.ids_awaiting_credentials(
+            [c.id for c in clients]
+        ),
+    )
 
 
 # --- Client onboarding ------------------------------------------------------
@@ -460,13 +499,13 @@ def validate_client_form(form, client=None):
 
 
 @main_bp.route("/clients/add", methods=["GET", "POST"])
-@role_required("admin")
+@role_required(*CLIENT_MANAGEMENT_ROLES)
 def add_client():
     return client_form()
 
 
 @main_bp.route("/clients/<int:client_id>/edit", methods=["GET", "POST"])
-@role_required("admin")
+@role_required(*CLIENT_MANAGEMENT_ROLES)
 def edit_client(client_id):
     client = db.get_or_404(ClientCompany, client_id)
     return client_form(client)
@@ -545,6 +584,13 @@ def client_onboarding(client_id):
 @platform_required
 def client_detail(client_id):
     client = db.get_or_404(ClientCompany, client_id)
+    # The run history grows every month this company stays a customer.
+    runs_page = paginate(
+        PayrollRun.query.filter_by(client_company_id=client.id).order_by(
+            PayrollRun.created_at.desc()
+        ),
+        per_page=12,
+    )
     now = datetime.now()
     current_month = now.strftime("%B")
     current_year = now.year
@@ -564,6 +610,7 @@ def client_detail(client_id):
     return render_template(
         "client_detail.html",
         client=client,
+        runs_page=runs_page,
         current_month=current_month,
         current_year=current_year,
         previous_month=previous_month,

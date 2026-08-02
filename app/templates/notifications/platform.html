@@ -1,45 +1,22 @@
 {% extends "base.html" %}
+{% import "macros/ui.html" as ui %}
 {% block title %}Notifications · {{ app_name }}{% endblock %}
 {% block page_title %}Notifications{% endblock %}
-{% block page_intro %}Oversight notifications — activity across client companies, such as client-side payslip distribution.{% endblock %}
+{% block page_actions %}
+{% if unread %}
+<form method="post" action="{{ url_for('notifications.mark_all_read') }}">
+  <button class="btn btn-light btn-sm" type="submit"><i class="bi bi-check2-all"></i>Mark all read ({{ unread }})</button>
+</form>
+{% endif %}
+{% endblock %}
 {% block content %}
-<div class="toolbar">
-  {% if unread %}
-  <form method="post" action="{{ url_for('notifications.mark_all_read') }}">
-    <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-check2-all"></i>Mark all read ({{ unread }})</button>
-  </form>
-  {% endif %}
-</div>
+{# The table is macros/ui.html::notification_rows — the same markup the tenant
+   inbox renders. Only the shell and the scope differ. #}
 {% if items %}
 <section class="panel">
-  <div class="table-responsive">
-    <table class="table align-middle">
-      <thead><tr><th></th><th>Notification</th><th>Detail</th><th>Company</th><th>When</th><th></th></tr></thead>
-      <tbody>
-        {% for n in items %}
-        <tr class="{{ '' if n.read_at else 'fw-semibold' }}">
-          <td>{% if not n.read_at %}<span class="badge {{ 'bg-warning text-dark' if n.level=='warning' else 'bg-success' if n.level=='success' else 'bg-secondary' }}">New</span>{% endif %}</td>
-          <td>{{ n.title }}</td>
-          <td class="text-muted small">{{ n.body or '' }}</td>
-          <td class="text-muted small">{{ n.event.client_company.name if n.event and n.event.client_company else '—' }}</td>
-          <td class="text-muted small">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '—' }}</td>
-          <td class="text-end">
-            {% if n.event and n.event.subject_type == 'PayrollRun' and n.event.subject_id and n.event.event_type.startswith('distribution') %}
-            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('distribution.run_status', run_id=n.event.subject_id) }}"><i class="bi bi-box-arrow-up-right"></i>View</a>
-            {% endif %}
-            {% if not n.read_at %}
-            <form method="post" action="{{ url_for('notifications.mark_read', note_id=n.id) }}">
-              <button class="btn btn-sm btn-outline-primary" type="submit">Mark read</button>
-            </form>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  {{ ui.notification_rows(items, scope="operator", view_endpoint="distribution.run_status") }}
 </section>
 {% else %}
-<div class="mini-note mb-3"><i class="bi bi-bell"></i> No notifications yet.</div>
+{{ ui.empty("No notifications yet", "Holds, approvals and distribution outcomes are recorded here as they happen.") }}
 {% endif %}
 {% endblock %}

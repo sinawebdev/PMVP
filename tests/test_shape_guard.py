@@ -172,7 +172,7 @@ class ShapeGuardWebTests(unittest.TestCase):
         # A Raw Hours workbook uploaded through Standard Upload must stop before
         # any parsing and bounce to the Raw Hour tab — never 163 invalid rows.
         resp = self.http.post(
-            "/payroll/runs",
+            "/payroll/runs/new",
             data={
                 "import_mode": "single_client",
                 "client_company_id": str(self.cid),
@@ -185,7 +185,7 @@ class ShapeGuardWebTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertIn("wrong_tab=raw", resp.headers.get("Location", ""))
 
-        followed = self.http.get("/payroll/runs?wrong_tab=raw")
+        followed = self.http.get("/payroll/runs/new?wrong_tab=raw")
         body = followed.get_data(as_text=True)
         # The alert splits "Raw Hours" into a <strong>, so assert on contiguous
         # rendered fragments: the guidance text and the switch-tab button.
@@ -195,7 +195,7 @@ class ShapeGuardWebTests(unittest.TestCase):
     def test_standard_route_allows_a_standard_workbook(self):
         # A genuine standard workbook must NOT be misfired by the guard.
         resp = self.http.post(
-            "/payroll/runs",
+            "/payroll/runs/new",
             data={
                 "import_mode": "single_client",
                 "client_company_id": str(self.cid),

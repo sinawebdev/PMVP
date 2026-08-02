@@ -44,7 +44,9 @@ from app.distribution.queue import (
     cancel_flash_message,
     enqueue_distribution,
 )
+from app.paging import paginate
 from app.distribution.service import resolve_channel
+from app.distribution.status import delivery_status_context
 from app.excel_utils import allowed_excel_file, export_import_error_report, mapping_conflicts
 from app.models import (
     CHANNEL_AUTO,
@@ -111,8 +113,10 @@ def _parse_money(value):
 @client_bp.route("/employees")
 @tenant_required
 def employees():
-    rows = tenant_query(Employee).order_by(Employee.full_name).all()
-    return render_template("client/employees.html", company=_company(), employees=rows)
+    page = paginate(tenant_query(Employee).order_by(Employee.full_name))
+    return render_template(
+        "client/employees.html", company=_company(), employees=page.items, page=page
+    )
 
 
 @client_bp.route("/employees/add", methods=["GET", "POST"])
@@ -220,7 +224,8 @@ def _save_employee(employee, company):
 @client_bp.route("/runs")
 @tenant_required
 def runs():
-    rows = tenant_query(PayrollRun).order_by(PayrollRun.created_at.desc()).all()
+    page = paginate(tenant_query(PayrollRun).order_by(PayrollRun.created_at.desc()))
+    rows = page.items
     # In-progress import drafts (uploaded but not yet confirmed) are resumable —
     # the client can pick one back up (preview) or discard it.
     drafts = (
@@ -229,15 +234,26 @@ def runs():
         .order_by(ImportBatch.uploaded_at.desc())
         .all()
     )
-    return render_template("client/runs.html", company=_company(), runs=rows, drafts=drafts)
+    return render_template(
+        "client/runs.html", company=_company(), runs=rows, drafts=drafts, page=page
+    )
 
 
 @client_bp.route("/runs/<int:run_id>")
 @tenant_required
 def run_detail(run_id):
     run = tenant_get_or_404(PayrollRun, run_id)  # 404 if another tenant's run
+    page = paginate(
+        PayrollItem.query.filter_by(payroll_run_id=run.id).order_by(
+            PayrollItem.full_name.asc(), PayrollItem.id.asc()
+        )
+    )
     return render_template(
-        "client/run_detail.html", company=_company(), run=run, items=run.items
+        "client/run_detail.html",
+        company=_company(),
+        run=run,
+        items=page.items,
+        page=page,
     )
 
 
@@ -565,49 +581,13 @@ def audit():
 # configured. Sending is client_admin-only; viewing/downloading is any tenant
 # user. A run is fetched via tenant_get_or_404 so a client can only ever
 # distribute their own run.
-def _latest_delivery(item_id):
-    return (
-        PayslipDelivery.query.filter_by(payroll_item_id=item_id)
-        .order_by(PayslipDelivery.created_at.desc())
-        .first()
-    )
-
-
-def _latest_batch(run_id):
-    return (
-        DistributionBatch.query.filter_by(payroll_run_id=run_id)
-        .order_by(DistributionBatch.created_at.desc())
-        .first()
-    )
-
-
-def _distribute_context(run):
-    """Shared by the full page and its auto-refreshing fragment."""
-    rows = [
-        {"item": it, "delivery": _latest_delivery(it.id), "suggested": resolve_channel(it)}
-        for it in run.items
-    ]
-    sent = sum(1 for r in rows if r["delivery"] and r["delivery"].status == DELIVERY_SENT)
-    failed = sum(1 for r in rows if r["delivery"] and r["delivery"].status == DELIVERY_FAILED)
-    batch = _latest_batch(run.id)
-    # A pending automatic retry keeps the page live even after the batch reached a
-    # terminal state, so the operator watches recovery happen.
-    pending_retry = any(
-        r["delivery"] and r["delivery"].status == DELIVERY_FAILED and r["delivery"].next_retry_at
-        for r in rows
-    )
-    batch_active = batch is not None and batch.status in ("queued", "running")
-    return {
-        "run": run,
-        "rows": rows,
-        "channels": DELIVERY_CHANNELS,
-        "sendable": run.status in SENDABLE_STATUSES,
-        "sent_count": sent,
-        "failed_count": failed,
-        "batch": batch,
-        "in_flight": batch_active or pending_retry,
-        "cancellable": (batch is not None and batch.status == "queued") or pending_retry,
-    }
+# One implementation, shared with the operator console (Phase 5, Task 5.1).
+# What used to be here was the operator's builder copied verbatim and then
+# left behind: it never computed `scheduled`, so this portal rendered a Queue
+# status card with no status line for a scheduled batch, and it polled on
+# `in_flight` rather than `live`, re-fetching every three seconds until a
+# batch scheduled days out finally ran.
+_distribute_context = delivery_status_context
 
 
 @client_bp.route("/runs/<int:run_id>/distribute")
@@ -654,11 +634,23 @@ def _do_client_send(run, only_failed):
         flash("A distribution is already in progress for this run.", "warning")
     else:
         note = " (already queued)" if replayed else ""
-        flash(
-            f"Distribution queued{note}: {summary['total']} payslip(s) will be sent shortly. "
-            f"{current_app.config['APP_BRAND_NAME']} oversight will be notified once it completes.",
-            "success",
-        )
+        # While the channels are console-backed a send is logged, not delivered,
+        # so the confirmation must not promise the worker will receive anything.
+        # The page itself carries the fuller disclosure (macros/delivery.html).
+        from app.distribution.channels import delivery_is_simulated
+
+        if delivery_is_simulated():
+            outcome = (
+                "delivery channels are not yet connected for your account, so the "
+                "payslips will be prepared and recorded but not actually sent."
+            )
+        else:
+            outcome = (
+                f"{summary['total']} payslip(s) will be sent shortly. "
+                f"{current_app.config['APP_BRAND_NAME']} oversight will be notified "
+                "once it completes."
+            )
+        flash(f"Distribution queued{note}: {outcome}", "success")
     return redirect(url_for("client.distribute", run_id=run.id))
 
 

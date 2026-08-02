@@ -1,7 +1,8 @@
 {% extends "client/base.html" %}
+{% import "macros/delivery.html" as dm %}
 {% block title %}Distribute — {{ run.month }} {{ run.year }}{% endblock %}
 {% block body %}
-  <div class="toolbar">
+  <div class="page-bar">
     <div class="page-head">
       <h1>Distribute payslips</h1>
       <p class="sub">{{ run.month }} {{ run.year }} · Status: <span class="badge {{ 'ok' if sendable }}">{{ run.status }}</span></p>
@@ -12,11 +13,12 @@
   <div class="card form stack">
     <h2>Download</h2>
     <p class="sub">The simplest way to hand out payslips: download the whole run as a ZIP of PDFs, or grab a single worker's payslip from the run page.</p>
-    <a class="btn primary" href="{{ url_for('client.payslips_zip', run_id=run.id) }}">Download all payslips (ZIP)</a>
+    <a class="btn" href="{{ url_for('client.payslips_zip', run_id=run.id) }}">Download all payslips (ZIP)</a>
   </div>
 
   <div class="card form stack">
     <h2>Send to workers</h2>
+    {{ dm.simulated_notice("flash warning") }}
     {% if not sendable %}
       <p class="sub">Payslips can be sent once the run is <strong>Approved</strong>. This run is <strong>{{ run.status }}</strong>.</p>
     {% elif not can_send %}
@@ -24,7 +26,9 @@
     {% elif in_flight %}
       <p class="sub"><span class="badge">In progress</span> A distribution is already running for this run — see the status below.</p>
       {% if cancellable %}
-      <form method="post" action="{{ url_for('client.distribute_cancel', run_id=run.id) }}" onsubmit="return confirm('Cancel this distribution? Any queued send and pending retries will be stopped. Already-sent payslips are unaffected.');">
+      <form method="post" action="{{ url_for('client.distribute_cancel', run_id=run.id) }}"
+            data-confirm="Cancel this distribution? Any queued send and pending retries will be stopped. Already-sent payslips are unaffected."
+            data-confirm-title="Cancel this distribution" data-confirm-ok="Cancel distribution">
         <button class="btn" type="submit">Cancel distribution</button>
       </form>
       {% endif %}

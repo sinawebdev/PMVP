@@ -51,8 +51,11 @@ ALL_ROLES = (
 )
 
 
-def _run(status):
-    return SimpleNamespace(status=status)
+def _run(status, total_workers=12):
+    # total_workers is populated because can_approve_run also requires a non-empty
+    # run (Task 2.4) — these cases are about the role x status truth table, and a
+    # zero-worker run is a different axis, pinned in test_recommended_action.py.
+    return SimpleNamespace(status=status, total_workers=total_workers)
 
 
 class PredicateTruthTableTestCase(unittest.TestCase):
@@ -204,6 +207,10 @@ class RenderedButtonVisibilityTestCase(unittest.TestCase):
                 month="August",
                 year=2099,
                 status=status,
+                # A run with no workers is not approvable by anyone (Task 2.4);
+                # these cases are about roles, so give it a realistic roster.
+                total_workers=12,
+                total_net_pay=24000,
             )
             db.session.add(run)
             db.session.commit()
@@ -334,6 +341,10 @@ class DistributionRouteEnforcementTestCase(unittest.TestCase):
                 month="August",
                 year=2099,
                 status=status,
+                # A run with no workers is not approvable by anyone (Task 2.4);
+                # these cases are about roles, so give it a realistic roster.
+                total_workers=12,
+                total_net_pay=24000,
             )
             db.session.add(run)
             db.session.commit()
@@ -379,7 +390,12 @@ class DistributionRouteEnforcementTestCase(unittest.TestCase):
         run_id = self._make_run(APPROVED)
         resp = self.http.get(f"/distribution/run/{run_id}/status-fragment")
         self.assertEqual(resp.status_code, 200)
-        self.assertIn("Delivery Status", resp.get_data(as_text=True))
+        body = resp.get_data(as_text=True)
+        # Phase 5 sentence-cased the heading and moved the table itself into
+        # macros/distribution.html, shared with the tenant portal — so this
+        # asserts on the shared component rather than on the old heading text.
+        self.assertIn("Delivery status", body)
+        self.assertIn("ds-table", body)
 
     def test_send_payslips_hidden_while_a_batch_is_in_flight(self):
         # Once a distribution is queued for a run, the send/resend controls

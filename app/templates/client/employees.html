@@ -1,7 +1,8 @@
 {% extends "client/base.html" %}
+{% import "macros/ui.html" as ui %}
 {% block title %}Employees{% endblock %}
 {% block body %}
-  <div class="toolbar">
+  <div class="page-bar">
     <div class="page-head">
       <h1>Employees</h1>
       <p class="sub">{{ employees|length }} on your roster.</p>
@@ -10,15 +11,19 @@
   </div>
 
   {% if employees %}
-  <div class="panel">
+  <div class="panel dt-wrap">
     <table>
-      <thead><tr><th>Staff ID</th><th>Name</th><th>Job title</th><th>Bank</th><th class="right">Basic</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Staff ID</th><th>Name</th><th>Job title</th><th>Contact</th><th>Bank</th><th class="right">Basic</th><th>Status</th><th></th></tr></thead>
       <tbody>
-        {% for e in employees %}
+        {% for e in page.items %}
         <tr>
           <td>{{ e.staff_id }}</td>
           <td>{{ e.full_name }}</td>
           <td class="muted">{{ e.job_title or '—' }}</td>
+          {# Same fact, same badge as the operator roster. This column did not
+             exist, so the people who can actually add a missing email could not
+             see which of their workers was missing one. #}
+          <td>{{ e.email or e.phone or '' }}{{ ui.contact_badge(e) }}</td>
           <td class="muted">{{ e.bank_name or '—' }}</td>
           <td class="right nums">{{ e.basic_salary | cedis }}</td>
           <td>
@@ -37,6 +42,7 @@
       </tbody>
     </table>
   </div>
+  {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
   {% else %}
   <div class="empty-state">No employees yet. Add your first with the button above.</div>
   {% endif %}

@@ -1,0 +1,429 @@
+/* ---------------------------------------------------------------------------
+   Payrolla shared components — the one implementation of the interface
+   primitives, loaded by BOTH shells on EVERY page:
+
+     base.html        (operator app — Bootstrap + styles.css)
+     client/base.html (tenant portal — portal.css, no Bootstrap)
+
+   This layer exists because there was nowhere for a genuinely shared component
+   to live: tokens.css is values only (it says so), styles.css is operator-side,
+   portal.css is tenant-side, and dashboard.css is page-scoped to the two
+   dashboards — which is where the empty/loading/error states were stranded,
+   unusable by the other ~30 authenticated pages that needed them.
+
+   Rules here must work in both shells, so they lean on tokens.css variables and
+   never assume Bootstrap. Markup lives in templates/macros/ui.html.
+   --------------------------------------------------------------------------- */
+
+/* --- Empty / loading / error states -------------------------------------- */
+
+.state {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 26px 18px;
+    text-align: center;
+}
+
+.state-ico { color: var(--muted); line-height: 0; }
+.state-title { font-size: 13.5px; font-weight: 700; margin: 0; }
+.state-detail { color: var(--muted); font-size: 12.5px; line-height: 1.55; margin: 0; max-width: 42ch; }
+.state .btn { margin-top: 6px; }
+
+.state--empty .state-ico { color: var(--line-strong); }
+.state--error .state-ico { color: var(--danger); }
+
+/* Skeleton: matches the height of what it replaces, so an async swap cannot
+   shift the layout. Shimmer travels rather than pulsing — a pulsing block at
+   0.2Hz is exactly the frequency reduced-motion exists to suppress. */
+.state--loading { align-items: stretch; gap: 10px; padding: 4px 0; }
+
+.sk-line {
+    background: linear-gradient(90deg, var(--surface-alt) 25%, var(--shell) 37%, var(--surface-alt) 63%);
+    background-size: 400% 100%;
+    border-radius: var(--radius-sm);
+    display: block;
+    height: 13px;
+}
+
+.sk-line:nth-child(even) { width: 72%; }
+
+@media (prefers-reduced-motion: no-preference) {
+    .sk-line { animation: sk-shimmer 1.4s linear infinite; }
+}
+
+@keyframes sk-shimmer {
+    from { background-position: 100% 0; }
+    to { background-position: 0 0; }
+}
+
+.sr-only {
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+
+/* --- Data table ------------------------------------------------------------
+   The one table. Server-paginated, server-filtered, server-sorted — a table that
+   hides rows in the browser while the server paginates will confidently show
+   "no results" for a row sitting on page 2, which is the defect this replaces.
+   Horizontal overflow is owned by the wrapper so a wide table scrolls itself
+   instead of the page. */
+
+.dt-wrap { overflow-x: auto; width: 100%; }
+
+.dt {
+    border-collapse: collapse;
+    font-size: 13.5px;
+    width: 100%;
+}
+
+.dt th,
+.dt td {
+    border-bottom: 1px solid var(--line);
+    padding: 9px 12px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.dt thead th {
+    background: var(--surface-alt);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    position: sticky;
+    text-transform: uppercase;
+    top: 0;
+    white-space: nowrap;
+    z-index: 1;
+}
+
+.dt tbody tr:hover { background: var(--surface-alt); }
+.dt .num, .dt .nums { font-variant-numeric: tabular-nums; text-align: right; }
+.dt-actions { text-align: right; white-space: nowrap; }
+/* Unread notification rows. Lived in portal.css, so the operator inbox — which
+   renders the same shared macro — showed no weight difference at all. */
+.dt tr.is-unread { font-weight: 600; }
+
+/* A table caption used for the one sentence a reader needs to trust the data in
+   it — relocated instructional copy (Task 3.1), not decoration. Left-aligned and
+   quiet: it explains the table, it does not title it. */
+.dt-note, table > caption.dt-note {
+    caption-side: top;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.5;
+    padding: 0 0 8px;
+    text-align: left;
+}
+
+/* Sortable headers carry the direction in the link itself, so sort state is a
+   URL the user can copy, not hidden client state. */
+.dt-sort { color: inherit; display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+.dt-sort:hover { color: var(--brand-deep); }
+.dt-sort-ind { opacity: 0.45; }
+.dt-sort[aria-sort] .dt-sort-ind, .dt-sort.is-active .dt-sort-ind { opacity: 1; }
+
+/* --- Pagination ----------------------------------------------------------- */
+
+.dt-foot {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: space-between;
+    padding: 10px 2px 0;
+}
+
+.dt-count { color: var(--muted); font-size: 12.5px; }
+.dt-pages { display: flex; gap: 6px; }
+.dt-page { border: 1px solid var(--line); border-radius: var(--radius-sm); color: inherit;
+           padding: 4px 10px; text-decoration: none; font-size: 12.5px; }
+.dt-page:hover { border-color: var(--line-strong); }
+.dt-page[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
+.dt-page.is-current { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-deep); font-weight: 700; }
+
+/* --- Decision header -------------------------------------------------------
+   Subject, state, the ONE recommended next action, and the few figures that
+   justify it. Everything else on a decision page goes one interaction deeper. */
+
+.dh { border-bottom: 1px solid var(--line); display: grid; gap: 14px; padding-bottom: 16px; }
+.dh-top { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.dh-subject { display: grid; gap: 4px; }
+.dh-title { font-size: 19px; font-weight: 700; margin: 0; }
+.dh-sub { color: var(--muted); font-size: 13px; margin: 0; }
+.dh-why { color: var(--muted); font-size: 13px; margin: 0; max-width: 62ch; }
+
+.dh-figures { display: flex; flex-wrap: wrap; gap: 22px; }
+.dh-figure { display: grid; gap: 2px; }
+.dh-figure dt { color: var(--muted); font-size: 11.5px; letter-spacing: 0.02em; text-transform: uppercase; }
+.dh-figure dd { font-size: 16px; font-weight: 700; margin: 0; font-variant-numeric: tabular-nums; }
+
+/* --- Action bar ------------------------------------------------------------
+   Exactly one visually primary action per screen: the recommended one. Everything
+   else is secondary or folded behind "More", so rank is expressed by appearance
+   and not left to the reader. */
+
+.ab { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.ab-more { margin-left: auto; position: relative; }
+.ab-more > summary { cursor: pointer; list-style: none; }
+.ab-more > summary::-webkit-details-marker { display: none; }
+.ab-menu {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md, 0 8px 24px rgba(0,0,0,.12));
+    display: grid;
+    min-width: 210px;
+    padding: 6px;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 20;
+}
+.ab-menu a, .ab-menu button {
+    background: none; border: 0; border-radius: var(--radius-sm); color: inherit;
+    font: inherit; padding: 7px 10px; text-align: left; text-decoration: none; width: 100%;
+}
+.ab-menu a:hover, .ab-menu button:hover { background: var(--surface-alt); }
+
+
+/* --- Tabs -------------------------------------------------------------------
+   A page whose secondary content is one interaction deeper, not deleted. The
+   panels are rendered VISIBLE and the tablist is inert until app.js claims it
+   (see macros/ui.html::tabs) — so with no JS the page degrades to the long
+   scroll it used to be rather than to four unreachable sections. */
+
+.tabs {
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: 2px;
+    margin: 18px 0 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    padding: 9px 14px;
+    white-space: nowrap;
+}
+.tab:hover { color: var(--brand-deep); }
+.tab[aria-selected="true"] { border-bottom-color: var(--brand); color: var(--brand-deep); }
+.tab-count {
+    background: var(--surface-alt);
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    margin-left: 6px;
+    padding: 1px 7px;
+}
+.tab[aria-selected="true"] .tab-count { background: var(--brand-soft); }
+.tabpanel { padding-top: 18px; }
+.tabpanel[hidden] { display: none; }
+
+
+/* --- Delivery status ---------------------------------------------------------
+   Payslip distribution state, rendered identically by both shells from
+   macros/distribution.html. Token-only and Bootstrap-free: the tenant portal
+   loads neither Bootstrap nor styles.css, which is the whole reason the two
+   portals had grown separate copies of this screen. */
+
+.ds-totals { display: flex; flex-wrap: wrap; gap: 24px; margin: 0 0 16px; }
+.ds-total { display: grid; gap: 2px; }
+.ds-total dt { color: var(--muted); font-size: 11.5px; letter-spacing: .02em; text-transform: uppercase; }
+.ds-total dd { font-size: 20px; font-weight: 700; margin: 0; font-variant-numeric: tabular-nums; }
+.ds-total--ok dd { color: var(--green); }
+.ds-total--bad dd { color: var(--danger); }
+
+.ds-queue {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    margin-bottom: 16px;
+    padding: 14px 16px;
+}
+.ds-queue-head { align-items: center; display: flex; gap: 10px; justify-content: space-between; margin-bottom: 10px; }
+.ds-queue-head h2 { font-size: 14px; font-weight: 700; margin: 0; }
+.ds-facts { display: flex; flex-wrap: wrap; gap: 22px; margin: 0; }
+.ds-facts > div { display: grid; gap: 2px; }
+.ds-facts dt { color: var(--muted); font-size: 11.5px; letter-spacing: .02em; text-transform: uppercase; }
+.ds-facts dd { font-size: 13.5px; font-weight: 600; margin: 0; }
+.ds-note { color: var(--muted); font-size: 12.5px; margin: 10px 0 0; }
+.ds-note--bad { color: var(--danger); }
+
+.ds-pill {
+    border-radius: 999px;
+    display: inline-block;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 2px 9px;
+    white-space: nowrap;
+    background: var(--surface-alt);
+    color: var(--muted);
+}
+.ds-pill--ok { background: var(--green-soft); color: #14532d; }
+.ds-pill--bad { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.ds-pill--warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.ds-pill--info { background: var(--brand-soft); color: var(--brand-deep); }
+.ds-pill--muted { background: var(--surface-alt); color: var(--muted); }
+
+.ds-table-wrap { overflow-x: auto; width: 100%; }
+.ds-table { border-collapse: collapse; font-size: 13px; min-width: 100%; width: 100%; }
+.ds-table th, .ds-table td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: middle; }
+.ds-table thead th { color: var(--muted); font-size: 11.5px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; }
+.ds-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ds-table tbody tr:last-child td { border-bottom: 0; }
+.ds-muted { color: var(--muted); }
+.ds-select {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+    color: inherit; font: inherit; font-size: 12.5px; padding: 3px 6px; max-width: 160px;
+}
+.ds-select:disabled { opacity: .55; }
+
+/* Import preview: the blockers list and the note voice, shared by both portals
+   (macros/import_preview.html). */
+.ip-note { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; max-width: 78ch; }
+.ip-blockers { border-left: 3px solid var(--warn); }
+.ip-blockers h2 { font-size: 14px; font-weight: 700; margin: 0 0 8px; }
+.ip-blockers ul { margin: 0; padding-left: 18px; }
+.ip-blockers li { margin-bottom: 8px; }
+.ip-blockers li:last-child { margin-bottom: 0; }
+
+/* --- Reports & exports -------------------------------------------------------
+   One report per block: purpose, availability (with a reason when it is not
+   available), preview. Shared by both portals via macros/reports.html. */
+
+.rp { border-top: 1px solid var(--line); padding: 16px 0; }
+.rp:first-of-type { border-top: 0; }
+.rp-head { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.rp-head h2 { font-size: 15px; font-weight: 700; margin: 0; }
+.rp-why { color: var(--muted); font-size: 13px; margin: 6px 0 0; max-width: 78ch; }
+.rp-blocked { color: var(--warn); font-size: 12.5px; margin: 6px 0 0; max-width: 78ch; }
+.rp .dt-wrap, .rp .ds-totals { margin-top: 12px; }
+
+
+/* --- Panel -------------------------------------------------------------------
+   The canonical content card, and the ONLY definition of `.panel` in the
+   codebase (Phase 6, Task 6.1).
+
+   It used to be defined twice and mean two different things. styles.css gave
+   the operator shell a padded card; portal.css gave the tenant shell the same
+   card overridden to `overflow-x: auto; padding: 4px`, because every tenant use
+   of it wrapped a table. So the same class name produced an 18px content card
+   in one portal and a 4px scroll box in the other — and the Phase 5 shared
+   macros, written once for both, landed in whichever box the surrounding shell
+   happened to mean. (Concretely: `class="panel ip-blockers"` in the tenant
+   import preview rendered a prose list at 4px padding.)
+
+   The table-wrapping meaning has its own name and always did — `.dt-wrap`,
+   above. `.panel` is a card. */
+
+.panel {
+    background: var(--surface, rgba(255, 255, 255, 0.92));
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm, 0 10px 26px rgba(15, 23, 42, 0.05));
+    padding: 18px;
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+.panel:hover {
+    border-color: rgba(15, 118, 110, 0.24);
+    box-shadow: var(--shadow);
+    transform: translateY(-2px);
+}
+
+
+/* --- Page bar ----------------------------------------------------------------
+   A title row: the page (or section) heading, with its actions on the right.
+
+   This is the second half of untangling `.toolbar` (Phase 6, Task 6.1). The
+   name meant two different things depending on which shell you were in — in the
+   operator console a row of controls (filters, bulk actions, button groups), in
+   the tenant portal the PAGE HEADER, because the tenant shell has no
+   page_title/page_actions blocks the way base.html does. Ten of the tenant's
+   twelve uses were headers; all nine operator uses were control rows.
+
+   `.toolbar` now means the control row, in both shells. This is the header. */
+
+.page-bar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+.page-bar > .page-head, .page-bar h1, .page-bar h2 { margin: 0; }
+
+
+/* --- Stat card ---------------------------------------------------------------
+   A single figure with its label. One definition, one child contract (Phase 6,
+   Task 6.1).
+
+   It was defined in both shells with the SAME visual treatment — down to an
+   identical decorative gradient blob — but two incompatible child contracts:
+   styles.css styled `span` (label) and `strong` (value); portal.css styled
+   `.n` (value) and `.l` (label), in the opposite order. A stat card written for
+   one portal rendered as unstyled text in the other, which is precisely why the
+   Phase 5 shared macros could not use it.
+
+   The surviving contract is <span> label then <strong> value, matching
+   .dh-figure's dt/dd above — so a figure reads the same whichever canonical
+   component draws it. `.stat-icon` stays in styles.css: it is Bootstrap-icon
+   positioning the tenant shell has no use for. */
+
+.stat-card {
+    background: var(--surface, rgba(255, 255, 255, 0.92));
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm, 0 10px 26px rgba(15, 23, 42, 0.05));
+    overflow: hidden;
+    padding: 18px;
+    position: relative;
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+.stat-card:hover {
+    border-color: rgba(15, 118, 110, 0.24);
+    box-shadow: var(--shadow);
+    transform: translateY(-2px);
+}
+.stat-card::after {
+    background: linear-gradient(135deg, rgba(15, 118, 110, 0.16), rgba(23, 195, 178, 0.18));
+    border-radius: 999px;
+    content: "";
+    height: 80px;
+    position: absolute;
+    right: -30px;
+    top: -30px;
+    width: 80px;
+}
+.stat-card > span {
+    color: var(--muted);
+    display: block;
+    font-size: 13px;
+    margin-bottom: 8px;
+    position: relative;
+    z-index: 1;
+}
+.stat-card > strong {
+    display: block;
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.2;
+    position: relative;
+    z-index: 1;
+}

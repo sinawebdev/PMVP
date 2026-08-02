@@ -291,6 +291,37 @@ class SmtpEmailSender(Sender):
         return SendResult(True, self.provider)
 
 
+def simulated_channels():
+    """The channels still on their console backend, i.e. logged but never delivered.
+
+    A console send returns ok=True, so the delivery is recorded `sent` and the
+    status screens show a green badge and a 100% success rate for a payslip that
+    only ever reached a log line. Until a real provider is configured, the UI has
+    to say that plainly rather than let the badge imply a delivery happened —
+    callers use this to render that disclosure. Empty once every channel is live.
+    """
+    cfg = current_app.config
+    live = {"sms": "hubtel", "whatsapp": "cloud", "email": "smtp"}
+    return [
+        channel
+        for channel, real in live.items()
+        if cfg.get(f"{channel.upper()}_BACKEND") != real
+    ]
+
+
+def delivery_is_simulated():
+    """True while any channel is console-backed — the one flag templates gate on."""
+    return bool(simulated_channels())
+
+
+CHANNEL_LABELS = {"sms": "SMS", "whatsapp": "WhatsApp", "email": "email"}
+
+
+def simulated_channel_labels():
+    """:func:`simulated_channels` as display names, for the UI disclosure."""
+    return [CHANNEL_LABELS.get(c, c) for c in simulated_channels()]
+
+
 def get_sender(channel: str) -> Sender:
     """Return the Sender for a channel, console vs real per the *_BACKEND config."""
     cfg = current_app.config

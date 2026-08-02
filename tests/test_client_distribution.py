@@ -167,5 +167,39 @@ class ClientDistributionTestCase(unittest.TestCase):
         )
 
 
+class SimulatedDeliveryIsDisclosedTests(ClientDistributionTestCase):
+    """Phase 0, Task 0.3 — a console send returns success, so a payslip nobody
+    received still shows a green "Sent" badge and a 100% success rate. While the
+    channels are console-backed the UI has to say that outright, and the send
+    confirmation must not promise a delivery that is not going to happen."""
+
+    def test_distribute_page_discloses_that_channels_are_not_connected(self):
+        self._login("admin@msc.com")
+        body = self.client.get(
+            f"/company/runs/{self.msc_run.id}/distribute"
+        ).get_data(as_text=True)
+        self.assertIn("Delivery channels are not connected yet", body)
+
+    def test_send_confirmation_does_not_promise_delivery(self):
+        self._login("admin@msc.com")
+        body = self.client.post(
+            f"/company/runs/{self.msc_run.id}/distribute/send",
+            data={"channel": "auto", "nonce": "disclosure-1"},
+            follow_redirects=True,
+        ).get_data(as_text=True)
+        self.assertIn("not actually sent", body)
+        self.assertNotIn("will be sent shortly", body)
+
+    def test_disclosure_disappears_once_a_real_backend_is_configured(self):
+        self.app.config.update(
+            SMS_BACKEND="hubtel", WHATSAPP_BACKEND="cloud", EMAIL_BACKEND="smtp"
+        )
+        self._login("admin@msc.com")
+        body = self.client.get(
+            f"/company/runs/{self.msc_run.id}/distribute"
+        ).get_data(as_text=True)
+        self.assertNotIn("Delivery channels are not connected yet", body)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
+{% import "macros/ui.html" as ui %}
 {% import "macros/breadcrumbs.html" as bc %}
 {% block title %}{{ client.name }} · {{ app_name }}{% endblock %}
 {% block page_title %}{{ client.name }}{% endblock %}
-{% block page_intro %}Review the workers and payroll history connected to this client before importing, approving, or preparing finance summaries.{% endblock %}
 {% block breadcrumbs %}
 {{ bc.trail([
     ("Dashboard", url_for('main.dashboard')),
@@ -68,7 +68,7 @@
             <table class="table">
                 <thead><tr><th>Month</th><th>Workers</th><th>Net Pay</th><th>Status</th></tr></thead>
                 <tbody>
-                {% for run in client.payroll_runs %}
+                {% for run in runs_page.items %}
                     <tr>
                         <td><a href="{{ url_for('payroll.detail', run_id=run.id) }}">{{ run.month }} {{ run.year }}</a></td>
                         <td>{{ run.total_workers }}</td>
@@ -80,6 +80,7 @@
                 {% endfor %}
                 </tbody>
             </table>
+            {% if runs_page.pages > 1 %}{{ ui.pagination(runs_page) }}{% endif %}
         </section>
     </div>
 </div>

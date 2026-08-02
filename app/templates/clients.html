@@ -1,21 +1,27 @@
 {% extends "base.html" %}
+{% import "macros/ui.html" as ui %}
 {% block title %}Client Companies · {{ app_name }}{% endblock %}
 {% block page_title %}Client Companies{% endblock %}
-{% block page_intro %}Maintain the client companies {{ app_brand_name }} serves, then attach employees and payroll imports to the right business before review or approval begins.{% endblock %}
 {% block content %}
 <div class="toolbar">
     <a class="btn btn-primary" href="{{ url_for('main.add_client') }}"><i class="bi bi-building-add"></i>Add Client Company</a>
 </div>
 <section class="panel">
-    <div class="toolbar">
+    <form class="toolbar" method="get" action="{{ url_for('main.clients') }}" role="search">
         <label class="visually-hidden" for="clients-filter">Filter client companies</label>
-        <input id="clients-filter" class="form-control" type="search" placeholder="Filter clients by name, code, contact, or location…" data-table-filter="clients-table">
-    </div>
+        <input id="clients-filter" name="q" class="form-control" type="search" value="{{ search or '' }}"
+               placeholder="Filter clients by name, code, contact, or location…">
+        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-search"></i>Filter</button>
+        {% if search %}<a class="btn btn-link" href="{{ url_for('main.clients') }}">Clear</a>{% endif %}
+    </form>
+    {% if search %}
+    <p class="mini-note mb-2"><i class="bi bi-funnel"></i> {{ page.total }} compan{{ "y" if page.total == 1 else "ies" }} matching &ldquo;{{ search }}&rdquo;.</p>
+    {% endif %}
     <div class="excel-grid-wrap">
         <table id="clients-table" class="table table-sm align-middle excel-grid">
             <thead><tr><th scope="col">Name</th><th scope="col">Code</th><th scope="col">Contact</th><th scope="col">Email</th><th scope="col">Location</th><th scope="col">Status</th><th scope="col"></th></tr></thead>
             <tbody>
-            {% for client in clients %}
+            {% for client in page.items %}
                 <tr>
                     <td><a href="{{ url_for('main.client_detail', client_id=client.id) }}">{{ client.name }}</a></td>
                     <td>{% if client.company_code %}<code>{{ client.company_code }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</td>
@@ -26,6 +32,15 @@
                         <span class="badge text-bg-{{ 'success' if client.status == 'Active' else 'danger' }}">
                             {{ client.status }}
                         </span>
+                        {# Onboarded, but nobody there can sign in. Payrolla
+                           never mints auth identities itself, so this state is
+                           invisible until the client complains — the badge is
+                           derived from the User table, never stored. #}
+                        {% if client.id in awaiting_credentials %}
+                        <span class="badge text-bg-warning" title="No login identity is linked to this company yet — provision credentials before they can sign in.">
+                            Awaiting credentials
+                        </span>
+                        {% endif %}
                     </td>
                     <td class="text-nowrap">
                         <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.edit_client', client_id=client.id) }}">Edit</a>
@@ -38,5 +53,6 @@
             </tbody>
         </table>
     </div>
+    {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
 </section>
 {% endblock %}

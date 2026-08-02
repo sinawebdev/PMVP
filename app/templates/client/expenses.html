@@ -1,9 +1,10 @@
 {% extends "client/base.html" %}
+{% import "macros/ui.html" as ui %}
 {% import "macros/charts.html" as ch %}
 {% block title %}Expenses{% endblock %}
-{% set may_record = can_record_expenses(current_user.role) %}
+{% set may_record = can_record_expenses(role) %}
 {% block body %}
-  <div class="toolbar">
+  <div class="page-bar">
     <div class="page-head">
       <h1>Expenses</h1>
       <p class="sub">Operational expenses recorded against {{ company.name }}. These totals feed your dashboard.</p>
@@ -19,16 +20,16 @@
      same app.analytics.expense_summary the dashboard reads. #}
   <div class="grid">
     <div class="card stat-card">
-      <span class="n">{{ summary.total | cedis }}</span>
-      <span class="l">Total expenses</span>
+      <span>Total expenses</span>
+      <strong>{{ summary.total | cedis }}</strong>
     </div>
     <div class="card stat-card">
-      <span class="n">{{ summary.monthly_total | cedis }}</span>
-      <span class="l">This month · {{ summary.monthly_label }}</span>
+      <span>This month · {{ summary.monthly_label }}</span>
+      <strong>{{ summary.monthly_total | cedis }}</strong>
     </div>
     <div class="card stat-card">
-      <span class="n">{{ summary.count }}</span>
-      <span class="l">Expenses recorded</span>
+      <span>Expenses recorded</span>
+      <strong>{{ summary.count }}</strong>
     </div>
   </div>
 
@@ -52,7 +53,7 @@
   {% endif %}
 
   {% if expenses %}
-  <div class="panel">
+  <div class="panel dt-wrap">
     <table>
       <thead>
         <tr>
@@ -62,7 +63,7 @@
         </tr>
       </thead>
       <tbody>
-        {% for x in expenses %}
+        {% for x in page.items %}
         <tr>
           <td class="nums">{{ x.expense_date }}</td>
           <td>{{ x.category }}</td>
@@ -76,7 +77,7 @@
             <div class="actions end">
               <a class="btn sm" href="{{ url_for('client.expense_edit', expense_id=x.id) }}">Edit</a>
               <form method="post" action="{{ url_for('client.expense_delete', expense_id=x.id) }}"
-                    onsubmit="return confirm('Delete this expense? This cannot be undone.');">
+                    data-confirm="Delete this expense? This cannot be undone." data-confirm-danger="1">
                 <button class="btn sm danger" type="submit">Delete</button>
               </form>
             </div>
@@ -87,11 +88,12 @@
       </tbody>
     </table>
   </div>
+  {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
   {% else %}
   <div class="empty-state">
     <p>No expenses recorded for your company yet.</p>
     {% if may_record %}
-    <a class="btn primary" href="{{ url_for('client.expense_add') }}">+ Add Expense</a>
+    <a class="btn" href="{{ url_for('client.expense_add') }}">+ Add Expense</a>
     {% endif %}
   </div>
   {% endif %}

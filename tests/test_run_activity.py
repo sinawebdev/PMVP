@@ -60,9 +60,10 @@ class RunActivityTestCase(unittest.TestCase):
         record_audit("Payroll approval", run, "Payroll approved.")
         db.session.commit()
         html = self.client.get(f"/payroll/runs/{run.id}").get_data(as_text=True)
-        self.assertIn("Payroll Progress", html)
+        # Phase 4: the stepper lost its panel wrapper and the timeline moved into
+        # a tab, so both are asserted on their own markup rather than on headings.
         self.assertIn("lifecycle-stepper", html)
-        self.assertIn("Activity &amp; Approval Timeline", html)
+        self.assertIn('id="tab-timeline-panel"', html)
         self.assertIn("Payroll approval", html)
 
 

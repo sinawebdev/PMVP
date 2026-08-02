@@ -13,6 +13,9 @@
      see the note at the top of portal.css. #}
   <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='portal.css') }}" />
+  {# Shared component layer — same file the operator shell loads, so a state or a
+     table renders identically in both portals. #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='components.css') }}" />
   {# Page-scoped stylesheets (the dashboard's executive layer is the only one
      today). Loading them here rather than in portal.css keeps a page's styles
      off every other page, so they cannot regress one. #}
@@ -39,7 +42,7 @@
         <a href="{{ url_for('client.statutory') }}" {% if ep == 'client.statutory' %}aria-current="page"{% endif %}>Statutory</a>
         <a href="{{ url_for('client.expenses') }}" {% if ep and ep.startswith('client.expense') %}aria-current="page"{% endif %}>Expenses</a>
         <a href="{{ url_for('client.audit') }}" {% if ep == 'client.audit' %}aria-current="page"{% endif %}>Audit</a>
-        {% if (current_user.role or '')|lower == 'client_admin' %}
+        {% if can_manage_branding(role) %}
         <a href="{{ url_for('client.branding') }}" {% if ep == 'client.branding' %}aria-current="page"{% endif %}>Branding</a>
         {% endif %}
         <a href="{{ url_for('notifications.inbox') }}" {% if ep and ep.startswith('notifications.') %}aria-current="page"{% endif %}>Notifications{% if notif_unread %} <span class="badge warn">{{ notif_unread }}</span>{% endif %}</a>

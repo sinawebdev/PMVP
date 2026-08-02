@@ -1,42 +1,56 @@
 {% extends "base.html" %}
-{% block title %}Payroll Preview · {{ app_name }}{% endblock %}
-{% block page_title %}Payroll Preview{% endblock %}
-{% block page_intro %}Check the selected client, detected company name, smart field mapping, unique worker count, duplicates, and row warnings before saving this payroll run.{% endblock %}
+{% import "macros/breadcrumbs.html" as bc %}
+{% import "macros/ui.html" as ui %}
+{% import "macros/import_preview.html" as ip %}
+{% block title %}Import preview · {{ app_name }}{% endblock %}
+{% block page_title %}Import preview{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Payroll Runs", url_for('payroll.runs')),
+    ("New payroll run", url_for('payroll.new_run')),
+    ("Import preview", None),
+]) }}
+{% endblock %}
 {% block content %}
-{% if client and unregistered %}
-<div class="alert alert-warning d-flex gap-2" role="alert">
-    <i class="bi bi-exclamation-triangle-fill"></i>
-    <div>
-        <strong>{{ unregistered|length }} employee ID{{ "" if unregistered|length == 1 else "s" }} in this file have no record in the system:</strong>
-        {{ unregistered|join(", ") }}.
-        These employees will be imported but cannot receive payslips until their records are created.
-        <a href="{{ url_for('employees.roster', client_id=client.id) }}">Go to Employee Roster →</a>
-    </div>
-</div>
-{% endif %}
-{% if client and no_contact %}
-<div class="alert alert-warning d-flex gap-2" role="alert">
-    <i class="bi bi-exclamation-triangle-fill"></i>
-    <div>
-        <strong>{{ no_contact|length }} registered employee{{ "" if no_contact|length == 1 else "s" }} have no email or phone on record:</strong>
-        {{ no_contact|map(attribute="name")|join(", ") }}.
-        Payslips cannot be distributed to these employees until contact info is added.
-        <a href="{{ url_for('employees.roster', client_id=client.id) }}">Go to Employee Roster →</a>
-    </div>
-</div>
-{% endif %}
+
 {% if payload.mode == "multi_client" %}
-<section class="panel">
-    <div class="panel-header">
-        <h2><i class="bi bi-buildings"></i>Multi-Client Workbook Preview</h2>
-        <span>{{ payload.runs|length }} matched client sheets</span>
+{# --- Multi-client workbook ------------------------------------------------
+   One row per matched client sheet. The blocker here is a sheet that looked
+   like payroll and was NOT matched — it leads, because confirming without
+   noticing it silently drops a company's payroll. #}
+{% if payload.unmatched_sheets %}
+<div class="alert alert-warning" role="alert">
+    <strong>{{ payload.unmatched_sheets|length }} payroll-looking sheet{{ "" if payload.unmatched_sheets|length == 1 else "s" }} will NOT be imported</strong>
+    <p class="mb-0">{% for sheet in payload.unmatched_sheets %}{{ sheet.sheet_name }}{% if not loop.last %}, {% endif %}{% endfor %} — no client company matched these names. Confirming imports everything else and leaves them out.</p>
+</div>
+{% endif %}
+
+{{ ui.decision_header(
+     "Import " ~ payload.runs|length ~ " client payroll run" ~ ("" if payload.runs|length == 1 else "s"),
+     subtitle=payload.month ~ " " ~ payload.year,
+     figures=[
+       {"label": "Client sheets matched", "value": payload.runs|length},
+       {"label": "Sheets not matched", "value": payload.unmatched_sheets|length},
+     ]) }}
+
+<form method="post" action="{{ url_for('payroll.confirm', import_id=import_id) }}" class="mt-3">
+    <label class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="replace_existing" value="1">
+        <span class="form-check-label">I confirm replacement if any matched client already has payroll for {{ payload.month }} {{ payload.year }}.</span>
+    </label>
+    <div class="toolbar mb-0">
+        <button class="btn btn-success"><i class="bi bi-check2-circle"></i>Confirm and create {{ payload.runs|length }} payroll run{{ "" if payload.runs|length == 1 else "s" }}</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('payroll.new_run') }}">Cancel</a>
     </div>
+</form>
+
+<section class="panel mt-3">
+    <div class="panel-header"><h2><i class="bi bi-buildings"></i>What will be created</h2></div>
     <div class="excel-grid-wrap">
         <table class="table table-sm excel-grid">
             <thead>
-                <tr>
-                    <th>Client Company</th><th>Sheet Name</th><th>Header Row</th><th>Rows</th><th>Unique Workers</th><th>Duplicates</th><th>Gross Pay</th><th>PAYE</th><th>SSNIT</th><th>Net Pay</th><th>Warnings</th>
-                </tr>
+                <tr><th>Client Company</th><th>Sheet Name</th><th>Header Row</th><th>Rows</th><th>Unique Workers</th><th>Duplicates</th><th>Gross Pay</th><th>PAYE</th><th>SSNIT</th><th>Net Pay</th><th>Warnings</th></tr>
             </thead>
             <tbody>
             {% for run in payload.runs %}
@@ -58,95 +72,57 @@
         </table>
     </div>
 </section>
-{% if payload.unmatched_sheets %}
-<section class="alert alert-warning mt-3">
-    <strong>Unmatched Sheets</strong>
-    <p class="mb-0">These payroll-looking sheets were not imported automatically:
-    {% for sheet in payload.unmatched_sheets %}{{ sheet.sheet_name }}{% if not loop.last %}, {% endif %}{% endfor %}
-    </p>
-</section>
-{% endif %}
-<form method="post" action="{{ url_for('payroll.confirm', import_id=import_id) }}" class="mt-3">
-    <label class="form-check mb-3">
-        <input class="form-check-input" type="checkbox" name="replace_existing" value="1">
-        <span class="form-check-label">I confirm replacement if any matched client already has payroll for {{ payload.month }} {{ payload.year }}.</span>
-    </label>
-    <button class="btn btn-success btn-lg"><i class="bi bi-check2-circle"></i>Confirm and Create Payroll Runs</button>
-    <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('payroll.runs') }}">Cancel</a>
-</form>
-{% else %}
-<section class="stats-grid">
-    <div class="stat-card"><i class="bi bi-building stat-icon"></i><span>Client Company</span><strong>{{ client.name }}</strong></div>
-    <div class="stat-card"><i class="bi bi-file-spreadsheet stat-icon"></i><span>Matched Sheet</span><strong>{{ payload.matched_sheet_name or "Default sheet" }}</strong></div>
-    <div class="stat-card"><i class="bi bi-list-ol stat-icon"></i><span>Detected Header Row</span><strong>{{ payload.detected_header_row or 1 }}</strong></div>
-    <div class="stat-card"><i class="bi bi-table stat-icon"></i><span>Total Rows Found</span><strong>{{ payload.worker_stats.total_rows }}</strong></div>
-    <div class="stat-card"><i class="bi bi-person-check stat-icon"></i><span>Total Unique Workers</span><strong>{{ payload.worker_stats.total_unique_workers }}</strong></div>
-    <div class="stat-card"><i class="bi bi-copy stat-icon"></i><span>Duplicate Entries Found</span><strong>{{ payload.worker_stats.duplicate_count }}</strong></div>
-    <div class="stat-card"><i class="bi bi-person-fill-check stat-icon"></i><span>Active Workers</span><strong>{{ payload.status_breakdown.active if payload.status_breakdown else 0 }}</strong></div>
-    <div class="stat-card"><i class="bi bi-person-dash stat-icon"></i><span>Inactive / Terminated</span><strong>{{ (payload.status_breakdown.inactive if payload.status_breakdown else 0) + (payload.status_breakdown.terminated if payload.status_breakdown else 0) }}</strong></div>
-    <div class="stat-card"><i class="bi bi-check-circle stat-icon"></i><span>Valid Rows</span><strong>{{ payload.import_summary.valid_rows }}</strong></div>
-    <div class="stat-card"><i class="bi bi-x-octagon stat-icon"></i><span>Invalid Rows</span><strong>{{ payload.import_summary.invalid_rows }}</strong></div>
-    <div class="stat-card"><i class="bi bi-cash-stack stat-icon"></i><span>Total Payroll Amount</span><strong>{{ payload.import_summary.net_total|cedis }}</strong></div>
-    <div class="stat-card"><i class="bi bi-receipt-cutoff stat-icon"></i><span>PAYE Total</span><strong>{{ payload.import_summary.paye_total|cedis }}</strong></div>
-    <div class="stat-card"><i class="bi bi-shield-check stat-icon"></i><span>SSNIT Total</span><strong>{{ payload.import_summary.ssnit_total|cedis }}</strong></div>
-</section>
 
-{% if payload.validation.summary_warnings %}
-<section class="alert alert-warning mt-3">
-    <strong>Upload warnings</strong>
-    <ul class="mb-0">
+{% else %}
+{# --- Single client --------------------------------------------------------
+   Blockers first, then the decision, then the evidence. This page used to open
+   on thirteen equally-weighted stat tiles with `Invalid Rows` sitting tenth,
+   so the one figure that decides whether to confirm was styled exactly like
+   the twelve that don't. #}
+
+{% set invalid = payload.import_summary.invalid_rows or 0 %}
+{% set blocking = invalid or (client and unregistered) or (client and no_contact) or payload.validation.summary_warnings %}
+
+{% if blocking %}
+<section class="panel action-required mb-3">
+    <div class="panel-header">
+        <h2><i class="bi bi-exclamation-triangle"></i>Check before you confirm</h2>
+        <span>Nothing is written until you confirm</span>
+    </div>
+    <ul class="mb-0 ps-3">
+        {% if invalid %}
+        <li class="mb-2">
+            <strong>{{ invalid }} row{{ "" if invalid == 1 else "s" }} failed validation</strong> and will not produce
+            payroll items. {{ payload.import_summary.valid_rows }} row{{ "" if payload.import_summary.valid_rows == 1 else "s" }} will import.
+            <a href="{{ url_for('payroll.error_report', import_id=import_id) }}">Download the error report</a>
+            to see which rows and why.
+        </li>
+        {% endif %}
+        {% if client and unregistered %}
+        <li class="mb-2">
+            <strong>{{ unregistered|length }} employee ID{{ "" if unregistered|length == 1 else "s" }} have no record in the system</strong>
+            ({{ unregistered|join(", ") }}). They will be imported but cannot receive payslips until their records exist.
+            <a href="{{ url_for('employees.roster', client_id=client.id) }}">Open the employee roster</a>.
+        </li>
+        {% endif %}
+        {% if client and no_contact %}
+        <li class="mb-2">
+            <strong>{{ no_contact|length }} registered employee{{ "" if no_contact|length == 1 else "s" }} have no email or phone</strong>
+            ({{ no_contact|map(attribute="name")|join(", ") }}). Payslips cannot be distributed to them.
+            <a href="{{ url_for('employees.roster', client_id=client.id) }}">Open the employee roster</a>.
+        </li>
+        {% endif %}
         {% for warning in payload.validation.summary_warnings %}
-            <li>{{ warning }}</li>
+        <li class="mb-2">{{ warning }}</li>
         {% endfor %}
     </ul>
 </section>
+{% else %}
+<div class="mini-note mb-3"><i class="bi bi-check-circle"></i> Nothing blocking — every row read from this workbook validated.</div>
 {% endif %}
 
-<section class="panel mt-3">
-    <div class="panel-header"><h2><i class="bi bi-diagram-3"></i>Suggested Column Mappings</h2></div>
-    <div class="excel-grid-wrap">
-        <table class="table table-sm excel-grid">
-            <thead><tr><th>Original Column</th><th>Mapped Field</th></tr></thead>
-            <tbody>
-            {% for original, mapped in payload.mapping.items() %}
-                <tr><td>{{ original }}</td><td><span class="badge text-bg-{{ 'secondary' if mapped == 'unmapped' else 'primary' }}">{{ mapped }}</span></td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</section>
-
-<section class="panel mt-3">
-    <div class="panel-header"><h2><i class="bi bi-exclamation-triangle"></i>Validation Warnings</h2></div>
-    {% if payload.validation.per_row_warnings %}
-        <div class="excel-grid-wrap">
-            <table class="table table-sm excel-grid">
-                <thead><tr><th>Row</th><th>Warnings</th></tr></thead>
-                <tbody>
-                {% for row_number, warnings in payload.validation.per_row_warnings.items() %}
-                    <tr><td>{{ row_number }}</td><td>{{ warnings|join("; ") }}</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    {% else %}
-        <p class="text-muted mb-0">No row-level warnings found.</p>
-    {% endif %}
-</section>
-
-<section class="panel mt-3">
-    <div class="panel-header"><h2><i class="bi bi-table"></i>First 20 Rows</h2></div>
-    <div class="excel-grid-wrap">
-        <table class="table table-sm excel-grid">
-            <thead><tr>{% for column in payload.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
-            <tbody>
-            {% for row in payload.preview_rows %}
-                <tr>{% for column in payload.columns %}<td>{{ row[column] }}</td>{% endfor %}</tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</section>
+{{ ip.figures(payload, client.name, subtitle=payload.month ~ ' ' ~ payload.year) }}
+{{ ip.rows_vs_workers(payload) }}
 
 <form method="post" action="{{ url_for('payroll.confirm', import_id=import_id) }}" class="mt-3">
     {% if payload.validation.summary_warnings %}
@@ -155,9 +131,38 @@
             <span class="form-check-label">I confirm replacement if this client already has payroll for {{ payload.month }} {{ payload.year }}.</span>
         </label>
     {% endif %}
-    <button class="btn btn-success btn-lg"><i class="bi bi-check2-circle"></i>Confirm and Create Payroll Run</button>
-    <a class="btn btn-outline-warning btn-lg" href="{{ url_for('payroll.error_report', import_id=import_id) }}"><i class="bi bi-file-earmark-spreadsheet"></i>Download Error Report</a>
-    <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('payroll.runs') }}">Cancel</a>
+    <div class="toolbar mb-0">
+        <button class="btn btn-success"><i class="bi bi-check2-circle"></i>Confirm and create payroll run</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('payroll.error_report', import_id=import_id) }}"><i class="bi bi-file-earmark-spreadsheet"></i>Download error report</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('payroll.new_run') }}">Cancel</a>
+    </div>
 </form>
+
+{# The evidence, one interaction deeper. Reading it is optional; the panel above
+   already says what is wrong with it. #}
+{{ ui.tabs([
+     {"id": "warnings", "label": "Row warnings", "count": payload.validation.per_row_warnings|length or none},
+     {"id": "mapping",  "label": "Column mapping", "count": payload.mapping|length},
+     {"id": "raw",      "label": "First 20 rows", "count": none},
+     {"id": "totals",   "label": "Totals & headcount", "count": none},
+   ], label="Import preview detail") }}
+
+<div class="tabpanel" id="tab-warnings-panel" role="tabpanel" aria-labelledby="tab-warnings">
+  {{ ip.row_warnings(payload.validation.per_row_warnings,
+                     error_report_href=url_for('payroll.error_report', import_id=import_id)) }}
+</div>
+
+<div class="tabpanel" id="tab-mapping-panel" role="tabpanel" aria-labelledby="tab-mapping">
+  {{ ip.mapping_table(payload.mapping, matched_sheet=payload.matched_sheet_name,
+                      header_row=payload.detected_header_row) }}
+</div>
+
+<div class="tabpanel" id="tab-raw-panel" role="tabpanel" aria-labelledby="tab-raw">
+  {{ ip.raw_rows(payload.columns, payload.preview_rows) }}
+</div>
+
+<div class="tabpanel" id="tab-totals-panel" role="tabpanel" aria-labelledby="tab-totals">
+  {{ ip.totals(payload) }}
+</div>
 {% endif %}
 {% endblock %}

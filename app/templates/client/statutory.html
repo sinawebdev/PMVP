@@ -8,13 +8,13 @@
 
   {% if rate %}
   <div class="grid">
-    <div class="card stat-card"><span class="n">{{ '%.1f%%' | format(rate.ssf_employee_rate * 100) }}</span><span class="l">SSF — employee</span></div>
-    <div class="card stat-card"><span class="n">{{ '%.1f%%' | format(rate.ssf_employer_rate * 100) }}</span><span class="l">SSF — employer</span></div>
-    <div class="card stat-card"><span class="n">{{ rate.effective_from }}</span><span class="l">Effective from</span></div>
+    <div class="card stat-card"><span>SSF — employee</span><strong>{{ '%.1f%%' | format(rate.ssf_employee_rate * 100) }}</strong></div>
+    <div class="card stat-card"><span>SSF — employer</span><strong>{{ '%.1f%%' | format(rate.ssf_employer_rate * 100) }}</strong></div>
+    <div class="card stat-card"><span>Effective from</span><strong>{{ rate.effective_from }}</strong></div>
   </div>
 
   <h2>PAYE bands (monthly)</h2>
-  <div class="panel">
+  <div class="panel dt-wrap">
     <table>
       <thead><tr><th>Income over (GH₵)</th><th class="right">Rate</th><th class="right">Base tax (GH₵)</th></tr></thead>
       <tbody>

@@ -1,0 +1,275 @@
+{# ---------------------------------------------------------------------------
+   Payrolla shared interface components — one implementation each, for BOTH
+   shells. Styling lives in app/static/components.css, which base.html and
+   client/base.html both load on every page.
+
+   These were previously stranded in macros/dashboard.html with their CSS in the
+   page-scoped dashboard.css, so the ~30 other authenticated pages could not use
+   them and grew one-off markup instead. Import here from anywhere:
+
+       {% import "macros/ui.html" as ui %}
+
+   Nothing in this file may assume Bootstrap — the tenant portal does not load it.
+   --------------------------------------------------------------------------- #}
+
+{# --- States ----------------------------------------------------------------
+   Empty, loading and error, so every surface waits and fails the same way.
+   `skeleton` matches the height of what it replaces so an async swap cannot
+   shift the layout. #}
+
+{% macro empty(title, detail="", action_label="", action_href="") %}
+<div class="state state--empty">
+  <p class="state-title">{{ title }}</p>
+  {% if detail %}<p class="state-detail">{{ detail }}</p>{% endif %}
+  {% if action_label %}<a class="btn primary" href="{{ action_href }}">{{ action_label }}</a>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro error_state(title, detail="", retry_href="") %}
+<div class="state state--error" role="alert">
+  <p class="state-title">{{ title }}</p>
+  {% if detail %}<p class="state-detail">{{ detail }}</p>{% endif %}
+  {% if retry_href %}<a class="btn" href="{{ retry_href }}">Try again</a>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro skeleton(lines=3, height=0) %}
+<div class="state state--loading" aria-busy="true" aria-live="polite"
+     {% if height %}style="min-height: {{ height }}px"{% endif %}>
+  <span class="sr-only">Loading</span>
+  {% for _ in range(lines) %}<span class="sk-line" aria-hidden="true"></span>{% endfor %}
+</div>
+{% endmacro %}
+
+
+{# --- Data table -------------------------------------------------------------
+   The only table component. Everything that narrows the list — filter, sort,
+   page — is a query parameter answered by the server, so what you see is the
+   whole result set and the URL reproduces it.
+
+   columns: [{key, label, align, sortable}]
+   rows:    the page's items; the CALLER supplies the body via the `caller` block
+            so each page owns its own cell rendering without this macro growing a
+            formatting language.
+   page:    a Flask-SQLAlchemy Pagination (or None to hide the footer)
+   params:  dict of current query args to preserve in sort/page links
+#}
+{% macro data_table(columns, page=None, params={}, sort=None, direction="asc",
+                    caption="", empty_title="Nothing to show",
+                    empty_detail="", table_id="") %}
+{% set has_rows = page is none or page.items %}
+<div class="dt-wrap">
+  <table class="dt"{% if table_id %} id="{{ table_id }}"{% endif %}>
+    {% if caption %}<caption class="sr-only">{{ caption }}</caption>{% endif %}
+    <thead>
+      <tr>
+        {% for col in columns %}
+        <th scope="col" class="{{ col.align or '' }}"
+            {% if col.sortable and sort == col.key %}aria-sort="{{ 'ascending' if direction == 'asc' else 'descending' }}"{% endif %}>
+          {% if col.sortable %}
+            {# Sort is a link, so the ordering is in the URL and survives a reload. #}
+            <a class="dt-sort {{ 'is-active' if sort == col.key }}"
+               href="{{ url_for(request.endpoint, **dict(params, sort=col.key, direction=('desc' if (sort == col.key and direction == 'asc') else 'asc'), **request.view_args)) }}">
+              {{ col.label }}
+              <span class="dt-sort-ind" aria-hidden="true">{{ '▼' if (sort == col.key and direction == 'desc') else '▲' }}</span>
+            </a>
+          {% else %}{{ col.label }}{% endif %}
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% if has_rows %}{{ caller() }}
+      {% else %}
+      <tr><td colspan="{{ columns|length }}">{{ empty(empty_title, empty_detail) }}</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% if page and page.pages > 1 %}{{ pagination(page, params) }}{% endif %}
+{% endmacro %}
+
+
+{% macro pagination(page, params={}) %}
+<div class="dt-foot">
+  <span class="dt-count">
+    Showing {{ ((page.page - 1) * page.per_page) + 1 }}–{{ ((page.page - 1) * page.per_page) + page.items|length }}
+    of {{ page.total }}
+  </span>
+  <nav class="dt-pages" aria-label="Pagination">
+    <a class="dt-page" {% if page.has_prev %}href="{{ url_for(request.endpoint, **dict(params, page=page.prev_num, **request.view_args)) }}"{% else %}aria-disabled="true"{% endif %}>Previous</a>
+    <span class="dt-page is-current" aria-current="page">{{ page.page }} of {{ page.pages }}</span>
+    <a class="dt-page" {% if page.has_next %}href="{{ url_for(request.endpoint, **dict(params, page=page.next_num, **request.view_args)) }}"{% else %}aria-disabled="true"{% endif %}>Next</a>
+  </nav>
+</div>
+{% endmacro %}
+
+
+{# --- Decision header --------------------------------------------------------
+   What this is, what state it is in, the ONE thing to do next and why, plus the
+   3–5 figures that justify the decision. `action` is the dict from
+   app.payroll_status.recommended_action_for — the ranking is computed on the
+   server; this macro renders what it is handed and decides nothing.
+
+   figures: [{label, value}]  — keep it to five; this is justification, not a report.
+#}
+{% macro decision_header(title, subtitle="", status_html="", action=None,
+                         figures=[], action_html="") %}
+<header class="dh">
+  <div class="dh-top">
+    <div class="dh-subject">
+      <h1 class="dh-title">{{ title }}</h1>
+      {% if subtitle %}<p class="dh-sub">{{ subtitle }}{% if status_html %} · {{ status_html|safe }}{% endif %}</p>
+      {% elif status_html %}<p class="dh-sub">{{ status_html|safe }}</p>{% endif %}
+    </div>
+    {% if action_html %}<div class="ab">{{ action_html|safe }}</div>{% endif %}
+  </div>
+  {% if action and action.why %}<p class="dh-why">{{ action.why }}</p>{% endif %}
+  {% if figures %}
+  <dl class="dh-figures">
+    {% for f in figures %}
+    <div class="dh-figure"><dt>{{ f.label }}</dt><dd>{{ f.value }}</dd></div>
+    {% endfor %}
+  </dl>
+  {% endif %}
+</header>
+{% endmacro %}
+
+
+{# --- Action bar -------------------------------------------------------------
+   Rank is expressed visually: exactly one primary action (the recommended one),
+   the rest secondary, the long tail behind "More". The caller passes an already
+   ranked+permission-filtered list — no template decides who may do what.
+
+   actions: [{label, href, method, primary, danger, confirm, confirm_typed, overflow}]
+#}
+{% macro action_bar(actions) %}
+{% set visible = actions | rejectattr("overflow", "defined") | list %}
+{% set overflow = actions | selectattr("overflow", "defined") | list %}
+<div class="ab">
+  {% for a in visible %}{{ _action_control(a) }}{% endfor %}
+  {% if overflow %}
+  <details class="ab-more">
+    <summary class="btn">More</summary>
+    <div class="ab-menu">{% for a in overflow %}{{ _action_control(a) }}{% endfor %}</div>
+  </details>
+  {% endif %}
+</div>
+{% endmacro %}
+
+
+{% macro _action_control(a) %}
+{% set cls = "btn " ~ ("primary" if a.primary else ("danger" if a.danger else "")) %}
+{% if a.method and a.method|upper == "POST" %}
+<form method="post" action="{{ a.href }}"
+      {% if a.confirm %}data-confirm="{{ a.confirm }}"{% endif %}
+      {% if a.danger %}data-confirm-danger="1"{% endif %}
+      {% if a.confirm_title %}data-confirm-title="{{ a.confirm_title }}"{% endif %}
+      {% if a.confirm_ok %}data-confirm-ok="{{ a.confirm_ok }}"{% endif %}
+      {% if a.confirm_typed %}data-confirm-typed="{{ a.confirm_typed }}"{% endif %}>
+  <button class="{{ cls }}" type="submit">{{ a.label }}</button>
+</form>
+{% else %}
+<a class="{{ cls }}" href="{{ a.href }}">{{ a.label }}</a>
+{% endif %}
+{% endmacro %}
+
+
+{# --- Tabs -------------------------------------------------------------------
+   Renders the tablist only. The caller writes each panel itself:
+
+       <div class="tabpanel" id="tab-rows-panel" role="tabpanel"
+            aria-labelledby="tab-rows"> … </div>
+
+   Panels are emitted WITHOUT `hidden`. app.js hides the inactive ones on load,
+   so a browser with no JS shows every panel in document order instead of
+   showing one and burying the rest behind buttons that do nothing.
+
+   items: [{id, label, count}]  — `id` keys the panel as `tab-<id>-panel`.
+#}
+{% macro tabs(items, label="Sections") %}
+<div class="tabs" role="tablist" aria-label="{{ label }}" data-tabs>
+  {% for t in items %}
+  <button class="tab" type="button" role="tab" id="tab-{{ t.id }}"
+          aria-controls="tab-{{ t.id }}-panel"
+          aria-selected="{{ 'true' if loop.first else 'false' }}">
+    {{ t.label }}{% if t.count is not none %}<span class="tab-count">{{ t.count }}</span>{% endif %}
+  </button>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+
+{# --- Notification inbox -----------------------------------------------------
+   ONE implementation, both shells (Phase 5, Task 5.2).
+
+   notifications/platform.html and notifications/tenant.html rendered the same
+   five-column table from the same `items`, in two hand-maintained copies. They
+   had drifted where it mattered: only the operator copy carried the "View" link
+   that jumps from a distribution notification to the run it is about, so a
+   company told its payslips had failed had no way to click through to them.
+   That link is scope-aware now (each portal has its own distribution route),
+   not operator-only.
+
+   scope: "operator" adds the Company column, since the operator reads across
+   every tenant and the tenant reads only itself.
+#}
+{% macro notification_rows(items, scope="tenant", view_endpoint=none) %}
+{% set operator = scope == "operator" %}
+<div class="dt-wrap">
+  <table class="dt">
+    <caption class="sr-only">Notifications, newest first</caption>
+    <thead>
+      <tr>
+        <th scope="col"></th>
+        <th scope="col">Notification</th>
+        <th scope="col">Detail</th>
+        {% if operator %}<th scope="col">Company</th>{% endif %}
+        <th scope="col">When</th>
+        <th scope="col"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for n in items %}
+      <tr class="{{ 'is-unread' if not n.read_at }}">
+        <td>{% if not n.read_at %}<span class="ds-pill ds-pill--{{ 'warn' if n.level == 'warning' else 'ok' if n.level == 'success' else 'info' }}">New</span>{% endif %}</td>
+        <td>{{ n.title }}</td>
+        <td class="dt-note">{{ n.body or '' }}</td>
+        {% if operator %}<td class="dt-note">{{ n.event.client_company.name if n.event and n.event.client_company else '—' }}</td>{% endif %}
+        <td class="dt-note">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '—' }}</td>
+        <td class="dt-actions">
+          {% if view_endpoint and n.event and n.event.subject_type == 'PayrollRun'
+                and n.event.subject_id and n.event.event_type.startswith('distribution') %}
+          <a class="btn" href="{{ url_for(view_endpoint, run_id=n.event.subject_id) }}">View</a>
+          {% endif %}
+          {% if not n.read_at %}
+          <form method="post" action="{{ url_for('notifications.mark_read', note_id=n.id) }}">
+            <button class="btn" type="submit">Mark read</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+
+
+{# --- Contact completeness ---------------------------------------------------
+   Whether a worker can be reached with a payslip — ONE rendering, both shells
+   (Phase 6, Task 6.2).
+
+   The operator roster drew a warning triangle for this; the tenant roster, which
+   is where the person who can actually fix it works, showed nothing. Same fact,
+   same badge, both portals now. The predicate is Employee.has_contact, which is
+   also the rule the import-time warning uses.
+#}
+{% macro contact_badge(employee, show_ok=false) %}
+{%- if not employee.has_contact -%}
+<span class="ds-pill ds-pill--warn"
+      title="No email or phone on record — this worker cannot receive a payslip until one is added.">No contact</span>
+{%- elif show_ok -%}
+<span class="ds-pill ds-pill--ok" title="Reachable at {{ employee.email or employee.phone }}">Contactable</span>
+{%- endif -%}
+{% endmacro %}

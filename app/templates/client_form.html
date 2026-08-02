@@ -2,7 +2,6 @@
 {% import "macros/breadcrumbs.html" as bc %}
 {% block title %}{{ "Edit" if client else "Add" }} Client · {{ app_name }}{% endblock %}
 {% block page_title %}{{ "Edit" if client else "Onboard" }} Client Company{% endblock %}
-{% block page_intro %}Capture the company details {{ app_brand_name }} needs to keep payroll, payslips, and expenses separated by client. Creating a company does not create logins — credentials are provisioned separately in Supabase Authentication.{% endblock %}
 {% block breadcrumbs %}
 {{ bc.trail([
     ("Dashboard", url_for('main.dashboard')),

@@ -56,7 +56,10 @@ class BulkActionsTestCase(unittest.TestCase):
 
     def _run(self, status, month="August", year=2099):
         run = PayrollRun(
-            client_company_id=self.client_id, month=month, year=year, status=status
+            client_company_id=self.client_id, month=month, year=year, status=status,
+            # Non-empty: an empty run is not approvable at all (Task 2.4), and
+            # these cases are about bulk mechanics, not worker counts.
+            total_workers=12, total_net_pay=24000,
         )
         db.session.add(run)
         db.session.commit()

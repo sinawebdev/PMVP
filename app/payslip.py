@@ -2,6 +2,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from app import db
 from app.audit import record_audit
+from app.paging import paginate
 from app.models import ClientCompany, PayrollItem, PayrollRun
 from app.tenancy import platform_required
 
@@ -11,6 +12,7 @@ payslip_bp = Blueprint("payslip", __name__, url_prefix="/payslip")
 @payslip_bp.route("")
 @platform_required
 def index():
+    items_page = None
     client_id = request.args.get("client_id", type=int)
     run_id = request.args.get("run_id", type=int)
     clients = ClientCompany.query.order_by(ClientCompany.name).all()
@@ -32,7 +34,12 @@ def index():
         if selected_client and selected_run.client_company_id != selected_client.id:
             flash("Selected payroll run does not belong to that client.", "warning")
             return redirect(url_for("payslip.index", client_id=selected_client.id))
-        items = selected_run.items
+        items_page = paginate(
+            PayrollItem.query.filter_by(payroll_run_id=selected_run.id).order_by(
+                PayrollItem.full_name.asc(), PayrollItem.id.asc()
+            )
+        )
+        items = items_page.items
 
     return render_template(
         "payslip/index.html",
@@ -41,6 +48,7 @@ def index():
         selected_run=selected_run,
         runs=runs,
         items=items,
+        items_page=items_page,
     )
 
 

@@ -1,7 +1,13 @@
 {% extends "base.html" %}
+{% import "macros/ui.html" as ui %}
 {% block title %}Payslips · {{ app_name }}{% endblock %}
 {% block page_title %}Payslips{% endblock %}
-{% block page_intro %}Generate printable employee payslips from existing client payroll runs without changing payroll run data.{% endblock %}
+{% block page_actions %}
+{# Distribution left the sidebar (it is delivery telemetry, not a domain the
+   operator navigates to daily). Payslips owns it, so it stays one click away. #}
+<a class="btn btn-outline-light btn-sm" href="{{ url_for('distribution.dashboard') }}"><i class="bi bi-hdd-network"></i>Distribution Monitor</a>
+<a class="btn btn-outline-light btn-sm" href="{{ url_for('distribution.history') }}"><i class="bi bi-clock-history"></i>Delivery History</a>
+{% endblock %}
 {% block content %}
 <section class="panel mb-3">
     <div class="mini-note mb-3"><i class="bi bi-info-circle"></i> Select a client company and one of its payroll runs, then choose <strong>Load</strong> to list employees and generate printable payslips. This never changes payroll run data.</div>
@@ -58,7 +64,7 @@
             <table class="table table-sm align-middle excel-grid">
                 <thead><tr><th>Select</th><th>Staff ID</th><th>Employee</th><th>Client</th><th>Period</th><th>Basic</th><th>Allowances</th><th>Deductions</th><th>Gross</th><th>Net</th><th>PDF</th></tr></thead>
                 <tbody>
-                {% for item in items %}
+                {% for item in items_page.items %}
                     {% set run = item.payroll_run %}
                     <tr>
                         <td><input class="form-check-input" type="checkbox" name="payroll_item_ids" value="{{ item.id }}"></td>
@@ -76,6 +82,7 @@
                 {% endfor %}
                 </tbody>
             </table>
+            {% if items_page and items_page.pages > 1 %}{{ ui.pagination(items_page) }}{% endif %}
         </div>
         <div class="toolbar mt-3 mb-0 d-flex gap-2">
             <button class="btn btn-success"><i class="bi bi-file-earmark-check"></i>Generate Selected Payslips</button>

@@ -1,0 +1,120 @@
+{# The swappable body of the payroll runs list.
+
+   Rendered inline by payroll_runs.html on a full page load, and on its own by
+   payroll._runs_body_response when an in-place approve/reject comes in over
+   htmx — so the queue re-renders from the same query either way and cannot show
+   a stale row after an action. `outerHTML` on #runs-body is the same swap
+   contract employees/_roster_body.html uses.
+#}
+{% import "macros/lifecycle.html" as lc %}
+{% import "macros/ui.html" as ui %}
+{% set bulk_visible = can_bulk_approve_reject(role) or can_operate_payroll(role) %}
+<div id="runs-body">
+<form method="post" id="bulk-actions-form" action="{{ url_for('payroll.bulk_approve') }}">
+    <input type="hidden" name="status" value="{{ status_filter }}">
+    <input type="hidden" name="client_id" value="{{ selected_client.id if selected_client else '' }}">
+    {% if bulk_visible %}
+    <div class="toolbar bulk-actions-toolbar d-flex flex-wrap align-items-center gap-2 mb-2">
+        <span class="small text-muted" id="bulk-selected-count">0 selected</span>
+        {% if can_bulk_approve_reject(role) %}
+        <button type="submit" formaction="{{ url_for('payroll.bulk_approve') }}" class="btn btn-sm btn-success" data-bulk-action-btn disabled><i class="bi bi-patch-check"></i>Bulk Approve</button>
+        <button type="submit" formaction="{{ url_for('payroll.bulk_reject') }}" class="btn btn-sm btn-outline-danger" data-bulk-action-btn disabled data-confirm="Reject the selected payroll runs? Runs not eligible for rejection are skipped and reported afterwards." data-confirm-danger="1" data-confirm-title="Reject selected runs" data-confirm-ok="Reject runs"><i class="bi bi-x-octagon"></i>Bulk Reject</button>
+        <input type="text" name="notes" class="form-control form-control-sm" style="max-width: 220px;" placeholder="Rejection note (optional, applies to all)">
+        {% endif %}
+        {% if can_operate_payroll(role) %}
+        <button type="submit" formaction="{{ url_for('payroll.bulk_distribute') }}" class="btn btn-sm btn-primary" data-bulk-action-btn disabled data-confirm="Distribute payslips for the selected payroll runs? Runs not eligible for distribution are skipped and reported afterwards." data-confirm-title="Distribute selected runs" data-confirm-ok="Distribute"><i class="bi bi-send-check"></i>Bulk Distribute</button>
+        {% endif %}
+    </div>
+    <p class="mini-note mb-2"><i class="bi bi-info-circle"></i> Bulk actions only apply to selected runs currently eligible for that action (matching status); anything else is skipped and reported after.</p>
+    {% endif %}
+
+    {% set columns = ([{"label": "", "align": ""}] if bulk_visible else []) + [
+         {"label": "Payroll month"},
+         {"label": "Client company"},
+         {"label": "Workers", "align": "num"},
+         {"label": "Gross pay", "align": "num"},
+         {"label": "Deductions", "align": "num"},
+         {"label": "Net pay", "align": "num"},
+         {"label": "Status"},
+         {"label": "Why held"},
+         {"label": "Actions", "align": "num"},
+       ] %}
+    {% call ui.data_table(columns, page=pagination, params=table_params,
+                          caption="Payroll runs",
+                          empty_title="No payroll runs yet",
+                          empty_detail="Upload a payroll workbook to create the first run.",
+                          table_id="runs-table") %}
+      {% for run in payroll_runs %}
+      <tr>
+          {% if bulk_visible %}
+          <td><input type="checkbox" name="run_ids" value="{{ run.id }}" class="run-select-checkbox" aria-label="Select {{ run.month }} {{ run.year }} {{ run.client_company.name if run.client_company else '' }}"></td>
+          {% endif %}
+          <td>{{ run.month }} {{ run.year }}</td>
+          <td>{{ run.client_company.name if run.client_company else "" }}</td>
+          <td class="num">{{ run.total_workers }}</td>
+          <td class="num">{{ run.total_gross_pay|cedis }}</td>
+          <td class="num">{{ run.total_deductions|cedis }}</td>
+          <td class="num">{{ run.total_net_pay|cedis }}</td>
+          <td>
+              {{ lc.status_pill(run.status) }}
+              {{ lc.progress_stepper(run_progress(run, run.id in distributed_ids), compact=true) }}
+          </td>
+          {# The hold reason, in the row. It was only ever visible by opening the
+             run, so triaging a queue of held payrolls meant a round trip per run
+             to learn something one sentence long. #}
+          <td class="dt-note">{{ run.risk_reasons or "—" }}</td>
+          <td class="dt-actions">
+              {# In place, on the queue: approving from a list should not throw
+                 the reviewer onto the run they just cleared. `type="button"`
+                 with hx-post keeps these OUT of the bulk form above — a nested
+                 <form> is invalid HTML and browsers silently drop it. #}
+              {% if can_approve_run(role, run) %}
+              <button class="btn btn-sm btn-success" type="button"
+                      hx-post="{{ url_for('payroll.approve', run_id=run.id) }}"
+                      hx-target="#runs-body" hx-swap="outerHTML"
+                      hx-confirm="Approve the {{ run.client_company.name if run.client_company else '' }} {{ run.month }} {{ run.year }} payroll run?">Approve</button>
+              {% endif %}
+              {% if can_reject_run(role, run) %}
+              <button class="btn btn-sm btn-outline-danger" type="button"
+                      hx-post="{{ url_for('payroll.reject', run_id=run.id) }}"
+                      hx-target="#runs-body" hx-swap="outerHTML"
+                      hx-confirm="Reject the {{ run.client_company.name if run.client_company else '' }} {{ run.month }} {{ run.year }} payroll run? It goes back to the preparer.">Reject</button>
+              {% endif %}
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.detail', run_id=run.id) }}">Open</a>
+          </td>
+      </tr>
+      {% endfor %}
+    {% endcall %}
+</form>
+</div>
+
+<script>
+(function () {
+    // Re-runs after every htmx swap because the swapped markup carries it.
+    var form = document.getElementById('bulk-actions-form');
+    if (!form) return;
+    var countEl = document.getElementById('bulk-selected-count');
+    var buttons = form.querySelectorAll('[data-bulk-action-btn]');
+    var selectAll = form.querySelector('#select-all-runs');
+
+    function checkboxes() { return form.querySelectorAll('.run-select-checkbox'); }
+
+    function refresh() {
+        var checked = form.querySelectorAll('.run-select-checkbox:checked').length;
+        if (countEl) countEl.textContent = checked + ' selected';
+        buttons.forEach(function (btn) { btn.disabled = checked === 0; });
+        if (selectAll) selectAll.checked = checked > 0 && checked === checkboxes().length;
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function () {
+            checkboxes().forEach(function (cb) { cb.checked = selectAll.checked; });
+            refresh();
+        });
+    }
+    form.addEventListener('change', function (e) {
+        if (e.target.classList.contains('run-select-checkbox')) refresh();
+    });
+    refresh();
+})();
+</script>

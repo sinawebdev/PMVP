@@ -365,12 +365,17 @@ def held_run_count():
     return PayrollRun.query.filter(held_run_criterion()).count()
 
 
+def held_runs_query():
+    """Held runs, newest first, unexecuted — so the queue page can page it
+    rather than materialising every held run (Phase 7, Task 7.1)."""
+    return PayrollRun.query.filter(held_run_criterion()).order_by(
+        PayrollRun.risk_checked_at.desc(), PayrollRun.id.desc()
+    )
+
+
 def held_runs(limit=None):
     """Held runs, newest first. ``limit`` caps the list for dashboard panels."""
-    query = (
-        PayrollRun.query.filter(held_run_criterion())
-        .order_by(PayrollRun.risk_checked_at.desc(), PayrollRun.id.desc())
-    )
+    query = held_runs_query()
     return (query.limit(limit).all() if limit else query.all())
 
 

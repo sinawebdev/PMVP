@@ -139,7 +139,8 @@ def platform_kpis(
 MAX_SIGNALS = 4
 
 
-def platform_risk_signals(held_count, pending_approvals, warning_count, limit=MAX_SIGNALS):
+def platform_risk_signals(held_count, pending_approvals, warning_count,
+                          awaiting_credentials=0, limit=MAX_SIGNALS):
     """Book-wide action items, worst first: ``[{tone, title, detail, action,
     endpoint}]``, the contract ``macros/dashboard.html::signal`` renders.
 
@@ -181,6 +182,18 @@ def platform_risk_signals(held_count, pending_approvals, warning_count, limit=MA
             "detail": "Submitted and past the risk gate. Ordinary queue work, waiting on Payrolla sign-off.",
             "action": "Approve",
             "endpoint": "payroll.runs",
+        })
+
+    # Onboarded but unable to sign in. Not a payroll risk — a delivery one, and
+    # invisible until someone at the company complains, because the onboarding
+    # flow completes successfully without ever minting a credential.
+    if awaiting_credentials:
+        signals.append({
+            "tone": "info",
+            "title": f"{awaiting_credentials} compan{'y' if awaiting_credentials == 1 else 'ies'} awaiting credentials",
+            "detail": "Onboarded, with no login identity provisioned yet — nobody there can sign in.",
+            "action": "Open companies",
+            "endpoint": "main.clients",
         })
 
     if not signals:

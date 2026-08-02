@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% import "macros/breadcrumbs.html" as bc %}
+{% import "macros/delivery.html" as dm %}
 {% block title %}Payslip Delivery · {{ app_name }}{% endblock %}
 {% block page_title %}Payslip Delivery{% endblock %}
-{% block page_intro %}Send each worker their salary breakdown by SMS, WhatsApp, or email and track delivery per worker.{% endblock %}
 {% block breadcrumbs %}
 {{ bc.trail([
     ("Dashboard", url_for('main.dashboard')),
@@ -53,5 +53,6 @@
     {% endif %}
 {% endblock %}
 {% block content %}
+{{ dm.simulated_notice() }}
 {% include "distribution/_status_fragment.html" %}
 {% endblock %}

@@ -1,0 +1,189 @@
+{% import "macros/ui.html" as ui %}
+{# ---------------------------------------------------------------------------
+   Payslip delivery status — ONE implementation, both shells (Phase 5, Task 5.1).
+
+   The operator console and the tenant portal render the same three things about
+   a distribution: how much of it has landed, what the queue is doing, and where
+   each individual payslip got to. They used to render them from two separate
+   templates — distribution/_status_fragment.html and
+   client/_distribute_status_fragment.html — which is why the tenant one had no
+   `scheduled` state and no delivery-detail column, and why the two disagreed on
+   what a failed-with-retries badge says.
+
+   What genuinely differs between the portals is SCOPE, not markup:
+
+     operator  may retarget a worker's preferred channel, and sees the recipient
+               address and net pay (it is doing payroll for someone else)
+     tenant    sees its own workers only, and cannot change routing
+
+   so scope is a parameter, and everything else is shared. Data comes from
+   app/distribution/status.py::delivery_status_context, which both routes call.
+
+   Bootstrap is NOT available here — client/base.html does not load it. Styling
+   is in components.css under `.ds-`, which both shells load.
+   --------------------------------------------------------------------------- #}
+
+
+{# --- Totals ---------------------------------------------------------------- #}
+{% macro totals(rows, sent_count, failed_count, net_total=none) %}
+<dl class="ds-totals">
+  <div class="ds-total"><dt>Payslips</dt><dd>{{ rows|length }}</dd></div>
+  <div class="ds-total ds-total--ok"><dt>Sent</dt><dd>{{ sent_count }}</dd></div>
+  <div class="ds-total ds-total--bad"><dt>Failed</dt><dd>{{ failed_count }}</dd></div>
+  {% if net_total is not none %}
+  <div class="ds-total"><dt>Net total</dt><dd>{{ net_total }}</dd></div>
+  {% endif %}
+</dl>
+{% endmacro %}
+
+
+{# --- Queue status ----------------------------------------------------------
+   Every batch state the model can be in, in one chain. The tenant copy of this
+   handled four of the six; `scheduled` and `cancelled` fell through it and
+   rendered a heading with nothing under it. #}
+{% macro queue_status(batch, in_flight=false, scheduled=false, seconds_until=none) %}
+{% if batch %}
+{% set tone = {"scheduled": "info", "queued": "", "running": "info",
+               "completed": "ok", "failed": "bad", "cancelled": "muted"} %}
+{% set label = {"scheduled": "Scheduled", "queued": "Queued", "running": "Sending…",
+                "completed": "Completed", "failed": "Failed", "cancelled": "Cancelled"} %}
+<section class="ds-queue">
+  <div class="ds-queue-head">
+    <h2>Queue status</h2>
+    <span class="ds-pill ds-pill--{{ tone.get(batch.status, '') }}">{{ label.get(batch.status, batch.status) }}</span>
+  </div>
+  <dl class="ds-facts">
+    {% if batch.status == "scheduled" %}
+    <div><dt>Scheduled for</dt><dd>{{ batch.scheduled_for.strftime("%Y-%m-%d %H:%M") if batch.scheduled_for }} GMT</dd></div>
+    {% else %}
+    <div><dt>Queued</dt><dd>{{ batch.created_at.strftime("%Y-%m-%d %H:%M") if batch.created_at }}</dd></div>
+    {% endif %}
+    <div><dt>Channel</dt><dd>{{ batch.channel }}{% if batch.only_failed %} (resend-failed){% endif %}</dd></div>
+    {% if batch.status in ("completed", "failed") %}
+    <div><dt>Sent / failed</dt><dd>{{ batch.sent_count or 0 }} / {{ batch.failed_count or 0 }} (of {{ batch.total or 0 }})</dd></div>
+    <div><dt>Finished</dt><dd>{{ batch.finished_at.strftime("%Y-%m-%d %H:%M") if batch.finished_at }}</dd></div>
+    {% else %}
+    <div><dt>Total queued</dt><dd>{{ batch.total or 0 }} payslip(s)</dd></div>
+    {% endif %}
+  </dl>
+  {% if batch.status == "failed" and batch.error %}
+  <p class="ds-note ds-note--bad">{{ batch.error }}</p>
+  {% elif batch.status == "scheduled" %}
+  <p class="ds-note">This distribution runs automatically at its scheduled time. You can reschedule or cancel it until then.</p>
+  {% elif batch.status in ("queued", "running") %}
+  <p class="ds-note">A worker is processing this batch — this page updates automatically.</p>
+  {% elif in_flight %}
+  <p class="ds-note">Some deliveries failed and are scheduled for automatic retry — this page updates automatically as they are re-attempted.</p>
+  {% elif batch.status == "cancelled" %}
+  <p class="ds-note">This batch was cancelled before it sent. Nothing further will go out from it.</p>
+  {% elif batch.status == "completed" %}
+  <p class="ds-note">Refresh the page to send again.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endmacro %}
+
+
+{# --- Per-delivery status badge ---------------------------------------------
+   The retry arithmetic (final / n retries left / next attempt at) existed in
+   both fragments and said different things in each. One copy now. #}
+{% macro delivery_badge(delivery, in_flight=false) %}
+{%- if delivery and delivery.status == "sent" -%}
+  <span class="ds-pill ds-pill--ok">sent</span>
+  {%- if delivery.provider_status in ("delivered", "read") %}
+  <span class="ds-pill ds-pill--ok" title="Confirmed by provider{% if delivery.delivered_at %} at {{ delivery.delivered_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}">{{ delivery.provider_status }}</span>
+  {%- endif -%}
+{%- elif delivery and delivery.status == "cancelled" -%}
+  <span class="ds-pill ds-pill--muted">cancelled</span>
+{%- elif delivery and delivery.status == "failed" -%}
+  {%- set rs = delivery_retry_state(delivery) -%}
+  {%- if rs.final -%}
+    <span class="ds-pill ds-pill--bad" title="{{ delivery.error }}">failed · final</span>
+  {%- elif rs.will_retry -%}
+    <span class="ds-pill ds-pill--warn" title="{{ delivery.error }}">failed · {{ rs.remaining }} retr{{ 'y' if rs.remaining == 1 else 'ies' }} left{% if delivery.next_retry_at %} · next {{ delivery.next_retry_at.strftime('%H:%M') }}{% endif %}</span>
+  {%- else -%}
+    <span class="ds-pill ds-pill--bad" title="{{ delivery.error }}">failed</span>
+  {%- endif -%}
+{%- elif delivery -%}
+  <span class="ds-pill ds-pill--warn">{{ delivery.status }}</span>
+{%- elif in_flight -%}
+  <span class="ds-pill ds-pill--info">queued</span>
+{%- else -%}
+  <span class="ds-pill ds-pill--muted">not sent</span>
+{%- endif -%}
+{% endmacro %}
+
+
+{# --- Per-worker delivery table ----------------------------------------------
+   scope: "operator" adds the preferred-channel control, the recipient address
+   and net pay; "tenant" gets neither the control nor the address. #}
+{# `live` matters as much as `scope`: while the region is polling it swaps
+   itself every three seconds, so a <select> inside it is a control that
+   vanishes under the cursor mid-interaction. Routing is frozen during a send
+   anyway — you cannot retarget a payslip that is already going out — so while
+   live the operator sees the resolved channel as text, and gets the control
+   back the moment the batch settles. (Phase 7, Task 7.2: a polling region
+   contains no focusable controls.) #}
+{% macro delivery_table(page, in_flight=false, scope="tenant", channels=[], live=false) %}
+{% set operator = scope == "operator" %}
+{# Columns are a scope question; the CONTROL is a polling question. Keeping
+   them separate matters: gating the columns on `live` too would make the table
+   change width the moment a send starts. #}
+{% set can_retarget = operator and not live %}
+<section class="ds-table-wrap">
+  <table class="ds-table">
+    <caption class="sr-only">Per-worker payslip delivery status</caption>
+    <thead>
+      <tr>
+        <th scope="col">Staff ID</th>
+        <th scope="col">Worker</th>
+        <th scope="col">{{ "Preferred" if can_retarget else "Suggested" }}</th>
+        <th scope="col">Channel</th>
+        {% if operator %}<th scope="col">Recipient</th>{% endif %}
+        <th scope="col">Status</th>
+        <th scope="col" class="num">Attempts</th>
+        <th scope="col">When</th>
+        {% if operator %}<th scope="col" class="num">Net</th>{% else %}<th scope="col">Detail</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in page.items %}
+      {% set item = row.item %}
+      {% set d = row.delivery %}
+      <tr>
+        <td>{{ item.staff_id }}</td>
+        <td>{{ item.full_name }}</td>
+        <td>
+          {% if can_retarget %}
+          <form method="post" action="{{ url_for('distribution.set_preferred_channel', item_id=item.id) }}">
+            <select class="ds-select" name="preferred_channel" onchange="this.form.submit()"
+                    aria-label="Preferred channel for {{ item.full_name }}"
+                    {% if not item.employee_id %}disabled title="No linked employee record"{% endif %}>
+              {% set pref = item.employee.preferred_channel if item.employee else None %}
+              <option value="" {% if not pref %}selected{% endif %}>Auto ({{ row.suggested }})</option>
+              {% for ch in channels %}
+              <option value="{{ ch }}" {% if pref == ch %}selected{% endif %}>{{ ch }}</option>
+              {% endfor %}
+            </select>
+          </form>
+          {% else %}
+          <span class="ds-muted">{{ (item.employee.preferred_channel if item.employee and item.employee.preferred_channel else row.suggested)|capitalize }}</span>
+          {% endif %}
+        </td>
+        <td>{% if d %}<span class="ds-pill ds-pill--muted">{{ d.channel }}</span>{% else %}<span class="ds-muted">—</span>{% endif %}</td>
+        {% if operator %}<td class="ds-muted">{{ d.recipient if d else "—" }}</td>{% endif %}
+        <td>{{ delivery_badge(d, in_flight) }}</td>
+        <td class="num">{{ d.attempts if d else 0 }}</td>
+        <td class="ds-muted num">{{ d.sent_at.strftime('%Y-%m-%d %H:%M') if d and d.sent_at else "—" }}</td>
+        {% if operator %}
+        <td class="num">{{ item.net_pay|cedis }}</td>
+        {% else %}
+        <td class="ds-muted">{{ d.error if d and d.error else "" }}</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
+{% endmacro %}

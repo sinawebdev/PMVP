@@ -20,9 +20,10 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from app import db
 from app.audit import record_audit
 from app.events import record_event, tenant_users
+from app.paging import paginate
 from app.models import PayrollRun
 from app.payroll_status import AUTO_ACCEPTED, HELD, PENDING_APPROVAL, RISK_GATED_STATUSES
-from app.risk import apply_risk_gate, held_runs, release_risk_hold
+from app.risk import held_runs_query, apply_risk_gate, held_runs, release_risk_hold
 from app.tenancy import platform_required
 
 oversight_bp = Blueprint("oversight", __name__, url_prefix="/oversight")
@@ -35,7 +36,10 @@ def risk_queue():
 
     Shares app.risk.held_runs with the operator dashboard's counters and Held
     panel, so the queue and the dashboard can never report different totals."""
-    return render_template("oversight/risk_queue.html", held_runs=held_runs())
+    page = paginate(held_runs_query())
+    return render_template(
+        "oversight/risk_queue.html", held_runs=page.items, page=page, total=page.total
+    )
 
 
 @oversight_bp.route("/runs/<int:run_id>/risk-check", methods=["POST"])

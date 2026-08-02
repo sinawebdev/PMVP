@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import current_app
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.audit import record_audit
@@ -44,25 +45,57 @@ from app.models import (
 from .service import as_aware, distribute_run, retry_delivery
 
 
+# The worker's identity in the heartbeat table. Deliberately NOT the hostname:
+# on a container platform (Render, here) the hostname is the pod name and changes
+# on every deploy, so keying the row on it defeated the upsert this table exists
+# for — the table gained one permanently-dead row per release and the monitoring
+# panel filled up with retired pod names. The name identifies the worker's ROLE in
+# the deployment, which is the question the dashboard actually asks; `host` and
+# `pid` still record which process last checked in, so forensics survive.
+DEFAULT_WORKER_NAME = "distribution-worker"
+INLINE_WORKER_NAME = "web-inline"
+
+
 def default_worker_name():
-    """A stable name for the worker process, so its heartbeat row is upserted
-    (not duplicated) across restarts. Overridable per process via env."""
-    return os.getenv("DISTRIBUTION_WORKER_NAME") or f"{socket.gethostname()}"
+    """The standalone worker's stable heartbeat identity. Override per process
+    via DISTRIBUTION_WORKER_NAME when running several that must be told apart."""
+    return os.getenv("DISTRIBUTION_WORKER_NAME") or DEFAULT_WORKER_NAME
 
 
 def record_heartbeat(worker_name, status=WORKER_STATUS_RUNNING):
     """Upsert this worker's liveness row. Commits on its own (called at the top of
     a poll, before any batch work is staged)."""
     now = datetime.now(timezone.utc)
+
+    def _apply(hb):
+        hb.status = status
+        hb.host = socket.gethostname()
+        hb.pid = os.getpid()
+        hb.last_poll_at = now
+
     hb = DistributionWorkerHeartbeat.query.filter_by(worker_name=worker_name).first()
-    if hb is None:
-        hb = DistributionWorkerHeartbeat(worker_name=worker_name, started_at=now)
-        db.session.add(hb)
-    hb.status = status
-    hb.host = socket.gethostname()
-    hb.pid = os.getpid()
-    hb.last_poll_at = now
-    db.session.commit()
+    if hb is not None:
+        _apply(hb)
+        db.session.commit()
+        return
+
+    hb = DistributionWorkerHeartbeat(worker_name=worker_name, started_at=now)
+    _apply(hb)
+    db.session.add(hb)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Another process with the same role name inserted the row between our
+        # SELECT and INSERT — expected now that identity is per-role rather than
+        # per-pod, and two dynos can first-poll together after a deploy. Take
+        # theirs and update it; a lost heartbeat race must never kill the worker.
+        db.session.rollback()
+        hb = DistributionWorkerHeartbeat.query.filter_by(
+            worker_name=worker_name
+        ).first()
+        if hb is not None:
+            _apply(hb)
+            db.session.commit()
 
 
 def worker_last_poll():
@@ -86,6 +119,24 @@ def worker_statuses():
     except Exception:  # noqa: BLE001
         db.session.rollback()
         return []
+
+
+# A batch's `error` is rendered to operators *and* to the tenant (the client
+# portal's distribution status panel), so it holds a short business-readable
+# reason — never a raw driver exception, which carries the failing SQL, its bound
+# parameters and the internal hostname. The full detail goes to the application
+# log, which is where an engineer looks.
+BATCH_ERROR_GENERIC = (
+    "The send could not be completed because of an internal error. No payslips "
+    "were lost — the run can be re-sent. Technical detail has been written to the "
+    "application log."
+)
+
+
+def safe_batch_error(exc):
+    """Log `exc` in full, return the business-readable reason to store on the batch."""
+    current_app.logger.exception("Distribution batch failed: %s", exc)
+    return BATCH_ERROR_GENERIC
 
 
 def _in_flight_batch(run_id):
@@ -343,9 +394,17 @@ def reclaim_stale_batches():
             from .notify import notify_batch_failed
 
             batch.status = BATCH_FAILED
+            # Business-readable, and deliberately free of the worker's hostname —
+            # this string is rendered to the tenant. The worker is named in the log.
+            current_app.logger.error(
+                "Distribution batch %s abandoned after %s reclaims; last claimed by %s.",
+                batch.id,
+                max_reclaims,
+                worker,
+            )
             batch.error = (
-                f"Abandoned by worker '{worker}' and exceeded "
-                f"{max_reclaims} reclaim attempts."
+                f"Abandoned after {max_reclaims} recovery attempts — the process "
+                "handling this send stopped repeatedly. Re-send the run to try again."
             )[:512]
             batch.finished_at = datetime.now(timezone.utc)
             record_audit(
@@ -408,7 +467,7 @@ def process_batch(batch):
     except Exception as exc:  # noqa: BLE001 - one bad batch must not kill the worker loop
         db.session.rollback()
         batch.status = BATCH_FAILED
-        batch.error = str(exc)[:500]
+        batch.error = safe_batch_error(exc)[:500]
         batch.finished_at = datetime.now(timezone.utc)
         notify_batch_failed(batch, run, batch.error)
         db.session.commit()

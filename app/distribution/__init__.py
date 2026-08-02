@@ -43,6 +43,8 @@ from .queue import (
     reschedule_distribution,
 )
 from .service import resolve_channel
+from .status import delivery_status_context
+from app.paging import paginate
 from .tokens import verify_payslip_token
 
 distribution_bp = Blueprint("distribution", __name__, url_prefix="/distribution")
@@ -147,13 +149,16 @@ def batch_detail(batch_id):
 
     batch = db.get_or_404(DistributionBatch, batch_id)
     run = db.session.get(PayrollRun, batch.payroll_run_id)
-    deliveries = (
-        PayslipDelivery.query.filter_by(distribution_batch_id=batch.id)
-        .order_by(PayslipDelivery.updated_at.desc())
-        .all()
+    # A batch holds one delivery per worker, so this is the payroll's size.
+    page = paginate(
+        PayslipDelivery.query.filter_by(distribution_batch_id=batch.id).order_by(
+            PayslipDelivery.updated_at.desc()
+        )
     )
+    deliveries = page.items
     return render_template(
         "distribution/batch_detail.html",
+        page=page,
         batch=batch,
         run=run,
         deliveries=deliveries,
@@ -161,72 +166,11 @@ def batch_detail(batch_id):
     )
 
 
-def _latest_delivery(item_id):
-    return (
-        PayslipDelivery.query.filter_by(payroll_item_id=item_id)
-        .order_by(PayslipDelivery.created_at.desc())
-        .first()
-    )
-
-
-def _latest_batch(run_id):
-    return (
-        DistributionBatch.query.filter_by(payroll_run_id=run_id)
-        .order_by(DistributionBatch.created_at.desc())
-        .first()
-    )
-
-
-def _run_status_context(run):
-    """Shared by the full page and its auto-refreshing fragment, so both ever
-    agree on what "delivery status" means for a run."""
-    rows = []
-    for item in run.items:
-        rows.append(
-            {
-                "item": item,
-                "delivery": _latest_delivery(item.id),
-                "suggested": resolve_channel(item),
-            }
-        )
-    sent = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "sent")
-    failed = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "failed")
-    batch = _latest_batch(run.id)
-    # A pending automatic retry (a failed delivery still scheduled) keeps the page
-    # live even after the batch itself reached a terminal state, so the operator
-    # watches recovery happen.
-    pending_retry = any(
-        r["delivery"] and r["delivery"].status == "failed" and r["delivery"].next_retry_at
-        for r in rows
-    )
-    batch_active = batch is not None and batch.status in ("queued", "running")
-    scheduled = batch is not None and batch.status == "scheduled"
-    seconds_until = None
-    if scheduled and batch.scheduled_for is not None:
-        target = batch.scheduled_for
-        if target.tzinfo is None:
-            target = target.replace(tzinfo=timezone.utc)
-        seconds_until = int((target - datetime.now(timezone.utc)).total_seconds())
-    return {
-        "run": run,
-        "rows": rows,
-        "channels": DELIVERY_CHANNELS,
-        "sendable": run.status in SENDABLE_STATUSES,
-        "sent_count": sent,
-        "failed_count": failed,
-        "batch": batch,
-        "in_flight": batch_active or pending_retry or scheduled,
-        # Drives live polling — a far-future scheduled batch changes nothing
-        # second-to-second, so it does not poll (only active/retrying does).
-        "live": batch_active or pending_retry,
-        "scheduled": scheduled,
-        "seconds_until_scheduled": seconds_until,
-        # Cancellable == there is not-yet-sent work to stop and no send is
-        # actively running (a running batch is never cancelled mid-flight).
-        "cancellable": scheduled
-        or (batch is not None and batch.status == "queued")
-        or pending_retry,
-    }
+# The delivery-state question is answered in ONE place for both portals now
+# (Phase 5, Task 5.1). `_latest_delivery`, `_latest_batch` and the twenty-line
+# context builder that used to sit here had byte-identical twins in
+# app/client/__init__.py, and the two had already drifted — see status.py.
+_run_status_context = delivery_status_context
 
 
 @distribution_bp.route("/run/<int:run_id>")
