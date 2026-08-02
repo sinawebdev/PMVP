@@ -221,10 +221,18 @@ tr.is-unread { font-weight: 600; }
     font-weight: 700;
     padding: 8px 15px;
     text-decoration: none;
-    transition: background var(--ease), border-color var(--ease), color var(--ease);
+    transition: background var(--ease), border-color var(--ease), color var(--ease),
+                transform 160ms var(--ease-out);
 }
 
 .btn:hover { border-color: var(--brand); color: var(--brand); }
+
+/* Press feedback. Asymmetric on purpose: the press snaps (60ms), the release
+   settles (160ms). */
+.btn:active {
+    transform: scale(0.97);
+    transition-duration: 60ms;
+}
 
 .btn.primary {
     background: var(--brand-deep);

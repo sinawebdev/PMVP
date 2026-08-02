@@ -69,7 +69,8 @@
     background:linear-gradient(135deg,var(--gold-bright),var(--gold));color:#06302b;text-decoration:none;
     box-shadow:0 6px 18px rgba(23,195,178,.3);transition:transform .3s,box-shadow .3s}
   .lp-root .login-link:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(23,195,178,.45);color:#06302b}
-  .lp-root .progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:40;
+  .lp-root .progress{position:fixed;top:0;left:0;height:3px;width:100%;z-index:40;
+    transform:scaleX(0);transform-origin:0 50%;will-change:transform;
     background:linear-gradient(90deg,var(--gold),var(--teal-bright));box-shadow:0 0 12px var(--teal-glow)}
 
   /* ---------- dot nav ---------- */
@@ -672,14 +673,27 @@
   });
   const dots=[...dotsWrap.children];
 
-  // scroll progress
-  function onScroll(){
+  // scroll progress — transform-driven (composited); layout read once, write
+  // coalesced to one rAF per frame.
+  let progMax=0, progQueued=false;
+  function measureProg(){
     const h=document.documentElement;
-    const max=h.scrollHeight-h.clientHeight;
-    prog.style.width=(max>0?(h.scrollTop/max*100):0)+'%';
+    progMax=h.scrollHeight-h.clientHeight;
+  }
+  function paintProg(){
+    progQueued=false;
+    const p=progMax>0?Math.min(document.documentElement.scrollTop/progMax,1):0;
+    prog.style.transform='scaleX('+p+')';
+  }
+  function onScroll(){
+    if(progQueued)return;
+    progQueued=true;
+    requestAnimationFrame(paintProg);
   }
   window.addEventListener('scroll',onScroll,{passive:true});
-  onScroll();
+  window.addEventListener('resize',function(){measureProg();onScroll();},{passive:true});
+  measureProg();
+  paintProg();
 
   // active section + reveal
   const io=new IntersectionObserver((entries)=>{
@@ -723,19 +737,10 @@
     });
   }
 
-  // keyboard nav
-  function currentIndex(){
-    const mid=window.scrollY+window.innerHeight/2;
-    let idx=0;
-    sections.forEach((s,i)=>{if(s.offsetTop<=mid)idx=i;});
-    return idx;
-  }
-  window.addEventListener('keydown',e=>{
-    if(['ArrowDown','PageDown'].includes(e.key)){e.preventDefault();
-      const n=Math.min(currentIndex()+1,sections.length-1);sections[n].scrollIntoView({behavior:'smooth'});}
-    if(['ArrowUp','PageUp'].includes(e.key)){e.preventDefault();
-      const n=Math.max(currentIndex()-1,0);sections[n].scrollIntoView({behavior:'smooth'});}
-  });
+  // Keyboard scrolling is intentionally left to the browser: native arrow/page
+  // behaviour is instant, respects the user's reduced-motion setting, and reaches
+  // content inside tall sections. Section-to-section jumps are available via the
+  // dot nav above.
 })();
 </script>
 {% endblock %}
