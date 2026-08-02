@@ -314,3 +314,116 @@
 .rp-why { color: var(--muted); font-size: 13px; margin: 6px 0 0; max-width: 78ch; }
 .rp-blocked { color: var(--warn); font-size: 12.5px; margin: 6px 0 0; max-width: 78ch; }
 .rp .dt-wrap, .rp .ds-totals { margin-top: 12px; }
+
+
+/* --- Panel -------------------------------------------------------------------
+   The canonical content card, and the ONLY definition of `.panel` in the
+   codebase (Phase 6, Task 6.1).
+
+   It used to be defined twice and mean two different things. styles.css gave
+   the operator shell a padded card; portal.css gave the tenant shell the same
+   card overridden to `overflow-x: auto; padding: 4px`, because every tenant use
+   of it wrapped a table. So the same class name produced an 18px content card
+   in one portal and a 4px scroll box in the other — and the Phase 5 shared
+   macros, written once for both, landed in whichever box the surrounding shell
+   happened to mean. (Concretely: `class="panel ip-blockers"` in the tenant
+   import preview rendered a prose list at 4px padding.)
+
+   The table-wrapping meaning has its own name and always did — `.dt-wrap`,
+   above. `.panel` is a card. */
+
+.panel {
+    background: var(--surface, rgba(255, 255, 255, 0.92));
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm, 0 10px 26px rgba(15, 23, 42, 0.05));
+    padding: 18px;
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+.panel:hover {
+    border-color: rgba(15, 118, 110, 0.24);
+    box-shadow: var(--shadow);
+    transform: translateY(-2px);
+}
+
+
+/* --- Page bar ----------------------------------------------------------------
+   A title row: the page (or section) heading, with its actions on the right.
+
+   This is the second half of untangling `.toolbar` (Phase 6, Task 6.1). The
+   name meant two different things depending on which shell you were in — in the
+   operator console a row of controls (filters, bulk actions, button groups), in
+   the tenant portal the PAGE HEADER, because the tenant shell has no
+   page_title/page_actions blocks the way base.html does. Ten of the tenant's
+   twelve uses were headers; all nine operator uses were control rows.
+
+   `.toolbar` now means the control row, in both shells. This is the header. */
+
+.page-bar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+.page-bar > .page-head, .page-bar h1, .page-bar h2 { margin: 0; }
+
+
+/* --- Stat card ---------------------------------------------------------------
+   A single figure with its label. One definition, one child contract (Phase 6,
+   Task 6.1).
+
+   It was defined in both shells with the SAME visual treatment — down to an
+   identical decorative gradient blob — but two incompatible child contracts:
+   styles.css styled `span` (label) and `strong` (value); portal.css styled
+   `.n` (value) and `.l` (label), in the opposite order. A stat card written for
+   one portal rendered as unstyled text in the other, which is precisely why the
+   Phase 5 shared macros could not use it.
+
+   The surviving contract is <span> label then <strong> value, matching
+   .dh-figure's dt/dd above — so a figure reads the same whichever canonical
+   component draws it. `.stat-icon` stays in styles.css: it is Bootstrap-icon
+   positioning the tenant shell has no use for. */
+
+.stat-card {
+    background: var(--surface, rgba(255, 255, 255, 0.92));
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm, 0 10px 26px rgba(15, 23, 42, 0.05));
+    overflow: hidden;
+    padding: 18px;
+    position: relative;
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+.stat-card:hover {
+    border-color: rgba(15, 118, 110, 0.24);
+    box-shadow: var(--shadow);
+    transform: translateY(-2px);
+}
+.stat-card::after {
+    background: linear-gradient(135deg, rgba(15, 118, 110, 0.16), rgba(23, 195, 178, 0.18));
+    border-radius: 999px;
+    content: "";
+    height: 80px;
+    position: absolute;
+    right: -30px;
+    top: -30px;
+    width: 80px;
+}
+.stat-card > span {
+    color: var(--muted);
+    display: block;
+    font-size: 13px;
+    margin-bottom: 8px;
+    position: relative;
+    z-index: 1;
+}
+.stat-card > strong {
+    display: block;
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.2;
+    position: relative;
+    z-index: 1;
+}

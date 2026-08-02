@@ -254,3 +254,22 @@
   </table>
 </div>
 {% endmacro %}
+
+
+{# --- Contact completeness ---------------------------------------------------
+   Whether a worker can be reached with a payslip — ONE rendering, both shells
+   (Phase 6, Task 6.2).
+
+   The operator roster drew a warning triangle for this; the tenant roster, which
+   is where the person who can actually fix it works, showed nothing. Same fact,
+   same badge, both portals now. The predicate is Employee.has_contact, which is
+   also the rule the import-time warning uses.
+#}
+{% macro contact_badge(employee, show_ok=false) %}
+{%- if not employee.has_contact -%}
+<span class="ds-pill ds-pill--warn"
+      title="No email or phone on record — this worker cannot receive a payslip until one is added.">No contact</span>
+{%- elif show_ok -%}
+<span class="ds-pill ds-pill--ok" title="Reachable at {{ employee.email or employee.phone }}">Contactable</span>
+{%- endif -%}
+{% endmacro %}

@@ -1,7 +1,7 @@
 {% extends "client/base.html" %}
 {% block title %}Upload payroll{% endblock %}
 {% block body %}
-  <div class="toolbar">
+  <div class="page-bar">
     <div class="page-head">
       <h1>Upload payroll</h1>
       <p class="sub">Prepare a new run for {{ company.name }}. Choose the workflow that matches your workbook.</p>
@@ -192,7 +192,7 @@
       }
       var html = '<div class="flash info"><strong>' + esc((d.mode === "seed" ? "Set-up" : "Monthly") ) +
         '</strong> preview for ' + esc(d.client_name) + " (" + esc(d.period) + ")</div>";
-      html += '<div class="panel"><table><tbody>';
+      html += '<div class="panel dt-wrap"><table><tbody>';
       rows.forEach(function (r) {
         html += "<tr><td>" + esc(r[0]) + '</td><td class="right nums">' + esc(r[1] == null ? "—" : r[1]) + "</td></tr>";
       });

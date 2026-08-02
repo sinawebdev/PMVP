@@ -100,7 +100,30 @@ class ClientCompany(db.Model):
         return {row[0] for row in query.all()}
 
 
-class Employee(db.Model):
+class _ContactCompleteness:
+    """Whether this worker can be reached with a payslip at all.
+
+    Phase 6, Task 6.2. The fact was already computed in three places that did not
+    agree on who got told: ``app/payroll.py::crossref_employee_records`` warned
+    the *operator* at import time, ``employees/_roster_body.html`` drew a warning
+    triangle on the *operator's* roster, and the tenant's own roster
+    (``client/employees.html``) showed nothing whatsoever — so a company could
+    see the import warning once and then have no way to find out which of its
+    workers would silently never receive a payslip.
+
+    One predicate now, rendered by one macro (``macros/ui.html::contact_badge``)
+    in both portals. Kept as a mixin so the definition sits beside the columns it
+    reads rather than in whichever module happened to need it first.
+    """
+
+    @property
+    def has_contact(self):
+        """Email or phone. Matches the import-time `no_contact` rule exactly —
+        `momo_number` is a payment destination, not a delivery channel."""
+        return bool(self.email or self.phone)
+
+
+class Employee(_ContactCompleteness, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     staff_id = db.Column(db.String(60), nullable=False, index=True)
     full_name = db.Column(db.String(160), nullable=False)

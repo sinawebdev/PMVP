@@ -1,7 +1,7 @@
 {% extends "client/base.html" %}
 {% block title %}{{ run.month }} {{ run.year }} payroll{% endblock %}
 {% block body %}
-  <div class="toolbar">
+  <div class="page-bar">
     <div class="page-head">
       <h1>{{ run.month }} {{ run.year }} payroll</h1>
       <p class="sub">Status: <span class="badge">{{ run.status }}</span></p>
@@ -22,15 +22,15 @@
   </div>
 
   <div class="grid">
-    <div class="card stat-card"><span class="n">{{ run.total_workers }}</span><span class="l">Workers</span></div>
-    <div class="card stat-card"><span class="n">{{ run.total_gross_pay | cedis }}</span><span class="l">Gross</span></div>
-    <div class="card stat-card"><span class="n">{{ run.total_deductions | cedis }}</span><span class="l">Deductions</span></div>
-    <div class="card stat-card"><span class="n">{{ run.total_net_pay | cedis }}</span><span class="l">Net pay</span></div>
+    <div class="card stat-card"><span>Workers</span><strong>{{ run.total_workers }}</strong></div>
+    <div class="card stat-card"><span>Gross</span><strong>{{ run.total_gross_pay | cedis }}</strong></div>
+    <div class="card stat-card"><span>Deductions</span><strong>{{ run.total_deductions | cedis }}</strong></div>
+    <div class="card stat-card"><span>Net pay</span><strong>{{ run.total_net_pay | cedis }}</strong></div>
   </div>
 
   <h2>Payslips</h2>
   {% if items %}
-  <div class="panel">
+  <div class="panel dt-wrap">
     <table>
       <thead><tr><th>Staff ID</th><th>Name</th><th class="right">Gross</th><th class="right">PAYE</th><th class="right">SSNIT</th><th class="right">Net</th><th></th></tr></thead>
       <tbody>

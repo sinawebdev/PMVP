@@ -3,7 +3,7 @@
 {% block title %}Expenses{% endblock %}
 {% set may_record = can_record_expenses(role) %}
 {% block body %}
-  <div class="toolbar">
+  <div class="page-bar">
     <div class="page-head">
       <h1>Expenses</h1>
       <p class="sub">Operational expenses recorded against {{ company.name }}. These totals feed your dashboard.</p>
@@ -19,16 +19,16 @@
      same app.analytics.expense_summary the dashboard reads. #}
   <div class="grid">
     <div class="card stat-card">
-      <span class="n">{{ summary.total | cedis }}</span>
-      <span class="l">Total expenses</span>
+      <span>Total expenses</span>
+      <strong>{{ summary.total | cedis }}</strong>
     </div>
     <div class="card stat-card">
-      <span class="n">{{ summary.monthly_total | cedis }}</span>
-      <span class="l">This month · {{ summary.monthly_label }}</span>
+      <span>This month · {{ summary.monthly_label }}</span>
+      <strong>{{ summary.monthly_total | cedis }}</strong>
     </div>
     <div class="card stat-card">
-      <span class="n">{{ summary.count }}</span>
-      <span class="l">Expenses recorded</span>
+      <span>Expenses recorded</span>
+      <strong>{{ summary.count }}</strong>
     </div>
   </div>
 
@@ -52,7 +52,7 @@
   {% endif %}
 
   {% if expenses %}
-  <div class="panel">
+  <div class="panel dt-wrap">
     <table>
       <thead>
         <tr>

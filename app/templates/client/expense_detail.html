@@ -2,7 +2,7 @@
 {% block title %}{{ expense.description }}{% endblock %}
 {% set may_record = can_record_expenses(role) %}
 {% block body %}
-  <div class="toolbar">
+  <div class="page-bar">
     <div class="page-head">
       <h1>{{ expense.description }}</h1>
       <p class="sub">{{ expense.category }} · {{ expense.expense_date }} · <span class="badge">{{ expense.status }}</span></p>
@@ -17,16 +17,16 @@
 
   <div class="grid">
     <div class="card stat-card">
-      <span class="n">{{ expense.amount | cedis }}</span>
-      <span class="l">Amount</span>
+      <span>Amount</span>
+      <strong>{{ expense.amount | cedis }}</strong>
     </div>
     <div class="card stat-card">
-      <span class="n">{{ expense.category }}</span>
-      <span class="l">Category</span>
+      <span>Category</span>
+      <strong>{{ expense.category }}</strong>
     </div>
     <div class="card stat-card">
-      <span class="n">{{ expense.expense_date }}</span>
-      <span class="l">Date incurred</span>
+      <span>Date incurred</span>
+      <strong>{{ expense.expense_date }}</strong>
     </div>
   </div>
 

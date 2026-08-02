@@ -2,7 +2,7 @@
 {% import "macros/reports.html" as rp %}
 {% block title %}{{ run.month }} {{ run.year }} reports{% endblock %}
 {% block body %}
-  <div class="toolbar">
+  <div class="page-bar">
     <div class="page-head">
       <h1>Reports &amp; exports</h1>
       <p class="sub">{{ run.month }} {{ run.year }} payroll · <span class="badge">{{ run.status }}</span></p>
@@ -20,10 +20,10 @@
   {% endif %}
 
   <div class="grid">
-    <div class="card stat-card"><span class="n">{{ run.total_workers }}</span><span class="l">Workers</span></div>
-    <div class="card stat-card"><span class="n">{{ run.total_gross_pay | cedis }}</span><span class="l">Gross</span></div>
-    <div class="card stat-card"><span class="n">{{ run.total_paye | cedis }}</span><span class="l">PAYE</span></div>
-    <div class="card stat-card"><span class="n">{{ run.total_net_pay | cedis }}</span><span class="l">Net pay</span></div>
+    <div class="card stat-card"><span>Workers</span><strong>{{ run.total_workers }}</strong></div>
+    <div class="card stat-card"><span>Gross</span><strong>{{ run.total_gross_pay | cedis }}</strong></div>
+    <div class="card stat-card"><span>PAYE</span><strong>{{ run.total_paye | cedis }}</strong></div>
+    <div class="card stat-card"><span>Net pay</span><strong>{{ run.total_net_pay | cedis }}</strong></div>
   </div>
 
   {# Grouped by purpose, each with a preview and a stated reason when it is not

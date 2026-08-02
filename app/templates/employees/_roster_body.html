@@ -1,3 +1,4 @@
+{% import "macros/ui.html" as ui %}
 {# Roster body — rendered on the full page and re-rendered on its own for HTMX
    add/deactivate/reactivate/delete (swapped into #roster-body via outerHTML).
 
@@ -31,9 +32,9 @@
                         <td>{{ emp.staff_id }}</td>
                         <td>
                             {{ emp.full_name }}
-                            {% if not emp.email and not emp.phone %}
-                                <i class="bi bi-exclamation-triangle-fill text-warning" title="No contact info — this employee cannot receive payslips"></i>
-                            {% endif %}
+                            {# One badge, one predicate, both portals — see
+                               macros/ui.html::contact_badge. #}
+                            {{ ui.contact_badge(emp) }}
                         </td>
                         <td>{{ emp.email or "—" }}</td>
                         <td>{{ emp.phone or "—" }}</td>

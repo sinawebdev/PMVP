@@ -237,66 +237,6 @@ body {
     margin-bottom: 16px;
 }
 
-.stat-card,
-.panel {
-    background: rgba(255, 255, 255, 0.92);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
-    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
-}
-
-.stat-card:hover,
-.panel:hover {
-    border-color: rgba(15, 118, 110, 0.24);
-    box-shadow: var(--shadow);
-    transform: translateY(-2px);
-}
-
-.stat-card {
-    overflow: hidden;
-    padding: 18px;
-    position: relative;
-}
-
-.stat-link {
-    color: inherit;
-    display: block;
-    text-decoration: none;
-}
-
-.stat-link:hover {
-    color: inherit;
-}
-
-.stat-card::after {
-    background: linear-gradient(135deg, rgba(15, 118, 110, 0.16), rgba(23, 195, 178, 0.18));
-    border-radius: 999px;
-    content: "";
-    height: 80px;
-    position: absolute;
-    right: -30px;
-    top: -30px;
-    width: 80px;
-}
-
-.stat-card span {
-    color: var(--muted);
-    display: block;
-    font-size: 13px;
-    margin-bottom: 8px;
-    position: relative;
-    z-index: 1;
-}
-
-.stat-card strong {
-    display: block;
-    font-size: 24px;
-    line-height: 1.2;
-    position: relative;
-    z-index: 1;
-}
-
 .stat-icon {
     align-items: center;
     background: rgba(15, 118, 110, 0.12);
@@ -312,9 +252,6 @@ body {
     z-index: 1;
 }
 
-.panel {
-    padding: 18px;
-}
 
 .panel-header,
 .toolbar {

@@ -2,7 +2,7 @@
 {% import "macros/delivery.html" as dm %}
 {% block title %}Distribute — {{ run.month }} {{ run.year }}{% endblock %}
 {% block body %}
-  <div class="toolbar">
+  <div class="page-bar">
     <div class="page-head">
       <h1>Distribute payslips</h1>
       <p class="sub">{{ run.month }} {{ run.year }} · Status: <span class="badge {{ 'ok' if sendable }}">{{ run.status }}</span></p>
