@@ -71,7 +71,7 @@
 .exec-grid {
     display: grid;
     gap: 18px;
-    grid-template-areas: "kpis" "health" "risk" "charts" "compliance" "activity" "actions";
+    grid-template-areas: "kpis" "actions" "health" "risk" "charts" "compliance" "activity";
     grid-template-columns: minmax(0, 1fr);
 }
 
@@ -667,10 +667,10 @@
     .exec-grid {
         grid-template-areas:
             "kpis       kpis"
+            "actions    actions"
             "health     risk"
             "charts     charts"
-            "compliance activity"
-            "actions    actions";
+            "compliance activity";
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 18px;
     }
@@ -681,10 +681,10 @@
     .exec-grid {
         grid-template-areas:
             "kpis   kpis   kpis   kpis   kpis   kpis   kpis   kpis   kpis  kpis  kpis  kpis"
+            "actions actions actions actions actions actions actions actions actions actions actions actions"
             "health health health health health health health health risk  risk  risk  risk"
             "charts charts charts charts charts charts charts charts charts charts charts charts"
-            "compliance compliance compliance compliance compliance activity activity activity activity activity activity activity"
-            "actions actions actions actions actions actions actions actions actions actions actions actions";
+            "compliance compliance compliance compliance compliance activity activity activity activity activity activity activity";
         grid-template-columns: repeat(12, minmax(0, 1fr));
         gap: 20px;
     }
