@@ -19,6 +19,11 @@ jobs:
           python-version: "3.13"
           cache: pip
       - run: pip install -r requirements.txt
+      # pytest is deliberately absent from requirements.txt: that file is the
+      # exact pinned set Render installs into production, and a test framework
+      # has no business on a payroll dyno. Pinned here for the same reason
+      # everything there is — a runner must never choose the version for us.
+      - run: pip install pytest==9.1.1
       # Fast and dependency-light: these read templates and stylesheets off
       # disk, so they finish in under a second and give a PR its first answer
       # long before the suite does.
@@ -35,6 +40,8 @@ jobs:
           python-version: "3.13"
           cache: pip
       - run: pip install -r requirements.txt
+      # Test-only, kept out of requirements.txt — see the lint job above.
+      - run: pip install pytest==9.1.1
       - name: pytest
         env:
           SKIP_DOTENV: "true"
