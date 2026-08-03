@@ -51,7 +51,26 @@
       </div>
     </section>
 
-    {# --- 2. Payroll Health Center --------------------------------------- #}
+    {# --- 2. Quick actions -----------------------------------------------
+       Role-filtered in app/dashboard.py against the same roles the target
+       routes are decorated with, so a preparer is never shown a button that
+       would bounce them. Actions needing a completed run disappear when the
+       company has none, rather than linking into an error. #}
+    <section class="xpanel area-actions" aria-labelledby="actions-heading">
+      <div class="panel-head">
+        <div>
+          <h2 id="actions-heading">Quick actions</h2>
+          <p class="panel-sub">Shortcuts available to your role.</p>
+        </div>
+      </div>
+      <div class="qa-grid">
+        {% for action in overview.actions %}
+        {{ ui.action_tile(action, url_for(action.endpoint, run_id=action.run_id) if action.run_id else url_for(action.endpoint)) }}
+        {% endfor %}
+      </div>
+    </section>
+
+    {# --- 3. Payroll Health Center --------------------------------------- #}
     <section class="xpanel area-health" aria-labelledby="health-heading">
       <div class="panel-head">
         <div>
@@ -115,7 +134,7 @@
       {% endif %}
     </section>
 
-    {# --- 3. Risk Intelligence -------------------------------------------
+    {# --- 4. Risk Intelligence -------------------------------------------
        The panel that makes Payrolla feel like it is watching. Every signal is
        the output of an engine that already runs on every submission — this only
        says it in business language, next to the action it implies. #}
@@ -141,7 +160,7 @@
       {% endif %}
     </section>
 
-    {# --- 4. Financial analytics -----------------------------------------
+    {# --- 5. Financial analytics -----------------------------------------
        Three charts, three business questions. Anything that did not answer one
        was cut: the old "expenses vs payroll" donut compared two unrelated
        ledgers and told nobody anything they could act on. #}
@@ -212,7 +231,7 @@
       {% endif %}
     </div>
 
-    {# --- 5. Compliance --------------------------------------------------
+    {# --- 6. Compliance --------------------------------------------------
        Every row is a real coverage count over data the app already stores. The
        score is the weighted mean of those five ratios, so it can be reconciled
        line by line from this panel — an executive can defend it. #}
@@ -247,7 +266,7 @@
       </ul>
     </section>
 
-    {# --- 6. Recent activity ---------------------------------------------
+    {# --- 7. Recent activity ---------------------------------------------
        Fed by the same DomainEvent + AuditTrail records the Audit page reads, so
        this feed and a formal audit export can never tell different stories. #}
     <section class="xpanel area-activity" aria-labelledby="activity-heading">
@@ -265,25 +284,6 @@
       {% else %}
       {{ ui.empty("No activity yet", "Uploads, approvals, payslip runs and employee changes are recorded here automatically.") }}
       {% endif %}
-    </section>
-
-    {# --- 7. Quick actions -----------------------------------------------
-       Role-filtered in app/dashboard.py against the same roles the target
-       routes are decorated with, so a preparer is never shown a button that
-       would bounce them. Actions needing a completed run disappear when the
-       company has none, rather than linking into an error. #}
-    <section class="xpanel area-actions" aria-labelledby="actions-heading">
-      <div class="panel-head">
-        <div>
-          <h2 id="actions-heading">Quick actions</h2>
-          <p class="panel-sub">Shortcuts available to your role.</p>
-        </div>
-      </div>
-      <div class="qa-grid">
-        {% for action in overview.actions %}
-        {{ ui.action_tile(action, url_for(action.endpoint, run_id=action.run_id) if action.run_id else url_for(action.endpoint)) }}
-        {% endfor %}
-      </div>
     </section>
 
   </div>
