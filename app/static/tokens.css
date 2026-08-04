@@ -17,6 +17,17 @@
     --muted: #556070;
     --line: #dce8e4;          /* teal-tinted hairline — NOT neutral grey */
     --line-strong: #c3d9d3;
+    /* The boundary of an INTERACTIVE element, as distinct from the two above.
+       WCAG 1.4.11 requires 3:1 for "visual information required to identify
+       user interface components" — a button whose only affordance is its
+       outline is exactly that, and --line-strong is 1.48:1 on white, so an
+       outlined control drawn with it is a control a low-vision user cannot see
+       is a control. --line/--line-strong remain correct for card and table
+       hairlines, which 1.4.11 does not govern (see the exemption note at the
+       foot of this file) and which would draw the product as a wireframe at
+       3:1. Measured: 3.17:1 on --shell, 3.43:1 on --surface, 3.29:1 on
+       --surface-alt. */
+    --line-control: #7a8f8a;
     --surface: #ffffff;
     --surface-alt: #f7fbfa;
     --shell: #f2f7f5;
@@ -111,14 +122,20 @@
    against WCAG 2.1 (4.5:1 for text, 3:1 for non-text). Two do not reach the
    threshold and are accepted deliberately rather than silently:
 
-   1. `.xpanel` / `.kpi` hairline borders — `--line` on `--surface` is 1.26:1.
-      SC 1.4.11 governs the boundary of a user-interface COMPONENT where that
-      boundary is what identifies it. A content panel is not a control, and it
-      is identified by its surface and elevation, not its hairline; the
-      interactive things inside it (links, tiles, buttons, focus rings) are all
-      measured separately and all pass. Taking every card edge to 3:1 would
-      draw the whole product as a wireframe — a real regression in clarity to
-      satisfy a clause that does not apply.
+   1. `.xpanel` / `.kpi` / `.dist-job` hairline borders — `--line` on
+      `--surface` is 1.26:1. SC 1.4.11 governs the boundary of a user-interface
+      COMPONENT where that boundary is what identifies it. A content panel is
+      not a control, and it is identified by its surface and elevation, not its
+      hairline; the interactive things inside it (links, tiles, buttons, focus
+      rings) are all measured separately and all pass. Taking every card edge to
+      3:1 would draw the whole product as a wireframe — a real regression in
+      clarity to satisfy a clause that does not apply.
+
+      The distribution monitor's in-flight cards are covered by this entry and
+      by nothing weaker: each also carries a coloured left edge that IS
+      measured (`--brand` at 6.14:1 for running, `--muted` at 6.38:1 for
+      scheduled) and a status pill in words, so the state is never the
+      hairline's job.
 
    2. `.donut-slice--accent` — `--brand-bright` on `--surface` is 2.21:1.
       --brand-bright is a fixed brand colour and cannot be darkened. The slice

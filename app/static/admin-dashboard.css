@@ -95,7 +95,9 @@
     background-position: right 15px center, right 10px center;
     background-repeat: no-repeat;
     background-size: 5px 5px, 5px 5px;
-    border: 1px solid var(--line-strong);
+    /* --line-control: a select's outline is what identifies it as a field, so
+       WCAG 1.4.11's 3:1 applies (--line-strong is 1.37:1 on the shell). */
+    border: 1px solid var(--line-control);
     border-radius: var(--radius-sm);
     color: var(--ink);
     font: inherit;

@@ -219,7 +219,13 @@ tr.is-unread { font-weight: 600; }
 
 .btn {
     background: var(--surface);
-    border: 1px solid var(--line-strong);
+    /* --line-control, not --line-strong. A secondary button's outline is the
+       only thing distinguishing it from a line of bold text, which is exactly
+       the case WCAG 1.4.11 legislates for at 3:1 — --line-strong measures
+       1.48:1 on --surface. Same change made to the operator shell's selects and
+       to the shared .state .btn, so both portals identify a control the same
+       way. See --line-control in tokens.css. */
+    border: 1px solid var(--line-control);
     border-radius: 10px;
     color: var(--ink);
     cursor: pointer;
@@ -301,7 +307,9 @@ label {
 
 input, select, textarea {
     background: var(--surface);
-    border: 1px solid var(--line-strong);
+    /* --line-control: a form field with a 1.48:1 outline is a field a low-vision
+       user cannot find. WCAG 1.4.11. */
+    border: 1px solid var(--line-control);
     border-radius: var(--radius-sm);
     font-family: inherit;
     font-size: 14px;
@@ -454,7 +462,9 @@ button:focus-visible {
    swaps between two upload panes, so a client picks their workflow explicitly. */
 .upload-choice {
     background: var(--surface);
-    border: 1px solid var(--line-strong);
+    /* --line-control — a segmented control, same case as the two new ones on
+       the distribution monitor and the risk queue. WCAG 1.4.11. */
+    border: 1px solid var(--line-control);
     border-radius: var(--radius-pill);
     display: inline-flex;
     gap: 4px;
