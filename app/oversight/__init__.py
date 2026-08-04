@@ -23,7 +23,19 @@ from app.events import record_event, tenant_users
 from app.paging import paginate
 from app.models import PayrollRun
 from app.payroll_status import AUTO_ACCEPTED, HELD, PENDING_APPROVAL, RISK_GATED_STATUSES
-from app.risk import held_runs_query, apply_risk_gate, held_runs, release_risk_hold
+from app.risk import (
+    DEFAULT_QUEUE_ORDER,
+    FIRST_N_RUNS_HELD,
+    HEADCOUNT_SWING_PCT,
+    NET_PAY_VARIANCE_PCT,
+    QUEUE_ORDERS,
+    apply_risk_gate,
+    held_runs,
+    held_runs_query,
+    queue_rows,
+    queue_summary,
+    release_risk_hold,
+)
 from app.tenancy import platform_required
 
 oversight_bp = Blueprint("oversight", __name__, url_prefix="/oversight")
@@ -32,13 +44,34 @@ oversight_bp = Blueprint("oversight", __name__, url_prefix="/oversight")
 @oversight_bp.route("/risk")
 @platform_required
 def risk_queue():
-    """Every held run, newest first — the platform review queue.
+    """Every held run — the platform review queue.
 
-    Shares app.risk.held_runs with the operator dashboard's counters and Held
-    panel, so the queue and the dashboard can never report different totals."""
-    page = paginate(held_runs_query())
+    Shares app.risk's held-run criterion with the operator dashboard's counters
+    and Held panel, so the queue and the dashboard can never report different
+    totals.
+
+    Ordered longest-held first by default (see risk.QUEUE_ORDERS): this is work
+    waiting on a human, and the run at the top should be the client who has been
+    unable to pay their staff for longest. The order is a query parameter, so a
+    reviewer who wants to clear the largest payrolls first can, and the URL
+    reproduces whichever view they chose."""
+    order = request.args.get("order", DEFAULT_QUEUE_ORDER)
+    if order not in QUEUE_ORDERS:
+        order = DEFAULT_QUEUE_ORDER
+    page = paginate(held_runs_query(order=order))
     return render_template(
-        "oversight/risk_queue.html", held_runs=page.items, page=page, total=page.total
+        "oversight/risk_queue.html",
+        rows=queue_rows(page.items),
+        page=page,
+        total=page.total,
+        summary=queue_summary(),
+        order=order,
+        orders=QUEUE_ORDERS,
+        thresholds={
+            "first_runs": FIRST_N_RUNS_HELD,
+            "net_pay_pct": int(NET_PAY_VARIANCE_PCT * 100),
+            "headcount_pct": int(HEADCOUNT_SWING_PCT * 100),
+        },
     )
 
 

@@ -105,6 +105,19 @@ body {
     min-width: 0;
 }
 
+/* --- Ultra-wide ceiling ---------------------------------------------------
+   Content stops growing at 1680px and centres beyond it. Unbounded, a 2560px
+   monitor stretched every panel to the glass, and two things broke at once:
+   captions and detail lines ran to 200+ characters, well past the ~75 a reader
+   can track back from; and the dashboard's line chart — an SVG with a fixed
+   viewBox and height:auto, so its height follows its width — grew to roughly
+   500px tall, turning six data points into a full screen of chart and pushing
+   the company table below the fold on the largest displays it should serve
+   best. A ceiling fixes both without touching a single panel's own rules. */
+@media (min-width: 1681px) {
+    .main-content { margin-inline: auto; max-width: 1680px; width: 100%; }
+}
+
 .topbar {
     align-items: center;
     background:

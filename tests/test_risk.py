@@ -30,6 +30,10 @@ from app.risk import (  # noqa: E402
     NET_PAY_VARIANCE_PCT,
     evaluate_run,
     held_run_count,
+    held_runs_query,
+    queue_rows,
+    queue_summary,
+    reason_items,
     risk_badge,
     risk_summary,
 )
@@ -128,6 +132,117 @@ class RiskEngineTestCase(unittest.TestCase):
     def test_thresholds_are_the_settled_values(self):
         self.assertEqual(NET_PAY_VARIANCE_PCT, 0.15)
         self.assertEqual(HEADCOUNT_SWING_PCT, 0.20)
+
+
+class RiskQueuePresentationTestCase(unittest.TestCase):
+    """What the review queue derives on top of the verdict, so a reviewer can
+    rank holds without opening them (DDEP Phase 1/2 — the queue used to state
+    neither the stake nor the movement that caused each hold)."""
+
+    def setUp(self):
+        self.app = create_app()
+        self.app.config["TESTING"] = True
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+        self.co = ClientCompany(name="QueueCo Ltd", status="Active")
+        db.session.add(self.co)
+        db.session.commit()
+        self._seq = 0
+
+    def tearDown(self):
+        self.ctx.pop()
+
+    def _run(self, status=DRAFT, net=0, workers=0, reasons=None, checked=None):
+        self._seq += 1
+        run = PayrollRun(
+            month="January",
+            year=2026,
+            status=status,
+            client_company_id=self.co.id,
+            total_net_pay=net,
+            total_workers=workers,
+            risk_reasons=reasons,
+            risk_checked_at=checked,
+            created_at=_BASE + timedelta(hours=self._seq),
+        )
+        db.session.add(run)
+        db.session.commit()
+        return run
+
+    def test_reasons_split_into_one_item_per_rule(self):
+        """A run tripping two rules read as one sentence with a pipe in it."""
+        run = self._run(
+            status=HELD,
+            reasons="Net pay 1,200.00 vs previous 1,000.00 (20.0% change; threshold 15%)."
+            " | 13 workers vs previous 10 (30.0% change; threshold 20%).",
+        )
+        items = reason_items(run)
+        self.assertEqual([i["code"] for i in items], ["net_pay", "headcount"])
+        self.assertEqual([i["label"] for i in items], ["Net pay", "Headcount"])
+        # The recorded sentence is never rewritten — only split.
+        self.assertIn("20.0% change", items[0]["detail"])
+
+    def test_unclassifiable_reason_keeps_its_own_words(self):
+        """A reason written by an older gate must still reach the operator."""
+        run = self._run(status=HELD, reasons="Something a future rule wrote.")
+        items = reason_items(run)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["code"], "other")
+        self.assertEqual(items[0]["detail"], "Something a future rule wrote.")
+
+    def test_summary_totals_the_whole_queue_not_the_page(self):
+        self._run(status=HELD, net=1000, workers=10, checked=_BASE)
+        self._run(status=HELD, net=2500, workers=15, checked=_BASE + timedelta(days=1))
+        self._run(status=APPROVED, net=9999, workers=99)  # not held: excluded
+        summary = queue_summary()
+        self.assertEqual(summary["count"], 2)
+        self.assertEqual(summary["net_pay"], 3500)
+        self.assertEqual(summary["workers"], 25)
+        self.assertEqual(summary["oldest_checked_at"], _BASE)
+        self.assertIsNotNone(summary["oldest_age"])
+
+    def test_rows_carry_the_movement_against_the_gate_s_own_baseline(self):
+        self._run(status=APPROVED, net=1000, workers=10)
+        held = self._run(status=HELD, net=1200, workers=12, checked=_BASE)
+        row = queue_rows([held])[0]
+        self.assertIsNotNone(row["previous"])
+        self.assertAlmostEqual(row["net_change"], 0.2)
+        self.assertAlmostEqual(row["worker_change"], 0.2)
+        self.assertEqual(row["previous_workers"], 10)
+
+    def test_a_moved_baseline_is_flagged_rather_than_silently_contradicting(self):
+        """The verdict is a photograph. If a newer run closes after scoring, the
+        recorded reason describes a comparison the row can no longer reproduce —
+        which is exactly what putting the movement on the row makes visible."""
+        self._run(status=APPROVED, net=1000, workers=10)
+        held = self._run(
+            status=HELD,
+            net=1100,  # only +10% against the CURRENT baseline
+            workers=10,
+            reasons="Net pay 1,100.00 vs previous 800.00 (37.5% change; threshold 15%).",
+            checked=_BASE,
+        )
+        self.assertTrue(queue_rows([held])[0]["stale"])
+
+        # A hold whose recorded reason still matches today's comparison is not.
+        agreeing = self._run(
+            status=HELD,
+            net=1400,  # +40% against the same baseline
+            workers=10,
+            reasons="Net pay 1,400.00 vs previous 1,000.00 (40.0% change; threshold 15%).",
+            checked=_BASE,
+        )
+        self.assertFalse(queue_rows([agreeing])[0]["stale"])
+
+    def test_queue_orders_oldest_first_by_default(self):
+        """A work queue serves the client who has waited longest. The dashboard's
+        Held panel keeps newest-first — it is a feed, not a queue — so the two
+        orders must stay distinguishable."""
+        newest = self._run(status=HELD, checked=_BASE + timedelta(days=5))
+        oldest = self._run(status=HELD, checked=_BASE)
+        self.assertEqual(held_runs_query(order="oldest").first().id, oldest.id)
+        self.assertEqual(held_runs_query(order="newest").first().id, newest.id)
+        self.assertEqual(held_runs_query().first().id, newest.id)  # unchanged default
 
 
 class RiskOversightRoutesTestCase(unittest.TestCase):
@@ -238,6 +353,30 @@ class RiskOversightRoutesTestCase(unittest.TestCase):
         resp = self.client.get("/oversight/risk")
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.headers["Location"].endswith("/company"))
+
+    def test_paging_past_the_end_does_not_claim_the_queue_is_clear(self):
+        """`paginate` uses error_out=False, so a ?page= past the end is an empty
+        page rather than a 404 — and the template's `if page.items` then rendered
+        the all-clear. An operator who typed a page number was told no payroll
+        was held while one sat in the queue. Empty PAGE and empty QUEUE are
+        different states and must read differently."""
+        self._login("operator@payrolla.com")
+        self.client.post(f"/oversight/runs/{self.run_id}/risk-check")
+        self.assertEqual(db.session.get(PayrollRun, self.run_id).status, HELD)
+
+        html = self.client.get("/oversight/risk?page=9999").get_data(as_text=True)
+        self.assertNotIn("No runs are currently held", html)
+        self.assertIn("past the end of the queue", html)
+        self.assertIn("still held for review", html)
+
+    def test_a_junk_order_falls_back_rather_than_raising(self):
+        """The order arrives from a URL a user can edit."""
+        self._login("operator@payrolla.com")
+        self.client.post(f"/oversight/runs/{self.run_id}/risk-check")
+        for value in ("", "nonsense", "DROP TABLE payroll_run"):
+            resp = self.client.get(f"/oversight/risk?order={value}")
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn("Runs held for review", resp.get_data(as_text=True))
 
 
 if __name__ == "__main__":

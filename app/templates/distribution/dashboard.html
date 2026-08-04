@@ -2,17 +2,84 @@
 {% import "macros/breadcrumbs.html" as bc %}
 {% import "macros/delivery.html" as dm %}
 {% block title %}Distribution Monitor · {{ app_name }}{% endblock %}
-{% block page_title %}Distribution Monitor{% endblock %}
-{% block breadcrumbs %}
-{{ bc.trail([("Dashboard", url_for('main.dashboard')), ("Distribution Monitor", None)]) }}
+
+{# The same two stylesheets the operator dashboard loads.
+
+   `dashboard.css` is the shared executive component vocabulary (.xpanel, .kpi,
+   .signal, .pill, .panel-head) — the file whose whole reason for existing is
+   that the product's decision surfaces cannot drift into separate design
+   systems. This page WAS that drift: it drew KPI tiles as Bootstrap
+   `.stat-card`s, status as `badge text-bg-*`, and panels as `.panel`, none of
+   which appear on either dashboard. Loading the vocabulary is the fix.
+
+   `distribution-monitor.css` is this page's own layout, every rule scoped under
+   `.dist`, exactly as admin-dashboard.css is scoped under `.ops`. #}
+{% block head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='distribution-monitor.css') }}" />
 {% endblock %}
+
+{% block page_title %}Payslip delivery{% endblock %}
 {% block page_actions %}
+{# One dominant action. A monitor's only job is to send you somewhere: the
+   place worth being sent is the failures, because they are the only thing here
+   that will not resolve itself. Analytics and History are the two other
+   surfaces, and neither is repeated below. #}
+<a class="btn btn-light btn-sm" href="{{ url_for('distribution.history', status='failed') }}"><i class="bi bi-exclamation-octagon"></i>Failed deliveries{% if stats.deliveries.final_failures %} ({{ stats.deliveries.final_failures }}){% endif %}</a>
+<a class="btn btn-outline-light btn-sm" href="{{ url_for('distribution.history') }}"><i class="bi bi-clock-history"></i>Delivery history</a>
 <a class="btn btn-outline-light btn-sm" href="{{ url_for('distribution.analytics') }}"><i class="bi bi-bar-chart"></i>Analytics</a>
-<a class="btn btn-outline-light btn-sm" href="{{ url_for('distribution.history') }}"><i class="bi bi-clock-history"></i>History</a>
 {% endblock %}
+{% block header_visual %}
+{# Worker liveness, promoted to the header. It used to be a full-width panel of
+   its own at the top of the page — four labelled figures and a status badge,
+   above the payslips. It is a precondition, not the subject: if it is healthy
+   nobody needs to read it, and if it is not, one word at the top of the screen
+   says so louder than a panel does. #}
+<div class="dashboard-signal" aria-label="Distribution worker">
+    <span class="signal-label">Worker</span>
+    <strong>{% if stats.worker.status == 'stalled' %}Not processing{% elif stats.worker.status == 'active' %}Sending{% else %}Idle{% endif %}</strong>
+    <small>{% if stats.worker.heartbeat_age_seconds is not none %}checked in {{ stats.worker.heartbeat_age_seconds|duration }} ago{% else %}no check-in recorded{% endif %}</small>
+</div>
+{% endblock %}
+
+{% block breadcrumbs %}
+{{ bc.trail([("Dashboard", url_for('main.dashboard')), ("Payslip delivery", None)]) }}
+{% endblock %}
+
 {% block content %}
+{# Two `.dist` scopes, not one wrapper around everything, and deliberately so:
+   the fragment below replaces ITSELF (hx-swap="outerHTML") with markup rendered
+   by distribution.dashboard_fragment, which knows nothing about this page. If
+   the scope lived only on a wrapper here, the first poll would swap the styled
+   region out for an unstyled one. The fragment therefore carries `.dist` on its
+   own root, and this block scopes the standing header above it. #}
+<div class="dist">
 {# Outside the polling fragment on purpose — this is a standing fact about the
    deployment, not a live metric, so it must not be re-rendered every 5s. #}
 {{ dm.simulated_notice() }}
+
+{# --- Reporting window ------------------------------------------------------
+   Also outside the fragment, and for two reasons that happen to agree.
+
+   The design reason: this is a filter, not a metric. It changes what you are
+   looking at, so it sits on the shell above the page rather than inside it.
+
+   The mechanical one: the fragment below swaps itself on a timer, and a control
+   inside a region that replaces itself every five seconds is a control that
+   disappears under the cursor (tests/test_constitution_lint.py enforces this).
+   Links rather than a <select>, so the window is in the URL and a reload, a
+   bookmark or a shared link all reproduce the same page. #}
+<nav class="dist-window" aria-label="Reporting window">
+  <span class="dist-window-label" id="window-label">Showing</span>
+  <span class="dist-window-set" role="group" aria-labelledby="window-label">
+    {% for days, label in stats.window.options %}
+    <a class="dist-window-opt{{ ' is-current' if days == stats.window.days }}"
+       {% if days == stats.window.days %}aria-current="true"{% endif %}
+       href="{{ url_for('distribution.dashboard', window=days) }}">{{ label }}</a>
+    {% endfor %}
+  </span>
+</nav>
+</div>
+
 {% include "distribution/_dashboard_fragment.html" %}
 {% endblock %}

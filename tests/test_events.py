@@ -16,8 +16,9 @@ os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from app import create_app, db  # noqa: E402
 from app.distribution.queue import process_all_queued  # noqa: E402
-from app.events import record_event  # noqa: E402
+from app.events import record_event, tenant_activity  # noqa: E402
 from app.models import (  # noqa: E402
+    AuditTrail,
     ClientCompany,
     DomainEvent,
     Notification,
@@ -167,6 +168,76 @@ class NotificationInboxTestCase(unittest.TestCase):
         db.session.commit()
         made = Notification.query.filter_by(user_id=self.msc.id, title="Test Event").all()
         self.assertEqual(len(made), 1)
+
+
+class TenantActivityScopeTestCase(unittest.TestCase):
+    """The tenant's activity feed must include what PAYROLLA did to this
+    tenant's payroll, not only what the tenant's own users did.
+
+    AuditTrail carries no tenant column, so the feed used to scope purely on the
+    acting user — which meant a company whose runs had been approved six times
+    by an operator saw "No activity yet" under a panel captioned "Every payroll
+    action, on the record", while the operator's dashboard listed all six. A
+    dashboard denying an event another dashboard is showing is the exact class
+    of contradiction the panel exists to prevent.
+    """
+
+    def setUp(self):
+        self.app = create_app()
+        self.app.config["TESTING"] = True
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+
+        self.co = ClientCompany(name="FeedCo Ltd", status="Active")
+        self.other = ClientCompany(name="OtherCo Ltd", status="Active")
+        db.session.add_all([self.co, self.other])
+        db.session.commit()
+
+        self.operator = User(
+            name="Ama Operator", email="ops@feedtest.demo", role="payrolla_admin",
+        )
+        self.operator.set_password("password123")
+        db.session.add(self.operator)
+
+        self.run = PayrollRun(
+            month="March", year=2026, status=DRAFT,
+            client_company_id=self.co.id, total_net_pay=1000, total_workers=3,
+        )
+        self.other_run = PayrollRun(
+            month="March", year=2026, status=DRAFT,
+            client_company_id=self.other.id, total_net_pay=1000, total_workers=3,
+        )
+        db.session.add_all([self.run, self.other_run])
+        db.session.commit()
+
+    def tearDown(self):
+        self.ctx.pop()
+
+    def _approval(self, run):
+        db.session.add(
+            AuditTrail(
+                user_id=self.operator.id,
+                user_role="payrolla_admin",
+                action="Payroll approval",
+                related_record_type="PayrollRun",
+                related_record_id=run.id,
+                notes=f"{run.month} {run.year} approved.",
+            )
+        )
+        db.session.commit()
+
+    def test_platform_action_on_this_tenants_run_reaches_the_tenant_feed(self):
+        self._approval(self.run)
+        feed = tenant_activity(self.co.id)
+        self.assertEqual([item["title"] for item in feed], ["Payroll approval"])
+        # Named as the provider, not as the individual operator: to the tenant
+        # the actor is Payrolla, and an operator's name is staffing detail they
+        # never asked for.
+        self.assertEqual(feed[0]["actor"], "Payrolla")
+
+    def test_another_tenants_run_never_reaches_this_feed(self):
+        self._approval(self.other_run)
+        self.assertEqual(tenant_activity(self.co.id), [])
 
 
 if __name__ == "__main__":

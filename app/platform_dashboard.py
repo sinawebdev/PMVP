@@ -33,6 +33,30 @@ operator scans to find the company that needs them.
 from app.analytics import TOP_CLIENT_LIMIT
 
 
+def period_scoped_trend(portfolio_trend, period_label):
+    """Blank the trend's ``change`` unless the trend actually ENDS at the
+    period the page is reporting on.
+
+    ``portfolio_trend`` is built from :func:`app.analytics.monthly_totals`,
+    which returns only the periods that HAVE runs — so selecting a month with
+    no payroll (a future month, or a quiet one) leaves the series ending at the
+    last month that did have some. Its ``change`` then describes that older
+    pair of months, while every figure beside it describes the selected one.
+
+    On the operator dashboard that rendered as ``GH₵ 0.00`` under a green
+    ``▲ +3.3% vs previous month``: a headline of zero and a rise, side by side,
+    both true of different questions. A delta that does not describe the number
+    it sits under is worse than no delta, so it becomes None and the macros
+    draw the dash they already draw when there is no baseline.
+
+    Returns a new dict; the caller's original is not mutated, and ``points`` is
+    untouched — the sparkline's history is still real history.
+    """
+    points = portfolio_trend.get("points") if portfolio_trend else None
+    ends_here = bool(points) and points[-1].get("full_label") == period_label
+    return {**portfolio_trend, "change": portfolio_trend["change"] if ends_here else None}
+
+
 def platform_kpis(
     analytics,
     current_month_total,
@@ -108,12 +132,22 @@ def platform_kpis(
             "endpoint": "main.clients",
         },
         {
+            # `delivery_rate` is None when no run in the period has reached a
+            # status that may be distributed — see the comment on its
+            # computation in routes.py. The tile then reads as a dash with the
+            # reason in its caption rather than as 0%, because "we have not
+            # been allowed to send anything yet" and "we tried and failed to
+            # send everything" are opposite facts and must not share a face.
             "key": "delivery",
             "label": "Payslip delivery",
             "value": delivery_rate,
             "formatter": "percent",
             "delta": None,
-            "caption": f"{payslips_delivered} of {payslips_total} pushed · {period_label}",
+            "caption": (
+                f"{payslips_delivered} of {payslips_total} sent · {period_label}"
+                if delivery_rate is not None
+                else f"No approved payroll to send yet · {period_label}"
+            ),
             "compare": None,
             "trend": [],
             "endpoint": "distribution.analytics",

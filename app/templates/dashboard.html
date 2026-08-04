@@ -19,7 +19,15 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-dashboard.css') }}" />
 {% endblock %}
 
-{% block page_title %}{{ user_greeting }}{% endblock %}
+{# The page's SUBJECT, not a salutation. The <h1> is the largest text on the
+   screen and the first thing read, and "Welcome, Payrolla Administrator"
+   spent that position on something the operator already knows and cannot act
+   on. Naming the workspace instead means the first three things the eye meets
+   — the title, the three action buttons with their counts, and the period
+   chip — together answer what this is, what needs doing, and when. The
+   greeting is not lost: the shell's "Signed in as" line is restored below,
+   which is where identity belongs. #}
+{% block page_title %}Payroll operations{% endblock %}
 {% block page_actions %}
 {# One dominant action, two secondaries. Neither secondary is repeated in the
    period toolbar below — an action offered twice on one screen reads as two
@@ -90,6 +98,18 @@
      and the phone re-orders the whole workspace (risk BEFORE the supporting
      charts) by rewriting five words instead of touching any markup here. #}
   <div class="ops-grid">
+
+   {# --- The work column ---------------------------------------------------
+      The analytical column, wrapped for the same reason .ops-rail is: on
+      desktop it becomes ONE grid item holding a flex stack, so its three panels
+      each keep their natural height and any surplus lands at the bottom of the
+      column. While they were three separate grid items spanning against a
+      taller rail, the grid handed the surplus to their ROWS — first stretching
+      the panels into half-empty boxes, then (once they were pinned to the top
+      of their rows) opening 200px gaps between them. Below the desktop
+      breakpoint this wrapper is `display: contents`, so the tablet and phone
+      orderings in admin-dashboard.css keep placing the panels individually. #}
+   <div class="ops-work">
 
     {# --- Primary analytics: the dominant panel on the page --------------- #}
     <section class="xpanel xpanel--primary area-primary ops-reveal" style="--i: 5"
@@ -182,40 +202,51 @@
       <div class="ops-table-wrap">
         <table class="ops-table">
           <caption class="sr-only">Client companies ranked by {{ period_label }} payroll cost</caption>
+          {# Five columns, not six. Latest run and Pending were two columns
+             answering one question — where does this company stand, and does it
+             need me — and six columns needed ~680px, which the left-hand 70%
+             column only clears above a ~1630px viewport. Below that the table
+             scrolled sideways inside its panel and PENDING, the only actionable
+             cell in the row, was the one that fell off the edge. A count of work
+             waiting on the operator must not be the thing a scroll hides. #}
+          {# Four columns. Headcount rides under the company name rather than
+             taking a column of its own: it identifies the company ("the
+             ten-person one") far more often than it is compared down the
+             column, and as a fifth column it was 70px that pushed the table
+             past its panel at tablet width — where the cell that fell off the
+             edge was Latest run, the only one carrying an action. Every column
+             that remains is one an operator sorts or acts on. #}
           <thead>
             <tr>
               <th scope="col">Company</th>
-              <th scope="col" class="num">Workers</th>
               <th scope="col" class="num">{{ selected_month }} cost</th>
               {# The comparison basis is stated once, in the header, instead of
                  being repeated verbatim in all six rows. #}
               <th scope="col">Cost movement <span class="ops-th-note">vs last month</span></th>
               <th scope="col">Latest run</th>
-              <th scope="col" class="num">Pending</th>
             </tr>
           </thead>
           <tbody>
             {% for row in company_table %}
             <tr>
-              <th scope="row" class="ops-company" title="{{ row.company }}">{{ row.company }}</th>
-              <td class="num nums">{{ row.workers }}</td>
+              <th scope="row" class="ops-company" title="{{ row.company }}">
+                <span class="ops-company-name">{{ row.company }}</span>
+                <span class="ops-company-meta">{{ row.workers }} worker{{ '' if row.workers == 1 else 's' }}</span>
+              </th>
               <td class="num nums">{{ row.cost|cedis }}</td>
               {# The signed percentage leads and is always present; the
                  sparkline is a small shape cue beside it, drawn only where
                  there is more than one period to shape. #}
               <td class="ops-move">
-                
                 {{ ch.delta(row.change, "vs last month") }}
                 {% if row.has_trend %}{{ ch.sparkline(row.trend, label=row.company ~ " cost trend", width=54, height=20) }}{% endif %}
               </td>
-              <td>{{ ui.status_badge(row.status) }}</td>
-              <td class="num">
+              <td class="ops-standing">
+                {{ ui.status_badge(row.status) }}
                 {% if row.pending %}
                   <a class="ops-pending" href="{{ url_for('payroll.runs', status='needs_approval') }}">
-                    {{ row.pending }}<span class="sr-only"> run{{ '' if row.pending == 1 else 's' }} awaiting approval for {{ row.company }}</span>
+                    {{ row.pending }} awaiting<span class="sr-only"> approval for {{ row.company }}</span>
                   </a>
-                {% else %}
-                  <span class="ops-none" aria-label="Nothing pending">—</span>
                 {% endif %}
               </td>
             </tr>
@@ -231,6 +262,8 @@
            url_for('main.add_client')) }}
       {% endif %}
     </section>
+
+   </div>{# /.ops-work #}
 
     {# --- The right rail --------------------------------------------------
        One element holding both rail panels, so on desktop the rail is a single

@@ -17,6 +17,17 @@
     --muted: #556070;
     --line: #dce8e4;          /* teal-tinted hairline — NOT neutral grey */
     --line-strong: #c3d9d3;
+    /* The boundary of an INTERACTIVE element, as distinct from the two above.
+       WCAG 1.4.11 requires 3:1 for "visual information required to identify
+       user interface components" — a button whose only affordance is its
+       outline is exactly that, and --line-strong is 1.48:1 on white, so an
+       outlined control drawn with it is a control a low-vision user cannot see
+       is a control. --line/--line-strong remain correct for card and table
+       hairlines, which 1.4.11 does not govern (see the exemption note at the
+       foot of this file) and which would draw the product as a wireframe at
+       3:1. Measured: 3.17:1 on --shell, 3.43:1 on --surface, 3.29:1 on
+       --surface-alt. */
+    --line-control: #7a8f8a;
     --surface: #ffffff;
     --surface-alt: #f7fbfa;
     --shell: #f2f7f5;
@@ -106,6 +117,40 @@
     width: auto;
 }
 
+/* --- Contrast: the two accepted exemptions -------------------------------
+   Every foreground/background pair these two shells put on screen was measured
+   against WCAG 2.1 (4.5:1 for text, 3:1 for non-text). Two do not reach the
+   threshold and are accepted deliberately rather than silently:
+
+   1. `.xpanel` / `.kpi` / `.dist-job` hairline borders — `--line` on
+      `--surface` is 1.26:1. SC 1.4.11 governs the boundary of a user-interface
+      COMPONENT where that boundary is what identifies it. A content panel is
+      not a control, and it is identified by its surface and elevation, not its
+      hairline; the interactive things inside it (links, tiles, buttons, focus
+      rings) are all measured separately and all pass. Taking every card edge to
+      3:1 would draw the whole product as a wireframe — a real regression in
+      clarity to satisfy a clause that does not apply.
+
+      The distribution monitor's in-flight cards are covered by this entry and
+      by nothing weaker: each also carries a coloured left edge that IS
+      measured (`--brand` at 6.14:1 for running, `--muted` at 6.38:1 for
+      scheduled) and a status pill in words, so the state is never the
+      hairline's job.
+
+   2. `.donut-slice--accent` — `--brand-bright` on `--surface` is 2.21:1.
+      --brand-bright is a fixed brand colour and cannot be darkened. The slice
+      is therefore never the only carrier of its information: every donut ships
+      a legend with a swatch, the label, the value AND the percentage; the
+      <figure> carries an aria-label naming every slice and value; and slices
+      are now separated by a hairline gap so two pale neighbours cannot merge
+      into one. Under SC 1.4.11 the information is available without relying on
+      the graphic's own contrast.
+
+   Everything else measures at or above threshold. When a token or a pairing
+   changes, re-measure — the two entries above are the only ones allowed to
+   fail, and each states why.
+   ------------------------------------------------------------------------- */
+
 /* --- Shared chart primitives ---------------------------------------------
    Styling for templates/macros/charts.html. These live here, beside
    .brand-mark, for the same reason: the macros are rendered by BOTH shells
@@ -149,6 +194,37 @@
     stroke: var(--surface);
 }
 
+/* --- Truncated-axis bounds -----------------------------------------------
+   A line chart whose series is range-scaled (macros/charts.html::line_chart,
+   fed by analytics._as_points(baseline="range")) does not start at zero, and
+   says so by labelling both bounds ON the plot. `.chart-plot` is the
+   positioning context; the labels sit against the top and bottom gridlines the
+   SVG already draws, so each one names the line it sits on.
+
+   They are aria-hidden because the figure's own aria-label already states the
+   axis range in a sentence — announcing the bounds twice makes the chart's
+   summary harder to follow, not more complete. */
+.chart-plot { position: relative; }
+
+.chart-bound {
+    color: var(--muted);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+    /* A chip on the surface, not floating text: the series can pass directly
+       under either label, and unbacked text on top of the line is unreadable. */
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    padding: 2px 4px;
+}
+
+.chart-bound--max { top: 0; }
+.chart-bound--min { bottom: 0; }
+
 /* Period labels under a line/bar chart, on the same track as the data. */
 .chart-axis {
     color: var(--muted);
@@ -181,9 +257,16 @@
     overflow: hidden;
 }
 
+/* The gradient's light end is --brand-bright, which measures 2.21:1 against the
+   card — under the 3:1 a data mark owes. --brand-bright is a locked brand
+   colour and cannot be darkened, so the mark's BOUNDARY carries the contrast
+   instead: a 1px inset ring in --brand (7.5:1) means the top of every bar is
+   unambiguous even where its fill is pale. The fill is untouched, so the brand
+   reads exactly as before. */
 .chart-bar-fill {
     background: linear-gradient(180deg, var(--brand-bright), var(--brand));
     border-radius: var(--radius-sm);
+    box-shadow: inset 0 0 0 1px var(--brand);
     display: block;
     min-height: 3px;   /* a small-but-real period stays visible */
     width: 100%;
@@ -234,9 +317,14 @@
     overflow: hidden;
 }
 
+/* Same treatment as .chart-bar-fill, and needed more here: this gradient ENDS
+   on --brand-bright, so the bar's tip — the exact pixel a reader compares one
+   company against another with — was its palest point, at 2.12:1 against the
+   track behind it. */
 .hbar-fill {
     background: linear-gradient(90deg, var(--brand-deep), var(--brand-bright));
     border-radius: var(--radius-pill);
+    box-shadow: inset 0 0 0 1px var(--brand);
     display: block;
     height: 100%;
     min-width: 3px;   /* a small-but-real company stays visible */
@@ -277,7 +365,15 @@
 .donut-slice--accent { stroke: var(--brand-bright); }
 .donut-slice--deep { stroke: var(--brand); }
 .donut-slice--soft { stroke: var(--accent-deep); }
-.donut-slice--muted { stroke: var(--brand-soft); }
+/* The `muted` tone is the neutral --muted, not --brand-soft. --brand-soft is a
+   FILL tone (badge backgrounds, icon tiles) and measures 1.17:1 against the
+   card — as a data slice it was invisible, which on the operator dashboard
+   meant every Draft run silently disappeared from the status ring while still
+   being counted in the total underneath it. --muted is 6.24:1, and neutral
+   grey is the semantically right colour for the one status that means "not in
+   the pipeline yet". No brand value changed: this is a role picking a
+   different existing token. */
+.donut-slice--muted { stroke: var(--muted); }
 .donut-slice--warn { stroke: var(--warn); }
 .donut-slice--danger { stroke: var(--danger); }
 .donut-slice--green { stroke: var(--green); }
@@ -337,7 +433,9 @@
 .legend-swatch--accent { background: var(--brand-bright); }
 .legend-swatch--deep { background: var(--brand); }
 .legend-swatch--soft { background: var(--accent-deep); }
-.legend-swatch--muted { background: var(--brand-soft); }
+/* Matches .donut-slice--muted — a legend swatch that does not match its slice
+   is worse than no legend. */
+.legend-swatch--muted { background: var(--muted); }
 .legend-swatch--warn { background: var(--warn); }
 .legend-swatch--danger { background: var(--danger); }
 .legend-swatch--green { background: var(--green); }
@@ -384,6 +482,10 @@
 .delta small { color: var(--muted); font-weight: 600; }
 .delta--up { background: var(--green-soft); color: #14532d; }
 .delta--down { background: var(--warn-soft); color: var(--warn); }
+/* "No change" and "no baseline to compare against" are different statements and
+   must not look identical: flat is a real measurement and keeps the neutral
+   surface a measured value gets; none is an absence and is muted throughout. */
+.delta--flat { background: var(--surface-alt); color: var(--ink-soft); }
 .delta--none { color: var(--muted); }
 
 @media (prefers-reduced-motion: reduce) {

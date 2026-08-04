@@ -1,48 +1,281 @@
 {% extends "base.html" %}
 {% import "macros/breadcrumbs.html" as bc %}
-{% import "macros/ui.html" as ui %}
+{% import "macros/ui.html" as sui %}
+{% import "macros/dashboard.html" as ui %}
+{% import "macros/charts.html" as ch %}
 {% block title %}Risk Queue · {{ app_name }}{% endblock %}
-{% block page_title %}Risk Review Queue{% endblock %}
+
+{# The shared executive vocabulary (.xpanel, .kpi, .pill, .panel-head) plus this
+   page's own layout, scoped under `.rq`. Same pairing, and the same reason, as
+   the operator dashboard and the distribution monitor: a review queue that
+   draws its own tiles and its own badges is a third design system. #}
+{% block head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='risk-queue.css') }}" />
+{% endblock %}
+
+{% block page_title %}Risk review{% endblock %}
+{% block page_actions %}
+<a class="btn btn-outline-light btn-sm" href="{{ url_for('payroll.runs') }}"><i class="bi bi-collection"></i>All payroll runs</a>
+{% endblock %}
+{# No header_visual. It held the money and the headcount for a while, and both
+   are tiles in the band eight lines below — the operator dashboard cut the same
+   duplication for the same reason: a number shown twice on one screen is a
+   number two people can quote differently, and the tile is the copy that also
+   states its own basis. #}
+
 {% block breadcrumbs %}
 {{ bc.trail([
     ("Dashboard", url_for('main.dashboard')),
     ("Payroll Runs", url_for('payroll.runs')),
-    ("Risk Review Queue", None),
+    ("Risk review", None),
 ]) }}
 {% endblock %}
+
 {% block content %}
-{% if held_runs %}
-<div class="mini-note mb-3">
-    <i class="bi bi-shield-exclamation"></i>
-    {{ total }} run(s) held for review. A run is held when it is one of a client's first two runs, its total net pay moves more than 15% from the previous run, or its worker count moves more than 20%.
-</div>
-<section class="panel">
-    <div class="table-responsive">
-        <table class="table align-middle">
-            <thead>
-                <tr><th>Company</th><th>Period</th><th class="text-end">Workers</th><th class="text-end">Net pay</th><th>Why held</th><th>Checked</th><th></th></tr>
-            </thead>
-            <tbody>
-                {% for run in page.items %}
-                <tr>
-                    <td>{{ run.client_company.name if run.client_company else '—' }}</td>
-                    <td>{{ run.month }} {{ run.year }}</td>
-                    <td class="text-end">{{ run.total_workers }}</td>
-                    <td class="text-end">{{ run.total_net_pay | cedis }}</td>
-                    <td class="text-muted small">{{ run.risk_reasons or '—' }}</td>
-                    <td class="text-muted small">{{ run.risk_checked_at.strftime('%Y-%m-%d %H:%M') if run.risk_checked_at else '—' }}</td>
-                    <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.detail', run_id=run.id) }}">Review</a></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<div class="rq">
+
+{# Three states, not two. `page.items` being empty means one of two completely
+   different things, and the page used to render the same reassuring "nothing is
+   held" for both: an out-of-range ?page= (paginate uses error_out=False, so a
+   page past the end is an empty page rather than a 404) told an operator the
+   queue was clear while eight payrolls sat in it. `total` is the queue; the
+   page is only a window onto it. #}
+{% if page.items %}
+
+  {# --- What the queue is holding ------------------------------------------
+     Four tiles, four questions this page could not previously answer at all.
+     It listed rows and left an operator to add them up: five held runs told you
+     nothing about whether that was GH₵ 5,000 or GH₵ 500,000, how many people
+     were waiting on it, or whether the oldest had been sitting since this
+     morning or since last week. Every tile is an aggregate over the SAME
+     filtered set the table below pages through (risk.queue_summary), so the
+     band and the list cannot disagree. #}
+  <section class="rq-kpis" aria-labelledby="rq-kpi-heading">
+    <h2 id="rq-kpi-heading" class="sr-only">What is currently held</h2>
+    <div class="kpi-band">
+      {{ ui.kpi_card({
+           "label": "Payrolls held",
+           "value": summary.count,
+           "formatter": "count",
+           "delta": none,
+           "caption": "Awaiting an operator decision",
+         }, url_for('oversight.risk_queue')) }}
+
+      {{ ui.kpi_card({
+           "label": "Net pay held",
+           "value": summary.net_pay,
+           "formatter": "cedis",
+           "delta": none,
+           "caption": "Cannot be paid until these are released",
+         }, url_for('oversight.risk_queue', order='value')) }}
+
+      {{ ui.kpi_card({
+           "label": "Workers waiting",
+           "value": summary.workers,
+           "formatter": "count",
+           "delta": none,
+           "caption": "People whose payslip is blocked",
+         }, url_for('oversight.risk_queue')) }}
+
+      {# A duration, not a quantity — `text` is the formatter branch
+         charts.html::fmt already falls through to, so the phrase renders as
+         written instead of being pushed through cedis or int. #}
+      {# A duration, not a date — the tile's whole job is to save the reader the
+         subtraction, and "26 Jul 2026" hands it back to them. `text` is the
+         formatter branch charts.html::fmt falls through to, so the phrase
+         renders as written instead of going through cedis or int. #}
+      {{ ui.kpi_card({
+           "label": "Longest wait",
+           "value": summary.oldest_age,
+           "formatter": "text",
+           "delta": none,
+           "caption": "Since the oldest held run was scored",
+         }, url_for('oversight.risk_queue', order='oldest')) }}
     </div>
-    {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
-</section>
+  </section>
+
+  {# --- Order ---------------------------------------------------------------
+     Links, not a control: the order lands in the URL, so a reviewer can send a
+     colleague the same view. Default is longest-held — this is a work queue,
+     and the client who has waited longest goes first. #}
+  <nav class="rq-order" aria-label="Queue order">
+    <span class="rq-order-label" id="order-label">Order by</span>
+    <span class="rq-order-set" role="group" aria-labelledby="order-label">
+      {% for key, label in orders.items() %}
+      <a class="rq-order-opt{{ ' is-current' if key == order }}"
+         {% if key == order %}aria-current="true"{% endif %}
+         href="{{ url_for('oversight.risk_queue', order=key) }}">{{ label }}</a>
+      {% endfor %}
+    </span>
+    <details class="rq-rules">
+      <summary>What holds a run?</summary>
+      {# Progressive disclosure (DDEP Phase 6). This was a permanent banner
+         across the top of the page: three sentences of rule definition, read
+         once on a reviewer's first day and skipped on every visit after, but
+         costing the same vertical space above the work every time. The rule
+         that applies to a given run is now stated on that run's own row; the
+         full set lives here, one click away, for whoever has not met it. #}
+      <ul>
+        <li><strong>New client</strong> — a client's first {{ thresholds.first_runs }} runs are always reviewed.</li>
+        <li><strong>Net pay</strong> — total net pay moved more than {{ thresholds.net_pay_pct }}% from the client's previous closed run.</li>
+        <li><strong>Headcount</strong> — the worker count moved more than {{ thresholds.headcount_pct }}% from that same run.</li>
+      </ul>
+      <p>A run tripping any one rule is held. Releasing it moves it to Pending Approval — it does not approve it.</p>
+    </details>
+  </nav>
+
+  {# --- The queue -----------------------------------------------------------
+     Two things this table now carries that its predecessor did not, and both
+     are the difference between a list and a queue.
+
+     The MOVEMENT. Every one of these runs is held because something moved, and
+     the old table printed only the current figure — so the reviewer had to open
+     each run to find the number that caused the hold. The comparison against
+     the client's previous closed run is on the row, from the same baseline the
+     gate scored against (risk.queue_rows).
+
+     The AGE. A hold is a client who cannot pay their staff, so how long it has
+     been waiting is the ranking fact. It was rendered as a bare
+     "2026-08-04 01:14", a format that reads identically whether it happened an
+     hour ago or last quarter — and which hides a nonsense value completely. #}
+  <section class="xpanel rq-panel" aria-labelledby="queue-heading">
+    <div class="panel-head">
+      <div>
+        <h2 id="queue-heading">Runs held for review</h2>
+        <p class="panel-sub">
+          Each row shows why it was held and how far it moved against the client's previous closed run.
+        </p>
+      </div>
+      <a class="link-action" href="{{ url_for('audit.audit_trail') }}">Audit trail{{ ui.icon('arrow', 14) }}</a>
+    </div>
+
+    {# The moved-baseline caveat, stated once. It began as a four-line note
+       inside each affected row, which on a page where five of eight rows were
+       affected made the explanation the largest thing in the column an operator
+       scans — a caveat that appears on most rows is a fact about the page, not
+       about a row. The rows keep a one-word marker so you can still see WHICH
+       ones; the reasoning lives here, once. #}
+    {% set stale_count = rows | selectattr('stale') | list | length %}
+    {% if stale_count %}
+    <p class="rq-stale-note">
+      {{ ui.icon('alert-triangle', 15) }}
+      <span><strong>{{ stale_count }} of these were scored against a baseline that has since changed.</strong>
+        The client has closed a newer run, so the movement shown on the right compares
+        against a different period than the recorded reason did. Re-check before releasing —
+        they are marked <span class="rq-rule rq-rule--stale">Baseline moved</span>.</span>
+    </p>
+    {% endif %}
+
+    <div class="dt-wrap">
+      <table class="dt rq-table">
+        <caption class="sr-only">Payroll runs held by the risk gate, {{ orders[order]|lower }} first</caption>
+        <thead>
+          <tr>
+            <th scope="col">Client &amp; period</th>
+            <th scope="col">Why it was held</th>
+            <th scope="col" class="num">Net pay <span class="rq-th-note">vs previous closed run</span></th>
+            <th scope="col" class="num">Workers <span class="rq-th-note">change, if any</span></th>
+            <th scope="col">Held for</th>
+            <th scope="col"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          {% set run = row.run %}
+          <tr>
+            <th scope="row" class="rq-client">
+              <span class="rq-client-name">{{ run.client_company.name if run.client_company else '—' }}</span>
+              <span class="rq-client-meta">{{ run.month }} {{ run.year }}</span>
+            </th>
+
+            <td class="rq-why">
+              {% for reason in row.reasons %}
+              <span class="rq-rule rq-rule--{{ reason.code }}">{{ reason.label }}</span>
+              {% else %}
+              <span class="rq-rule rq-rule--other">Flagged</span>
+              {% endfor %}
+              {# The gate's own sentence, verbatim, under the chips — and
+                 explicitly dated to when it was written. The two live figures
+                 to its right are today's; saying which moment each belongs to
+                 is what keeps a moved baseline from reading as the page
+                 contradicting itself. #}
+              {% if row.stale %}<span class="rq-rule rq-rule--stale">Baseline moved</span>{% endif %}
+              <span class="rq-why-detail"><span class="rq-when">At scoring:</span> {{ run.risk_reasons or 'No reason recorded.' }}</span>
+            </td>
+
+            {# data-label feeds the phone layout's ::before. Below 760px the
+               table becomes a stack of cards and the column headers are no
+               longer on screen to say what a number is. #}
+            <td class="num rq-move" data-label="Net pay">
+              <span class="nums">{{ run.total_net_pay|cedis }}</span>
+              {% if row.previous %}
+                {{ ch.delta(row.net_change, "vs " ~ row.previous.month ~ " " ~ row.previous.year) }}
+              {% else %}
+                <span class="rq-nobase">No previous run</span>
+              {% endif %}
+            </td>
+
+            {# The headcount movement only where headcount moved. Rendering it
+               unconditionally put the identical phrase in eight rows of a column
+               an operator scans for the ONE row that differs; the header states
+               the basis instead, once. #}
+            <td class="num rq-move" data-label="Workers">
+              <span class="nums">{{ run.total_workers }}</span>
+              {% if row.worker_change %}
+                {{ ch.delta(row.worker_change, "was " ~ row.previous_workers|string) }}
+              {% endif %}
+            </td>
+
+            {# A duration, not a date. "26 Jul 2026" made the reader subtract,
+               in the one column the default ordering is built on — and it read
+               identically whether the hold was an hour or a quarter old. The
+               exact moment stays on the <time> element for the audit case. #}
+            <td class="rq-age" data-label="Held for">
+              {% if run.risk_checked_at %}
+              <time datetime="{{ run.risk_checked_at.isoformat() }}"
+                    title="Scored {{ run.risk_checked_at.strftime('%d %b %Y, %H:%M UTC') }}">{{ row.age }}</time>
+              {% else %}<span class="rq-nobase">Not recorded</span>{% endif %}
+            </td>
+
+            <td class="dt-actions">
+              <a class="btn" href="{{ url_for('payroll.detail', run_id=run.id) }}">Review<span class="sr-only"> {{ run.month }} {{ run.year }} payroll for {{ run.client_company.name if run.client_company else 'this client' }}</span></a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if page.pages > 1 %}{{ sui.pagination(page, {'order': order}) }}{% endif %}
+  </section>
+
+{% elif total %}
+
+  {# Past the end of the list. Not an error and not an all-clear — the queue is
+     full, this window onto it is not. #}
+  {{ sui.empty(
+       "That page is past the end of the queue",
+       total ~ " payroll" ~ ("" if total == 1 else "s") ~ " are still held for review.",
+       "Back to the first page",
+       url_for('oversight.risk_queue', order=order)) }}
+
 {% else %}
-<div class="mini-note mb-3">
-    <i class="bi bi-shield-check"></i>
-    No runs are currently held for review.
-</div>
+
+  {# The all-clear. Previously a one-line grey note, which is the same treatment
+     the page gave a warning — so "nothing is wrong" and "something is wrong"
+     looked alike. It uses the shared empty state now, and says what the absence
+     MEANS rather than only that the list is empty.
+
+     "No runs are currently held" is load-bearing text: tests/test_risk.py
+     asserts on it as the proof that releasing a hold clears every indicator. #}
+  {{ sui.empty(
+       "No runs are currently held for review",
+       "Every submitted payroll has passed the risk gate. A run appears here automatically when it is one of a client's first "
+       ~ thresholds.first_runs ~ " runs, when net pay moves more than " ~ thresholds.net_pay_pct
+       ~ "%, or when the worker count moves more than " ~ thresholds.headcount_pct ~ "%.",
+       "View all payroll runs",
+       url_for('payroll.runs')) }}
+
 {% endif %}
+</div>
 {% endblock %}

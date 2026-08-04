@@ -1,0 +1,326 @@
+/* ---------------------------------------------------------------------------
+   Payrolla — Risk review queue layer.
+
+   Loaded ONLY by oversight/risk_queue.html, on top of tokens.css + styles.css +
+   components.css + dashboard.css. Every rule is scoped under `.rq`, the same
+   discipline as `.ops` (admin-dashboard.css) and `.dist`
+   (distribution-monitor.css).
+
+   The page is a WORK QUEUE, which is a different thing from a dashboard and a
+   different thing from a report: its job is to let a reviewer rank five or
+   fifty holds and pick one, without opening any of them. Everything below
+   serves that — the movement that caused each hold sits in the row, the age
+   sits in the row, and nothing competes with the Review action.
+
+   Colour from tokens only; status never carried by colour alone (every rule
+   chip is a word first).
+   --------------------------------------------------------------------------- */
+
+.rq {
+    --space-tight: 8px;
+    --space-panel: 16px;
+    --space-section: 22px;
+
+    --panel-pad: 20px;
+}
+
+.rq .nums { font-variant-numeric: tabular-nums; }
+
+/* --- Summary band --------------------------------------------------------
+   Four tiles, four questions. Four rather than the dashboard's five because
+   there are exactly four things to know about a queue before you start work,
+   and a fifth would be padding. */
+
+.rq-kpis { margin-bottom: var(--space-section); }
+
+.rq .kpi-band { gap: 12px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+
+@media (min-width: 1080px) {
+    .rq .kpi-band { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.rq .kpi-value { font-size: clamp(18px, 1.35vw, 21px); margin-top: 6px; white-space: nowrap; }
+.rq .kpi-label { font-size: 11px; }
+.rq .kpi-caption { font-size: 11.5px; margin-top: 8px; }
+
+/* --- Order + rules -------------------------------------------------------
+   A filter row on the shell, not a card: it changes what you are looking at.
+   The rule definitions ride at the far end as a disclosure rather than as the
+   banner they used to be. */
+
+.rq-order {
+    align-items: center;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: var(--space-section);
+    padding-bottom: 14px;
+}
+
+.rq-order-label {
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+/* --line-control for the same reason as .dist-window-set: the box is what says
+   these are controls, so WCAG 1.4.11's 3:1 applies to it. */
+.rq-order-set {
+    background: var(--surface);
+    border: 1px solid var(--line-control);
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    overflow: hidden;
+    padding: 3px;
+}
+
+.rq-order-opt {
+    border-radius: calc(var(--radius-sm) - 2px);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 650;
+    padding: 6px 14px;
+    text-decoration: none;
+    transition: background var(--ease), color var(--ease);
+}
+
+.rq-order-opt:hover { background: var(--surface-alt); color: var(--ink); }
+.rq-order-opt.is-current { background: var(--brand); color: var(--surface); }
+.rq-order-opt.is-current:hover { background: var(--brand-dark); color: var(--surface); }
+
+.rq-rules { font-size: 12.5px; margin-left: auto; }
+
+.rq-rules summary {
+    color: var(--brand);
+    cursor: pointer;
+    font-weight: 650;
+    list-style: none;
+}
+
+.rq-rules summary::-webkit-details-marker { display: none; }
+.rq-rules summary::after { content: " ›"; }
+.rq-rules[open] summary::after { content: " ⌄"; }
+.rq-rules summary:hover { color: var(--brand-dark); }
+
+.rq-rules ul, .rq-rules p {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    line-height: 1.6;
+    margin: 8px 0 0;
+    max-width: 62ch;
+    padding: 12px 14px 12px 30px;
+}
+
+.rq-rules p { padding-left: 14px; }
+.rq-rules strong { color: var(--ink); }
+
+/* --- The queue table -----------------------------------------------------
+   Built for ranking: the reason and the movement are the two columns the eye
+   travels between, so they sit next to each other, and the action is the last
+   thing on the row. */
+
+.rq-table td, .rq-table th { vertical-align: top; }
+
+.rq-client { min-width: 150px; }
+
+.rq-client-name { display: block; font-weight: 700; }
+
+.rq-client-meta {
+    color: var(--muted);
+    display: block;
+    font-size: 12px;
+    font-weight: 550;
+    margin-top: 2px;
+}
+
+/* One chip per tripped rule, so a run tripping two rules reads as two facts
+   rather than as one sentence with a pipe in the middle. The word is the
+   signal; the tint is a second, redundant cue. */
+.rq-why { max-width: 34ch; }
+
+.rq-rule {
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-pill);
+    display: inline-block;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    margin: 0 4px 4px 0;
+    padding: 2px 9px;
+}
+
+.rq-rule--new-client { background: var(--brand-tint); border-color: var(--brand); color: var(--brand-deep); }
+.rq-rule--net_pay { background: var(--warn-soft); border-color: var(--warn); color: var(--ink); }
+.rq-rule--headcount { background: var(--surface-alt); color: var(--ink-soft); }
+.rq-rule--other { background: var(--surface-alt); color: var(--ink-soft); }
+.rq-rule--stale { background: var(--warn-soft); border-color: var(--warn); color: var(--ink); }
+
+.rq-why-detail {
+    color: var(--muted);
+    display: block;
+    font-size: 12px;
+    line-height: 1.5;
+    margin-top: 4px;
+}
+
+/* Dates the recorded reason, so it cannot be misread as today's figure. */
+.rq-when { font-weight: 700; }
+
+/* The moved-baseline caveat: one note above the table, one marker per affected
+   row. Worded as an instruction ("re-check"), not as an error — nothing is
+   broken, the world moved. */
+.rq-stale-note {
+    align-items: flex-start;
+    background: var(--warn-soft);
+    border: 1px solid var(--warn);
+    border-radius: var(--radius-sm);
+    color: var(--ink-soft);
+    display: flex;
+    font-size: 12.5px;
+    gap: 8px;
+    line-height: 1.6;
+    margin: 0 0 14px;
+    padding: 10px 13px;
+}
+
+.rq-stale-note .ico { color: var(--warn); flex: none; margin-top: 2px; }
+.rq-stale-note strong { color: var(--ink); }
+.rq-stale-note .rq-rule { margin: 0; vertical-align: baseline; }
+
+/* Value above, movement below — the figure identifies the run, the movement is
+   why it is on this page. */
+.rq-move { min-width: 132px; white-space: nowrap; }
+.rq-move .nums { display: block; font-weight: 700; }
+.rq-move .delta { margin-top: 3px; }
+
+.rq-age { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+
+.rq-nobase { color: var(--muted); font-size: 11.5px; font-weight: 550; }
+
+.rq-th-note {
+    color: var(--muted);
+    display: block;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-transform: none;
+}
+
+/* The row's one action. Not primary-styled: the page has many rows and one of
+   them is not more important than the others — rank here comes from the
+   ordering, which is the reviewer's own choice.
+
+   Styled here rather than left to a bare `.btn`, because components.css only
+   dresses `.btn` INSIDE `.state` and the operator shell's Bootstrap gives an
+   unqualified `.btn` no border and no background — so the control rendered as
+   a line of body text that happened to be clickable. Scoped to this table
+   rather than fixed in components.css: lifting `.btn` out of `.state` there
+   would land after Bootstrap in the cascade and restyle every button in the
+   operator console. */
+.rq-table .dt-actions .btn {
+    background: var(--surface);
+    /* The outline is the ONLY thing that says "Review" is a button rather than
+       a word, so 1.4.11's 3:1 applies squarely — --line-control, not
+       --line-strong (1.48:1 here). */
+    border: 1px solid var(--line-control);
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 6px 14px;
+    text-decoration: none;
+    transition: border-color var(--ease), color var(--ease), transform 160ms var(--ease-out);
+    white-space: nowrap;
+}
+
+.rq-table .dt-actions .btn:hover { border-color: var(--brand); color: var(--brand); }
+.rq-table .dt-actions .btn:active { transform: scale(0.97); transition-duration: 60ms; }
+
+/* No ultra-wide rule here on purpose — see the same note in
+   distribution-monitor.css. The Phase 11 cap is on `.main-content` in
+   styles.css, which every operator page already sits inside. */
+
+/* --- Phone: the queue becomes a stack of cards ---------------------------
+   Six columns do not fit in 390px, and the `.dt-wrap` scroller is the wrong
+   answer here: at 390px it left CLIENT and WHY on screen and pushed Net pay,
+   Workers, Held for and the Review button off the right-hand edge — so the
+   phone view showed which payrolls were stuck and hid both the stake and the
+   only thing you could do about it. That is the same mistake the operator
+   dashboard's company table was rebuilt to avoid ("a count of work waiting on
+   the operator must not be the thing a scroll hides"), and an action is worse
+   to hide than a count.
+
+   So below 760px each row becomes a card. The <table> stays a table in the
+   markup, so one layout does not fork into two templates.
+
+   Be honest about the trade this makes: `display: block` on rows and cells
+   removes the table's row/column relationships from the accessibility tree in
+   most engines, so the header association a data table normally gives is not
+   available at this width. That is why every cell holding a bare figure
+   carries `data-label` and prints it above the value — the label is real,
+   visible text in the card, read in order by a screen reader, rather than a
+   relationship the reader has to reconstruct. The header row is kept
+   visually-hidden rather than `display: none` so its text stays in the
+   document either way. */
+@media (max-width: 760px) {
+    .rq-table, .rq-table tbody, .rq-table tr, .rq-table th, .rq-table td {
+        display: block;
+    }
+
+    /* Visually hidden, not `display: none`: removing the header row from the
+       box tree would also remove it from the accessibility tree, and the cell
+       relationships are what make a stacked table readable non-visually. */
+    .rq-table thead {
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        height: 1px;
+        overflow: hidden;
+        position: absolute;
+        white-space: nowrap;
+        width: 1px;
+    }
+
+    .rq-table tr {
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        margin-bottom: 10px;
+        padding: 12px 14px;
+    }
+
+    .rq-table td, .rq-table th { border-bottom: 0; padding: 0; }
+    .rq-table .rq-client { margin-bottom: 8px; }
+    .rq-table .rq-why { margin-bottom: 10px; max-width: none; }
+
+    /* Label above value, so a bare "10" is never left to stand for itself. */
+    .rq-table td[data-label] { margin-bottom: 8px; text-align: left; }
+
+    .rq-table td[data-label]::before {
+        color: var(--muted);
+        content: attr(data-label);
+        display: block;
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        margin-bottom: 2px;
+        text-transform: uppercase;
+    }
+
+    .rq-move { min-width: 0; white-space: normal; }
+    .rq-move .nums { display: inline; }
+    .rq-move .delta { margin-left: 6px; margin-top: 0; }
+
+    /* The action gets the full width at the foot of its own card — the one
+       thing on the row that must never need hunting for. */
+    .rq-table .dt-actions { text-align: left; }
+    .rq-table .dt-actions .btn { display: block; text-align: center; width: 100%; }
+
+    /* The scroller has nothing left to scroll, and a stray horizontal
+       overflow on a phone is how a page ends up 2px wider than the viewport. */
+    .rq-panel .dt-wrap { overflow-x: visible; }
+}

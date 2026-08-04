@@ -88,6 +88,22 @@ def format_duration(seconds):
     return f"{hours}h {mins}m" if mins else f"{hours}h"
 
 
+def format_relative(moment):
+    """'5 minutes ago' / 'Yesterday' / '12 Mar 2026' for any stored timestamp.
+
+    The activity timeline has read this way since the dashboard redesign, via
+    app.events.relative_time; exposing it as a filter is what lets the rest of
+    the product stop printing bare ``2026-08-04 19:13`` — a format that states
+    no timezone, reads as identical whether it happened four minutes or four
+    months ago, and makes a nonsense value (a timestamp in the future, a clock
+    skewed between two app servers) completely invisible. The exact moment is
+    never lost: every caller pairs this with a <time datetime> and a title.
+    """
+    from app.events import relative_time
+
+    return relative_time(moment)
+
+
 def format_file_size(num_bytes):
     """Human file size for stored attachments: 900 -> '900 B', 20480 -> '20 KB',
     5242880 -> '5.0 MB'. None/negative -> '—'.
@@ -452,6 +468,7 @@ def create_app():
     app.jinja_env.filters["cedis"] = format_ghana_cedis
     app.jinja_env.filters["role_label"] = format_role_label
     app.jinja_env.filters["duration"] = format_duration
+    app.jinja_env.filters["relative"] = format_relative
     app.jinja_env.filters["filesize"] = format_file_size
     # Greet any user by name: {{ some_user|display_name }}. The *current* user's
     # name is also injected as `user_display_name` (see inject_user_greeting).

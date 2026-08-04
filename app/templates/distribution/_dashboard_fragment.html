@@ -6,153 +6,332 @@
    open tab, indefinitely. It now polls only while `stats.live` (something
    queued, running or retrying) and stops when the queue drains, exactly like
    the run-status fragment beside it. The trigger filter also stands the poll
-   down while the tab is hidden, so a backgrounded monitor costs nothing. #}
-<div id="distribution-monitor"
+   down while the tab is hidden, so a backgrounded monitor costs nothing.
+
+   `.dist` is on THIS element rather than on a wrapper in dashboard.html: the
+   region swaps its own outerHTML, so any scope kept outside it would be lost on
+   the first refresh.
+
+   Reading order, top to bottom, is the operator's question order — and it is
+   the reverse of what this page used to do, which opened with two full-width
+   infrastructure panels (SLA, then Worker) before mentioning a payslip:
+
+     1. did the payslips go out, and how well          (the five tiles)
+     2. what is moving right now                       (In flight)
+     3. what needs a human                             (Needs attention)
+     4. what happened, in detail                       (Recent distributions)
+#}
+{% import "macros/dashboard.html" as ui %}
+{% import "macros/charts.html" as ch %}
+{% import "macros/distribution.html" as dist %}
+
+<div id="distribution-monitor" class="dist"
      {% if stats.live %}
-     hx-get="{{ url_for('distribution.dashboard_fragment') }}"
+     hx-get="{{ url_for('distribution.dashboard_fragment', window=stats.window.days) }}"
      hx-trigger="every 5s [document.visibilityState === 'visible']"
      hx-swap="outerHTML"
      {% endif %}>
-{% if not stats.live %}
-<p class="mini-note mb-3">
-    <i class="bi bi-pause-circle"></i>
-    Nothing in flight — live updates are paused.
-    <a href="{{ url_for('distribution.dashboard') }}">Refresh</a> to check again.
-</p>
-{% endif %}
 
 {% set d = stats.deliveries %}
 {% set b = stats.batches %}
 {% set w = stats.worker %}
 
-<section class="panel mb-3">
-    <div class="panel-header">
-        <h2><i class="bi bi-clipboard2-check"></i>SLA</h2>
-        {% if stats.sla.ok %}<span class="badge text-bg-success">Within SLA</span>
-        {% else %}<span class="badge text-bg-danger">{{ stats.sla.breaches|length }} breach{{ "" if stats.sla.breaches|length == 1 else "es" }}</span>{% endif %}
+{# --- The five questions ----------------------------------------------------
+   Five tiles, five genuinely different questions — the same rule the operator
+   dashboard's KPI band holds itself to. The eight tiles this replaces asked
+   four questions between them:
+
+     Delivered / Success rate / Failed / Active retries / Final failures /
+     Queue backlog / Batches running / Batches queued
+
+   "Failed" was exactly "Active retries" + "Final failures", printed a third
+   time as its own tile, so one number appeared three ways and an operator had
+   to work out which to act on. "Queue backlog" (58 payslips) and "Batches
+   queued" (1) were the same queue counted in two units, beside "Batches
+   running" which the panel below already showed. And "Delivered" was not
+   delivered: it counts sends the channel ACCEPTED, which — as the banner two
+   inches above it says — currently means a line in a log file.
+
+   Each tile now carries the basis of its own number in its caption, because a
+   figure whose window and denominator are unstated is a figure nobody can
+   defend in a meeting. #}
+<section class="dist-kpis" aria-labelledby="dist-kpi-heading">
+  <h2 id="dist-kpi-heading" class="sr-only">Delivery summary {{ stats.window.phrase }}</h2>
+  <div class="kpi-band">
+
+    {{ ui.kpi_card({
+         "label": "Payslips sent",
+         "value": d.sent,
+         "formatter": "count",
+         "delta": d.sent_change,
+         "compare": "previous " ~ stats.window.label|lower,
+         "caption": (
+            d.confirmed|string ~ " confirmed by the provider"
+            if d.confirmed else "Accepted by the channel " ~ stats.window.phrase
+         ),
+       }, url_for('distribution.history', status='sent')) }}
+
+    {# A rate with no attempts behind it is undefined, not zero — kpi_card
+       renders `none` as an em dash rather than asserting a 0% success that
+       nobody measured. #}
+    {{ ui.kpi_card({
+         "label": "Success rate",
+         "value": (d.success_rate|round if d.attempted else none),
+         "formatter": "percent",
+         "delta": (d.success_rate_change if d.prior_attempted else none),
+         "compare": "previous " ~ stats.window.label|lower,
+         "caption": (
+            d.sent|string ~ " of " ~ d.attempted|string ~ " attempts " ~ stats.window.phrase
+            if d.attempted else "No sends attempted " ~ stats.window.phrase
+         ),
+       }, url_for('distribution.analytics')) }}
+
+    {# The three state tiles carry no delta on purpose: they count what is true
+       now, not what happened in a period, so there is no previous period to
+       compare them against. `delta: none` is explicit because kpi_card tests
+       `is not none`, and an absent key would be Undefined — which is not None. #}
+    {{ ui.kpi_card({
+         "label": "Awaiting retry",
+         "value": d.active_retries,
+         "formatter": "count",
+         "delta": none,
+         "caption": "Retrying automatically — no action needed",
+       }, url_for('distribution.history', status='failed')) }}
+
+    {{ ui.kpi_card({
+         "label": "Out of retries",
+         "value": d.final_failures,
+         "formatter": "count",
+         "delta": none,
+         "caption": (
+            "Needs a corrected contact and a resend"
+            if d.final_failures else "Every failure so far has recovered"
+         ),
+       }, url_for('distribution.history', status='failed')) }}
+
+    {{ ui.kpi_card({
+         "label": "In the queue",
+         "value": stats.backlog.queued_payslips,
+         "formatter": "count",
+         "delta": none,
+         "caption": (
+            b.queued|string ~ " batch" ~ ("" if b.queued == 1 else "es") ~ " waiting · "
+            ~ b.running|string ~ " sending now"
+         ),
+       }, url_for('distribution.history')) }}
+
+  </div>
+</section>
+
+<div class="dist-grid">
+
+  {# --- In flight -----------------------------------------------------------
+     Running, queued and scheduled batches as ONE list, in the order they will
+     clear. This replaces two panels: a six-row status legend (Scheduled 1 /
+     Queued 1 / Running 1 / Completed 5 / Failed 1 / Cancelled 1 — a table doing
+     a chart's job, every count of which appeared elsewhere on the page) and an
+     "In progress" panel that only ever listed running batches and so sat empty
+     nine visits in ten. #}
+  <section class="xpanel dist-flight" aria-labelledby="inflight-heading">
+    <div class="panel-head">
+      <div>
+        <h2 id="inflight-heading">In flight</h2>
+        <p class="panel-sub">Every distribution that has not finished, soonest first.</p>
+      </div>
+      {% if stats.throughput.payslips_per_minute is not none %}
+      <span class="dist-rate" title="Mean across the 50 most recently completed batches">
+        {{ stats.throughput.payslips_per_minute }}/min
+      </span>
+      {% endif %}
     </div>
-    {% if stats.sla.breaches %}
-    <ul class="mb-0">
-        {% for br in stats.sla.breaches %}
-        <li class="text-danger"><i class="bi bi-exclamation-triangle"></i> {{ br.detail }}</li>
-        {% endfor %}
-    </ul>
+
+    {% if stats.in_flight %}
+    <ol class="dist-queue">
+      {% for row in stats.in_flight %}
+      {% set batch = row.batch %}
+      <li class="dist-job dist-job--{{ batch.status }}">
+        <div class="dist-job-head">
+          <span class="dist-job-who">
+            {{ batch.client_company.name if batch.client_company else "Unknown company" }}
+            <small>{% if batch.payroll_run %}{{ batch.payroll_run.month }} {{ batch.payroll_run.year }}{% else %}Run #{{ batch.payroll_run_id }}{% endif %}
+              · {{ batch.channel }}{% if batch.only_failed %} resend{% endif %}</small>
+          </span>
+          {{ dist.batch_pill(batch.status) }}
+        </div>
+
+        {# A progress bar only where progress is a real measurement. A queued
+           batch has made none, and drawing it a 0% bar states a measurement
+           that was never taken. #}
+        {% if batch.status == 'running' %}
+        <div class="progress" role="img"
+             aria-label="{{ row.done }} of {{ row.total }} payslips sent, {{ row.percent }} percent">
+          <span class="progress-fill" style="width: {{ row.percent }}%"></span>
+        </div>
+        <p class="dist-job-meta">
+          <span class="nums">{{ row.done }}/{{ row.total }}</span> sent
+          · running {{ row.elapsed_seconds|duration }}
+          {% if row.eta_seconds is not none %}· about {{ row.eta_seconds|duration }} left{% endif %}
+        </p>
+        {% elif batch.status == 'scheduled' %}
+        <p class="dist-job-meta">
+          {{ batch.total or 0 }} payslip{{ '' if batch.total == 1 else 's' }} ·
+          {% if row.due_at %}
+            <time datetime="{{ row.due_at.isoformat() }}"
+                  title="{{ row.due_at.strftime('%d %b %Y, %H:%M UTC') }}">{% if row.waiting_seconds is not none and row.waiting_seconds < 0 %}starts in {{ (0 - row.waiting_seconds)|duration }}{% else %}due now{% endif %}</time>
+          {% else %}no start time recorded{% endif %}
+        </p>
+        {% else %}
+        <p class="dist-job-meta">
+          {{ batch.total or 0 }} payslip{{ '' if batch.total == 1 else 's' }} ·
+          waiting {{ (row.waiting_seconds or 0)|duration }} for a worker
+        </p>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
     {% else %}
-    <div class="mini-note"><i class="bi bi-check2-circle"></i> Distribution is meeting its service levels.</div>
+    {{ ui.empty(
+         "Nothing sending",
+         "The queue is empty. Distributions started from a payroll run appear here while they send.") }}
     {% endif %}
-</section>
+  </section>
 
-<section class="panel mb-3">
-    <div class="panel-header">
-        <h2><i class="bi bi-hdd-network"></i>Worker</h2>
-        {% if w.status == "stalled" %}<span class="badge text-bg-danger">Stalled</span>
-        {% elif w.status == "active" %}<span class="badge text-bg-info">Active</span>
-        {% else %}<span class="badge text-bg-success">Idle</span>{% endif %}
-    </div>
-    <div class="row g-3">
-        <div class="col-md-3"><strong>Mode</strong><p class="mb-0">{{ "In-process" if stats.worker_inline else "External process" }}</p></div>
-        <div class="col-md-3"><strong>Last poll</strong><p class="mb-0">{% if w.heartbeat_age_seconds is not none %}{{ w.heartbeat_age_seconds|duration }} ago{% else %}—{% endif %}</p></div>
-        <div class="col-md-3"><strong>Last completed</strong><p class="mb-0">{{ stats.last_processed_at.strftime("%Y-%m-%d %H:%M") if stats.last_processed_at else "—" }}</p></div>
-        <div class="col-md-3"><strong>Throughput</strong><p class="mb-0">{% if stats.throughput.payslips_per_minute is not none %}{{ stats.throughput.payslips_per_minute }}/min{% else %}—{% endif %}</p></div>
-    </div>
-    {% if w.status == "stalled" %}
-    <div class="mini-note mt-3 text-danger"><i class="bi bi-exclamation-triangle"></i> Work is queued but nothing has been processed recently — check the distribution worker is running.</div>
-    {% endif %}
-    {# Deliberately no per-process table here. This panel is read by operators, not
-       engineers, and the raw heartbeat rows are container hostnames and PIDs — one
-       new row per deploy, so the list only ever grows. The liveness question this
-       audience actually has is answered in one sentence; the rows stay in the
-       heartbeat table and the application log for whoever needs them. #}
-    {% set fleet = stats.worker_fleet %}
-    <div class="mini-note mt-3">
-        <i class="bi bi-hdd-network"></i>
-        {% if fleet.live == 1 %}Worker running{% elif fleet.live %}{{ fleet.live }} workers running{% else %}No worker running{% endif %}{% if w.heartbeat_age_seconds is not none %} · last check-in {{ w.heartbeat_age_seconds|duration }} ago{% endif %}.
-    </div>
-</section>
+  {# --- Needs attention -----------------------------------------------------
+     The same component, and the same rule, as the operator dashboard's Risk &
+     action rail: every item states what happened, why it matters and what to do,
+     and it is built in Python (dashboard.py::_attention) from numbers already on
+     this page — so the panel cannot disagree with the tiles above it. An
+     all-clear still renders a card; a panel that draws nothing when all is well
+     reads as broken, not as safe.
 
-<section class="stats-grid">
-    <div class="stat-card"><i class="bi bi-send-check stat-icon"></i><span>Delivered</span><strong>{{ d.sent }}</strong></div>
-    <div class="stat-card"><i class="bi bi-graph-up-arrow stat-icon"></i><span>Success rate</span><strong>{{ d.success_rate }}%</strong></div>
-    <div class="stat-card"><i class="bi bi-x-octagon stat-icon"></i><span>Failed</span><strong>{{ d.failed }}</strong></div>
-    <div class="stat-card"><i class="bi bi-arrow-repeat stat-icon"></i><span>Active retries</span><strong>{{ d.active_retries }}</strong></div>
-    <div class="stat-card"><i class="bi bi-exclamation-octagon stat-icon"></i><span>Final failures</span><strong>{{ d.final_failures }}</strong></div>
-    <div class="stat-card"><i class="bi bi-hourglass-split stat-icon"></i><span>Queue backlog</span><strong>{{ stats.backlog.queued_payslips }}</strong></div>
-    <div class="stat-card"><i class="bi bi-collection stat-icon"></i><span>Batches running</span><strong>{{ b.running }}</strong></div>
-    <div class="stat-card"><i class="bi bi-inbox stat-icon"></i><span>Batches queued</span><strong>{{ b.queued }}</strong></div>
-</section>
+     It also absorbs the SLA panel, which used to open the page as a full-width
+     band whose entire content, on a healthy day, was a green badge and the
+     sentence "Distribution is meeting its service levels" — an assertion with
+     no stated levels behind it. The levels are now spelled out beneath, from
+     the same config the check runs against. #}
+  <section class="xpanel dist-attention" aria-labelledby="attention-heading">
+    <div class="panel-head">
+      <div>
+        <h2 id="attention-heading">Needs attention</h2>
+        <p class="panel-sub">Everything on this page that will not resolve itself.</p>
+      </div>
+      <a class="link-action" href="{{ url_for('distribution.history', status='failed') }}">Failures{{ ui.icon('arrow', 14) }}</a>
+    </div>
+    <ul class="signals">
+      {% for item in stats.attention %}
+        {% if item.endpoint %}{{ ui.signal(item, url_for(item.endpoint, **item.args)) }}
+        {% else %}{{ ui.signal(item) }}{% endif %}
+      {% endfor %}
+    </ul>
 
-<div class="row g-4 mt-1">
-    <div class="col-lg-6">
-        <section class="panel h-100">
-            <div class="panel-header"><h2><i class="bi bi-collection"></i>Batches</h2><span>{{ b.total }} total</span></div>
-            <table class="table table-sm align-middle">
-                <tbody>
-                    <tr><td><span class="badge text-bg-primary">Scheduled</span></td><td class="text-end"><strong>{{ b.scheduled }}</strong></td></tr>
-                    <tr><td><span class="badge text-bg-secondary">Queued</span></td><td class="text-end"><strong>{{ b.queued }}</strong></td></tr>
-                    <tr><td><span class="badge text-bg-info">Running</span></td><td class="text-end"><strong>{{ b.running }}</strong></td></tr>
-                    <tr><td><span class="badge text-bg-success">Completed</span></td><td class="text-end"><strong>{{ b.completed }}</strong></td></tr>
-                    <tr><td><span class="badge text-bg-danger">Failed</span></td><td class="text-end"><strong>{{ b.failed }}</strong></td></tr>
-                    <tr><td><span class="badge text-bg-dark">Cancelled</span></td><td class="text-end"><strong>{{ b.cancelled }}</strong></td></tr>
-                </tbody>
-            </table>
-        </section>
-    </div>
-    <div class="col-lg-6">
-        <section class="panel h-100">
-            <div class="panel-header"><h2><i class="bi bi-activity"></i>In progress</h2><span>{{ stats.running_batches|length }} running</span></div>
-            {% if stats.running_batches %}
-            <div class="excel-grid-wrap">
-                <table class="table table-sm align-middle">
-                    <thead><tr><th>Run</th><th>Progress</th><th>Elapsed</th><th>ETA</th></tr></thead>
-                    <tbody>
-                    {% for rb in stats.running_batches %}
-                        <tr>
-                            <td>{% if rb.batch.payroll_run %}<a href="{{ url_for('distribution.run_status', run_id=rb.batch.payroll_run_id) }}">{{ rb.batch.payroll_run.month }} {{ rb.batch.payroll_run.year }}</a>{% else %}Run #{{ rb.batch.payroll_run_id }}{% endif %}</td>
-                            <td>{{ rb.done }}/{{ rb.total }} ({{ rb.percent }}%)</td>
-                            <td>{{ rb.elapsed_seconds|duration }}</td>
-                            <td>{% if rb.eta_seconds is not none %}~{{ rb.eta_seconds|duration }}{% else %}—{% endif %}</td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="mini-note"><i class="bi bi-check2-circle"></i> No distributions are running right now.</div>
-            {% endif %}
-        </section>
-    </div>
+    <dl class="dist-health">
+      <div class="dist-health-head">
+        <dt>Service level</dt>
+        <dd>{% if stats.sla.ok %}Met{% else %}{{ stats.sla.breaches|length }} breached{% endif %}</dd>
+      </div>
+      <div class="dist-health-note"><dd>{{ stats.sla.statement }}</dd></div>
+      <div class="dist-health-row">
+        <dt>Worker</dt>
+        <dd>{{ "In-process" if stats.worker_inline else "External process" }}{% if stats.worker_fleet.live %} · {{ stats.worker_fleet.live }} running{% else %} · none running{% endif %}</dd>
+      </div>
+      <div class="dist-health-row">
+        <dt>Last batch finished</dt>
+        <dd>
+          {% if stats.last_processed_at %}
+          <time datetime="{{ stats.last_processed_at.isoformat() }}"
+                title="{{ stats.last_processed_at.strftime('%d %b %Y, %H:%M UTC') }}">{{ stats.last_processed_at|relative }}</time>
+          {% else %}Never{% endif %}
+        </dd>
+      </div>
+    </dl>
+  </section>
 </div>
 
-<section class="panel mt-4">
-    <div class="panel-header"><h2><i class="bi bi-clock-history"></i>Recent distributions</h2><span>{{ stats.recent_batches|length }}</span></div>
-    {% if stats.recent_batches %}
-    <div class="excel-grid-wrap">
-        <table class="table table-sm align-middle excel-grid">
-            <thead><tr><th>When</th><th>Client</th><th>Run</th><th>Channel</th><th>Status</th><th>Sent</th><th>Failed</th><th>By</th></tr></thead>
-            <tbody>
-            {% for batch in stats.recent_batches %}
-                <tr>
-                    <td class="nums">{{ batch.created_at.strftime("%Y-%m-%d %H:%M") if batch.created_at }}</td>
-                    <td>{{ batch.client_company.name if batch.client_company else "—" }}</td>
-                    <td>{% if batch.payroll_run %}<a href="{{ url_for('distribution.run_status', run_id=batch.payroll_run_id) }}">{{ batch.payroll_run.month }} {{ batch.payroll_run.year }}</a>{% else %}#{{ batch.payroll_run_id }}{% endif %}</td>
-                    <td>{{ batch.channel }}{% if batch.only_failed %} <span class="text-muted">(resend)</span>{% endif %}</td>
-                    <td>
-                        {% if batch.status == "queued" %}<span class="badge text-bg-secondary">Queued</span>
-                        {% elif batch.status == "running" %}<span class="badge text-bg-info">Running</span>
-                        {% elif batch.status == "completed" %}<span class="badge text-bg-success">Completed</span>
-                        {% elif batch.status == "failed" %}<span class="badge text-bg-danger" title="{{ batch.error }}">Failed</span>
-                        {% elif batch.status == "cancelled" %}<span class="badge text-bg-dark">Cancelled</span>{% endif %}
-                    </td>
-                    <td>{{ batch.sent_count if batch.sent_count is not none else "—" }}</td>
-                    <td>{{ batch.failed_count if batch.failed_count is not none else "—" }}</td>
-                    <td>{{ batch.initiated_by.name if batch.initiated_by else "System" }}</td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
+{# --- Recent distributions --------------------------------------------------
+   The shared data table (.dt in components.css), not a Bootstrap `table-sm`.
+
+   Three fixes beyond the vocabulary. Status was a five-branch if/elif that had
+   no `scheduled` arm, so a scheduled batch rendered a blank cell — it now goes
+   through the one batch_pill macro, which owns all six states. Sent and Failed
+   were two columns showing an em dash apiece for every batch that had not
+   finished; they are one outcome column that says nothing when there is nothing
+   to say. And a failed batch's error lived only in a `title` attribute — an
+   explanation you can only find by hovering the thing you already know is
+   broken, and one a screen reader announces as part of the badge or not at
+   all — so it is printed under the row. #}
+<section class="xpanel dist-recent" aria-labelledby="recent-heading">
+  <div class="panel-head">
+    <div>
+      <h2 id="recent-heading">Recent distributions</h2>
+      <p class="panel-sub">The last {{ stats.recent_batches|length }} sends, newest first, across every client.</p>
     </div>
-    {% else %}
-    <div class="empty-state"><i class="bi bi-inbox"></i><p class="mb-0">No distributions yet.</p></div>
-    {% endif %}
+    <a class="link-action" href="{{ url_for('distribution.history') }}">Every delivery{{ ui.icon('arrow', 14) }}</a>
+  </div>
+
+  {% if stats.recent_batches %}
+  <div class="dt-wrap">
+    <table class="dt">
+      <caption class="sr-only">The ten most recent distribution batches</caption>
+      <thead>
+        <tr>
+          <th scope="col">Client</th>
+          <th scope="col">Run</th>
+          <th scope="col">Status</th>
+          <th scope="col">Outcome</th>
+          <th scope="col">Started by</th>
+          <th scope="col">When</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for batch in stats.recent_batches %}
+        <tr>
+          <th scope="row" class="dist-client">{{ batch.client_company.name if batch.client_company else "—" }}</th>
+          <td>
+            <a href="{{ url_for('distribution.batch_detail', batch_id=batch.id) }}">
+              {% if batch.payroll_run %}{{ batch.payroll_run.month }} {{ batch.payroll_run.year }}{% else %}Run #{{ batch.payroll_run_id }}{% endif %}
+            </a>
+            <span class="dist-sub">{{ batch.channel }}{% if batch.only_failed %} · resend{% endif %}</span>
+          </td>
+          <td>{{ dist.batch_pill(batch.status) }}</td>
+          <td class="dist-outcome">
+            {% if batch.sent_count is not none or batch.failed_count is not none %}
+              {{ batch.sent_count or 0 }} sent{% if batch.failed_count %} · {{ batch.failed_count }} failed{% endif %}
+            {% elif batch.total %}
+              <span class="dist-quiet">{{ batch.total }} queued</span>
+            {% endif %}
+          </td>
+          <td class="dist-quiet">{{ batch.initiated_by.name if batch.initiated_by else "System" }}</td>
+          <td class="dist-quiet">
+            {% if batch.created_at %}
+            <time datetime="{{ batch.created_at.isoformat() }}"
+                  title="{{ batch.created_at.strftime('%d %b %Y, %H:%M UTC') }}">{{ batch.created_at|relative }}</time>
+            {% endif %}
+          </td>
+        </tr>
+        {% if batch.status == 'failed' and batch.error %}
+        <tr class="dist-error-row">
+          <td colspan="6"><span class="dist-error">{{ batch.error }}</span></td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  {{ ui.empty(
+       "No distributions yet",
+       "Payslips are sent from an approved payroll run. Every send is recorded here.") }}
+  {% endif %}
 </section>
+
+{% if not stats.live %}
+{# Last, not first. The old copy of this note sat at the very top of the page,
+   above every number, so the first thing an operator read on a perfectly
+   healthy day was that something had stopped. It belongs where a reader arrives
+   having finished: nothing is moving, so nothing will change until you ask. #}
+<p class="dist-paused">
+  Nothing is in flight, so this page has stopped updating itself.
+  <a href="{{ url_for('distribution.dashboard', window=stats.window.days) }}">Check again</a>
+</p>
+{% endif %}
 </div>

@@ -22,8 +22,19 @@
   {% block head %}{% endblock %}
 </head>
 <body class="brand-shell-bg">
+{# The shared icon set (macros/ui.html) — inline SVG, no icon font, so the
+   portal stays Bootstrap-free while drawing the same glyph family the operator
+   shell and both dashboards use.
+
+   Named `shell_ui`, NOT `ui`: a name imported by this layout is in scope inside
+   the {% raw %}{% block body %}{% endraw %} that child templates fill, so a
+   plain `ui` here silently shadowed client/dashboard.html's own
+   `{% raw %}{% import "macros/dashboard.html" as ui %}{% endraw %}` and every
+   `ui.kpi_card(...)` in it resolved against the wrong module. The shell's own
+   names are prefixed so a page can never lose one of its own. #}
+{% import "macros/ui.html" as shell_ui %}
   <a class="skip-link" href="#main-content">Skip to content</a>
-  <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="primary-nav" aria-expanded="false">☰</button>
+  <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="primary-nav" aria-expanded="false">{{ shell_ui.icon('menu', 22) }}</button>
   <div class="nav-backdrop"></div>
   <div class="portal-shell">
     <aside class="portal-sidebar" id="primary-nav">
@@ -34,19 +45,25 @@
           <small>Company portal · {{ user_display_name }}</small>
         </div>
       </div>
+      {# Icon + label on every item, matching the operator sidebar. A text-only
+         nav is scanned by reading it; an icon gives each destination a shape
+         the eye can find without reading, which is the difference between
+         navigating on the second visit and re-reading the list every time. The
+         icons are decorative (aria-hidden) — the label is still the accessible
+         name, so nothing here depends on recognising a glyph. #}
       <nav class="portal-nav" aria-label="Company portal">
         {% set ep = request.endpoint %}
-        <a href="{{ url_for('main.company_dashboard') }}" {% if ep == 'main.company_dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
-        <a href="{{ url_for('client.employees') }}" {% if ep and ep.startswith('client.employee') %}aria-current="page"{% endif %}>Employees</a>
-        <a href="{{ url_for('client.runs') }}" {% if ep in ('client.runs', 'client.run_detail', 'client.run_upload', 'client.import_preview', 'client.distribute') %}aria-current="page"{% endif %}>Payroll</a>
-        <a href="{{ url_for('client.statutory') }}" {% if ep == 'client.statutory' %}aria-current="page"{% endif %}>Statutory</a>
-        <a href="{{ url_for('client.expenses') }}" {% if ep and ep.startswith('client.expense') %}aria-current="page"{% endif %}>Expenses</a>
-        <a href="{{ url_for('client.audit') }}" {% if ep == 'client.audit' %}aria-current="page"{% endif %}>Audit</a>
+        <a href="{{ url_for('main.company_dashboard') }}" {% if ep == 'main.company_dashboard' %}aria-current="page"{% endif %}>{{ shell_ui.icon('grid', 18) }}Dashboard</a>
+        <a href="{{ url_for('client.employees') }}" {% if ep and ep.startswith('client.employee') %}aria-current="page"{% endif %}>{{ shell_ui.icon('users', 18) }}Employees</a>
+        <a href="{{ url_for('client.runs') }}" {% if ep in ('client.runs', 'client.run_detail', 'client.run_upload', 'client.import_preview', 'client.distribute') %}aria-current="page"{% endif %}>{{ shell_ui.icon('wallet', 18) }}Payroll</a>
+        <a href="{{ url_for('client.statutory') }}" {% if ep == 'client.statutory' %}aria-current="page"{% endif %}>{{ shell_ui.icon('bank', 18) }}Statutory</a>
+        <a href="{{ url_for('client.expenses') }}" {% if ep and ep.startswith('client.expense') %}aria-current="page"{% endif %}>{{ shell_ui.icon('receipt', 18) }}Expenses</a>
+        <a href="{{ url_for('client.audit') }}" {% if ep == 'client.audit' %}aria-current="page"{% endif %}>{{ shell_ui.icon('list-check', 18) }}Audit</a>
         {% if can_manage_branding(role) %}
-        <a href="{{ url_for('client.branding') }}" {% if ep == 'client.branding' %}aria-current="page"{% endif %}>Branding</a>
+        <a href="{{ url_for('client.branding') }}" {% if ep == 'client.branding' %}aria-current="page"{% endif %}>{{ shell_ui.icon('palette', 18) }}Branding</a>
         {% endif %}
-        <a href="{{ url_for('notifications.inbox') }}" {% if ep and ep.startswith('notifications.') %}aria-current="page"{% endif %}>Notifications{% if notif_unread %} <span class="badge warn">{{ notif_unread }}</span>{% endif %}</a>
-        <a class="logout-link" href="{{ url_for('auth.logout') }}">Log out</a>
+        <a href="{{ url_for('notifications.inbox') }}" {% if ep and ep.startswith('notifications.') %}aria-current="page"{% endif %}>{{ shell_ui.icon('bell', 18) }}Notifications{% if notif_unread %} <span class="badge warn">{{ notif_unread }}</span>{% endif %}</a>
+        <a class="logout-link" href="{{ url_for('auth.logout') }}">{{ shell_ui.icon('logout', 18) }}Log out</a>
       </nav>
       <div class="portal-sidebar-foot">Powered by <strong>{{ app_brand_name }}</strong></div>
     </aside>

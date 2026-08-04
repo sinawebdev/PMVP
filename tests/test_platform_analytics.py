@@ -28,21 +28,29 @@ from app.events import platform_activity  # noqa: E402
 from app.models import AuditTrail, ClientCompany, Employee, PayrollRun, User  # noqa: E402
 
 
+# The icon set lives in macros/ui.html, the SHARED component layer — it moved
+# there from macros/dashboard.html when the tenant shell started drawing the
+# same glyphs in its navigation, and macros/dashboard.html now forwards to it.
 _MACRO_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "app", "templates", "macros", "dashboard.html",
+    "app", "templates", "macros", "ui.html",
 )
 
 
 def _icon_names_the_macro_can_draw():
-    """The icon names macros/dashboard.html::icon has a path for.
+    """The icon names macros/ui.html::icon has a path for.
 
     Read from the macro itself rather than duplicated here: an icon name the
     macro does not know renders as the fallback glyph, silently, and a copy of
     the list in this file would be the thing that let that happen.
     """
     with open(_MACRO_FILE, encoding="utf-8") as handle:
-        return set(re.findall(r"name == '([a-z-]+)'", handle.read()))
+        names = set(re.findall(r"name == '([a-z-]+)'", handle.read()))
+    # Guard the guard: if the set ever comes back empty the assertions below
+    # would all pass vacuously against an empty set, which is exactly how a
+    # moved macro could slip through unnoticed.
+    assert names, f"no icon names found in {_MACRO_FILE} — has the macro moved?"
+    return names
 
 
 class FakeRun:
@@ -100,7 +108,34 @@ class PlatformAnalyticsUnitTestCase(unittest.TestCase):
         self.assertEqual([p["label"] for p in trend], ["May", "Jun"])
         self.assertEqual(trend[0]["value"], 1000)   # MSC only
         self.assertEqual(trend[1]["value"], 2000)   # MSC 1500 + Acme 500
-        self.assertEqual(trend[1]["pct"], 100)      # scaled against the peak
+
+    def test_revenue_trend_is_range_scaled_and_declares_its_axis(self):
+        """The trend is drawn as a LINE, so it is scaled to its own min..max
+        rather than to zero — otherwise payroll, which moves a couple of per
+        cent on a six-figure base, draws a dead flat line pinned to the top of
+        the plot. Both bounds ride on every point so the chart can label the
+        axis it is actually drawn against; an unlabelled truncated axis is a
+        misleading chart."""
+        trend = self._analytics()["revenue_trend"]
+        floor, ceiling = trend[0]["floor"], trend[0]["ceiling"]
+        self.assertIsNotNone(floor)
+        # Padded beyond the data on both sides, so neither extreme sits on an
+        # edge of the plot and reads as clipped.
+        self.assertLess(floor, 1000)
+        self.assertGreater(ceiling, 2000)
+        # Every point carries the same bounds, and positions are ordered by value.
+        self.assertEqual({p["floor"] for p in trend}, {floor})
+        self.assertLess(trend[0]["pct"], trend[1]["pct"])
+        self.assertGreater(trend[0]["pct"], 0)
+        self.assertLess(trend[1]["pct"], 100)
+
+    def test_bar_series_keep_the_zero_baseline(self):
+        """A bar's LENGTH is proportional to its value, so a ranking must not be
+        range-scaled — the largest bar is full and a zero bar is empty."""
+        ranked = self._analytics()["companies_by_cost"]
+        self.assertIsNone(ranked[0]["floor"])
+        self.assertEqual(ranked[0]["pct"], 100)
+        self.assertEqual(ranked[-1]["pct"], 0)
 
     def test_companies_are_ranked_by_payroll_cost(self):
         ranked = self._analytics()["companies_by_cost"]

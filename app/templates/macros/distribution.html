@@ -37,20 +37,35 @@
 {% endmacro %}
 
 
+{# --- Batch state, named and toned -------------------------------------------
+   The one place a DistributionBatch.status becomes words and a colour.
+
+   It was inline in `queue_status` below and, separately, as a six-branch
+   if/elif chain in the operator monitor's Recent distributions table — which
+   had only five of the six branches, so a SCHEDULED batch rendered an empty
+   Status cell. A status vocabulary that lives in two places is a status
+   vocabulary with a hole in it; there is one copy now, and an unknown state
+   falls through to its own raw name rather than to nothing. #}
+{% set _BATCH_TONE = {"scheduled": "info", "queued": "", "running": "info",
+                      "completed": "ok", "failed": "bad", "cancelled": "muted"} %}
+{% set _BATCH_LABEL = {"scheduled": "Scheduled", "queued": "Queued", "running": "Sending…",
+                       "completed": "Completed", "failed": "Failed", "cancelled": "Cancelled"} %}
+
+{% macro batch_pill(status) -%}
+<span class="ds-pill ds-pill--{{ _BATCH_TONE.get(status, '') }}">{{ _BATCH_LABEL.get(status, status) }}</span>
+{%- endmacro %}
+
+
 {# --- Queue status ----------------------------------------------------------
    Every batch state the model can be in, in one chain. The tenant copy of this
    handled four of the six; `scheduled` and `cancelled` fell through it and
    rendered a heading with nothing under it. #}
 {% macro queue_status(batch, in_flight=false, scheduled=false, seconds_until=none) %}
 {% if batch %}
-{% set tone = {"scheduled": "info", "queued": "", "running": "info",
-               "completed": "ok", "failed": "bad", "cancelled": "muted"} %}
-{% set label = {"scheduled": "Scheduled", "queued": "Queued", "running": "Sending…",
-                "completed": "Completed", "failed": "Failed", "cancelled": "Cancelled"} %}
 <section class="ds-queue">
   <div class="ds-queue-head">
     <h2>Queue status</h2>
-    <span class="ds-pill ds-pill--{{ tone.get(batch.status, '') }}">{{ label.get(batch.status, batch.status) }}</span>
+    {{ batch_pill(batch.status) }}
   </div>
   <dl class="ds-facts">
     {% if batch.status == "scheduled" %}

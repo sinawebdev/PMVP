@@ -62,18 +62,31 @@ VALID_SEND_CHANNELS = set(DELIVERY_CHANNELS) | {CHANNEL_AUTO}
 @distribution_bp.route("/dashboard")
 @role_required(*PAYROLL_ROLES)
 def dashboard():
-    from .dashboard import collect_dashboard_stats
+    from .dashboard import collect_dashboard_stats, resolve_window
 
-    return render_template("distribution/dashboard.html", stats=collect_dashboard_stats())
+    window = resolve_window(request.args.get("window"))
+    return render_template(
+        "distribution/dashboard.html",
+        stats=collect_dashboard_stats(window_days=window),
+        window=window,
+    )
 
 
 @distribution_bp.route("/dashboard/fragment")
 @role_required(*PAYROLL_ROLES)
 def dashboard_fragment():
-    from .dashboard import collect_dashboard_stats
+    """The live-refreshing body of the monitor.
 
+    The reporting window travels on the query string so a poll re-renders the
+    period the operator is actually looking at — without it, the first refresh
+    would silently snap the page back to the default."""
+    from .dashboard import collect_dashboard_stats, resolve_window
+
+    window = resolve_window(request.args.get("window"))
     return render_template(
-        "distribution/_dashboard_fragment.html", stats=collect_dashboard_stats()
+        "distribution/_dashboard_fragment.html",
+        stats=collect_dashboard_stats(window_days=window),
+        window=window,
     )
 
 

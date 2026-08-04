@@ -20,6 +20,9 @@ Thresholds settled with Sina (2026-07-16); see the pmvp-v1-decisions memory:
 
 from dataclasses import dataclass, field
 
+from sqlalchemy import func
+
+from app import db
 from app.models import PayrollRun
 from app.payroll_status import (
     CLOSED_STATUSES,
@@ -365,18 +368,225 @@ def held_run_count():
     return PayrollRun.query.filter(held_run_criterion()).count()
 
 
-def held_runs_query():
-    """Held runs, newest first, unexecuted — so the queue page can page it
-    rather than materialising every held run (Phase 7, Task 7.1)."""
-    return PayrollRun.query.filter(held_run_criterion()).order_by(
-        PayrollRun.risk_checked_at.desc(), PayrollRun.id.desc()
-    )
+# The orders the review queue offers, and the one it opens on.
+#
+# `oldest` is the default, and the change is deliberate: this is a WORK queue,
+# and a work queue sorted newest-first serves the client who has waited least.
+# A held run is a payroll nobody can pay until an operator looks at it, so the
+# run at the top should be the one that has been waiting longest.
+#
+# The dashboard's Held panel keeps calling held_runs() with no argument and so
+# keeps its newest-first order — there it is a feed of what just happened, not a
+# list of work to do, and the two want opposite orders for good reasons.
+QUEUE_ORDERS = {
+    "oldest": "Longest held",
+    "newest": "Most recent",
+    "value": "Largest payroll",
+}
+DEFAULT_QUEUE_ORDER = "oldest"
+
+
+def held_runs_query(order="newest"):
+    """Held runs, unexecuted — so the queue page can page it rather than
+    materialising every held run (Phase 7, Task 7.1).
+
+    ``order`` is one of QUEUE_ORDERS, or ``newest`` (the historical default,
+    which the operator dashboard's panel relies on). An unknown value falls back
+    to the default rather than raising: it arrives from a query string.
+    """
+    query = PayrollRun.query.filter(held_run_criterion())
+    if order == "oldest":
+        # NULLs last would need a dialect-specific clause; a run scored before
+        # risk_checked_at existed sorts first here, which is the safe direction
+        # for a queue whose whole job is to surface the longest wait.
+        return query.order_by(PayrollRun.risk_checked_at.asc(), PayrollRun.id.asc())
+    if order == "value":
+        return query.order_by(PayrollRun.total_net_pay.desc(), PayrollRun.id.desc())
+    return query.order_by(PayrollRun.risk_checked_at.desc(), PayrollRun.id.desc())
 
 
 def held_runs(limit=None):
     """Held runs, newest first. ``limit`` caps the list for dashboard panels."""
     query = held_runs_query()
     return (query.limit(limit).all() if limit else query.all())
+
+
+# --- The review queue's own view of a held run -----------------------------
+# Everything below is presentation support for /oversight/risk. It measures
+# nothing new: the verdict is the one the gate persisted, and the comparison is
+# the one _previous_closed_run already defines. What it adds is the shape the
+# queue needs — a rule per chip rather than a run-on sentence, the movement that
+# caused the hold as a number, and the stake, so an operator can rank five holds
+# without opening five runs.
+
+# Maps a persisted reason sentence back to the rule that wrote it, for a short
+# chip label. Matched on the fixed phrasing evaluate_run emits (above), longest
+# first so "worker count" cannot be claimed by a looser pattern.
+_REASON_RULES = (
+    ("new-client", "New client", ("new-client", "runs are always reviewed", "first ")),
+    ("net_pay", "Net pay", ("net pay",)),
+    ("headcount", "Headcount", ("workers vs previous", "worker count", "0 workers")),
+)
+
+
+def reason_items(run):
+    """``run.risk_reasons`` as one item per tripped rule.
+
+    The queue used to print this field raw, so a run tripping two rules read as
+    one long sentence with a pipe in the middle of it. The persisted text is the
+    record of WHY the run was held and is not rewritten here — it is split on
+    the separator reasons_text() joins with, and each part is labelled with the
+    rule that produced it. Text this cannot classify keeps its own words under a
+    neutral label rather than being dropped, so a reason written by an older
+    version of the gate still reaches the operator.
+    """
+    raw = (run.risk_reasons or "").strip()
+    if not raw:
+        return []
+    items = []
+    for part in (p.strip() for p in raw.split("|")):
+        if not part:
+            continue
+        lowered = part.lower()
+        code, label = "other", "Flagged"
+        for rule_code, rule_label, needles in _REASON_RULES:
+            if any(needle in lowered for needle in needles):
+                code, label = rule_code, rule_label
+                break
+        items.append({"code": code, "label": label, "detail": part})
+    return items
+
+
+def queue_rows(runs):
+    """Each held run with the facts a reviewer ranks on: why, by how much, and
+    what is at stake.
+
+    One extra query per run, for that run's previous closed run — the SAME
+    baseline function the gate scored against, so the movement shown here and
+    the verdict shown beside it can never describe different comparisons. A
+    cheaper batched lookup would have to re-implement "most recent closed run
+    per client" and could then drift from it; at a page of held runs (the queue
+    is work waiting on a human, so it is small by definition, and paged besides)
+    correctness is worth more than the round trips.
+    """
+    rows = []
+    for run in runs:
+        previous = _previous_closed_run(run)
+        prev_net = (previous.total_net_pay or 0) if previous else None
+        prev_workers = (previous.total_workers or 0) if previous else None
+        this_net = run.total_net_pay or 0
+        this_workers = run.total_workers or 0
+        # Signed fractional change, for macros/charts.html::delta. None where
+        # there is no baseline — which is itself the reason a first run is held,
+        # and the template says so in those words rather than drawing a dash.
+        net_change = (this_net - prev_net) / prev_net if prev_net else None
+        worker_change = (
+            (this_workers - prev_workers) / prev_workers if prev_workers else None
+        )
+        reasons = reason_items(run)
+        rows.append(
+            {
+                "run": run,
+                "reasons": reasons,
+                "previous": previous,
+                "net_change": net_change,
+                "worker_change": worker_change,
+                "previous_net": prev_net,
+                "previous_workers": prev_workers,
+                "stale": _verdict_is_stale(reasons, net_change, worker_change),
+                # The ranking fact, as a duration. Same phrasing as the summary
+                # band's "Longest wait" tile, so the tile and the column it
+                # describes cannot read as two different measurements.
+                "age": _age_phrase(run.risk_checked_at),
+            }
+        )
+    return rows
+
+
+def _verdict_is_stale(reasons, net_change, worker_change):
+    """Whether the recorded reason no longer describes today's comparison.
+
+    A verdict is a photograph: it was taken against whichever closed run was the
+    client's most recent AT SCORING TIME. If a later run has since been approved,
+    the baseline moves under it, and the sentence stored in ``risk_reasons`` can
+    end up describing a comparison nobody can reproduce from the current data —
+    "net pay moved +38.4%" beside a row that now reads -2.1%.
+
+    Putting the movement on the row is what makes that visible; this is what
+    stops it reading as a contradiction. The queue keeps showing the recorded
+    reason (it is the audit record of why the hold exists, and it is not
+    rewritten here) and marks the row so the operator knows to re-check rather
+    than to distrust the page.
+
+    Costs nothing: it re-uses the comparison already computed above, and never
+    re-runs the gate — re-scoring a run is a deliberate operator action with its
+    own route and its own audit entry, not something a list page does silently.
+    """
+    tripped = {reason["code"] for reason in reasons}
+    if "net_pay" in tripped and net_change is not None:
+        if abs(net_change) <= NET_PAY_VARIANCE_PCT:
+            return True
+    if "headcount" in tripped and worker_change is not None:
+        if abs(worker_change) <= HEADCOUNT_SWING_PCT:
+            return True
+    return False
+
+
+def queue_summary():
+    """What the whole queue is holding: how many runs, how many workers, how
+    much money, and how long the oldest has waited.
+
+    The page listed five runs and stated none of this. "Five runs held" is a
+    number of rows; "GH₵ 223,813 of payroll and 109 workers, oldest waiting
+    three days" is the reason the page exists. Three aggregates in one query,
+    over a table already filtered to a state a human is expected to clear."""
+    row = (
+        db.session.query(
+            func.count(PayrollRun.id),
+            func.coalesce(func.sum(PayrollRun.total_net_pay), 0),
+            func.coalesce(func.sum(PayrollRun.total_workers), 0),
+            func.min(PayrollRun.risk_checked_at),
+        )
+        .filter(held_run_criterion())
+        .one()
+    )
+    count, net_pay, workers, oldest = row
+    return {
+        "count": int(count or 0),
+        "net_pay": float(net_pay or 0),
+        "workers": int(workers or 0),
+        "oldest_checked_at": oldest,
+        "oldest_age": _age_phrase(oldest),
+    }
+
+
+def _age_phrase(moment, now=None):
+    """How long ago, as a DURATION rather than as a date.
+
+    app.events.relative_time is right for a feed ("26 Jul 2026" is what you want
+    beside an entry from July), and wrong for a tile whose label is "Longest
+    wait" — a date there makes the reader do the subtraction, which is the one
+    piece of arithmetic the tile exists to save them. Coarsens the same way, and
+    clamps a future timestamp to zero rather than reporting a negative wait: two
+    app servers with a few seconds of clock skew must not make the queue print
+    nonsense."""
+    if moment is None:
+        return None
+    from datetime import datetime, timezone
+
+    from app.events import as_utc
+
+    moment = as_utc(moment)
+    now = as_utc(now) or datetime.now(timezone.utc)
+    seconds = max((now - moment).total_seconds(), 0)
+    if seconds < 3600:
+        minutes = int(seconds // 60)
+        return "under a minute" if minutes < 1 else f"{minutes} minute{'' if minutes == 1 else 's'}"
+    if seconds < 86400:
+        hours = int(seconds // 3600)
+        return f"{hours} hour{'' if hours == 1 else 's'}"
+    days = int(seconds // 86400)
+    return f"{days} day{'' if days == 1 else 's'}"
 
 
 def risk_summary(limit=8):

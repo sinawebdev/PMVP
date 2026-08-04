@@ -15,32 +15,17 @@
 {% import "macros/charts.html" as ch %}
 
 {# --- Icon set --------------------------------------------------------------
-   One family, one geometry: 24x24 box, 1.75 stroke, round caps and joins, so
-   nothing looks borrowed. Decorative beside their labels, hence aria-hidden —
-   every icon in this file sits next to real text. #}
+   Forwarded, not redefined. The implementation moved to macros/ui.html (the
+   shared layer) because the tenant SHELL needs it too — it is the only
+   Bootstrap-free icon set here, and client/base.html cannot use the operator
+   shell's icon font. Same forwarding pattern, and same Jinja reason, as the
+   state macros at the foot of this file: an imported name is not re-exported
+   on a module, so a plain alias would silently yield Undefined. One
+   implementation, one hop. #}
+{% import "macros/ui.html" as _icons %}
+
 {% macro icon(name, size=20) -%}
-<svg class="ico" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none"
-     stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
-     aria-hidden="true" focusable="false">
-{%- if name == 'upload' %}<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/>
-{%- elif name == 'users' %}<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M17 11.4a3.2 3.2 0 0 0 0-6.4"/><path d="M18.2 20a6.2 6.2 0 0 0-3.2-5.2"/>
-{%- elif name == 'file-text' %}<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/>
-{%- elif name == 'download' %}<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/>
-{%- elif name == 'shield-alert' %}<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="M12 9v3.5"/><path d="M12 16h.01"/>
-{%- elif name == 'shield-check' %}<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="m9.2 12 2 2 3.6-3.8"/>
-{%- elif name == 'receipt' %}<path d="M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21z"/><path d="M9.5 8h5"/><path d="M9.5 12h5"/>
-{%- elif name == 'check-circle' %}<circle cx="12" cy="12" r="9"/><path d="m8.5 12.2 2.4 2.4 4.6-5"/>
-{%- elif name == 'x-circle' %}<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/>
-{%- elif name == 'flag' %}<path d="M5 21V4"/><path d="M5 4h9l-1.5 3.5L14 11H5"/>
-{%- elif name == 'send' %}<path d="M21 3 11.5 12.5"/><path d="M21 3l-6.5 18-3.5-8-8-3.5z"/>
-{%- elif name == 'activity' %}<path d="M3 12h4l3 8 4-16 3 8h4"/>
-{%- elif name == 'alert-triangle' %}<path d="M12 4 2.5 20h19z"/><path d="M12 10v4"/><path d="M12 17.5h.01"/>
-{%- elif name == 'clock' %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>
-{%- elif name == 'wallet' %}<path d="M19 8V6.5A1.5 1.5 0 0 0 17.5 5H5a2 2 0 0 0 0 4h13a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7"/><path d="M16.5 13.5h.01"/>
-{%- elif name == 'arrow' %}<path d="M4.5 12h14"/><path d="m13 6.5 6 5.5-6 5.5"/>
-{%- else %}<circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/>
-{%- endif %}
-</svg>
+{{- _icons.icon(name, size) -}}
 {%- endmacro %}
 
 {# --- Value formatting ------------------------------------------------------
@@ -48,7 +33,12 @@
    so the branch is extended here rather than duplicated. Jinja cannot apply a
    filter chosen at runtime, hence the explicit branch. #}
 {% macro value(v, formatter="cedis") -%}
-{%- if formatter == 'percent' -%}{{ v|int }}<span class="unit">%</span>
+{#- A metric with no defined value renders as a dash, never as zero. A rate
+    whose denominator is empty is undefined, and printing 0% for it states a
+    failure that did not happen — the same rule app.analytics.pct_change
+    already follows for a change against a zero baseline. -#}
+{%- if v is none -%}<span class="kpi-undefined">—</span>
+{%- elif formatter == 'percent' -%}{{ v|int }}<span class="unit">%</span>
 {%- else -%}{{ ch.fmt(v, formatter) }}
 {%- endif -%}
 {%- endmacro %}
@@ -124,7 +114,12 @@
 </li>
 {% endmacro %}
 
-{# --- Compliance row -------------------------------------------------------- #}
+{# --- Compliance row --------------------------------------------------------
+   `earned`/`available` (app/compliance.py) are this row's contribution to the
+   headline score, printed so the five rows visibly SUM to the number above
+   them. Without it the panel asserted a score and then listed five findings
+   with no arithmetic joining the two, which is precisely the kind of
+   unexplained percentage an executive cannot defend in a meeting. #}
 {% macro compliance_row(check, href="#") %}
 <li class="creq creq--{{ check.state }}">
   <span class="creq-mark" aria-hidden="true">{{ icon('check-circle' if check.state == 'ok' else 'alert-triangle', 18) }}</span>
@@ -132,6 +127,11 @@
     <strong>{{ check.label }}</strong>
     <span class="creq-detail">{{ check.detail }}</span>
   </span>
+  {% if check.available is defined %}
+  <span class="creq-points nums" title="This check contributes {{ check.available }} of the 100 available compliance points">
+    <strong>{{ check.earned }}</strong><span aria-hidden="true">/{{ check.available }}</span><span class="sr-only"> of {{ check.available }} points earned</span>
+  </span>
+  {% endif %}
   <span class="creq-state">{{ 'Clear' if check.state == 'ok' else ('Action needed' if check.state == 'danger' else 'Review') }}</span>
   {% if href != '#' %}<a class="creq-link" href="{{ href }}" aria-label="Resolve {{ check.label }}">{{ icon('arrow', 16) }}</a>{% endif %}
 </li>

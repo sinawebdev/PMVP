@@ -50,14 +50,13 @@
 
 /* --- Page header ---------------------------------------------------------
    The shell's header is shared by every operator page and is not redesigned
-   here — with one subtraction. This page's <h1> IS the greeting, so the shell's
-   "Signed in as …" line repeats it word for word directly underneath. Scoped by
-   :has() to pages that contain the operator workspace, so no other page loses
-   its signed-in line, and a browser without :has() simply keeps the duplicate
-   rather than losing anything. The role is still on screen, in the sidebar. */
-
-body:has(.ops) .topbar .signed-in { display: none; }
-body:has(.ops) .topbar .page-intro { margin-bottom: 0; }
+   here. It previously carried one subtraction: while this page's <h1> WAS the
+   greeting, a `.signed-in` line in the topbar would have repeated it word for
+   word underneath, so it was hidden. The <h1> now names the workspace rather
+   than the reader, so there is nothing left to collide with and the rule is
+   gone. (The topbar no longer renders a signed-in line at all — base.html
+   moved identity to the sidebar — so this is a dead rule removed, not a line
+   restored.) */
 
 /* --- Period filter -------------------------------------------------------
    A filter, not a content panel: it sits directly on the shell with a hairline
@@ -96,7 +95,9 @@ body:has(.ops) .topbar .page-intro { margin-bottom: 0; }
     background-position: right 15px center, right 10px center;
     background-repeat: no-repeat;
     background-size: 5px 5px, 5px 5px;
-    border: 1px solid var(--line-strong);
+    /* --line-control: a select's outline is what identifies it as a field, so
+       WCAG 1.4.11's 3:1 applies (--line-strong is 1.37:1 on the shell). */
+    border: 1px solid var(--line-control);
     border-radius: var(--radius-sm);
     color: var(--ink);
     font: inherit;
@@ -126,25 +127,11 @@ body:has(.ops) .topbar .page-intro { margin-bottom: 0; }
 .ops-apply:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
 .ops-apply:active { transform: translateY(1px); }
 
-/* macros/dashboard.html::empty renders its call to action as `.btn.primary` —
-   the tenant portal's class pair, which portal.css styles and the operator
-   shell (Bootstrap + styles.css) does not, so an empty panel's only action
-   would render as bare bold text. Same treatment as Apply above, so the two
-   primary actions on the page are the same button. */
-.ops .state .btn {
-    background: var(--brand);
-    border: 1px solid var(--brand);
-    border-radius: var(--radius-sm);
-    color: var(--surface);
-    font-size: 13.5px;
-    font-weight: 650;
-    padding: 9px 18px;
-    text-decoration: none;
-    transition: background var(--ease), border-color var(--ease), transform var(--ease);
-}
-
-.ops .state .btn:hover { background: var(--brand-dark); border-color: var(--brand-dark); color: var(--surface); }
-.ops .state .btn:active { transform: translateY(1px); }
+/* The compensating block that used to sit here — re-styling `.state .btn`
+   because macros/ui.html emits the tenant portal's `.btn.primary` vocabulary
+   and the operator shell does not style `.primary` — is gone. The shared state
+   component now owns its button's whole appearance in components.css, which
+   both shells load, so every operator page gets it rather than this one. */
 
 .ops-filters-note {
     color: var(--muted);
@@ -237,12 +224,12 @@ body:has(.ops) .topbar .page-intro { margin-bottom: 0; }
 .ops .area-risk { grid-area: risk; }
 .ops .area-activity { grid-area: activity; }
 
-/* Until the desktop breakpoint the rail is not a column at all: `contents`
-   dissolves the wrapper so its two panels become grid items in their own right
-   and can be placed independently — which is the whole reason the phone can put
-   Risk & action above the supporting charts while keeping the rail intact on a
-   wide screen. */
-.ops-rail { display: contents; }
+/* Until the desktop breakpoint neither wrapper is a column at all: `contents`
+   dissolves them so their panels become grid items in their own right and can
+   be placed independently — which is the whole reason the phone can put
+   Risk & action above the supporting charts while keeping both columns intact
+   on a wide screen. */
+.ops-rail, .ops-work { display: contents; }
 
 .ops-support { display: grid; gap: var(--space-panel); grid-template-columns: minmax(0, 1fr); }
 
@@ -350,9 +337,12 @@ body:has(.ops) .topbar .page-intro { margin-bottom: 0; }
         linear-gradient(to left, var(--line-strong), transparent) 100% 0 / 12px 100% no-repeat scroll;
 }
 
+/* Four columns fit ~440px. The scroll container above stays — it is the
+   phone's safety net, not the desktop's crutch — but from a tablet up the
+   table now fits its panel and never scrolls at all. */
 .ops-table {
     border-collapse: collapse;
-    min-width: 620px;
+    min-width: 440px;
     width: 100%;
 }
 
@@ -377,7 +367,17 @@ body:has(.ops) .topbar .page-intro { margin-bottom: 0; }
     white-space: nowrap;
 }
 
-.ops-th-note { font-weight: 500; letter-spacing: 0; text-transform: none; }
+/* On its own line under the column name. Inline, it made "COST MOVEMENT vs last
+   month" a single 200px nowrap header over a 70px pill — the widest cell in the
+   table, and 46px of the overflow that was clipping the status badge off the
+   right edge. Wrapping it keeps the comparison basis stated (which is why it
+   exists) at a fraction of the width. */
+.ops-th-note {
+    display: block;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+}
 
 .ops-table tbody tr { transition: background var(--ease); }
 .ops-table tbody tr + tr th, .ops-table tbody tr + tr td { border-top: 1px solid var(--line); }
@@ -391,38 +391,70 @@ body:has(.ops) .topbar .page-intro { margin-bottom: 0; }
     white-space: nowrap;
 }
 
+/* The company and its size, one above the other. The name is the row's subject
+   and keeps the row's weight; the headcount is the quiet qualifier that used to
+   need a column. */
 .ops-company {
     color: var(--ink);
-    font-size: 13.5px;
     font-weight: 700;
     max-width: 26ch;
+}
+
+.ops-company-name {
+    display: block;
+    font-size: 13.5px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.ops-move { align-items: center; display: flex; gap: 8px; white-space: nowrap; }
+.ops-company-meta {
+    color: var(--muted);
+    display: block;
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 550;
+    margin-top: 2px;
+}
+
+/* Cell CONTENTS are laid out, never the cell itself: `display: flex` on a <td>
+   takes it out of table-cell layout, and the row then stops sizing to its
+   tallest cell — every row grew to ~90px and the company name floated away
+   from the figures on its own row. Anything that needs a flex box inside a cell
+   gets an inline-flex box that sits IN the cell. */
+.ops-move { white-space: nowrap; }
+.ops-move .delta, .ops-move .sparkline { vertical-align: middle; }
+.ops-move .sparkline { margin-left: 8px; }
 /* The delta pill leads; the sparkline is secondary and drops out first when the
    column is squeezed. */
 .ops-move .delta { font-size: 11.5px; padding: 2px 8px; }
 .ops-move .delta small { display: none; }
+
+/* Where a company stands: its latest run's status, and — only when there is
+   any — the work waiting on the operator, stacked under it. Two facts about one
+   subject in one cell, so the eye reads a company's standing in one stop
+   instead of tracking across to a sixth column. A company with nothing pending
+   renders nothing: an em-dash in every quiet row is six pieces of ink saying
+   "no news", and it made the rows with real work harder to spot. */
+/* Block, not flex, for the reason above. The pending chip sits on its own line
+   under the status badge via a plain block + margin. */
+.ops-standing .ops-pending { display: block; margin-top: 5px; width: fit-content; }
 
 .ops-pending {
     background: var(--warn-soft);
     border-radius: var(--radius-pill);
     color: var(--warn);
     display: inline-block;
-    font-size: 12.5px;
-    font-weight: 750;
-    min-width: 26px;
+    font-size: 11.5px;
+    font-weight: 700;
     padding: 2px 9px;
     text-align: center;
     text-decoration: none;
     transition: background var(--ease), color var(--ease);
+    white-space: nowrap;
 }
 
 .ops-pending:hover { background: var(--warn); color: var(--surface); }
-.ops-none { color: var(--line-strong); }
 
 /* --- Motion --------------------------------------------------------------
    The entrance establishes hierarchy: the KPI band resolves first (--i 0-4),
@@ -546,11 +578,14 @@ body:has(.ops) .topbar .page-intro { margin-bottom: 0; }
     }
 
     .ops-support { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    /* Paired side by side, so they match heights rather than reading as two
-       cards of arbitrary length — and the statutory strip drops to the foot of
-       whatever height that turns out to be. */
-    .ops .area-risk, .ops .area-activity { align-self: stretch; }
-    .ops-statutory { margin-top: auto; }
+
+    /* Each panel keeps its own height. Stretching them to match looked tidier
+       in a wireframe and is wrong with real data: Risk & action carries two
+       signals and Recent activity carries eight, so matching heights put ~400px
+       of blank card under the risk signals — and a card that is two-thirds
+       empty reads as a panel that failed to load, not as a short list. Ragged
+       bottoms between two columns are ordinary; a hole inside a card is not. */
+    .ops .area-risk, .ops .area-activity { align-self: start; }
 }
 
 /* --- Desktop (>=1180px) --------------------------------------------------
@@ -562,27 +597,29 @@ body:has(.ops) .topbar .page-intro { margin-bottom: 0; }
 @media (min-width: 1180px) {
     .ops { --panel-pad: 22px; --space-panel: 18px; --space-section: 26px; }
 
+    /* Two columns, one row. Each column is a single grid item holding a flex
+       stack of panels, so the two columns' heights are entirely independent of
+       each other and every panel inside them keeps its natural height. The
+       earlier three-row version could not do that: a rail spanning three rows
+       forces those rows to accommodate it, and the surplus goes either into the
+       left-hand panels (empty cards) or into the gaps between them (200px
+       holes). One row per column removes the shared row track that caused it,
+       and the shorter column simply ends. */
     .ops-grid {
-        grid-template-areas:
-            "primary rail"
-            "support rail"
-            "table   rail";
+        grid-template-areas: "work rail";
         grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
     }
 
-    /* The rail becomes a real column here: one grid item spanning the three
-       workspace rows, with its own panels stacked inside it. That is what keeps
-       each left-hand panel at its natural height — while the rail was two
-       separate grid items, a tall risk panel set the height of row 1 and
-       stretched the chart panel beside it into a mostly empty box. */
-    .ops-rail {
+    .ops-work, .ops-rail {
         align-self: start;
         display: flex;
         flex-direction: column;
         gap: var(--space-panel);
-        grid-area: rail;
         min-width: 0;
     }
+
+    .ops-work { grid-area: work; }
+    .ops-rail { grid-area: rail; }
 
     .ops .xpanel--primary { padding: 24px; }
     .ops .kpi-band { gap: 14px; }
@@ -618,22 +655,24 @@ body:has(.ops) .topbar .page-intro { margin-bottom: 0; }
     .ops-table { min-width: 500px; }
 }
 
-/* The six columns need about 680px. The left column only clears that from
-   ~1400px up (0.7 × the content width), and below that the first thing to go is
-   the row sparkline: it is the only cell carrying no figure. The signed
-   percentage beside it says the same thing in words, so nothing is lost — which
-   is the test for whether a sparkline earns its row. */
-@media (max-width: 1400px) {
+/* The five columns need ~610px of content. The work column only clears that
+   with the sparkline still in it from ~1500px of viewport up (the sidebar and
+   the page gutters take ~340px before the 70% split), so below that the
+   sparkline is the first thing to go: it is the only cell carrying no figure,
+   and the signed percentage beside it says the same thing in words. That is
+   the test for whether a sparkline earns its row — and the alternative was the
+   status badge being clipped at 1440px, which is the single most common
+   desktop width there is. */
+@media (max-width: 1500px) {
     .ops-move .sparkline { display: none; }
 }
 
 @media (max-width: 900px) {
     .ops-table th, .ops-table td { padding-left: 6px; padding-right: 6px; }
     /* Same trade at the header: the comparison basis is a clarifier, and every
-       delta still carries it in its own tooltip. Dropping it here is what keeps
-       the Pending column — an actionable count — on screen without scrolling. */
+       delta still carries it in its own tooltip. */
     .ops-th-note { display: none; }
-    .ops-table { min-width: 480px; }
+    .ops-table { min-width: 400px; }
 }
 
 /* --- Accessibility preferences -------------------------------------------

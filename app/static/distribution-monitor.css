@@ -1,0 +1,287 @@
+/* ---------------------------------------------------------------------------
+   Payrolla — Distribution Monitor layer.
+
+   Loaded ONLY by distribution/dashboard.html, on top of tokens.css + styles.css
+   + components.css + dashboard.css. Every rule below is scoped under `.dist`,
+   the same discipline admin-dashboard.css holds to under `.ops`: nothing here
+   can reach another operator page, and nothing here redefines a name
+   dashboard.css or components.css already owns.
+
+   What this file is NOT is as important as what it is. The monitor's panels,
+   tiles, pills, signals and tables are all components that already existed
+   (.xpanel, .kpi, .pill, .signal, .dt) — this page was drawn in Bootstrap
+   instead, which is exactly the drift dashboard.css was extracted to prevent.
+   So this file adds the two things genuinely new here (a window switcher and an
+   in-flight job list) and otherwise only sets spacing.
+
+   Same three rules as dashboard.css: colour comes from tokens, motion is
+   interaction-only, and status is never carried by colour alone.
+   --------------------------------------------------------------------------- */
+
+.dist {
+    /* One spacing scale, three steps — the same one .ops uses, because these
+       two pages sit side by side in the same console and a reader moving
+       between them should not feel the rhythm change. */
+    --space-tight: 8px;
+    --space-panel: 16px;
+    --space-section: 22px;
+
+    --panel-pad: 20px;
+}
+
+.dist .nums { font-variant-numeric: tabular-nums; }
+
+/* --- Reporting window ----------------------------------------------------
+   A segmented control built from links, not a <select> + Apply: four options
+   is below the threshold where a dropdown earns its extra click, and links put
+   the window in the URL so a reload or a shared link reproduces the view.
+
+   It sits on the shell rather than on a card for the same reason the operator
+   dashboard's period filter does — it changes what you are looking at, not
+   what you are doing. */
+
+.dist-window {
+    align-items: center;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: var(--space-section);
+    padding-bottom: 14px;
+}
+
+.dist-window-label {
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+/* --line-control, not --line-strong: this box IS the affordance that says the
+   four words inside it are a control, and --line-strong reads at 1.37:1 against
+   the shell — a boundary a low-vision user cannot see is not a boundary. */
+.dist-window-set {
+    background: var(--surface);
+    border: 1px solid var(--line-control);
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    overflow: hidden;
+    padding: 3px;
+}
+
+.dist-window-opt {
+    border-radius: calc(var(--radius-sm) - 2px);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 650;
+    padding: 6px 14px;
+    text-decoration: none;
+    transition: background var(--ease), color var(--ease);
+}
+
+.dist-window-opt:hover { background: var(--surface-alt); color: var(--ink); }
+
+/* The selected option is filled, and also marked aria-current — the state is
+   never carried by the fill alone. */
+.dist-window-opt.is-current {
+    background: var(--brand);
+    color: var(--surface);
+}
+
+.dist-window-opt.is-current:hover { background: var(--brand-dark); color: var(--surface); }
+
+/* --- KPI band ------------------------------------------------------------
+   Five tiles that must read as ONE band. Below a laptop they reflow to
+   whatever fits; from a laptop up they are five equal columns, always — the
+   same rule (and the same reasoning) as .ops .kpi-band: auto-fit alone drops
+   to 4+1 at around 1280px, and a band with one tile hanging off the end reads
+   as a mistake rather than as a band. */
+
+.dist-kpis { margin-bottom: var(--space-section); }
+
+.dist .kpi-band { gap: 12px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+
+@media (min-width: 1080px) {
+    .dist .kpi-band { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+.dist .kpi-value { font-size: clamp(18px, 1.35vw, 21px); margin-top: 6px; white-space: nowrap; }
+.dist .kpi-label { font-size: 11px; }
+.dist .kpi-caption { font-size: 11.5px; margin-top: 8px; }
+
+/* --- Workspace -----------------------------------------------------------
+   Phone first: one column, and In flight comes before Needs attention because
+   on a 390px screen the live queue is what an operator opened the page for.
+   From a laptop up it is a 60/40 split — the live work is the wider column,
+   the standing signals the narrower one. */
+
+.dist-grid {
+    /* `start`, not the grid default `stretch`: the two panels answer different
+       questions and have genuinely different natural heights, and stretching
+       the shorter one leaves a card that is two-thirds empty air — which reads
+       as missing content rather than as a short list. Each keeps its own
+       height; the surplus lands at the bottom of the row, where it is just
+       page. */
+    align-items: start;
+    display: grid;
+    gap: var(--space-panel);
+    grid-template-columns: minmax(0, 1fr);
+    margin-bottom: var(--space-panel);
+}
+
+@media (min-width: 1080px) {
+    .dist-grid { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+}
+
+/* --- In flight -----------------------------------------------------------
+   A list of jobs, not a table: each entry has a different shape depending on
+   its state (a running batch has progress, a scheduled one has a start time),
+   and forcing four columns onto all of them is what produced the em-dash grid
+   this replaces. */
+
+.dist-rate {
+    color: var(--muted);
+    flex: none;
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 650;
+}
+
+.dist-queue {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.dist-job {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    padding: 11px 13px;
+}
+
+/* The left edge carries state as a second, redundant cue beside the pill —
+   never as the only one. */
+.dist-job--running { border-left-color: var(--brand); }
+.dist-job--queued { border-left-color: var(--line-strong); }
+.dist-job--scheduled { border-left-color: var(--muted); }
+
+.dist-job-head {
+    align-items: flex-start;
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+}
+
+.dist-job-who {
+    display: flex;
+    flex-direction: column;
+    font-size: 13.5px;
+    font-weight: 700;
+    gap: 2px;
+    min-width: 0;
+}
+
+.dist-job-who small { color: var(--muted); font-size: 11.5px; font-weight: 550; }
+
+.dist-job-meta {
+    color: var(--muted);
+    font-size: 12px;
+    margin: 8px 0 0;
+}
+
+.dist-job .progress { margin-top: 10px; }
+
+/* --- Health footnote ------------------------------------------------------
+   Deliberately a <dl> footnote under the signals rather than a panel of its
+   own, and deliberately last: worker mode, service-level target and last
+   completion are preconditions. If they are fine nobody needs to read them,
+   and if they are not, a signal above has already said so in words. Same shape
+   and same argument as .ops-statutory on the operator dashboard. */
+
+.dist-health {
+    border-top: 1px solid var(--line);
+    margin: 16px 0 0;
+    padding-top: 12px;
+}
+
+.dist-health div { align-items: baseline; display: flex; gap: 10px; }
+.dist-health dt, .dist-health dd { margin: 0; }
+
+.dist-health-head { margin-bottom: 8px; }
+
+.dist-health-head dt {
+    color: var(--ink-soft);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.dist-health-head dd { color: var(--muted); font-size: 11.5px; margin-left: auto; }
+
+.dist-health-note { margin-bottom: 8px; }
+.dist-health-note dd { color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+
+.dist-health-row { padding: 3px 0; }
+.dist-health-row dt { color: var(--muted); font-size: 12.5px; }
+.dist-health-row dd { font-size: 12.5px; font-weight: 650; margin-left: auto; text-align: right; }
+
+/* --- Recent distributions -------------------------------------------------
+   The shared .dt table; only the two page-specific cells are set here. */
+
+.dist-recent .dist-client { font-weight: 700; }
+
+/* Deliberately NOT `.dt-note`, which components.css defines for a table's
+   <caption> (caption-side + zero side padding). Borrowing it for cells looked
+   right until `display: block` was added on top: a <td> set to block leaves the
+   table's row flow entirely, so the last two columns stacked vertically inside
+   their own row, each keeping its bottom border. Two names, two jobs. */
+.dist-quiet { color: var(--muted); font-size: 12.5px; }
+
+.dist-sub { color: var(--muted); display: block; font-size: 11.5px; }
+
+/* Left-aligned, because "57 sent · 1 failed" is a sentence and right-aligning
+   sentences of different lengths ragged-lefts the column. Tabular figures still,
+   so the counts line up down it. */
+.dist-outcome { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* A failed batch's error, printed under its row rather than hidden in a title
+   attribute. It is the row's continuation, so it carries no border of its own
+   and is inset to the first data column. */
+.dist-error-row td { border-top: 0; padding-top: 0; }
+
+/* #991b1b, not --danger: --danger on --danger-soft is 4.23:1, and this is 12px
+   body text, which needs 4.5. #991b1b is the value .pill--danger already uses on
+   this exact background (7.28:1) — the system agreeing with itself rather than a
+   new colour. */
+.dist-error {
+    background: var(--danger-soft);
+    border-radius: var(--radius-sm);
+    color: #991b1b;
+    display: inline-block;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 6px 10px;
+}
+
+/* --- Polling stood down ---------------------------------------------------
+   Quiet by design. "Nothing is happening" is the good state, and it is stated
+   at the foot of the page rather than announced at the top of it. */
+
+.dist-paused {
+    color: var(--muted);
+    font-size: 12.5px;
+    margin: var(--space-panel) 0 0;
+    text-align: center;
+}
+
+/* No ultra-wide rule here on purpose. The 1680px cap Phase 11 introduced lives
+   on the SHELL — `.main-content` in styles.css, `.portal-main` in portal.css —
+   so it already applies to every operator page including this one. Repeating it
+   here would give one rule two owners, which is the failure mode this whole
+   file's scoping exists to prevent. Verified at 2560px. */
