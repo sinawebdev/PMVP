@@ -12,6 +12,49 @@
    Nothing in this file may assume Bootstrap — the tenant portal does not load it.
    --------------------------------------------------------------------------- #}
 
+{# --- Icon set --------------------------------------------------------------
+   One family, one geometry: 24x24 box, 1.75 stroke, round caps and joins, so
+   nothing looks borrowed. Decorative beside their labels, hence aria-hidden.
+
+   This lives HERE, in the shared layer, rather than in macros/dashboard.html
+   where it started. It is the only Bootstrap-free icon set in the codebase,
+   and the tenant shell — which deliberately does not load Bootstrap or its
+   icon font — needs it for its own navigation. macros/dashboard.html now
+   forwards to this definition so the two dashboards keep drawing exactly the
+   glyphs they did before. #}
+{% macro icon(name, size=20) -%}
+<svg class="ico" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none"
+     stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+     aria-hidden="true" focusable="false">
+{%- if name == 'upload' %}<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/>
+{%- elif name == 'users' %}<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M17 11.4a3.2 3.2 0 0 0 0-6.4"/><path d="M18.2 20a6.2 6.2 0 0 0-3.2-5.2"/>
+{%- elif name == 'file-text' %}<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/>
+{%- elif name == 'download' %}<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/>
+{%- elif name == 'shield-alert' %}<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="M12 9v3.5"/><path d="M12 16h.01"/>
+{%- elif name == 'shield-check' %}<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="m9.2 12 2 2 3.6-3.8"/>
+{%- elif name == 'receipt' %}<path d="M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21z"/><path d="M9.5 8h5"/><path d="M9.5 12h5"/>
+{%- elif name == 'check-circle' %}<circle cx="12" cy="12" r="9"/><path d="m8.5 12.2 2.4 2.4 4.6-5"/>
+{%- elif name == 'x-circle' %}<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/>
+{%- elif name == 'flag' %}<path d="M5 21V4"/><path d="M5 4h9l-1.5 3.5L14 11H5"/>
+{%- elif name == 'send' %}<path d="M21 3 11.5 12.5"/><path d="M21 3l-6.5 18-3.5-8-8-3.5z"/>
+{%- elif name == 'activity' %}<path d="M3 12h4l3 8 4-16 3 8h4"/>
+{%- elif name == 'alert-triangle' %}<path d="M12 4 2.5 20h19z"/><path d="M12 10v4"/><path d="M12 17.5h.01"/>
+{%- elif name == 'clock' %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>
+{%- elif name == 'wallet' %}<path d="M19 8V6.5A1.5 1.5 0 0 0 17.5 5H5a2 2 0 0 0 0 4h13a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7"/><path d="M16.5 13.5h.01"/>
+{%- elif name == 'arrow' %}<path d="M4.5 12h14"/><path d="m13 6.5 6 5.5-6 5.5"/>
+{# Added for the tenant shell's navigation — same box, same stroke. #}
+{%- elif name == 'grid' %}<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>
+{%- elif name == 'bank' %}<path d="M3.5 9.5 12 4l8.5 5.5"/><path d="M5.5 9.5v9"/><path d="M18.5 9.5v9"/><path d="M9.5 9.5v9"/><path d="M14.5 9.5v9"/><path d="M3 20h18"/>
+{%- elif name == 'list-check' %}<path d="M4 6.5h10"/><path d="M4 12h10"/><path d="M4 17.5h6"/><path d="m16.5 16.5 1.8 1.8 3.2-3.6"/>
+{%- elif name == 'palette' %}<path d="M12 3a9 9 0 0 0 0 18c1.4 0 2-1 2-1.8 0-1.4-1.4-1.6-1.4-2.7 0-.8.7-1.5 1.6-1.5H16a5 5 0 0 0 5-5c0-4-4-7-9-7z"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16" cy="10" r="1"/>
+{%- elif name == 'bell' %}<path d="M6 9a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 13 6 9z"/><path d="M10 18a2 2 0 0 0 4 0"/>
+{%- elif name == 'logout' %}<path d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3"/><path d="M15.5 16.5 20 12l-4.5-4.5"/><path d="M20 12H9"/>
+{%- elif name == 'menu' %}<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>
+{%- else %}<circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/>
+{%- endif %}
+</svg>
+{%- endmacro %}
+
 {# --- States ----------------------------------------------------------------
    Empty, loading and error, so every surface waits and fails the same way.
    `skeleton` matches the height of what it replaces so an async swap cannot

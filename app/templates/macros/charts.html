@@ -32,9 +32,18 @@
 {%- endmacro %}
 
 {# --- Line chart — a period trend ------------------------------------------
-   points: [{label, full_label, value, pct}] from analytics. `formatter` names
-   how each value is rendered in the tooltip/summary ('cedis' | 'count'). #}
+   points: [{label, full_label, value, pct, floor, ceiling}] from analytics.
+   `formatter` names how each value is rendered in the tooltip/summary
+   ('cedis' | 'count').
+
+   `floor`/`ceiling` are set when analytics range-scaled the series (see
+   app/analytics.py::_as_points). When they are, the plot does NOT start at
+   zero, and this macro labels both bounds — an unlabelled truncated axis
+   exaggerates every movement, which on a payroll dashboard is the difference
+   between "costs are stable" and "costs are spiking". When they are absent the
+   axis is zero-based and needs no label to say so. #}
 {% macro line_chart(points, label="Trend", height=132, formatter="cedis") %}
+{% set bounds = points[0] if points and points[0].floor is not none else none %}
 {% set w = 320 %}
 {% set h = height %}
 {% set pad_x = 6 %}
@@ -49,8 +58,9 @@
   {% set y = pad_y + inner - (p.pct / 100 * inner) %}
   {% set _ = coords.append({"x": x, "y": y, "p": p}) %}
 {% endfor %}
-<figure class="chart chart--line" role="img"
-        aria-label="{{ label }}: {% for p in points %}{{ p.full_label }} {{ fmt(p.value, formatter) }}{{ "; " if not loop.last }}{% endfor %}">
+<figure class="chart chart--line{{ ' chart--zoomed' if bounds }}" role="img"
+        aria-label="{{ label }}{% if bounds %} (vertical axis {{ fmt(bounds.floor, formatter) }} to {{ fmt(bounds.ceiling, formatter) }}, not starting at zero){% endif %}: {% for p in points %}{{ p.full_label }} {{ fmt(p.value, formatter) }}{{ "; " if not loop.last }}{% endfor %}">
+  <div class="chart-plot">
   {# Uniform scaling (meet, not none): non-uniform scaling would squash the
      point markers into ellipses at wide card widths. Height follows width via
      .chart--line svg { height: auto }, so it stays responsive either way. #}
@@ -82,6 +92,15 @@
             cx="{{ "%.2f"|format(c.x) }}" cy="{{ "%.2f"|format(c.y) }}" r="{{ 3.5 if loop.last else 2.5 }}"/>
     {% endfor %}
   </svg>
+  {# The two bounds the plot is actually drawn against, on the plot itself so
+     they cannot be read apart from it. Rendered as HTML rather than <text>
+     because the SVG is scaled to the card's width — SVG text would grow with
+     it and end up three times the size of every other label on the page. #}
+  {% if bounds %}
+  <span class="chart-bound chart-bound--max" aria-hidden="true">{{ fmt(bounds.ceiling, formatter) }}</span>
+  <span class="chart-bound chart-bound--min" aria-hidden="true">{{ fmt(bounds.floor, formatter) }}</span>
+  {% endif %}
+  </div>
   <div class="chart-axis" aria-hidden="true">
     {% for p in points %}<span title="{{ p.full_label }}: {{ fmt(p.value, formatter) }}">{{ p.label }}</span>{% endfor %}
   </div>
@@ -138,19 +157,36 @@
 {% macro donut(mix, label="Composition", size=150, thickness=18, formatter="cedis", center_label="Total") %}
 {% set radius = (size / 2) - (thickness / 2) %}
 {% set circumference = 2 * 3.14159265 * radius %}
+{# Shares are stored at full precision (the ring's geometry needs it) and
+   ALWAYS displayed at one decimal. Printing the stored float gave "50.0%"
+   beside "16.67%" beside "81.23%" in one legend, which reads as three
+   different measurements rather than one rule, and two decimals on a share of
+   a whole is precision the underlying figure does not have. #}
+{% set pc = "%.1f" %}
 <figure class="chart chart--donut" role="img"
-        aria-label="{{ label }}: {% for s in mix.slices %}{{ s.label }} {{ fmt(s.value, formatter) }} ({{ s.pct }}%){{ "; " if not loop.last }}{% endfor %}">
+        aria-label="{{ label }}: {% for s in mix.slices %}{{ s.label }} {{ fmt(s.value, formatter) }} ({{ pc|format(s.pct) }}%){{ "; " if not loop.last }}{% endfor %}">
   <div class="donut-wrap">
     <svg viewBox="0 0 {{ size }} {{ size }}" width="{{ size }}" height="{{ size }}" focusable="false" aria-hidden="true">
       {# -90deg start puts the first slice at 12 o'clock. #}
       <g transform="rotate(-90 {{ size / 2 }} {{ size / 2 }})">
         <circle class="donut-track" cx="{{ size / 2 }}" cy="{{ size / 2 }}" r="{{ "%.3f"|format(radius) }}"
                 stroke-width="{{ thickness }}" fill="none"/>
+        {# A hairline gap between slices, cut out of each slice's own arc length.
+           Slices used to butt directly against one another, so two adjacent
+           slices of similar lightness read as one larger slice and the ring
+           silently under-reported how many states were in play. The gap is
+           taken from the END of each arc so every slice still STARTS at its
+           true angle — the geometry stays honest and only the last ~1.5px of
+           each arc is given up. Guarded so a slice smaller than the gap is
+           shortened rather than inverted into a negative dash. #}
+        {% set gap = 1.5 %}
         {% set offset = namespace(pct=0) %}
         {% for s in mix.slices %}
+        {% set arc = circumference * s.pct / 100 %}
+        {% set drawn = arc - gap if arc > gap * 2 else arc %}
         <circle class="donut-slice donut-slice--{{ s.tone }}" cx="{{ size / 2 }}" cy="{{ size / 2 }}"
                 r="{{ "%.3f"|format(radius) }}" stroke-width="{{ thickness }}" fill="none"
-                stroke-dasharray="{{ "%.3f"|format(circumference * s.pct / 100) }} {{ "%.3f"|format(circumference) }}"
+                stroke-dasharray="{{ "%.3f"|format(drawn) }} {{ "%.3f"|format(circumference) }}"
                 stroke-dashoffset="{{ "%.3f"|format(-1 * circumference * offset.pct / 100) }}"
                 stroke-linecap="butt"/>
         {% set offset.pct = offset.pct + s.pct %}
@@ -167,7 +203,7 @@
   <ul class="chart-legend">
     {% for s in mix.slices %}
     <li><span class="legend-swatch legend-swatch--{{ s.tone }}"></span>{{ s.label }}
-      <strong>{{ fmt(s.value, formatter) }}</strong><small>{{ s.pct }}%</small></li>
+      <strong>{{ fmt(s.value, formatter) }}</strong><small>{{ pc|format(s.pct) }}%</small></li>
     {% else %}
     <li class="muted">Nothing recorded yet.</li>
     {% endfor %}
@@ -214,10 +250,16 @@
    colour alone. #}
 {% macro delta(change, suffix="vs previous") %}
 {% if change is not none %}
-<span class="delta {{ 'delta--up' if change > 0 else ('delta--down' if change < 0 else 'delta--flat') }}"
-      title="{{ "%+.1f"|format(change * 100) }}% {{ suffix }}">
-  <span aria-hidden="true">{{ "▲" if change > 0 else ("▼" if change < 0 else "▬") }}</span>
-  {{ "%+.1f"|format(change * 100) }}%
+{# Direction is decided on the value AS DISPLAYED, not on the raw float. A
+   change of 0.0002 renders "+0.0%", and a signed, one-decimal zero reads as a
+   measurement someone took to that precision rather than as "this did not
+   move" — so anything that rounds to zero says so in words instead. #}
+{% set shown = (change * 100)|round(1) %}
+{% set flat = shown == 0 %}
+<span class="delta {{ 'delta--flat' if flat else ('delta--up' if shown > 0 else 'delta--down') }}"
+      title="{{ 'No change' if flat else '%+.1f%%'|format(shown) }} {{ suffix }}">
+  <span aria-hidden="true">{{ "▬" if flat else ("▲" if shown > 0 else "▼") }}</span>
+  {{ "No change" if flat else "%+.1f%%"|format(shown) }}
   <small>{{ suffix }}</small>
 </span>
 {% else %}

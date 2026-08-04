@@ -31,7 +31,7 @@ from app.models import (
     User,
 )
 
-from app.payroll_status import PENDING_STATUSES
+from app.payroll_status import CLOSED_STATUSES, PENDING_STATUSES
 
 main_bp = Blueprint("main", __name__)
 
@@ -189,22 +189,36 @@ def dashboard():
     warning_count = PayrollItem.query.filter_by(validation_status="Warning").count()
 
     # Payslip delivery rate for the selected period: distinct workers whose payslip was
-    # actually pushed (SMS/WhatsApp/email) over the total payslips in those runs. This is
-    # our differentiator — competitors stop at "payslip available in a portal".
+    # actually pushed (SMS/WhatsApp/email) over the payslips that were ELIGIBLE to be
+    # pushed. This is our differentiator — competitors stop at "payslip available in a
+    # portal".
+    #
+    # The denominator is deliberately the payslips in runs that have reached an
+    # approved/processed status, not every payslip in the period. A run still
+    # awaiting approval cannot lawfully be distributed, so counting its payslips
+    # as undelivered scores Payrolla against work it is not allowed to do yet:
+    # a book where every run was submitted this morning reported "0%" — the
+    # loudest possible failure — for a period in which nothing had gone wrong.
+    # When nothing is eligible yet the rate is None, not zero, for the same
+    # reason pct_change returns None against a zero baseline: the ratio is
+    # undefined, and a fabricated 0% is worse than an honest dash.
     period_run_ids = [run.id for run in current_runs]
-    payslips_total = sum(len(run.items) for run in current_runs)
+    sendable_runs = [run for run in current_runs if run.status in CLOSED_STATUSES]
+    payslips_total = sum(len(run.items) for run in sendable_runs)
     payslips_delivered = (
         db.session.query(PayslipDelivery.payroll_item_id)
         .filter(
-            PayslipDelivery.payroll_run_id.in_(period_run_ids),
+            PayslipDelivery.payroll_run_id.in_([run.id for run in sendable_runs]),
             PayslipDelivery.status == DELIVERY_SENT,
         )
         .distinct()
         .count()
-        if period_run_ids
+        if sendable_runs
         else 0
     )
-    delivery_rate = round(payslips_delivered / payslips_total * 100) if payslips_total else 0
+    delivery_rate = (
+        round(payslips_delivered / payslips_total * 100) if payslips_total else None
+    )
 
     # Held payrolls (risk gate). The risk signal, the Risk Queue badge in the
     # page header and the queue page itself all count off the same predicate
@@ -234,6 +248,7 @@ def dashboard():
     from app.events import platform_activity
     from app.platform_dashboard import (
         company_rows,
+        period_scoped_trend,
         platform_kpis,
         platform_risk_signals,
         statutory_summary,
@@ -260,6 +275,13 @@ def dashboard():
     total_clients_count = ClientCompany.query.count()
     current_month_total = sum(run.total_net_pay for run in current_runs)
     period_label = f"{selected_month} {selected_year}"
+
+    # Rebound BEFORE anything reads it, so the KPI tile and the primary panel's
+    # headline figure — the two places this trend's `change` is rendered — both
+    # get the period-checked version. See period_scoped_trend: the raw change
+    # describes the last two months that HAVE runs, which is not the selected
+    # month whenever the selected month is empty.
+    portfolio_trend = period_scoped_trend(portfolio_trend, period_label)
 
     kpis = platform_kpis(
         analytics,

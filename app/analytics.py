@@ -36,19 +36,62 @@ def _short_month(month):
     return str(month or "")[:3]
 
 
-def _as_points(rows, value_key):
-    """Turn period rows into chart points scaled against the series maximum.
+# Padding above and below a range-scaled series, as a fraction of its own span.
+# Without it the highest and lowest points sit exactly on the plot's edges and
+# read as clipped rather than as extremes.
+TREND_HEADROOM = 0.20
 
-    Each point is ``{label, full_label, value, pct}``. ``pct`` is 0-100 of the
-    largest value in the series, which is what the chart macros plot. An
-    all-zero series yields pct 0 throughout rather than dividing by zero."""
-    peak = max((row[value_key] for row in rows), default=0)
+
+def _as_points(rows, value_key, baseline="zero"):
+    """Turn period rows into chart points the chart macros can plot directly.
+
+    Each point is ``{label, full_label, value, pct, floor, ceiling}``, where
+    ``pct`` is the 0-100 position the macro draws at. Two scalings, chosen by
+    what the mark means:
+
+    ``baseline="zero"`` — ``pct`` is the value's share of the series maximum,
+    so a bar's LENGTH is proportional to its value. This is the only honest
+    scaling for a bar chart, and the default. ``floor``/``ceiling`` are None:
+    the axis starts at zero and needs no label to say so.
+
+    ``baseline="range"`` — ``pct`` positions the value inside the series' own
+    padded min..max. Correct for a LINE, whose job is shape rather than
+    magnitude. Zero-scaling a line flattens any series whose variation is small
+    beside its magnitude, and monthly payroll — six figures moving one or two
+    per cent — is exactly that series: charted from zero it draws a dead
+    straight line pinned to the top of the plot, which tells the reader nothing
+    and quietly implies "nothing is moving". ``floor`` and ``ceiling`` carry the
+    range actually drawn against so the macro can LABEL it; a chart whose axis
+    does not start at zero and does not say so is a misleading chart, which is
+    the one thing a payroll dashboard cannot afford.
+
+    An all-zero or single-point series falls back to zero scaling, where a range
+    has no meaning.
+    """
+    values = [row[value_key] or 0 for row in rows]
+    peak = max(values, default=0)
+
+    floor = ceiling = None
+    if baseline == "range" and len(values) > 1 and peak:
+        low, high = min(values), peak
+        span = high - low
+        if span > 0:
+            pad = span * TREND_HEADROOM
+            floor, ceiling = low - pad, high + pad
+
+    def position(value):
+        if floor is None:
+            return round(value / peak * 100, 2) if peak else 0
+        return round((value - floor) / (ceiling - floor) * 100, 2)
+
     return [
         {
             "label": row["label"],
             "full_label": row["full_label"],
             "value": row[value_key],
-            "pct": round(row[value_key] / peak * 100, 2) if peak else 0,
+            "pct": position(row[value_key] or 0),
+            "floor": floor,
+            "ceiling": ceiling,
         }
         for row in rows
     ]
@@ -119,8 +162,11 @@ def client_dashboard_analytics(runs, employee_count, expense_total, periods=TREN
 
     return {
         "has_data": bool(rows),
-        "trend": _as_points(rows, "net"),
-        "cost_by_month": _as_points(rows, "cost"),
+        # Both are drawn as LINES (the tenant dashboard's cost trend, and the
+        # trend behind the Payroll cost tile), so both are range-scaled — see
+        # _as_points. A bar series must keep the zero baseline.
+        "trend": _as_points(rows, "net", baseline="range"),
+        "cost_by_month": _as_points(rows, "cost", baseline="range"),
         "cost_mix": cost_mix(payroll_total, expense_total),
         "stats": {
             "employees": employee_count,
@@ -281,7 +327,9 @@ def client_cost_trend(runs, periods=TREND_PERIODS):
     Both are None with fewer than two periods, where a trend is not yet
     meaningful — the caller renders a dash rather than a fake 0%."""
     rows = monthly_totals(runs, periods=periods)
-    points = _as_points(rows, "net")
+    # A sparkline exists only to show shape, so it is range-scaled: a six-figure
+    # payroll moving 2% is a visible rise here and a flat line from zero.
+    points = _as_points(rows, "net", baseline="range")
     multi = len(rows) > 1
     return {
         "points": points,
@@ -441,7 +489,9 @@ def platform_dashboard_analytics(
 
     return {
         "has_data": bool(runs),
-        "revenue_trend": _as_points(rows, "net"),
+        # A line, so range-scaled (see _as_points). companies_by_cost above is a
+        # BAR ranking and keeps the zero baseline its lengths depend on.
+        "revenue_trend": _as_points(rows, "net", baseline="range"),
         "companies_by_cost": companies_by_cost,
         "status_mix": status_distribution(runs),
         "growth_trend": client_growth(clients, cutoff=cutoff, periods=periods),

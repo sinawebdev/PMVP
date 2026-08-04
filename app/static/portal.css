@@ -127,6 +127,14 @@ body {
     padding: 30px 30px 56px;
 }
 
+/* Same ultra-wide ceiling as the operator shell (see the note in styles.css):
+   past ~1680px the reading line and the aspect-ratio-scaled charts both grow
+   past useful. One number, both portals, so a wide monitor shows the same
+   dashboard shape in either plane. */
+@media (min-width: 1681px) {
+    .portal-main { margin-inline: auto; max-width: 1680px; width: 100%; }
+}
+
 .page-head { margin-bottom: 22px; }
 
 h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.01em; margin: 0 0 6px; }

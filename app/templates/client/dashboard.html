@@ -23,9 +23,15 @@
      A dashboard without a date is a dashboard nobody can quote in a meeting. #}
   <header class="exec-head">
     <div>
-      <h1>{{ user_greeting }}</h1>
+      {# The company is the subject of this page, so the company is the <h1>.
+         "Welcome, MSC Administrator" occupied the largest, first-read position
+         on the screen with something the reader already knew, and pushed the
+         two facts that actually orient them — whose payroll this is, and which
+         period it covers — into small grey text underneath. Swapped: the
+         subject leads, and the greeting rides along with the period. #}
+      <h1>{{ company.name }}</h1>
       <p class="sub">
-        {{ company.name }}
+        {{ user_greeting }}
         {%- if run %} · reporting on {{ run.month }} {{ run.year }}{% endif %}
       </p>
     </div>
@@ -55,7 +61,17 @@
        Role-filtered in app/dashboard.py against the same roles the target
        routes are decorated with, so a preparer is never shown a button that
        would bounce them. Actions needing a completed run disappear when the
-       company has none, rather than linking into an error. #}
+       company has none, rather than linking into an error.
+
+       `run_payroll` is filtered out here: it is already the page's one primary
+       button in the header above, and the same action offered twice on one
+       screen reads as two different actions until the reader checks. The
+       operator dashboard has held itself to that rule since its redesign; this
+       panel was the last place the two dashboards disagreed about it. The tile
+       is dropped, never the capability — the header button is role-gated on
+       exactly the same key. #}
+    {% set shortcuts = overview.actions | rejectattr('key', 'equalto', 'run_payroll') | list %}
+    {% if shortcuts %}
     <section class="xpanel area-actions" aria-labelledby="actions-heading">
       <div class="panel-head">
         <div>
@@ -64,11 +80,12 @@
         </div>
       </div>
       <div class="qa-grid">
-        {% for action in overview.actions %}
+        {% for action in shortcuts %}
         {{ ui.action_tile(action, url_for(action.endpoint, run_id=action.run_id) if action.run_id else url_for(action.endpoint)) }}
         {% endfor %}
       </div>
     </section>
+    {% endif %}
 
     {# --- 3. Payroll Health Center --------------------------------------- #}
     <section class="xpanel area-health" aria-labelledby="health-heading">
@@ -107,21 +124,48 @@
 
       {{ ui.stepper(health.steps) }}
 
+      {# The four money figures of THIS run, in the order they derive from each
+         other, so the arithmetic is on the page rather than in the reader's
+         head: gross + employer SSF = total cost, and net is what leaves the
+         account for workers. The Payroll cost KPI at the top of this page is
+         that same total cost, and before employer SSF was shown here the two
+         panels stated 38,161 and 42,191 with nothing to connect them — two
+         figures a reader has no way to reconcile is the definition of a
+         dashboard you cannot quote in a meeting. #}
       <dl class="figures">
         <div class="figure"><dt>Gross pay</dt><dd class="nums">{{ run.total_gross_pay | cedis }}</dd></div>
-        <div class="figure"><dt>Net pay</dt><dd class="nums">{{ run.total_net_pay | cedis }}</dd></div>
-        <div class="figure {{ 'figure--flag' if health.pending_count }}">
-          <dt>Awaiting action</dt><dd class="nums">{{ health.pending_count }}</dd>
+        <div class="figure"><dt>+ Employer SSF</dt><dd class="nums">{{ run.total_ssnit_employer | cedis }}</dd></div>
+        {# Summed into a variable first: a filter binds tighter than `+` in
+           Jinja, so `a + b | cedis` formats b alone and then tries to add a
+           number to a string. #}
+        {% set total_cost = (run.total_gross_pay or 0) + (run.total_ssnit_employer or 0) %}
+        <div class="figure figure--total">
+          <dt>= Total payroll cost</dt>
+          <dd class="nums">{{ total_cost | cedis }}</dd>
         </div>
+        <div class="figure"><dt>Net to workers</dt><dd class="nums">{{ run.total_net_pay | cedis }}</dd></div>
         <div class="figure {{ 'figure--flag' if health.exceptions }}">
-          <dt>Exceptions</dt><dd class="nums">{{ health.exceptions }}</dd>
+          {# Scoped in its own label. "Exceptions" beside three run totals was
+             read as a count of something wrong with the RUN's money; it is the
+             number of imported rows validation flagged. #}
+          <dt>Flagged rows</dt><dd class="nums">{{ health.exceptions }}</dd>
         </div>
       </dl>
 
-      {% if health.draft_count %}
+      {% if health.pending_count or health.draft_count %}
+      {# Company-wide counts, stated as company-wide. Sitting unlabelled in the
+         figures strip above, "Awaiting action 2" read as two items inside the
+         August run rather than two runs across the company. #}
       <p class="chart-note">
-        {{ health.draft_count }} import{{ '' if health.draft_count == 1 else 's' }} still in progress.
-        <a href="{{ url_for('client.runs') }}">Resume {{ 'it' if health.draft_count == 1 else 'them' }}</a>.
+        {% if health.pending_count %}
+          {{ health.pending_count }} payroll run{{ '' if health.pending_count == 1 else 's' }}
+          across your company {{ 'is' if health.pending_count == 1 else 'are' }} awaiting action.
+          <a href="{{ url_for('client.runs') }}">Open payroll runs</a>.
+        {% endif %}
+        {% if health.draft_count %}
+          {{ health.draft_count }} import{{ '' if health.draft_count == 1 else 's' }} still in progress.
+          <a href="{{ url_for('client.runs') }}">Resume {{ 'it' if health.draft_count == 1 else 'them' }}</a>.
+        {% endif %}
       </p>
       {% endif %}
 
@@ -175,7 +219,12 @@
               <p class="panel-sub">Employer outlay per month — gross pay plus employer SSF.</p>
             </div>
           </div>
-          {{ ch.line_chart(overview.analytics.cost_by_month, label="Payroll cost trend") }}
+          {# Taller than the macro's 132 default. These three cards are row peers
+             and match heights against the cost-distribution card, which carries
+             a ring plus two lists; at the default the trend card spent ~200px
+             of that shared height on empty space below its axis. The plot is
+             the card's whole content, so the plot is what grows. #}
+          {{ ch.line_chart(overview.analytics.cost_by_month, label="Payroll cost trend", height=190) }}
           <p class="chart-note">The number a budget is built from: what payroll actually costs the company, not what employees take home.</p>
         </section>
 
@@ -206,7 +255,7 @@
               <p class="panel-sub">Paid headcount per period.</p>
             </div>
           </div>
-          {{ ch.bar_chart(workforce.headcount, label="Paid headcount by month", formatter="count") }}
+          {{ ch.bar_chart(workforce.headcount, label="Paid headcount by month", formatter="count", height=180) }}
           <dl class="movement">
             <div><dt>Joined (30d)</dt><dd class="nums">{{ workforce.joined }}</dd></div>
             <div><dt>Left</dt><dd class="nums">{{ workforce.left }}</dd></div>
@@ -253,11 +302,15 @@
             <circle class="ring-fill" cx="34" cy="34" r="26" stroke-width="7"
                     stroke-dasharray="{{ "%.2f"|format(circ * compliance.score / 100) }} {{ "%.2f"|format(circ) }}"/>
           </svg>
-          <span class="ring-label" aria-hidden="true">{{ compliance.score }}</span>
+          {# The unit belongs on the figure. "70" inside a ring was read as a
+             score out of an unstated maximum; the KPI tile beside it says 70%,
+             and two spellings of one number invite the question of whether they
+             are one number. #}
+          <span class="ring-label" aria-hidden="true">{{ compliance.score }}<small>%</small></span>
         </div>
         <div class="compliance-headline">
           <strong>{{ compliance.headline }}</strong>
-          <p>Weighted across PAYE, SSNIT, payment details, employee documents and filing readiness.</p>
+          <p>Out of 100 points across five checks. Each check's score is shown against it below, and the five add up to this figure.</p>
         </div>
       </div>
 

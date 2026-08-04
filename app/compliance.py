@@ -154,6 +154,21 @@ def compliance_overview(employees, latest_run, today=None):
     score = round(sum(ratios[key] * weight for key, weight in COMPLIANCE_WEIGHTS) * 100)
     gaps = [check["label"] for check in checks if check["state"] != "ok"]
 
+    # Each row's points, so the headline score can be ADDED UP from the rows
+    # printed underneath it. This module's whole premise is that an executive
+    # who cannot reconcile a compliance score cannot defend it — but the weights
+    # lived only in this file, so the panel showed "70" above five rows with no
+    # arithmetic connecting them, and a reader looking at "10 of 10 employees
+    # are missing a TIN" above a 70% score has no way to tell whether 70 is
+    # generous, harsh, or made up. `earned` and `available` make it checkable:
+    # 25 + 25 + 20 + 0 + 0 = 70.
+    weights = dict(COMPLIANCE_WEIGHTS)
+    for check in checks:
+        available = round(weights[check["key"]] * 100)
+        checks_ratio = ratios[check["key"]]
+        check["available"] = available
+        check["earned"] = round(checks_ratio * available)
+
     return {
         "score": score,
         "state": "ok" if not gaps else ("warn" if score >= 80 else "danger"),

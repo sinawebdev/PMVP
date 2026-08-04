@@ -16,9 +16,10 @@ from datetime import datetime, timezone
 
 from flask import has_request_context
 from flask_login import current_user
+from sqlalchemy import and_, or_
 
 from app import db
-from app.models import AuditTrail, DomainEvent, Notification, User
+from app.models import AuditTrail, DomainEvent, Notification, PayrollRun, User
 from app.roles import PLATFORM_ROLES, TENANT_ROLES
 
 
@@ -377,22 +378,66 @@ def tenant_activity(company_id, limit=8, now=None):
             }
         )
 
+    # Two ways an AuditTrail row belongs to this company, because AuditTrail
+    # carries no tenant column:
+    #
+    #   1. one of the company's own users recorded it, and
+    #   2. it was recorded AGAINST one of the company's payroll runs.
+    #
+    # (2) is what a Payrolla operator does on the tenant's behalf — approve,
+    # reject, mark processed, release a risk hold. Scoping on the actor alone
+    # meant the tenant's feed structurally could not contain those, so a company
+    # whose payroll had been approved six times saw "No activity yet" under a
+    # panel captioned "Every payroll action, on the record" — the dashboard
+    # denying an event the operator's own dashboard was listing. Both queries
+    # stay bounded by `limit`; neither widens the tenant's horizon, since the
+    # run ids are themselves scoped to this company.
     user_ids = [u.id for u in User.query.filter_by(client_company_id=company_id).all()]
+    run_ids = [
+        row[0]
+        for row in db.session.query(PayrollRun.id)
+        .filter(PayrollRun.client_company_id == company_id)
+        .all()
+    ]
+
+    scopes = []
     if user_ids:
+        scopes.append(AuditTrail.user_id.in_(user_ids))
+    if run_ids:
+        scopes.append(
+            and_(
+                AuditTrail.related_record_type == "PayrollRun",
+                AuditTrail.related_record_id.in_(run_ids),
+            )
+        )
+
+    if scopes:
+        seen = set()
         for entry in (
             AuditTrail.query.filter(
-                AuditTrail.user_id.in_(user_ids),
+                or_(*scopes),
                 AuditTrail.action.in_(TENANT_TIMELINE_ACTIONS),
             )
             .order_by(AuditTrail.created_at.desc())
             .limit(limit)
             .all()
         ):
+            if entry.id in seen:
+                continue
+            seen.add(entry.id)
             icon, tone = tenant_look(entry.action)
             items.append(
                 {
                     "at": as_utc(entry.created_at),
-                    "actor": entry.user.name if entry.user else "Payrolla",
+                    # A platform user acting on this company's payroll is shown
+                    # as "Payrolla", not by their personal name: to the tenant
+                    # the actor is their provider, and naming an individual
+                    # operator leaks staffing detail they did not ask for.
+                    "actor": (
+                        entry.user.name
+                        if entry.user and entry.user.client_company_id == company_id
+                        else "Payrolla"
+                    ),
                     "title": entry.action,
                     "detail": entry.notes or "",
                     "icon": icon,

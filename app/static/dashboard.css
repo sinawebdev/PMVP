@@ -136,7 +136,8 @@
 .link-action:hover { color: var(--brand-dark); gap: 6px; }
 .link-action .ico { transition: transform var(--ease); }
 
-.ico { flex: none; vertical-align: middle; }
+/* `.ico` moved to components.css — see the note there. Both shells load that
+   file on every page, which is what the tenant navigation now needs. */
 
 /* --- KPI band ------------------------------------------------------------
    Four tiles, four different questions. Each is a link, because the executive
@@ -182,15 +183,31 @@
 .kpi-value {
     align-items: baseline;
     display: flex;
-    font-size: clamp(23px, 2.4vw, 28px);
+    /* Floor lowered from 23px: the cedis filter renders "GH₵ 42,191.00", and at
+       23px in a four-up band that is wider than the tile, so the flex line broke
+       at the only space in it and put the currency symbol alone on the first
+       line with the digits underneath. A split figure is one the eye has to
+       reassemble before it can read it, which is the whole thing a KPI band
+       exists to prevent. nowrap makes the break impossible; the clamp keeps the
+       figure as large as it can be without needing one. */
+    font-size: clamp(19px, 1.7vw, 27px);
     font-weight: 800;
     grid-area: value;
     letter-spacing: -0.025em;
     line-height: 1.15;
     margin-top: 7px;
+    white-space: nowrap;
 }
 
 .kpi-value .unit { font-size: 0.62em; font-weight: 700; margin-left: 1px; }
+
+/* "Not defined yet" is a quieter thing than a figure, and must not read as a
+   measured result. Muted so the tile still holds its place in the band without
+   claiming a value it does not have; the caption carries the reason.
+   --muted, not --line-strong: the dash IS this tile's value, so it is content
+   and owes 4.5:1 (--muted on white is 6.24:1; --line-strong is 1.48:1, which
+   is a hairline colour and unreadable as text). */
+.kpi-undefined { color: var(--muted); font-weight: 700; }
 
 .kpi-move { grid-area: move; margin-top: 7px; min-height: 20px; }
 
@@ -202,7 +219,13 @@
     margin-top: 9px;
 }
 
-.kpi-spark { align-self: end; grid-area: spark; opacity: 0.9; }
+/* The sparkline shares its row with the figure, so its width comes straight out
+   of the figure's. The macro's 84px default is sized for a wide table cell; in
+   a KPI tile that is the difference between a figure that fits and one that
+   wraps. It is a shape cue — the shape survives at 56px, and the exact values
+   are in the tile's own caption and the sparkline's title. */
+.kpi-spark { align-self: end; grid-area: spark; opacity: 0.9; padding-left: 10px; }
+.kpi-spark svg { height: 24px; width: 56px; }
 
 /* --- Payroll Health Center ----------------------------------------------- */
 
@@ -235,10 +258,18 @@
 
 /* Completion — the only bar on the dashboard, because completion is the only
    value that is genuinely a proportion of a fixed whole. */
+/* The track needs a visible boundary of its own. At --surface-alt on --surface
+   it measured 1.04:1 — invisible — so the bar showed a teal fill floating on
+   nothing and the reader could not see what proportion of WHAT had been
+   completed. The ring is --muted (6.24:1 against the card): --line-strong was
+   tried first and measured 1.48:1, which is a hairline colour and still leaves
+   the track's extent unreadable. The fill is untouched, so the bar still reads
+   as a light track with a brand fill. */
 .progress {
     background: var(--surface-alt);
     border-radius: var(--radius-pill);
-    height: 7px;
+    box-shadow: inset 0 0 0 1px var(--muted);
+    height: 8px;
     margin-top: 6px;
     overflow: hidden;
 }
@@ -301,9 +332,14 @@
 .step:first-child::before { display: none; }
 .step--done::before, .step--current::before { background: var(--brand-bright); }
 
+/* An upcoming step's ring is the only thing that says "this stage exists but
+   has not happened". --line-strong measured 1.48:1 against the panel, so on a
+   dimmer screen the remaining stages simply vanished and the stepper looked
+   like it ended at the current step. --muted is 6.24:1 and still clearly
+   subordinate to the filled brand dots. */
 .step-dot {
     background: var(--surface);
-    border: 2px solid var(--line-strong);
+    border: 2px solid var(--muted);
     border-radius: 50%;
     height: 12px;
     position: relative;
@@ -344,6 +380,18 @@
 
 .figure--flag dd { color: var(--warn); }
 
+/* The reconciling total in the run's figures strip. It is the one figure on
+   this panel that also appears in the KPI band, so it carries the weight that
+   says "this is the number the two panels agree on" — the others are its
+   parts. A rule on its leading edge groups it with the addends it closes. */
+.figure--total {
+    border-left: 2px solid var(--brand);
+    padding-left: 11px;
+}
+
+.figure--total dt { color: var(--ink-soft); font-weight: 700; }
+.figure--total dd { color: var(--brand-deep); }
+
 /* --- Signals (Risk Intelligence) ----------------------------------------- */
 
 .signals { display: flex; flex-direction: column; gap: 10px; list-style: none; margin: 0; padding: 0; }
@@ -380,8 +428,14 @@
 
 .signal-link:hover { color: var(--brand-dark); gap: 5px; text-decoration: underline; }
 
+/* The icon uses the DEEP green (#14532d), not --green: on the tinted card
+   behind it --green measured 2.94:1, just under the 3:1 a non-text graphic
+   owes. #14532d is the same value .pill--ok already uses on this exact
+   background, so this is the system agreeing with itself rather than a new
+   colour. The left border keeps --green — it sits on the white panel, where it
+   passes, and it is what carries the tone at a glance. */
 .signal--ok { background: var(--green-soft); border-color: #cbe8d7; border-left-color: var(--green); }
-.signal--ok .signal-ico { color: var(--green); }
+.signal--ok .signal-ico { color: #14532d; }
 /* `info` — ordinary pending work. Deliberately the quietest of the four tones:
    it is the one signal that resolves itself if the queue simply gets worked. */
 .signal--info { background: var(--brand-tint); border-left-color: var(--brand); }
@@ -398,6 +452,15 @@
     gap: 18px;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
+
+/* The three chart cards sit in one row and DO match heights — peers on a shelf,
+   where a ragged bottom edge reads as sloppiness rather than as brevity. What
+   they must not do is leave the surplus in the middle of the card: the note is
+   pushed to the foot instead, so a short card ends with a line of text rather
+   than with a hole between its chart and its border. (The panels that are NOT
+   row peers — health beside risk, compliance beside activity — take the
+   opposite treatment further down: each keeps its own height.) */
+.charts-grid > .xpanel > .chart-note:last-child { margin-top: auto; }
 
 .chart-note {
     border-top: 1px solid var(--line);
@@ -474,6 +537,10 @@
     position: absolute;
 }
 
+/* The unit is present but subordinate — it identifies the scale without
+   competing with the figure for the 40px of clear space inside the ring. */
+.ring-label small { font-size: 0.62em; font-weight: 700; margin-left: 1px; }
+
 .compliance-headline strong { display: block; font-size: 14.5px; }
 .compliance-headline p { color: var(--muted); font-size: 12.5px; line-height: 1.5; margin: 3px 0 0; }
 
@@ -493,16 +560,36 @@
 .creq--warn .creq-mark { color: var(--warn); }
 .creq--danger .creq-mark { color: var(--danger); }
 
-.creq-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* The body absorbs the row's free space, so the points and the state chip sit
+   at the right edge without either of them owning a `margin-left: auto` — with
+   two auto margins in one flex row the free space splits between them and both
+   end up floating in the middle. */
+.creq-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; }
 .creq-body strong { font-size: 13.5px; }
 .creq-detail { color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+/* The row's contribution to the headline score. Tabular and right-aligned so
+   the five rows read as a column of addends that the reader can run down and
+   total against the ring — which is the only reason the figure is here. */
+.creq-points {
+    color: var(--muted);
+    flex: none;
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    min-width: 4.2em;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.creq-points strong { color: var(--ink-soft); font-weight: 750; }
+.creq--ok .creq-points strong { color: var(--green); }
 
 .creq-state {
     border-radius: var(--radius-pill);
     flex: none;
     font-size: 11px;
     font-weight: 700;
-    margin-left: auto;
+    margin-left: 12px;
     padding: 3px 9px;
     white-space: nowrap;
 }
@@ -547,7 +634,8 @@
     z-index: 1;
 }
 
-.tl-item--ok .tl-node { background: var(--green-soft); border-color: #cbe8d7; color: var(--green); }
+/* Same 2.94:1 shortfall as .signal--ok's icon, same system answer. */
+.tl-item--ok .tl-node { background: var(--green-soft); border-color: #cbe8d7; color: #14532d; }
 .tl-item--warn .tl-node { background: var(--warn-soft); border-color: #f3dcb4; color: var(--warn); }
 .tl-item--danger .tl-node { background: var(--danger-soft); border-color: #f6cdd2; color: var(--danger); }
 .tl-item--brand .tl-node { background: var(--brand-soft); border-color: var(--line-strong); color: var(--brand); }
@@ -674,6 +762,32 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 18px;
     }
+
+    /* Two by two, never three-and-one. auto-fit alone fits three 212px tiles in
+       the ~760px a tablet leaves after the sidebar, which strands Compliance
+       alone on a second row beside a tile-and-a-half of empty grid — and a band
+       with one tile hanging off the end reads as a mistake rather than as a
+       band. This is the same rule the operator band already holds itself to at
+       its own five-tile equivalent; the tenant band was the one place the two
+       dashboards disagreed about it. */
+    .kpi-band { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    /* Same failure, same fix, one row down: three chart cards in a two-column
+       grid leave the third alone beside a hole. The odd one out spans instead. */
+    .charts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .charts-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+    /* Each of these four keeps its own height rather than matching its neighbour.
+       They are paired by the grid but they are not peers: Payroll health carries
+       a stepper, a progress bar and four figures while Risk carries one card,
+       and Compliance carries five checks while Activity may carry none at all.
+       Stretching them put 250-400px of blank card under the shorter one of each
+       pair, which reads as a panel that failed to load rather than as a short
+       list. The row's own bottom edge going ragged is the correct, cheaper cost. */
+    .exec-grid > .area-health,
+    .exec-grid > .area-risk,
+    .exec-grid > .area-compliance,
+    .exec-grid > .area-activity { align-self: start; }
 }
 
 @media (min-width: 1180px) {
@@ -689,6 +803,12 @@
         gap: 20px;
     }
     .movement { gap: 16px; }
+
+    /* Full desktop: four tiles in one band and three charts in one row, which
+       is what the tablet rules above were standing in for. */
+    .kpi-band { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .charts-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .charts-grid > :last-child:nth-child(odd) { grid-column: auto; }
 }
 
 /* Phone: the brief's mobile priority order is payroll status, alerts, KPIs,
@@ -704,10 +824,18 @@
     .exec-head { align-items: flex-start; flex-direction: column; gap: 10px; }
     .kpi-band { gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
     .kpi { grid-template-areas: "label label" "value spark" "move spark" "caption caption"; padding: 14px; }
-    .kpi-value { font-size: 21px; }
+    /* Two ~170px tiles across a 390px phone: 19px is the largest size at which
+       a nine-character cedis figure still fits one line beside the sparkline. */
+    .kpi-value { font-size: 19px; }
+    .kpi-spark svg { width: 44px; }
     .figures { gap: 12px; grid-template-columns: repeat(2, 1fr); }
     .creq { align-items: flex-start; flex-wrap: wrap; }
-    .creq-state { margin-left: 0; order: 3; }
+    /* On a phone the body takes the full width and the two chips wrap onto a
+       second line together, in reading order: what it scored, then what to do. */
+    .creq-body { flex-basis: 100%; }
+    .creq-points { margin-left: 29px; min-width: 0; order: 3; text-align: left; }
+    .creq-state { margin-left: 10px; order: 4; }
+    .creq-link { margin-left: auto; order: 5; }
 }
 
 /* --- Accessibility preferences -------------------------------------------

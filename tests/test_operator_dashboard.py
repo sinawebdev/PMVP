@@ -17,6 +17,7 @@ os.environ["PERSISTENCE_REQUIRED"] = "false"
 from app import create_app, db  # noqa: E402
 from app.models import ClientCompany, PayrollRun  # noqa: E402
 from app.payroll_status import HELD, PROCESSED  # noqa: E402
+from app.platform_dashboard import period_scoped_trend  # noqa: E402
 
 
 class OperatorDashboardTestCase(unittest.TestCase):
@@ -71,6 +72,48 @@ class OperatorDashboardTestCase(unittest.TestCase):
         for gone in ("Held for Risk Review", "Recently Completed", "Recent Payroll Runs"):
             with self.subTest(panel=gone):
                 self.assertNotIn(gone, html)
+
+
+class PeriodScopedTrendTestCase(unittest.TestCase):
+    """A delta must describe the number it is printed under.
+
+    The portfolio trend is built from the periods that HAVE runs, so selecting a
+    month with no payroll leaves the series ending on an older month. Pairing
+    that series' change with the selected month's total rendered "GH₵ 0.00"
+    beneath a green "▲ +3.3% vs previous month" — two true statements about two
+    different questions, side by side, on the dashboard's primary panel.
+    """
+
+    def _trend(self, last_label, change=0.033):
+        return {
+            "points": [
+                {"label": "Jul", "full_label": "July 2026", "value": 100, "pct": 20},
+                {"label": last_label[:3], "full_label": last_label, "value": 103, "pct": 80},
+            ],
+            "change": change,
+            "window_change": change,
+            "periods_covered": 2,
+        }
+
+    def test_change_survives_when_the_trend_ends_at_the_selected_period(self):
+        scoped = period_scoped_trend(self._trend("August 2026"), "August 2026")
+        self.assertAlmostEqual(scoped["change"], 0.033)
+
+    def test_change_is_dropped_when_the_selected_period_has_no_runs(self):
+        scoped = period_scoped_trend(self._trend("August 2026"), "January 2027")
+        self.assertIsNone(scoped["change"])
+
+    def test_points_are_never_altered_and_the_input_is_not_mutated(self):
+        """The history is still real history — only the claim about the
+        selected period is withdrawn."""
+        original = self._trend("August 2026")
+        scoped = period_scoped_trend(original, "January 2027")
+        self.assertEqual(scoped["points"], original["points"])
+        self.assertAlmostEqual(original["change"], 0.033)
+
+    def test_an_empty_series_yields_no_change(self):
+        empty = {"points": [], "change": None, "periods_covered": 0}
+        self.assertIsNone(period_scoped_trend(empty, "January 2027")["change"])
 
 
 if __name__ == "__main__":

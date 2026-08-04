@@ -15,6 +15,13 @@
    never assume Bootstrap. Markup lives in templates/macros/ui.html.
    --------------------------------------------------------------------------- */
 
+/* --- Icons ----------------------------------------------------------------
+   The one rule the shared inline-SVG set (macros/ui.html::icon) needs. It used
+   to live in dashboard.css, which only the two DASHBOARDS load — fine while the
+   icons were a dashboard component, wrong now that the tenant shell draws them
+   in its navigation on every page. Here it ships with the macro that emits it. */
+.ico { flex: none; vertical-align: middle; }
+
 /* --- Empty / loading / error states -------------------------------------- */
 
 .state {
@@ -29,7 +36,49 @@
 .state-ico { color: var(--muted); line-height: 0; }
 .state-title { font-size: 13.5px; font-weight: 700; margin: 0; }
 .state-detail { color: var(--muted); font-size: 12.5px; line-height: 1.55; margin: 0; max-width: 42ch; }
-.state .btn { margin-top: 6px; }
+
+/* --- The state's own button ----------------------------------------------
+   A state is a SHARED component, so it owns the whole appearance of the button
+   inside it rather than inheriting whichever `.btn` the surrounding shell
+   happens to define. It previously set only `margin-top`, and macros/ui.html
+   emits `class="btn primary"` — the TENANT portal's vocabulary. The operator
+   shell spells its modifiers Bootstrap-style (`.btn-primary`), so `.primary`
+   meant nothing there and every empty state on ~30 operator pages rendered its
+   one call to action as a default Bootstrap button. The operator DASHBOARD had
+   a compensating rule in admin-dashboard.css; no other operator page did.
+
+   Defining it once here fixes all of them and deletes the compensation. Two
+   classes of specificity, so it wins over both `.btn` owners regardless of load
+   order, and it is Bootstrap-free as this file requires. The look is the
+   tenant portal's existing primary button, so nothing changes for tenants. */
+.state .btn {
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    color: var(--ink);
+    cursor: pointer;
+    display: inline-block;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    margin-top: 6px;
+    padding: 8px 15px;
+    text-decoration: none;
+    transition: background var(--ease), border-color var(--ease), color var(--ease),
+                transform 160ms var(--ease-out);
+}
+
+.state .btn:hover { border-color: var(--brand); color: var(--brand); }
+/* The press snaps, the release settles — same asymmetry as portal.css's button. */
+.state .btn:active { transform: scale(0.97); transition-duration: 60ms; }
+
+.state .btn.primary {
+    background: var(--brand-deep);
+    border-color: var(--brand-deep);
+    color: #fff;
+}
+
+.state .btn.primary:hover { background: var(--brand-dark); border-color: var(--brand-dark); color: #fff; }
 
 .state--empty .state-ico { color: var(--line-strong); }
 .state--error .state-ico { color: var(--danger); }
