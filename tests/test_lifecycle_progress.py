@@ -85,7 +85,16 @@ class LifecycleStepsTestCase(unittest.TestCase):
         self.assertEqual(_state(run_progress(run2), "held"), "skipped")
 
 
-class RunsListRendersStepperTestCase(unittest.TestCase):
+class RunsListRendersStatusCellTestCase(unittest.TestCase):
+    """The runs list states where a run stands, in words.
+
+    It used to render a status pill with `progress_stepper(compact=true)` under
+    it — seven 9px dots with their labels switched off by `font-size: 0`,
+    because a ~110px column had no room for them. Reading it meant knowing the
+    stage order by heart and then counting, and it never answered the question a
+    queue is scanned for: what happens next. macros/lifecycle.html::status_cell
+    replaces it with the status, the position, and the next stage named."""
+
     def setUp(self):
         from app import create_app
 
@@ -98,17 +107,47 @@ class RunsListRendersStepperTestCase(unittest.TestCase):
     def tearDown(self):
         self.ctx.pop()
 
-    def test_operator_runs_list_shows_lifecycle_stepper(self):
+    def test_operator_runs_list_states_position_and_next_stage(self):
         self.assertEqual(
             self.client.post(
                 "/login", data={"email": "admin@payrolla.com", "password": "password123"}
             ).status_code,
             302,
         )
-        html = self.client.get("/payroll/runs").get_data(as_text=True)
-        self.assertEqual(self.client.get("/payroll/runs").status_code, 200)
-        # seed ships at least one payroll run, so the stepper markup must appear
-        self.assertIn("lifecycle-stepper", html)
+        page = self.client.get("/payroll/runs")
+        self.assertEqual(page.status_code, 200)
+        html = page.get_data(as_text=True)
+        # seed ships at least one payroll run, so the cell must appear
+        self.assertIn('class="rs"', html)
+        self.assertRegex(html, r"Step \d+ of \d+")
+        # The unlabelled dot stepper is gone from the LIST. It still serves the
+        # run detail page, where it has the width to draw its labels.
+        self.assertNotIn("lifecycle-stepper--compact", html)
+
+    def test_the_cell_counts_only_the_stages_that_apply_to_the_run(self):
+        """A run that was never held is on a six-step path, not a seven-step one
+        with a greyed-out stage — telling its reader otherwise invents a stage
+        it will never reach."""
+        from app.payroll_status import status_progress
+
+        never_held = types.SimpleNamespace(
+            status="Approved", total_workers=5, risk_status="accepted"
+        )
+        progress = status_progress(run_progress(never_held))
+        self.assertEqual(progress["total"], 6)
+        self.assertEqual(progress["position"], 4)
+        self.assertEqual(progress["current"], "Approved")
+        self.assertEqual(progress["next"], "Processed")
+
+    def test_a_finished_run_has_no_next_stage(self):
+        from app.payroll_status import status_progress
+
+        done = types.SimpleNamespace(
+            status="Processed", total_workers=5, risk_status="accepted"
+        )
+        progress = status_progress(run_progress(done, distributed=True))
+        self.assertIsNone(progress["next"])
+        self.assertEqual(progress["position"], progress["total"])
 
 
 if __name__ == "__main__":

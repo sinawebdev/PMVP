@@ -1,9 +1,9 @@
 """Phase 2 — operator dashboard: a held payroll reaches the operator.
 
 Reuses existing state (risk_status/status + PayslipDelivery) — no new business
-logic. Verifies a held run surfaces on the dashboard through the surfaces the
-redesign kept (the Risk & action panel and the consolidated company table)
-rather than through the three run lists it removed.
+logic. Verifies a held run surfaces on the dashboard through the surface the
+redesign kept (the Risk & action panel, now the page's lead) rather than through
+the three run lists — or the company table — it removed.
 """
 
 import os
@@ -57,19 +57,23 @@ class OperatorDashboardTestCase(unittest.TestCase):
         #
         # There is no longer a "Held Payrolls" stat card, a "Held for Risk
         # Review" list, a "Recent Payroll Runs" list or a "Recently Completed"
-        # list. Three lists of runs on a dashboard restated what the risk panel,
-        # the activity timeline and the company table already say, and each had
-        # a page of its own to live on. A hold now shows up in exactly two
-        # places here — as an action in the Risk & action panel, and as the
-        # company's latest run status in the table — plus a count on the header's
-        # Risk queue button. The detail (which run, why) lives one click away in
-        # the risk queue, which is where it can actually be acted on.
+        # list — nor the consolidated company table that replaced the last two
+        # ranked lists. Every one of those restated what the risk panel already
+        # says, and each had a page of its own to live on. A hold now shows up
+        # in exactly two places here: as an action in the Risk & action panel —
+        # which leads the page rather than sitting in a right-hand rail — and as
+        # a count on the header's Risk queue button. The detail (which run, why)
+        # lives one click away in the risk queue, which is where it can actually
+        # be acted on.
         self.assertIn("payroll held for risk review", html)   # risk signal
         self.assertIn("Review queue", html)                   # ...and its action
         self.assertIn("Risk queue (1)", html)                 # header count
-        self.assertIn("Company payroll overview", html)       # consolidated table
-        self.assertIn("Held", html)                           # the run's status badge
-        for gone in ("Held for Risk Review", "Recently Completed", "Recent Payroll Runs"):
+        for gone in (
+            "Held for Risk Review",
+            "Recently Completed",
+            "Recent Payroll Runs",
+            "Company payroll overview",
+        ):
             with self.subTest(panel=gone):
                 self.assertNotIn(gone, html)
 

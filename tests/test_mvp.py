@@ -980,7 +980,7 @@ class MvpTestCase(unittest.TestCase):
         ]:
             self.assertNotIn(text, response.data)
 
-    def test_dashboard_has_period_filter_and_company_movement_column(self):
+    def test_dashboard_has_period_filter(self):
         self.login_admin()
         response = self.client.get("/dashboard?month=May&year=2026")
 
@@ -992,15 +992,14 @@ class MvpTestCase(unittest.TestCase):
         self.assertIn(b"ops-filters", response.data)
         self.assertIn(b'name="month"', response.data)
         self.assertIn(b'name="year"', response.data)
-        # The per-company sparkbar (share of the largest client) is gone: the
-        # "Companies by payroll cost" chart directly above the table already
-        # ranks companies against each other, so the bar restated it once per
-        # row. What replaced it answers a different question — which way is this
-        # company's cost moving.
-        self.assertIn(b"Cost movement", response.data)
+        # The per-company table this test also used to assert on (its sparkbar,
+        # then its Cost movement column, then its "No run" status cell) is gone
+        # from the dashboard altogether — it was a ranked slice of the Client
+        # Companies page rebuilt here on every render. "Companies by payroll
+        # cost" still ranks the book; a company's own standing lives on the
+        # company page. The sparkbar assertion outlived the thing it guarded.
         self.assertNotIn(b"sparkbar", response.data)
-        # A company with no run in the period reads as such in its status cell.
-        self.assertIn(b"No run", response.data)
+        self.assertIn(b"Companies by payroll cost", response.data)
 
     def test_health_endpoint_is_available_for_render(self):
         response = self.client.get("/health")

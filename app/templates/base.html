@@ -64,6 +64,15 @@
                same on all 30+ pages, and the dashboard already opens with it. #}
             <div class="topbar-copy">
                 <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+                {# One line under the title, for the page that has something
+                   worth saying there. Empty on all ~30 other pages and the
+                   paragraph is not emitted at all, so the header they render is
+                   byte-identical to before. The dashboard fills it with the
+                   greeting: identity belongs beside the workspace it opens, and
+                   the <h1> stays the SUBJECT ("Payroll operations") rather than
+                   spending the largest text on the screen on a salutation. #}
+                {% set page_subtitle %}{% block page_subtitle %}{% endblock %}{% endset %}
+                {% if page_subtitle | trim %}<p class="topbar-sub">{{ page_subtitle }}</p>{% endif %}
                 <div class="topbar-actions">
                     {% block page_actions %}{% endblock %}
                 </div>

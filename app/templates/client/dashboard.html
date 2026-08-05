@@ -113,15 +113,13 @@
         <p>{{ health.next_detail }}</p>
       </div>
 
-      <div class="progress-meta">
-        <span class="muted">Lifecycle completion</span>
-        <strong>{{ health.completion }}%</strong>
-      </div>
-      <div class="progress" role="progressbar" aria-valuenow="{{ health.completion }}"
-           aria-valuemin="0" aria-valuemax="100" aria-label="Payroll lifecycle completion">
-        <span class="progress-fill" style="width: {{ health.completion }}%"></span>
-      </div>
-
+      {# The stepper alone, no percentage bar above it. "Lifecycle completion
+         57%" was the stepper's own information re-encoded as a number, and the
+         two disagreed about what they measured the moment a reader tried to
+         reconcile them: the bar counted steps, while what an executive wants
+         from this panel is WHICH step — which is the thing the stepper already
+         names. A progress bar over a labelled stepper is a second answer to a
+         question that was already answered. #}
       {{ ui.stepper(health.steps) }}
 
       {# The four money figures of THIS run, in the order they derive from each
@@ -205,28 +203,15 @@
     </section>
 
     {# --- 5. Financial analytics -----------------------------------------
-       Three charts, three business questions. Anything that did not answer one
-       was cut: the old "expenses vs payroll" donut compared two unrelated
-       ledgers and told nobody anything they could act on. #}
+       Two charts, two business questions. Anything that did not answer one was
+       cut: the old "expenses vs payroll" donut compared two unrelated ledgers
+       and told nobody anything they could act on, and the payroll cost trend
+       plotted a line the Payroll cost KPI tile above already states with its
+       own month-on-month movement — a chart whose whole message is "up 3%"
+       when a tile eight lines higher says "up 3%". #}
     <div class="area-charts">
       {% if overview.analytics.has_data %}
       <div class="charts-grid">
-
-        <section class="xpanel" aria-labelledby="trend-heading">
-          <div class="panel-head">
-            <div>
-              <h2 id="trend-heading">Payroll cost trend</h2>
-              <p class="panel-sub">Employer outlay per month — gross pay plus employer SSF.</p>
-            </div>
-          </div>
-          {# Taller than the macro's 132 default. These three cards are row peers
-             and match heights against the cost-distribution card, which carries
-             a ring plus two lists; at the default the trend card spent ~200px
-             of that shared height on empty space below its axis. The plot is
-             the card's whole content, so the plot is what grows. #}
-          {{ ch.line_chart(overview.analytics.cost_by_month, label="Payroll cost trend", height=190) }}
-          <p class="chart-note">The number a budget is built from: what payroll actually costs the company, not what employees take home.</p>
-        </section>
 
         <section class="xpanel" aria-labelledby="mix-heading">
           <div class="panel-head">
@@ -321,12 +306,20 @@
 
     {# --- 7. Recent activity ---------------------------------------------
        Fed by the same DomainEvent + AuditTrail records the Audit page reads, so
-       this feed and a formal audit export can never tell different stories. #}
+       this feed and a formal audit export can never tell different stories.
+
+       Three entries, not eight. This panel is a GLANCE — "has anything happened
+       since I last looked" — and the Audit page one click away is the record.
+       At eight it was the tallest thing on the dashboard and the reader had to
+       decide, per entry, whether it was news; at three the answer is available
+       without a decision, and anyone who wants the fourth wants the whole
+       trail. The cap is applied in app/dashboard.py, not here, so the query
+       fetches three rather than fetching eight and hiding five. #}
     <section class="xpanel area-activity" aria-labelledby="activity-heading">
       <div class="panel-head">
         <div>
           <h2 id="activity-heading">Recent activity</h2>
-          <p class="panel-sub">Every payroll action, on the record.</p>
+          <p class="panel-sub">The last three payroll actions, on the record.</p>
         </div>
         <a class="link-action" href="{{ url_for('client.audit') }}">Full audit trail{{ ui.icon('arrow', 14) }}</a>
       </div>

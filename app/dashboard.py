@@ -512,7 +512,11 @@ def company_overview(company, runs, employees, expenses, role, draft_count=0, to
         "composition": cost_composition(latest),
         "workforce": workforce,
         "compliance": compliance,
-        "activity": tenant_activity(company.id, limit=8),
+        # Three, not eight. The dashboard's feed is a glance — has anything
+        # happened since I last looked — and the Audit page one click away is
+        # the record. Capped in the QUERY rather than sliced in the template, so
+        # the page does not pay for five rows it will not draw.
+        "activity": tenant_activity(company.id, limit=3),
         "actions": quick_actions(role, latest, completed_run=completed),
         "spend": spend,
         "latest_run": latest,

@@ -19,15 +19,16 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-dashboard.css') }}" />
 {% endblock %}
 
-{# The page's SUBJECT, not a salutation. The <h1> is the largest text on the
-   screen and the first thing read, and "Welcome, Payrolla Administrator"
-   spent that position on something the operator already knows and cannot act
-   on. Naming the workspace instead means the first three things the eye meets
-   — the title, the three action buttons with their counts, and the period
-   chip — together answer what this is, what needs doing, and when. The
-   greeting is not lost: the shell's "Signed in as" line is restored below,
-   which is where identity belongs. #}
+{# The page's SUBJECT in the <h1>, the greeting on the line beneath it. The
+   <h1> is the largest text on the screen and the first thing read, so it names
+   the workspace rather than the reader — but the banner said only "Payroll
+   operations" and nothing else, which is a workspace that never acknowledges
+   who opened it. The two together answer what this is and whose it is, in that
+   order, and the buttons and the period chip beside them answer what needs
+   doing and when. `user_greeting` is the same resolve_display_name rule the
+   company portal greets by, so both planes greet the same person the same way. #}
 {% block page_title %}Payroll operations{% endblock %}
+{% block page_subtitle %}{{ user_greeting }} — {{ period_label }} across every client company on the book.{% endblock %}
 {% block page_actions %}
 {# One dominant action, two secondaries. Neither secondary is repeated in the
    period toolbar below — an action offered twice on one screen reads as two
@@ -94,25 +95,63 @@
 
   {# --- Workspace ----------------------------------------------------------
      Named grid areas rather than column spans or Bootstrap rows: the layout
-     intent is legible in the grid-template-areas block in admin-dashboard.css,
-     and the phone re-orders the whole workspace (risk BEFORE the supporting
-     charts) by rewriting five words instead of touching any markup here. #}
+     intent is legible in the grid-template-areas block in admin-dashboard.css.
+
+     Three panels, one column order, every width: what needs a DECISION, then
+     the money, then the two supporting questions. The 70/30 split this
+     workspace used to run — an analytical column with an attention rail beside
+     it — is gone with the rail itself; see the Risk & action panel below. #}
   <div class="ops-grid">
 
-   {# --- The work column ---------------------------------------------------
-      The analytical column, wrapped for the same reason .ops-rail is: on
-      desktop it becomes ONE grid item holding a flex stack, so its three panels
-      each keep their natural height and any surplus lands at the bottom of the
-      column. While they were three separate grid items spanning against a
-      taller rail, the grid handed the surplus to their ROWS — first stretching
-      the panels into half-empty boxes, then (once they were pinned to the top
-      of their rows) opening 200px gaps between them. Below the desktop
-      breakpoint this wrapper is `display: contents`, so the tablet and phone
-      orderings in admin-dashboard.css keep placing the panels individually. #}
-   <div class="ops-work">
+    {# --- Risk & action: the first panel on the page ----------------------
+       The operator's attention column, promoted out of the right-hand rail and
+       across the full width. Every item states what happened, why it matters
+       and what to do — reshaped from the exact same counts that drive the
+       header badges (platform_dashboard.py::platform_risk_signals), so this
+       panel and the risk queue can never disagree. An all-clear still renders a
+       card: silence is not the same as reassurance.
 
-    {# --- Primary analytics: the dominant panel on the page --------------- #}
-    <section class="xpanel xpanel--primary area-primary ops-reveal" style="--i: 5"
+       It is the page's PRIMARY panel now, in weight as well as position. A
+       30%-wide rail on the right is where a dashboard puts what it wants
+       available but not read — and the one panel on this page that carries work
+       an operator must act on today does not belong in the margin, at a third
+       of the width, below the fold on anything narrower than a desktop. The
+       charts it used to sit beside report; this decides. #}
+    <section class="xpanel xpanel--primary area-risk ops-reveal" style="--i: 5"
+             aria-labelledby="risk-heading">
+      <div class="panel-head">
+        <div>
+          <h2 id="risk-heading">Risk &amp; action</h2>
+          <p class="panel-sub">What needs a decision, book-wide.</p>
+        </div>
+        <a class="link-action" href="{{ url_for('oversight.risk_queue') }}">Risk queue{{ ui.icon('arrow', 14) }}</a>
+      </div>
+      <ul class="signals">
+        {% for item in risk_signals %}
+          {% if item.endpoint %}{{ ui.signal(item, url_for(item.endpoint)) }}
+          {% else %}{{ ui.signal(item) }}{% endif %}
+        {% endfor %}
+      </ul>
+
+      {# Statutory exposure — a footnote to the risk panel, not a KPI tile. It
+         is what the period owes once these runs clear, which is the only
+         reason an operator wants it beside the queue. #}
+      <dl class="ops-statutory">
+        <div class="ops-statutory-head">
+          <dt>Statutory exposure</dt>
+          <dd>{{ statutory.period }}</dd>
+        </div>
+        {% for item in statutory.figures %}
+        <div class="ops-statutory-row">
+          <dt>{{ item.label }}</dt>
+          <dd class="nums">{{ item.value|cedis }}</dd>
+        </div>
+        {% endfor %}
+      </dl>
+    </section>
+
+    {# --- Primary analytics ------------------------------------------------ #}
+    <section class="xpanel area-primary ops-reveal" style="--i: 6"
              aria-labelledby="trend-heading">
       <div class="panel-head">
         <div>
@@ -148,7 +187,7 @@
        payroll day. It survives as context in the Client companies tile's
        caption ("Active · N total on the book"). #}
     <div class="area-support ops-support">
-      <section class="xpanel ops-reveal" style="--i: 6" aria-labelledby="ranking-heading">
+      <section class="xpanel ops-reveal" style="--i: 7" aria-labelledby="ranking-heading">
         <div class="panel-head">
           <div>
             <h2 id="ranking-heading">Companies by payroll cost</h2>
@@ -162,7 +201,7 @@
         {% endif %}
       </section>
 
-      <section class="xpanel ops-reveal" style="--i: 7" aria-labelledby="status-heading">
+      <section class="xpanel ops-reveal" style="--i: 8" aria-labelledby="status-heading">
         <div class="panel-head">
           <div>
             <h2 id="status-heading">Payroll status distribution</h2>
@@ -178,171 +217,41 @@
       </section>
     </div>
 
-    {# --- Company payroll overview ---------------------------------------
-       One table where Top Clients and Payroll Cost Per Client used to sit — the
-       two ranked the same companies by two measures of the same money, so an
-       operator had to read both to learn one thing. Six rows and a link out:
-       a company's own history belongs on the company page. #}
-    <section class="xpanel area-table ops-reveal" style="--i: 8" aria-labelledby="companies-heading">
+    {# --- Recent activity --------------------------------------------------
+       The last panel on the page, by design. Held runs, recent runs and
+       completed runs used to be three lists below this; every one of those
+       events arrives here as it happens, and each has a page of its own for
+       the full list.
+
+       Three entries, not eight. This is a GLANCE — has anything happened since
+       I last looked — and the audit trail one click away is the record. At
+       eight it was the tallest thing in the old right rail and the operator had
+       to decide, per entry, whether it was news. The cap is applied in the
+       QUERY (app/routes.py), so the page does not fetch five rows to hide
+       them. #}
+    <section class="xpanel area-activity ops-reveal" style="--i: 9" aria-labelledby="activity-heading">
       <div class="panel-head">
         <div>
-          <h2 id="companies-heading">Company payroll overview</h2>
-          <p class="panel-sub">
-            {% if company_total > company_table|length %}
-              Top {{ company_table|length }} of {{ company_total }} companies by {{ selected_month }} cost.
-            {% else %}
-              Every client company, by {{ selected_month }} cost.
-            {% endif %}
-          </p>
+          <h2 id="activity-heading">Recent activity</h2>
+          <p class="panel-sub">The last three payroll actions, on the record.</p>
         </div>
-        <a class="link-action" href="{{ url_for('main.clients') }}">View all companies{{ ui.icon('arrow', 14) }}</a>
+        <a class="link-action" href="{{ url_for('audit.audit_trail') }}">Full audit trail{{ ui.icon('arrow', 14) }}</a>
       </div>
-
-      {% if company_table %}
-      <div class="ops-table-wrap">
-        <table class="ops-table">
-          <caption class="sr-only">Client companies ranked by {{ period_label }} payroll cost</caption>
-          {# Five columns, not six. Latest run and Pending were two columns
-             answering one question — where does this company stand, and does it
-             need me — and six columns needed ~680px, which the left-hand 70%
-             column only clears above a ~1630px viewport. Below that the table
-             scrolled sideways inside its panel and PENDING, the only actionable
-             cell in the row, was the one that fell off the edge. A count of work
-             waiting on the operator must not be the thing a scroll hides. #}
-          {# Four columns. Headcount rides under the company name rather than
-             taking a column of its own: it identifies the company ("the
-             ten-person one") far more often than it is compared down the
-             column, and as a fifth column it was 70px that pushed the table
-             past its panel at tablet width — where the cell that fell off the
-             edge was Latest run, the only one carrying an action. Every column
-             that remains is one an operator sorts or acts on. #}
-          <thead>
-            <tr>
-              <th scope="col">Company</th>
-              <th scope="col" class="num">{{ selected_month }} cost</th>
-              {# The comparison basis is stated once, in the header, instead of
-                 being repeated verbatim in all six rows. #}
-              <th scope="col">Cost movement <span class="ops-th-note">vs last month</span></th>
-              <th scope="col">Latest run</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in company_table %}
-            <tr>
-              <th scope="row" class="ops-company" title="{{ row.company }}">
-                <span class="ops-company-name">{{ row.company }}</span>
-                <span class="ops-company-meta">{{ row.workers }} worker{{ '' if row.workers == 1 else 's' }}</span>
-              </th>
-              <td class="num nums">{{ row.cost|cedis }}</td>
-              {# The signed percentage leads and is always present; the
-                 sparkline is a small shape cue beside it, drawn only where
-                 there is more than one period to shape. #}
-              <td class="ops-move">
-                {{ ch.delta(row.change, "vs last month") }}
-                {% if row.has_trend %}{{ ch.sparkline(row.trend, label=row.company ~ " cost trend", width=54, height=20) }}{% endif %}
-              </td>
-              <td class="ops-standing">
-                {{ ui.status_badge(row.status) }}
-                {% if row.pending %}
-                  <a class="ops-pending" href="{{ url_for('payroll.runs', status='needs_approval') }}">
-                    {{ row.pending }} awaiting<span class="sr-only"> approval for {{ row.company }}</span>
-                  </a>
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+      {% if activity %}
+      <ol class="timeline ops-timeline">
+        {% for item in activity %}{{ ui.activity_item(item) }}{% endfor %}
+      </ol>
       {% else %}
-      {{ ui.empty(
-           "No client companies yet",
-           "Onboard your first client company to start processing payroll for them.",
-           "Onboard a client company",
-           url_for('main.add_client')) }}
+      {{ ui.empty("No activity yet", "Uploads, approvals, payslip runs and client changes are recorded here automatically.") }}
       {% endif %}
     </section>
-
-   </div>{# /.ops-work #}
-
-    {# --- The right rail --------------------------------------------------
-       One element holding both rail panels, so on desktop the rail is a single
-       column beside the workspace and its height is its own business: a tall
-       risk panel no longer stretches the chart panel next to it into a mostly
-       empty box. On tablet and phone this wrapper becomes `display: contents`
-       (see admin-dashboard.css) and the two panels drop back into the grid as
-       ordinary items, which is what lets the phone put Risk & action above the
-       supporting charts. #}
-    <aside class="ops-rail" aria-label="Attention">
-
-      {# --- Right rail 1: Risk & action ----------------------------------
-         The operator's attention column. Every item states what happened, why
-         it matters and what to do — reshaped from the exact same counts that
-         drive the header badges (platform_dashboard.py::platform_risk_signals),
-         so this panel and the risk queue can never disagree. An all-clear still
-         renders a card: silence is not the same as reassurance. #}
-      <section class="xpanel area-risk ops-reveal" style="--i: 5" aria-labelledby="risk-heading">
-        <div class="panel-head">
-          <div>
-            <h2 id="risk-heading">Risk &amp; action</h2>
-            <p class="panel-sub">What needs a decision, book-wide.</p>
-          </div>
-          <a class="link-action" href="{{ url_for('oversight.risk_queue') }}">Risk queue{{ ui.icon('arrow', 14) }}</a>
-        </div>
-        <ul class="signals">
-          {% for item in risk_signals %}
-            {% if item.endpoint %}{{ ui.signal(item, url_for(item.endpoint)) }}
-            {% else %}{{ ui.signal(item) }}{% endif %}
-          {% endfor %}
-        </ul>
-
-        {# Statutory exposure — a footnote to the risk panel, not a KPI tile. It
-           is what the period owes once these runs clear, which is the only
-           reason an operator wants it beside the queue. #}
-        <dl class="ops-statutory">
-          <div class="ops-statutory-head">
-            <dt>Statutory exposure</dt>
-            <dd>{{ statutory.period }}</dd>
-          </div>
-          {% for item in statutory.figures %}
-          <div class="ops-statutory-row">
-            <dt>{{ item.label }}</dt>
-            <dd class="nums">{{ item.value|cedis }}</dd>
-          </div>
-          {% endfor %}
-        </dl>
-      </section>
-
-      {# --- Right rail 2: Recent activity --------------------------------
-         The last panel on the page, by design. Held runs, recent runs and
-         completed runs used to be three lists below this; every one of those
-         events arrives here as it happens, and each has a page of its own for
-         the full list. #}
-      <section class="xpanel area-activity ops-reveal" style="--i: 6" aria-labelledby="activity-heading">
-        <div class="panel-head">
-          <div>
-            <h2 id="activity-heading">Recent activity</h2>
-            <p class="panel-sub">Every payroll action, on the record.</p>
-          </div>
-          <a class="link-action" href="{{ url_for('audit.audit_trail') }}">Full audit trail{{ ui.icon('arrow', 14) }}</a>
-        </div>
-        {% if activity %}
-        <ol class="timeline ops-timeline">
-          {% for item in activity %}{{ ui.activity_item(item) }}{% endfor %}
-        </ol>
-        {% else %}
-        {{ ui.empty("No activity yet", "Uploads, approvals, payslip runs and client changes are recorded here automatically.") }}
-        {% endif %}
-      </section>
-
-    </aside>
 
   </div>
 </div>
 
 <script>
 (function () {
-  // Timeline entries reveal as they scroll into the rail. Everything else on
+  // Timeline entries reveal as they scroll into the feed. Everything else on
   // this page animates from CSS alone; only this needs to know where the
   // viewport is, and IntersectionObserver is the cheap way to ask.
   //
@@ -360,9 +269,8 @@
     entries.forEach(function (entry) {
       if (!entry.isIntersecting) return;
       var item = entry.target;
-      // Stagger within the batch that came into view together, capped so a long
-      // feed never queues up a visible wait at the bottom.
-      var index = Math.min(Array.prototype.indexOf.call(items, item), 7);
+      // Stagger within the batch that came into view together.
+      var index = Array.prototype.indexOf.call(items, item);
       item.style.transitionDelay = (index * 40) + 'ms';
       item.classList.remove('tl-pending');
       observer.unobserve(item);

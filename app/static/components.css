@@ -144,6 +144,16 @@
     vertical-align: middle;
 }
 
+/* Column rules. A payroll grid is ten columns of numbers that differ only in
+   magnitude — GROSS, PAYE, SSNIT, DEDUCTIONS, NET PAY — and with horizontal
+   rules alone the reader has to work out where one column ends and the next
+   begins, on every row. The hairline is the same --line as the row rule, so it
+   is quiet enough to disappear when reading ACROSS a row and present enough to
+   hold a column together when scanning DOWN it. Drawn with `+` rather than a
+   blanket border-left so no rule lands on the table's outer edge. */
+.dt th + th,
+.dt td + td { border-left: 1px solid var(--line); }
+
 .dt thead th {
     background: var(--surface-alt);
     color: var(--muted);
@@ -159,7 +169,47 @@
 
 .dt tbody tr:hover { background: var(--surface-alt); }
 .dt .num, .dt .nums { font-variant-numeric: tabular-nums; text-align: right; }
-.dt-actions { text-align: right; white-space: nowrap; }
+
+/* --- The actions column ------------------------------------------------------
+   Pinned to the right edge, so the row's buttons are the one thing a horizontal
+   scroll can never hide.
+
+   This is the rule admin-dashboard.css already states for its own table — "a
+   count of work waiting on the operator must not be the thing a scroll hides" —
+   applied where it matters more, because here the cell holds Approve and Reject
+   rather than a number. The payroll runs list is ten columns wide and clears
+   1440px by about thirty pixels; every column added since has been paid for out
+   of the right-hand edge, and the right-hand edge is where the buttons are. A
+   reviewer who cannot see Approve without scrolling sideways will open the run
+   instead, which is the round trip the in-place queue exists to remove.
+
+   Sticky needs an opaque background or the scrolled cells show through it, and
+   the shadow is what says "there is more table under this". The divider is a
+   shadow rather than the border-left below because Chrome does not paint
+   collapsed borders on a sticky cell. */
+.dt-actions {
+    background: var(--surface);
+    box-shadow: inset 1px 0 0 var(--line), -6px 0 10px -8px rgba(15, 23, 42, 0.28);
+    position: sticky;
+    right: 0;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.dt tbody tr:hover .dt-actions { background: var(--surface-alt); }
+
+/* The header cell above it is sticky in BOTH directions — it already sticks to
+   the top, and z-index keeps it over the body cells that now share its corner.
+   Scoped with :has() because not every last column is an actions column: the
+   run detail's rows table ends in Payslip, a plain cell, and pinning its HEADER
+   while its body cells scrolled away underneath would be worse than pinning
+   neither. (:has() is already load-bearing in admin-dashboard.css.) */
+.dt:has(.dt-actions) thead th:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+}
+
 /* Unread notification rows. Lived in portal.css, so the operator inbox — which
    renders the same shared macro — showed no weight difference at all. */
 .dt tr.is-unread { font-weight: 600; }
@@ -182,6 +232,68 @@
 .dt-sort:hover { color: var(--brand-deep); }
 .dt-sort-ind { opacity: 0.45; }
 .dt-sort[aria-sort] .dt-sort-ind, .dt-sort.is-active .dt-sort-ind { opacity: 1; }
+
+/* --- Run status cell ---------------------------------------------------------
+   Three lines, three facts: what state the run is in, how far along it is, and
+   what comes next (macros/lifecycle.html::status_cell).
+
+   What it replaces: a coloured pill with seven 9px dots crammed under it, the
+   dots' labels switched off with `font-size: 0` because a ~110px table column
+   had no room for them. That cell asked the reader to know the stage order by
+   heart and then count — and never answered the question a queue is scanned
+   for, which is what happens if I act on this row.
+
+   Sized to be legible at a glance from a list: the pill is the loudest thing in
+   the cell, the bar is a shape cue, and the caption is quiet but readable
+   (12px, not the 11px the labels were shrunk to before they were dropped). */
+
+/* 118px is the pill's own natural width at the longest status ("Pending
+   Approval"), so the cell costs the table nothing the status word did not
+   already cost it. */
+.rs { display: grid; gap: 4px; justify-items: start; min-width: 118px; }
+
+.rs-pill {
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    line-height: 1.35;
+    padding: 3px 10px;
+    white-space: nowrap;
+    /* The default is the `muted` tone; every other tone overrides both. */
+    background: var(--surface-alt);
+    color: var(--ink-soft);
+}
+
+.rs-pill--info { background: var(--brand-soft); color: var(--brand-deep); }
+.rs-pill--warn { background: var(--warn-soft); color: #7a4b06; }
+.rs-pill--ok { background: var(--green-soft); color: #14532d; }
+.rs-pill--brand { background: var(--brand-soft); color: var(--brand-deep); }
+.rs-pill--danger { background: var(--danger-soft); color: #b02a37; }
+
+/* One segment per stage that applies to this run, gapped so the count is
+   readable as a count and filled so the proportion is readable without one. */
+.rs-track { display: flex; gap: 3px; width: 100%; }
+
+.rs-seg {
+    background: var(--line);
+    border-radius: 2px;
+    flex: 1 1 0;
+    height: 4px;
+    min-width: 8px;
+}
+
+.rs-seg--done { background: var(--brand); }
+/* The current stage is the one the reader is being asked about, so it is the
+   only segment that is neither plainly done nor plainly waiting: brand-coloured
+   like the completed run behind it, and ringed so it reads as the edge of the
+   progress rather than part of it. */
+.rs-seg--current { background: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+
+.rs-meta, .rs-next { color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+/* The next stage is the one thing here a reviewer acts on, so it carries the
+   ink — the position above it is context. */
+.rs-next { color: var(--ink-soft); font-weight: 600; }
 
 /* --- Pagination ----------------------------------------------------------- */
 
@@ -213,10 +325,25 @@
 .dh-sub { color: var(--muted); font-size: 13px; margin: 0; }
 .dh-why { color: var(--muted); font-size: 13px; margin: 0; max-width: 62ch; }
 
-.dh-figures { display: flex; flex-wrap: wrap; gap: 22px; }
-.dh-figure { display: grid; gap: 2px; }
+/* The figures take the header's full width instead of bunching against its left
+   edge. As a flex row with a fixed 22px gap, five figures occupied about a
+   third of a desktop header and read as one dense block — WORKERS 33 GROSS PAY
+   GH₵ 96,063.63 DEDUCTIONS GH₵ 15,354.73 — leaving the reader to separate the
+   labels from the amounts themselves. Equal auto-fit columns give each figure
+   its own share of the width, so the grouping is done by space, and the strip
+   is scannable left to right. The hairline above sets it off as the header's
+   evidence rather than more of its prose. */
+.dh-figures {
+    border-top: 1px solid var(--line);
+    display: grid;
+    gap: 16px 24px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    margin: 0;
+    padding-top: 14px;
+}
+.dh-figure { display: grid; gap: 3px; min-width: 0; }
 .dh-figure dt { color: var(--muted); font-size: 11.5px; letter-spacing: 0.02em; text-transform: uppercase; }
-.dh-figure dd { font-size: 16px; font-weight: 700; margin: 0; font-variant-numeric: tabular-nums; }
+.dh-figure dd { font-size: 17px; font-weight: 700; margin: 0; font-variant-numeric: tabular-nums; }
 
 /* --- Action bar ------------------------------------------------------------
    Exactly one visually primary action per screen: the recommended one. Everything
@@ -227,6 +354,94 @@
 .ab-more { margin-left: auto; position: relative; }
 .ab-more > summary { cursor: pointer; list-style: none; }
 .ab-more > summary::-webkit-details-marker { display: none; }
+
+/* --- The action bar's own buttons -------------------------------------------
+   Same defect as `.state .btn` above, same fix, same reason.
+
+   macros/ui.html::action_bar emits `class="btn"` / `"btn primary"` /
+   `"btn danger"` — the TENANT portal's vocabulary, which portal.css defines in
+   full. The operator shell's `.btn` is Bootstrap's, whose base class carries
+   padding and a pointer and nothing else: no border, no background, no fill.
+   So on every operator decision page the ranked actions — Run risk check,
+   Release hold, Edit figures, More — rendered as four pieces of bold text in a
+   row, with nothing on screen to say they were controls at all.
+
+   The action bar is a SHARED component, so it owns the whole appearance of the
+   controls inside it rather than inheriting whichever `.btn` the surrounding
+   shell happens to define.
+
+   Two selectors rather than one, because the bar nests: decision_header wraps
+   action_bar's own `.ab` in a second one, and a POST action sits inside its own
+   <form>. `.ab > .btn` catches the flat case; `.ab :not(.ab-menu) > .btn`
+   catches every wrapped one — and excludes the overflow items, which carry
+   `.btn` too but are menu rows and keep the flat treatment defined below.
+
+   `.dt-actions` is here for the identical reason: the risk queue's Review link
+   is a bare `class="btn"` in a table cell, and it was the same invisible
+   control. Bootstrap-variant buttons (`btn-sm btn-outline-primary`, as on the
+   Payslip column) are excluded — those already say what they are. */
+.ab > .btn,
+.ab :not(.ab-menu) > .btn,
+.dt-actions .btn:not([class*="btn-"]) {
+    align-items: center;
+    background: var(--surface);
+    /* --line-control, not --line-strong: this outline is the only thing that
+       identifies the control, and --line-strong is 1.48:1 on white — below the
+       3:1 WCAG 1.4.11 requires. See the token's note in tokens.css. */
+    border: 1px solid var(--line-control);
+    border-radius: 10px;
+    color: var(--ink);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 700;
+    gap: 6px;
+    line-height: 1.25;
+    padding: 8px 15px;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background var(--ease), border-color var(--ease), color var(--ease),
+                transform 160ms var(--ease-out);
+}
+
+.ab > .btn:hover,
+.ab :not(.ab-menu) > .btn:hover,
+.dt-actions .btn:not([class*="btn-"]):hover { border-color: var(--brand); color: var(--brand); }
+
+/* The press snaps, the release settles — same asymmetry as portal.css's button. */
+.ab > .btn:active,
+.ab :not(.ab-menu) > .btn:active,
+.dt-actions .btn:not([class*="btn-"]):active { transform: scale(0.97); transition-duration: 60ms; }
+
+/* Exactly one primary per bar: the recommended action. */
+.ab > .btn.primary,
+.ab :not(.ab-menu) > .btn.primary {
+    background: var(--brand-deep);
+    border-color: var(--brand-deep);
+    color: #fff;
+}
+
+.ab > .btn.primary:hover,
+.ab :not(.ab-menu) > .btn.primary:hover {
+    background: var(--brand-dark);
+    border-color: var(--brand-dark);
+    color: #fff;
+}
+
+.ab > .btn.danger,
+.ab :not(.ab-menu) > .btn.danger { border-color: #f1c0c5; color: #b02a37; }
+
+.ab > .btn.danger:hover,
+.ab :not(.ab-menu) > .btn.danger:hover {
+    background: var(--danger-soft);
+    border-color: var(--danger);
+    color: #b02a37;
+}
+
+/* A POST action is wrapped in its own <form> (macros/ui.html::_action_control),
+   which is a flex item of the bar and must not add height or margin of its own. */
+.ab form { display: flex; margin: 0; }
 .ab-menu {
     background: var(--surface);
     border: 1px solid var(--line);

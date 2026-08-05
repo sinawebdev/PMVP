@@ -8,11 +8,11 @@
    this page), the rest of the admin shell, or any page a future feature adds.
    A change here has exactly one blast radius: this page.
 
-   It holds the things the two dashboards do NOT share — the operator's 70/30
-   workspace grid, the consolidated company table, the period filter, and the
-   page's entrance motion. The components themselves (.xpanel, .kpi, .signal,
-   .timeline, .pill, .state) come from dashboard.css unchanged: one component
-   vocabulary across both dashboards, not two.
+   It holds the things the two dashboards do NOT share — the operator's
+   workspace grid, the period filter, the risk panel's full-width treatment, and
+   the page's entrance motion. The components themselves (.xpanel, .kpi,
+   .signal, .timeline, .pill, .state) come from dashboard.css unchanged: one
+   component vocabulary across both dashboards, not two.
 
    Four rules this file holds itself to:
 
@@ -194,24 +194,21 @@
    words rather than touching markup. */
 
 /* Grid and flex items default to min-width:auto — they refuse to shrink below
-   their content. Every ancestor of the wide table needs an explicit floor of
-   zero, and the table's own panel clips, or a 620px table on a 390px phone
-   scrolls the whole page sideways instead of scrolling inside its panel. */
+   their content. Every ancestor of a wide panel needs an explicit floor of
+   zero, or a chart that cannot shrink scrolls the whole page sideways instead
+   of fitting its panel. */
 .ops, .ops-grid, .ops-support, .ops .xpanel { min-width: 0; }
-/* An opaque surface, so the table's scroll-cue gradients (which fade to
-   --surface) blend into the panel rather than sitting on the translucent white
-   .xpanel default. */
-.ops .area-table { background: var(--surface); overflow: hidden; }
 
 .ops-grid {
     display: grid;
     gap: var(--space-panel);
-    /* Phone order is an operator's order, not the desktop reading order: what
-       needs a decision comes first, then the money, then the companies, and the
-       supporting charts last — they are the least useful thing on a 390px
-       screen. This is the same call the tenant dashboard makes for the same
-       reason (see the phone block in dashboard.css). */
-    grid-template-areas: "risk" "primary" "table" "support" "activity";
+    /* One order, every width: what needs a DECISION, then the money, then the
+       two supporting questions. This used to be five areas re-ordered at three
+       breakpoints around a 70/30 column split; the split is gone with the
+       right-hand rail, and Risk & action leads the page at every size rather
+       than only on a phone. A panel whose position changes with the viewport is
+       a panel the reader has to find again on each device. */
+    grid-template-areas: "risk" "primary" "support" "activity";
     grid-template-columns: minmax(0, 1fr);
 }
 
@@ -220,24 +217,20 @@
    but a bare redefinition here would be two files quietly owning one name. */
 .ops .area-primary { grid-area: primary; }
 .ops .area-support { grid-area: support; }
-.ops .area-table { grid-area: table; }
 .ops .area-risk { grid-area: risk; }
 .ops .area-activity { grid-area: activity; }
-
-/* Until the desktop breakpoint neither wrapper is a column at all: `contents`
-   dissolves them so their panels become grid items in their own right and can
-   be placed independently — which is the whole reason the phone can put
-   Risk & action above the supporting charts while keeping both columns intact
-   on a wide screen. */
-.ops-rail, .ops-work { display: contents; }
 
 .ops-support { display: grid; gap: var(--space-panel); grid-template-columns: minmax(0, 1fr); }
 
 /* --- Panel weights -------------------------------------------------------
-   Three weights, so not every panel shouts. Primary: the strongest surface and
-   the only elevated one. Supporting: a plain surface with a hairline. Utility
-   (the rail): the quietest fill, because the rail earns attention from its
-   position and its words, not from a heavy container. */
+   Two weights, so not every panel shouts. Primary: the strongest surface and
+   the only elevated one — which is now Risk & action, the page's first panel
+   and the only one carrying work. Supporting: a plain surface with a hairline,
+   which is what the three charts are.
+
+   The third weight this file used to carry — the quiet --surface-alt fill of
+   the right rail — went with the rail. It existed to say "available, but not
+   the point", and nothing on this page is that any more. */
 
 .ops .xpanel { gap: 0; padding: var(--panel-pad); }
 
@@ -247,12 +240,14 @@
     box-shadow: var(--shadow);
 }
 
-.ops .area-risk,
-.ops .area-activity {
-    align-self: start;
-    background: var(--surface-alt);
-    box-shadow: none;
-}
+/* The risk panel leads with a brand edge — the one piece of colour on the page
+   that is not data. It says "start here" before a word of it is read, which is
+   the job the rail's position used to do and its grey fill never did. */
+.ops .area-risk { border-top: 3px solid var(--brand); }
+
+/* The feed closes the page, so it is the quietest surface on it: three entries
+   answering "anything new", under everything that answers "what now". */
+.ops .area-activity { background: var(--surface-alt); box-shadow: none; }
 
 .ops .panel-head { margin-bottom: 14px; }
 .ops .panel-head h2 { font-size: 15.5px; }
@@ -274,12 +269,17 @@
     line-height: 1.1;
 }
 
-/* --- Risk rail: statutory strip ------------------------------------------
+/* --- Risk panel: statutory strip -----------------------------------------
    Two figures, quiet, at the foot of the panel. Not tiles: these are numbers an
-   operator reconciles at filing time, not a question they scan for. */
+   operator reconciles at filing time, not a question they scan for. Across the
+   panel's full width they run as a row rather than a stack — a two-item list
+   down the left of a 1200px panel is a list with 1000px of nothing beside it. */
 
 .ops-statutory {
     border-top: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 32px;
     margin: 16px 0 0;
     padding-top: 12px;
 }
@@ -287,9 +287,8 @@
 .ops-statutory div { align-items: baseline; display: flex; gap: 10px; }
 .ops-statutory dt, .ops-statutory dd { margin: 0; }
 
-.ops-statutory-head {
-    margin-bottom: 8px;
-}
+/* The label owns the first row on a phone and the first column from there up. */
+.ops-statutory-head { flex: 1 1 100%; }
 
 .ops-statutory-head dt {
     color: var(--ink-soft);
@@ -303,158 +302,7 @@
 
 .ops-statutory-row { padding: 3px 0; }
 .ops-statutory-row dt { color: var(--muted); font-size: 12.5px; }
-.ops-statutory-row dd { font-size: 13px; font-weight: 700; margin-left: auto; }
-
-/* --- Company payroll overview table --------------------------------------
-   Built for scanning: numbers right-aligned and tabular so magnitudes line up
-   column to column, dividers quiet enough to disappear when you are reading
-   across a row, and exactly one badge per row. */
-
-/* The table scrolls inside its own panel and never sideways-scrolls the page.
-   That needs three things together: a scroll container (overflow-x), a floor of
-   zero on every ancestor that would otherwise refuse to shrink below its
-   content (grid and flex items default to min-width:auto), and no negative
-   margin — a wrapper pulled out to the panel's edge reports its full content
-   width to the panel, and the page grows by the difference. */
-.ops-table-wrap {
-    margin: 0;
-    max-width: 100%;
-    min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: thin;
-
-    /* A scroll cue, so a phone user knows there are columns past the edge — a
-       table that silently hides its Pending column is a table that hides work.
-       Four layers, the standard local/scroll pairing: the two `local` covers
-       travel WITH the content, the two `scroll` shadows are pinned to the box,
-       so a shadow is only visible while there is something to scroll to on that
-       side. No JavaScript, and nothing shows at all when the table already
-       fits. */
-    background:
-        linear-gradient(to right, var(--surface), transparent) 0 0 / 22px 100% no-repeat local,
-        linear-gradient(to left, var(--surface), transparent) 100% 0 / 22px 100% no-repeat local,
-        linear-gradient(to right, var(--line-strong), transparent) 0 0 / 12px 100% no-repeat scroll,
-        linear-gradient(to left, var(--line-strong), transparent) 100% 0 / 12px 100% no-repeat scroll;
-}
-
-/* Four columns fit ~440px. The scroll container above stays — it is the
-   phone's safety net, not the desktop's crutch — but from a tablet up the
-   table now fits its panel and never scrolls at all. */
-.ops-table {
-    border-collapse: collapse;
-    min-width: 440px;
-    width: 100%;
-}
-
-.ops-table th, .ops-table td {
-    padding: 12px var(--space-tight);
-    text-align: left;
-    vertical-align: middle;
-}
-
-.ops-table th:first-child, .ops-table td:first-child { padding-left: var(--panel-pad); }
-.ops-table th:last-child, .ops-table td:last-child { padding-right: var(--panel-pad); }
-
-.ops-table thead th {
-    border-bottom: 1px solid var(--line-strong);
-    color: var(--muted);
-    font-size: 11.5px;
-    font-weight: 650;
-    letter-spacing: 0.03em;
-    padding-bottom: 9px;
-    padding-top: 0;
-    text-transform: uppercase;
-    white-space: nowrap;
-}
-
-/* On its own line under the column name. Inline, it made "COST MOVEMENT vs last
-   month" a single 200px nowrap header over a 70px pill — the widest cell in the
-   table, and 46px of the overflow that was clipping the status badge off the
-   right edge. Wrapping it keeps the comparison basis stated (which is why it
-   exists) at a fraction of the width. */
-.ops-th-note {
-    display: block;
-    font-weight: 500;
-    letter-spacing: 0;
-    text-transform: none;
-}
-
-.ops-table tbody tr { transition: background var(--ease); }
-.ops-table tbody tr + tr th, .ops-table tbody tr + tr td { border-top: 1px solid var(--line); }
-.ops-table tbody tr:hover { background: var(--brand-tint); }
-
-.ops-table .num { text-align: right; }
-.ops-table td.num {
-    font-variant-numeric: tabular-nums;
-    font-weight: 650;
-    /* A cedi figure must never break between its symbol and its digits. */
-    white-space: nowrap;
-}
-
-/* The company and its size, one above the other. The name is the row's subject
-   and keeps the row's weight; the headcount is the quiet qualifier that used to
-   need a column. */
-.ops-company {
-    color: var(--ink);
-    font-weight: 700;
-    max-width: 26ch;
-}
-
-.ops-company-name {
-    display: block;
-    font-size: 13.5px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.ops-company-meta {
-    color: var(--muted);
-    display: block;
-    font-size: 11.5px;
-    font-variant-numeric: tabular-nums;
-    font-weight: 550;
-    margin-top: 2px;
-}
-
-/* Cell CONTENTS are laid out, never the cell itself: `display: flex` on a <td>
-   takes it out of table-cell layout, and the row then stops sizing to its
-   tallest cell — every row grew to ~90px and the company name floated away
-   from the figures on its own row. Anything that needs a flex box inside a cell
-   gets an inline-flex box that sits IN the cell. */
-.ops-move { white-space: nowrap; }
-.ops-move .delta, .ops-move .sparkline { vertical-align: middle; }
-.ops-move .sparkline { margin-left: 8px; }
-/* The delta pill leads; the sparkline is secondary and drops out first when the
-   column is squeezed. */
-.ops-move .delta { font-size: 11.5px; padding: 2px 8px; }
-.ops-move .delta small { display: none; }
-
-/* Where a company stands: its latest run's status, and — only when there is
-   any — the work waiting on the operator, stacked under it. Two facts about one
-   subject in one cell, so the eye reads a company's standing in one stop
-   instead of tracking across to a sixth column. A company with nothing pending
-   renders nothing: an em-dash in every quiet row is six pieces of ink saying
-   "no news", and it made the rows with real work harder to spot. */
-/* Block, not flex, for the reason above. The pending chip sits on its own line
-   under the status badge via a plain block + margin. */
-.ops-standing .ops-pending { display: block; margin-top: 5px; width: fit-content; }
-
-.ops-pending {
-    background: var(--warn-soft);
-    border-radius: var(--radius-pill);
-    color: var(--warn);
-    display: inline-block;
-    font-size: 11.5px;
-    font-weight: 700;
-    padding: 2px 9px;
-    text-align: center;
-    text-decoration: none;
-    transition: background var(--ease), color var(--ease);
-    white-space: nowrap;
-}
-
-.ops-pending:hover { background: var(--warn); color: var(--surface); }
+.ops-statutory-row dd { font-size: 13px; font-weight: 700; }
 
 /* --- Motion --------------------------------------------------------------
    The entrance establishes hierarchy: the KPI band resolves first (--i 0-4),
@@ -528,34 +376,27 @@
 .ops .signal { transition: background var(--ease), border-color var(--ease); }
 .ops .signal:hover { border-color: var(--line-strong); }
 
-/* In a 30%-wide rail there is not room for the icon, the sentence AND the
-   action side by side: the shared row layout squeezes the text to roughly one
-   word per line. Stack the action under the sentence instead — the rail is a
-   column, and an action that sits below what it acts on reads in the same
-   direction as everything else in it. */
-.ops .area-risk .signal {
-    align-items: start;
-    column-gap: 11px;
+/* Across the panel's full width the signals sit side by side rather than in one
+   long column: a 1200px-wide card holding three stacked one-line sentences puts
+   the eye through three vertical stops to read what fits in one horizontal
+   sweep. Each card keeps a floor of 340px, so they collapse back to a stack
+   when there is no longer room for two — and the stack was the whole layout
+   while this panel lived in a 30%-wide rail.
+
+   The grid-inside-a-card layout the rail needed (icon, sentence, then the
+   action stacked under it, because there was no room for all three abreast) is
+   gone with the rail. `.signal`'s own row layout in dashboard.css applies
+   again, which is what it was written for. */
+.ops .area-risk .signals {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    row-gap: 6px;
-}
-
-.ops .area-risk .signal-body { grid-column: 2; }
-
-.ops .area-risk .signal-link {
-    align-self: start;
-    grid-column: 2;
-    justify-self: start;
-    margin-left: 0;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
 }
 
 /* --- Focus --------------------------------------------------------------- */
 
 .ops .ops-field select:focus-visible,
-.ops .ops-apply:focus-visible,
-.ops .ops-pending:focus-visible,
-.ops .ops-table tbody tr:focus-within {
+.ops .ops-apply:focus-visible {
     outline: 3px solid var(--brand);
     outline-offset: 2px;
 }
@@ -563,64 +404,25 @@
 .ops .ops-field select:focus-visible { box-shadow: none; }
 
 /* --- Tablet (>=860px) ----------------------------------------------------
-   Two columns. The primary chart takes the full width so its axis labels stay
-   readable, the rail's two panels pair up beneath it, and the table spans —
-   a six-column table in a half-width cell is a table nobody can read. */
+   The two supporting charts pair up. Risk & action and the primary chart both
+   keep the full width: the first because it is the page's lead panel and its
+   signal cards need room to read as sentences, the second because a trend line
+   in a half-width cell loses its axis labels. */
 
 @media (min-width: 860px) {
-    .ops-grid {
-        grid-template-areas:
-            "primary primary"
-            "risk    activity"
-            "support support"
-            "table   table";
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .ops-support { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
-    /* Each panel keeps its own height. Stretching them to match looked tidier
-       in a wireframe and is wrong with real data: Risk & action carries two
-       signals and Recent activity carries eight, so matching heights put ~400px
-       of blank card under the risk signals — and a card that is two-thirds
-       empty reads as a panel that failed to load, not as a short list. Ragged
-       bottoms between two columns are ordinary; a hole inside a card is not. */
-    .ops .area-risk, .ops .area-activity { align-self: start; }
 }
 
 /* --- Desktop (>=1180px) --------------------------------------------------
-   The 70/30 workspace. Left column: the analytical work, top to bottom in the
-   order it is read — the dominant trend, then the two supporting questions,
-   then the companies. Right column: the attention rail, its top aligned to the
-   primary chart's top, running the full height of the page. */
+   One column, wider. The 70/30 split this breakpoint used to build — an
+   analytical column with an attention rail beside it — is gone: the rail held
+   Risk & action and Recent activity, the feed was a preview of the audit page,
+   and the risk panel is the page's lead now rather than its margin. What is
+   left is three full-width panels in reading order, so nothing here needs to
+   place anything; only the spacing opens up. */
 
 @media (min-width: 1180px) {
     .ops { --panel-pad: 22px; --space-panel: 18px; --space-section: 26px; }
-
-    /* Two columns, one row. Each column is a single grid item holding a flex
-       stack of panels, so the two columns' heights are entirely independent of
-       each other and every panel inside them keeps its natural height. The
-       earlier three-row version could not do that: a rail spanning three rows
-       forces those rows to accommodate it, and the surplus goes either into the
-       left-hand panels (empty cards) or into the gaps between them (200px
-       holes). One row per column removes the shared row track that caused it,
-       and the shorter column simply ends. */
-    .ops-grid {
-        grid-template-areas: "work rail";
-        grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
-    }
-
-    .ops-work, .ops-rail {
-        align-self: start;
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-panel);
-        min-width: 0;
-    }
-
-    .ops-work { grid-area: work; }
-    .ops-rail { grid-area: rail; }
-
     .ops .xpanel--primary { padding: 24px; }
     .ops .kpi-band { gap: 14px; }
 }
@@ -649,30 +451,6 @@
     .ops-field { flex: 1 1 130px; }
     .ops-apply { flex: 1 1 100%; }
     .ops-filters-note { flex: 1 1 100%; margin: 0; }
-
-    /* The table keeps its own horizontal scroll inside the panel rather than
-       pushing the page sideways — .ops-table-wrap already owns that overflow. */
-    .ops-table { min-width: 500px; }
-}
-
-/* The five columns need ~610px of content. The work column only clears that
-   with the sparkline still in it from ~1500px of viewport up (the sidebar and
-   the page gutters take ~340px before the 70% split), so below that the
-   sparkline is the first thing to go: it is the only cell carrying no figure,
-   and the signed percentage beside it says the same thing in words. That is
-   the test for whether a sparkline earns its row — and the alternative was the
-   status badge being clipped at 1440px, which is the single most common
-   desktop width there is. */
-@media (max-width: 1500px) {
-    .ops-move .sparkline { display: none; }
-}
-
-@media (max-width: 900px) {
-    .ops-table th, .ops-table td { padding-left: 6px; padding-right: 6px; }
-    /* Same trade at the header: the comparison basis is a clarifier, and every
-       delta still carries it in its own tooltip. */
-    .ops-th-note { display: none; }
-    .ops-table { min-width: 400px; }
 }
 
 /* --- Accessibility preferences -------------------------------------------
@@ -711,6 +489,5 @@
 
 @media (prefers-contrast: more) {
     .ops .xpanel, .ops .kpi, .ops-field select { border-color: var(--ink-soft); }
-    .ops-table thead th, .ops-field label, .ops-filters-note { color: var(--ink-soft); }
-    .ops-table tbody tr + tr th, .ops-table tbody tr + tr td { border-top-color: var(--line-strong); }
+    .ops-field label, .ops-filters-note { color: var(--ink-soft); }
 }

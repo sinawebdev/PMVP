@@ -55,10 +55,10 @@
           <td class="num">{{ run.total_gross_pay|cedis }}</td>
           <td class="num">{{ run.total_deductions|cedis }}</td>
           <td class="num">{{ run.total_net_pay|cedis }}</td>
-          <td>
-              {{ lc.status_pill(run.status) }}
-              {{ lc.progress_stepper(run_progress(run, run.id in distributed_ids), compact=true) }}
-          </td>
+          {# The status, the position on the path, and the next stage — one cell,
+             three lines, no dot-counting. See macros/lifecycle.html::status_cell
+             for what the compact stepper here could not say. #}
+          <td>{{ lc.status_cell(run.status, run_progress(run, run.id in distributed_ids)) }}</td>
           {# The hold reason, in the row. It was only ever visible by opening the
              run, so triaging a queue of held payrolls meant a round trip per run
              to learn something one sentence long. #}

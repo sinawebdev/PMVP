@@ -286,11 +286,11 @@ class DemoResetTestCase(unittest.TestCase):
             ),
             (
                 "admin@msc.com", "/company",
-                "Payroll cost trend", "No payroll run yet",
+                "Employee cost distribution", "No payroll run yet",
             ),
             (
                 "finance@acme.com", "/company",
-                "Payroll cost trend", "No payroll run yet",
+                "Employee cost distribution", "No payroll run yet",
             ),
         ]
         for email, path, marker, empty_marker in cases:

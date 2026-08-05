@@ -119,22 +119,12 @@ def dashboard():
         year=selected_year,
     ).all()
     pending_statuses = PENDING_STATUSES
-    # Per-client cost history for the sparkline + % change on the Payroll Cost
-    # Per Client card. Computed from the client.payroll_runs relationship that is
-    # already loaded for the cost/pending figures below — no extra query per
-    # client — and truncated at the selected period so looking back at March
-    # never charts months after it.
-    from app.analytics import (
-        MONTH_INDEX,
-        client_cost_trend,
-        totals_trend,
-        up_to_period,
-    )
+    from app.analytics import MONTH_INDEX, totals_trend, up_to_period
 
     # Eager-load the two relationships every figure below walks. Without this,
-    # the per-client cost rows, the executive analytics, and the Top Clients
-    # table each lazy-load employees + runs per company (2N queries); with it the
-    # whole dashboard costs three queries no matter how many companies exist.
+    # the executive analytics lazy-load employees + runs per company (2N
+    # queries); with it the whole dashboard costs three queries no matter how
+    # many companies exist.
     all_clients = (
         ClientCompany.query.options(
             selectinload(ClientCompany.employees),
@@ -143,33 +133,13 @@ def dashboard():
         .order_by(ClientCompany.name)
         .all()
     )
-    client_costs = [
-        {
-            "client": client.name,
-            "workers": len(client.employees),
-            "payroll_cost": sum(
-                run.total_net_pay
-                for run in client.payroll_runs
-                if run.month == selected_month and run.year == selected_year
-            ),
-            "trend": client_cost_trend(
-                up_to_period(client.payroll_runs, selected_year, selected_month)
-            ),
-            "pending": sum(
-                1
-                for run in client.payroll_runs
-                if run.month == selected_month
-                and run.year == selected_year
-                and run.status in pending_statuses
-            ),
-            "runs": [
-                run
-                for run in client.payroll_runs
-                if run.month == selected_month and run.year == selected_year
-            ],
-        }
-        for client in all_clients
-    ]
+    # The per-client cost rows that used to be built here — one dict per company
+    # carrying its cost, its pending count and a truncated cost trend — fed the
+    # Company payroll overview table, which is gone. A company's own standing
+    # belongs on the company page, and the operator reaches it from Client
+    # Companies; rebuilding a ranked slice of that page on the dashboard cost an
+    # O(companies x runs) pass on every render to restate it. The eager-load
+    # above stays: the executive analytics below walk the same relationships.
     # Book-wide trend for the card header, summed from the same already-loaded
     # relationship the per-client rows use (no additional query).
     portfolio_trend = totals_trend(
@@ -247,7 +217,6 @@ def dashboard():
     from app.analytics import platform_dashboard_analytics
     from app.events import platform_activity
     from app.platform_dashboard import (
-        company_rows,
         period_scoped_trend,
         platform_kpis,
         platform_risk_signals,
@@ -311,9 +280,6 @@ def dashboard():
         run.total_ssnit + run.total_ssnit_employer for run in current_runs
     )
     paye_payable = sum(run.total_paye for run in current_runs)
-    # One consolidated table from the rows that used to feed two overlapping
-    # ones; `company_total` is what the "View all companies" link is counting.
-    company_table, company_total = company_rows(client_costs)
 
     return render_template(
         "dashboard.html",
@@ -329,17 +295,16 @@ def dashboard():
         kpis=kpis,
         risk_signals=risk_signals,
         statutory=statutory_summary(paye_payable, ssnit_payable, period_label),
-        # Six to eight entries: enough to see the shape of the last few hours,
-        # short enough that the rail stays a summary and the audit trail stays
-        # the place you go for the record.
-        activity=platform_activity(limit=8),
+        # Three entries: enough to see whether anything has happened since the
+        # last look, short enough that the panel stays a glance and the audit
+        # trail stays the place you go for the record. Capped in the query, not
+        # sliced in the template.
+        activity=platform_activity(limit=3),
         held_count=held_count,
         warning_count=warning_count,
         delivery_rate=delivery_rate,
         payslips_delivered=payslips_delivered,
         payslips_total=payslips_total,
-        company_table=company_table,
-        company_total=company_total,
         portfolio_trend=portfolio_trend,
         selected_month=selected_month,
         selected_year=selected_year,
