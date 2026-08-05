@@ -177,6 +177,18 @@ body {
     margin: 0 0 5px;
 }
 
+/* The greeting line under the page title. Quiet against the banner — it is
+   context, not the subject — but at #d6f0ea on the teal gradient it clears 7:1,
+   so it is a line anyone can actually read rather than decoration. */
+.topbar-sub {
+    color: #d6f0ea;
+    font-size: 14.5px;
+    font-weight: 550;
+    line-height: 1.45;
+    margin: 0;
+    max-width: 62ch;
+}
+
 .topbar-actions {
     display: flex;
     flex-wrap: wrap;

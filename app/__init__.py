@@ -500,7 +500,12 @@ def create_app():
         can_view_audit,
     )
 
-    from app.payroll_status import run_progress, status_badge_class
+    from app.payroll_status import (
+        run_progress,
+        status_badge_class,
+        status_progress,
+        status_tone,
+    )
     from app.risk import risk_badge
     from app.distribution.service import retry_state as delivery_retry_state
     from app.distribution.channels import (
@@ -526,6 +531,12 @@ def create_app():
         # pill, reused across the operator dashboard, runs list, and run detail.
         run_progress=run_progress,
         status_badge_class=status_badge_class,
+        # The status CELL's two inputs: a shell-independent tone, and where the
+        # run stands on the path that actually applies to it. Both derive from
+        # the same lifecycle_steps run_progress returns, so the pill, the bar and
+        # the stepper on the detail page can never tell three different stories.
+        status_tone=status_tone,
+        status_progress=status_progress,
         can_operate_payroll=can_operate_payroll,
         can_maintain_roster=can_maintain_roster,
         can_view_audit=can_view_audit,

@@ -66,12 +66,19 @@
 /* --- Workspace grid ------------------------------------------------------
    Named areas rather than column spans: the layout intent is legible in the
    grid-template-areas block itself, and a breakpoint re-orders the workspace by
-   rewriting five words instead of touching every child. */
+   rewriting five words instead of touching every child.
+
+   `actions` is FIRST in every one of the four orderings below, phone included,
+   and that is a rule rather than a coincidence. Quick actions is the only panel
+   on this page that does something; everything else reports. A panel that had
+   to be scrolled to on a phone but not on a desktop is a panel whose position
+   the reader has to relearn per device, and the one thing they came to click
+   should never be the thing they have to hunt for. */
 
 .exec-grid {
     display: grid;
     gap: 18px;
-    grid-template-areas: "kpis" "actions" "health" "risk" "charts" "compliance" "activity";
+    grid-template-areas: "actions" "kpis" "health" "risk" "charts" "compliance" "activity";
     grid-template-columns: minmax(0, 1fr);
 }
 
@@ -256,8 +263,11 @@
 .health-next p { color: var(--ink-soft); font-size: 12.5px; line-height: 1.55; margin: 3px 0 0; }
 .health-next--warn { background: var(--warn-soft); border-color: #f3dcb4; }
 
-/* Completion — the only bar on the dashboard, because completion is the only
-   value that is genuinely a proportion of a fixed whole. */
+/* The progress bar. The tenant dashboard's "Lifecycle completion" use of it is
+   gone — that bar restated the labelled stepper beneath it as a percentage, and
+   two answers to one question is one answer too many. It stays defined here
+   because the distribution monitor draws the same bar for a genuine proportion
+   (payslips delivered of payslips queued), which is what a bar is for. */
 /* The track needs a visible boundary of its own. At --surface-alt on --surface
    it measured 1.04:1 — invisible — so the bar showed a teal fill floating on
    nothing and the reader could not see what proportion of WHAT had been
@@ -283,15 +293,6 @@
        already correct, so nothing animates until the value actually moves. */
     transition: width 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
-
-.progress-meta {
-    align-items: baseline;
-    display: flex;
-    font-size: 12px;
-    justify-content: space-between;
-}
-
-.progress-meta strong { font-size: 13px; font-variant-numeric: tabular-nums; }
 
 /* Lifecycle stepper — horizontal on desktop, scrolls rather than wraps so the
    sequence never breaks into a second line and read as two sequences. */
@@ -754,8 +755,8 @@
 @media (min-width: 860px) {
     .exec-grid {
         grid-template-areas:
-            "kpis       kpis"
             "actions    actions"
+            "kpis       kpis"
             "health     risk"
             "charts     charts"
             "compliance activity";
@@ -772,18 +773,18 @@
        dashboards disagreed about it. */
     .kpi-band { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
-    /* Same failure, same fix, one row down: three chart cards in a two-column
-       grid leave the third alone beside a hole. The odd one out spans instead. */
+    /* Same failure, same fix, one row down: an odd chart card in a two-column
+       grid is left alone beside a hole. The odd one out spans instead. */
     .charts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .charts-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
 
     /* Each of these four keeps its own height rather than matching its neighbour.
        They are paired by the grid but they are not peers: Payroll health carries
-       a stepper, a progress bar and four figures while Risk carries one card,
-       and Compliance carries five checks while Activity may carry none at all.
-       Stretching them put 250-400px of blank card under the shorter one of each
-       pair, which reads as a panel that failed to load rather than as a short
-       list. The row's own bottom edge going ragged is the correct, cheaper cost. */
+       a stepper and five figures while Risk carries one card, and Compliance
+       carries five checks while Activity may carry none at all. Stretching them
+       put 250-400px of blank card under the shorter one of each pair, which
+       reads as a panel that failed to load rather than as a short list. The
+       row's own bottom edge going ragged is the correct, cheaper cost. */
     .exec-grid > .area-health,
     .exec-grid > .area-risk,
     .exec-grid > .area-compliance,
@@ -794,8 +795,8 @@
     .exec { --panel-pad: 22px; }
     .exec-grid {
         grid-template-areas:
-            "kpis   kpis   kpis   kpis   kpis   kpis   kpis   kpis   kpis  kpis  kpis  kpis"
             "actions actions actions actions actions actions actions actions actions actions actions actions"
+            "kpis   kpis   kpis   kpis   kpis   kpis   kpis   kpis   kpis  kpis  kpis  kpis"
             "health health health health health health health health risk  risk  risk  risk"
             "charts charts charts charts charts charts charts charts charts charts charts charts"
             "compliance compliance compliance compliance compliance activity activity activity activity activity activity activity";
@@ -804,22 +805,23 @@
     }
     .movement { gap: 16px; }
 
-    /* Full desktop: four tiles in one band and three charts in one row, which
-       is what the tablet rules above were standing in for. */
+    /* Full desktop: four tiles in one band. The charts stay at two columns —
+       there are two charts, and a three-column track would leave the second one
+       ending two-thirds of the way across with a third of the row empty beside
+       it. */
     .kpi-band { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .charts-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .charts-grid > :last-child:nth-child(odd) { grid-column: auto; }
 }
 
-/* Phone: the brief's mobile priority order is payroll status, alerts, KPIs,
-   quick actions — so on a phone the health panel and risk signals move ABOVE
-   the KPI band. A payroll operator checking their phone needs "is it held",
-   not "what did it cost". */
+/* Phone: quick actions first, then payroll status and alerts, then the KPI
+   band. Someone checking this on a phone wants to DO something or to know "is
+   it held" — not "what did it cost", which is a desk question. Actions lead
+   here exactly as they do at every other width; health and risk simply overtake
+   the KPI band behind them. */
 @media (max-width: 640px) {
     .exec { --panel-pad: 16px; }
     .exec-grid {
         gap: 14px;
-        grid-template-areas: "health" "risk" "kpis" "actions" "charts" "compliance" "activity";
+        grid-template-areas: "actions" "health" "risk" "kpis" "charts" "compliance" "activity";
     }
     .exec-head { align-items: flex-start; flex-direction: column; gap: 10px; }
     .kpi-band { gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }

@@ -14,3 +14,46 @@
   {% endfor %}
 </ol>
 {% endmacro %}
+
+
+{# --- Status cell -------------------------------------------------------------
+   Where a run stands, in a table cell, in three lines that each say one thing:
+   the STATUS as a word, the POSITION on the path, and what comes NEXT.
+
+   It replaces a status pill with `progress_stepper(compact=true)` stacked under
+   it. That compact stepper rendered the seven lifecycle stages as seven 9px
+   dots with `font-size: 0` — the labels were switched off because there was no
+   room for them — so the cell showed a coloured pill above a row of grey and
+   green dots that named nothing. Reading it required knowing the stage order by
+   heart AND counting dots, in a ~110px column, and it still could not answer
+   the one question a reviewer actually has in a queue: what happens next.
+
+   Three deliberate choices:
+
+     * Segments, not dots. A filled bar is read as a proportion at a glance; a
+       row of dots has to be counted. The bar is `aria-hidden` — the sentence
+       under it carries the same fact in words, so a screen reader is told it
+       once rather than twice.
+     * Only the stages that APPLY. status_progress drops the skipped ones, so a
+       run that was never held is "3 of 6", not "3 of 7 with one greyed out" —
+       a stage it will never reach is not part of its path.
+     * The next stage, named. "Pending Approval · next: Approved" tells a
+       reviewer what their click does before they make it.
+#}
+{% macro status_cell(status, steps) %}
+{% set progress = status_progress(steps) %}
+{% set applicable = steps | rejectattr('state', 'equalto', 'skipped') | list %}
+<div class="rs">
+  <span class="rs-pill rs-pill--{{ status_tone(status) }}">{{ status }}</span>
+  <span class="rs-track" aria-hidden="true">
+    {% for step in applicable %}<span class="rs-seg rs-seg--{{ step.state }}"></span>{% endfor %}
+  </span>
+  {# Two short lines rather than one long one. As a single sentence the cell
+     needed ~200px to avoid wrapping mid-phrase, and in a ten-column table that
+     width came out of the Actions column — which is where Approve and Reject
+     live, and pushing THOSE off the right edge to explain the status is a bad
+     trade. Split, each line is ~11 characters and the cell sits at ~118px. #}
+  <span class="rs-meta">Step {{ progress.position }} of {{ progress.total }}</span>
+  {% if progress.next %}<span class="rs-next">Next: {{ progress.next }}</span>{% endif %}
+</div>
+{% endmacro %}

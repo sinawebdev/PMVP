@@ -226,10 +226,10 @@ class PlatformDashboardRenderTestCase(unittest.TestCase):
 
     def test_dashboard_renders_every_executive_section(self):
         # The operator dashboard's information architecture, asserted as
-        # headings. Five KPI tiles (one per distinct question), one dominant
-        # chart plus two supporting ones, one consolidated company table, and a
-        # two-panel right rail — see app/platform_dashboard.py for the reasoning
-        # behind each split.
+        # headings. Five KPI tiles (one per distinct question), then four
+        # full-width panels in reading order: Risk & action, the dominant chart,
+        # the two supporting ones, and the activity glance — see
+        # app/platform_dashboard.py for the reasoning behind each split.
         page = self.client.get("/dashboard")
         self.assertEqual(page.status_code, 200)
         body = page.get_data(as_text=True)
@@ -243,12 +243,66 @@ class PlatformDashboardRenderTestCase(unittest.TestCase):
             "Payroll cost trend",
             "Companies by payroll cost",
             "Payroll status distribution",
-            "Company payroll overview",
             "Recent activity",
             "Statutory exposure",
         ):
             with self.subTest(heading=heading):
                 self.assertIn(heading, body)
+
+    def test_the_risk_panel_leads_the_page_and_is_not_a_side_rail(self):
+        """Risk & action is the first and heaviest panel, not a margin note.
+
+        It spent the redesign in a 30%-wide right rail, which is where a
+        dashboard puts what it wants available but not read — and it is the only
+        panel here carrying work an operator must act on today. Asserted
+        structurally rather than by heading text, because the heading survived
+        the move and the position is the whole point."""
+        body = self.client.get("/dashboard").get_data(as_text=True)
+        # No rail, and no work/rail column wrappers to put one back.
+        for gone in ('class="ops-rail"', 'class="ops-work"'):
+            with self.subTest(removed=gone):
+                self.assertNotIn(gone, body)
+        # It is the page's one primary-weight panel, and it comes before the
+        # chart that used to hold that rank.
+        self.assertIn("xpanel--primary area-risk", body)
+        self.assertLess(body.index('id="risk-heading"'), body.index('id="trend-heading"'))
+
+    def test_the_activity_feed_is_a_glance_not_a_second_audit_page(self):
+        """Three entries, however many exist. The audit trail is one click away
+        and is the record; this panel only answers "has anything happened since
+        I last looked". Seeded with more than three so an empty feed cannot pass
+        this vacuously."""
+        admin = User.query.filter_by(email="admin@payrolla.com").first()
+        base = datetime.now(timezone.utc).replace(tzinfo=None)
+        for index in range(6):
+            db.session.add(
+                AuditTrail(
+                    user_id=admin.id,
+                    user_role=admin.role,
+                    action="Payroll approval",
+                    related_record_type="PayrollRun",
+                    related_record_id=index,
+                    notes=f"glance {index}",
+                    created_at=base + timedelta(minutes=index),
+                )
+            )
+        db.session.commit()
+
+        body = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("Recent activity", body)
+        feed = body.split('class="timeline ops-timeline"', 1)[1].split("</ol>", 1)[0]
+        self.assertEqual(feed.count('class="tl-item'), 3)
+
+    def test_the_banner_greets_the_operator_by_name(self):
+        """The <h1> names the workspace; the line under it names the reader.
+
+        The banner said only "Payroll operations" — a workspace that never
+        acknowledges who opened it. Same resolve_display_name rule the company
+        portal greets by, so the two planes greet the same person the same way."""
+        body = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("Payroll operations", body)
+        self.assertIn('class="topbar-sub"', body)
+        self.assertIn("Welcome, ", body)
 
     def test_dashboard_carries_no_removed_or_duplicated_section(self):
         """The redesign's subtractions, asserted so they cannot creep back.
@@ -270,6 +324,11 @@ class PlatformDashboardRenderTestCase(unittest.TestCase):
             "Recently Completed",
             "Client growth",
             "Approval Queue",
+            # The consolidated company table went the same way as the two it
+            # replaced: a ranked slice of the Client Companies page, rebuilt on
+            # the dashboard on every render to restate what that page already
+            # shows. A company's own standing belongs on the company page.
+            "Company payroll overview",
         ):
             with self.subTest(removed=gone):
                 self.assertNotIn(gone, body)

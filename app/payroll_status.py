@@ -99,6 +99,52 @@ def status_badge_class(status):
     return _STATUS_BADGE.get(status, "text-bg-secondary")
 
 
+# The same eight statuses in the shell-independent vocabulary the shared
+# component layer speaks (see app/static/components.css). _STATUS_BADGE above is
+# Bootstrap's, which the tenant portal does not load — a status cell keyed off it
+# is a status cell only one of the two planes can draw.
+_STATUS_TONE = {
+    DRAFT: "muted",
+    SUBMITTED: "info",
+    AUTO_ACCEPTED: "info",
+    HELD: "warn",
+    PENDING_APPROVAL: "warn",
+    APPROVED: "ok",
+    PROCESSED: "brand",
+    REJECTED: "danger",
+}
+
+
+def status_tone(status):
+    """``muted | info | warn | ok | brand | danger`` for a run status.
+
+    Tone, not colour: every surface that renders it pairs the tone with a word
+    and a shape, so status is never carried by colour alone."""
+    return _STATUS_TONE.get(status, "muted")
+
+
+def status_progress(steps):
+    """Where a run stands in its lifecycle, from the stepper it already has.
+
+    ``{position, total, current, next}`` over the ``lifecycle_steps`` list —
+    ``total`` counts only the stages that APPLY to this run (a run that was never
+    held is on a six-step path, not a seven-step one, and telling its reader
+    otherwise invents a stage it will never reach). ``next`` is the stage after
+    the current one, or None where the run is finished or terminal.
+
+    Presentation-free: labels in, labels out, no markup."""
+    applicable = [s for s in steps if s["state"] != "skipped"]
+    done = sum(1 for s in applicable if s["state"] == "done")
+    current = next((s for s in applicable if s["state"] == "current"), None)
+    upcoming = [s for s in applicable if s["state"] == "upcoming"]
+    return {
+        "position": done + (1 if current else 0),
+        "total": len(applicable),
+        "current": current["label"] if current else None,
+        "next": upcoming[0]["label"] if upcoming else None,
+    }
+
+
 def _reached_stage_index(status, calculated, distributed):
     """Highest stage index the run has reached, from its status + derived flags."""
     if distributed:
