@@ -615,6 +615,50 @@
 }
 
 
+/* --- Analytics card ----------------------------------------------------------
+   The grid of chart cards, and a chart card's own header. Moved here from
+   styles.css (Phase 6's one-definition rule): the operator stylesheet defined
+   them, but the only template that uses them is the TENANT expenses page, which
+   never loads styles.css. The result was a chart card with no padding sitting
+   under three 18px-padded .stat-cards, and an .analytics-grid that was not a
+   grid — the two chart cards stacked full-width instead of sitting side by side.
+
+   Padding matches .stat-card and .panel above (18px) so every card on a page
+   shares one inset, whichever shell drew it. */
+
+.analytics-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    margin-bottom: 26px;
+}
+
+.chart-card {
+    min-width: 0;          /* charts shrink with the cell instead of overflowing */
+    padding: 18px;
+}
+
+.chart-card:hover {
+    transform: none;       /* a chart is read, not clicked */
+}
+
+.chart-head {
+    margin-bottom: 14px;
+}
+
+.chart-head h2 {
+    font-size: 15px;
+    font-weight: 750;
+    margin: 0;
+}
+
+.chart-head small {
+    display: block;
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+
 /* --- Page bar ----------------------------------------------------------------
    A title row: the page (or section) heading, with its actions on the right.
 

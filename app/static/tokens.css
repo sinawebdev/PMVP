@@ -254,7 +254,24 @@
     display: flex;
     flex: 1 1 0;
     height: 100%;
+    max-width: 88px;
     overflow: hidden;
+}
+
+/* A bar's WIDTH carries no meaning — only its height encodes the value — so an
+   uncapped `flex: 1 1 0` let a one-period series grow into a full-card slab
+   that read as a filled area chart rather than a bar. The cap only bites when
+   there are few periods; at twelve months the bars shrink below it and pack
+   the row exactly as before. The axis is pinned to the same track and the same
+   8px gap so a label stays under its own bar — scoped to .chart--bar because
+   the line chart shares .chart-axis and does span the full width. */
+.chart--bar .chart-axis {
+    gap: 8px;
+    justify-content: flex-start;
+}
+
+.chart--bar .chart-axis span {
+    max-width: 88px;
 }
 
 /* The gradient's light end is --brand-bright, which measures 2.21:1 against the
@@ -343,7 +360,16 @@
 /* The donut sits beside its legend once there is room for both. Shared by both
    shells, so it lives here rather than in either shell's stylesheet. */
 .chart--donut { align-items: center; display: flex; flex-wrap: wrap; gap: 18px; }
-.chart--donut .chart-legend { flex: 1 1 130px; margin-top: 0; }
+/* The legend sizes to its CONTENT, and stops there. It used to be `flex: 1 1
+   130px`, so it grew to fill every pixel the card had left; combined with the
+   `margin-left: auto` on .chart-legend strong below — which is what aligns the
+   values into a column when there are several rows — a single-category
+   breakdown put the swatch and label beside the donut and threw its value to
+   the far edge of the card, reading as two unrelated things with a void
+   between them. Shrink-to-fit keeps the value with the label it belongs to and
+   still right-aligns the column across multiple rows, because every row is now
+   as wide as the widest. The card's leftover width stays neutral background. */
+.chart--donut .chart-legend { flex: 0 1 auto; margin-top: 0; max-width: 100%; }
 
 .donut-wrap {
     display: inline-grid;
