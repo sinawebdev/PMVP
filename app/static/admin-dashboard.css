@@ -208,7 +208,7 @@
        right-hand rail, and Risk & action leads the page at every size rather
        than only on a phone. A panel whose position changes with the viewport is
        a panel the reader has to find again on each device. */
-    grid-template-areas: "risk" "primary" "support" "activity" "actions";
+    grid-template-areas: "risk" "primary" "support" "activity";
     grid-template-columns: minmax(0, 1fr);
 }
 
@@ -219,9 +219,12 @@
 .ops .area-support { grid-area: support; }
 .ops .area-risk { grid-area: risk; }
 .ops .area-activity { grid-area: activity; }
-/* Navigation to other operator surfaces, so it closes the page rather than
-   pushing Risk & action — the one panel carrying work — below it. */
-.ops .area-actions { grid-area: actions; }
+
+/* Quick actions opens the page, ABOVE the period filter and the KPI band, so it
+   sits outside the workspace grid entirely rather than holding an area in it.
+   Same --space-section the filter row and the KPI band use between themselves,
+   so the three read as one stack. */
+.ops .ops-actions { margin-bottom: var(--space-section); }
 
 .ops-support { display: grid; gap: var(--space-panel); grid-template-columns: minmax(0, 1fr); }
 
