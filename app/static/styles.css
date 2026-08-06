@@ -370,43 +370,15 @@ body {
 }
 
 /* --- Executive overview (operator dashboard) -----------------------------
-   The chart row and the activity feed. The charts themselves are the shared
-   macros styled by tokens.css; only the CARD layout is per-shell, because the
-   two shells have different card languages (Bootstrap panels here, bespoke
-   cards in the tenant portal). auto-fit gives four cards on a wide desktop,
-   two on a tablet and one on a phone with no media query. */
+   `.analytics-grid`, `.chart-card` and `.chart-head` used to live here, on the
+   assumption that card layout was per-shell. They were only ever USED by
+   client/expenses.html — a tenant-shell template, and the tenant shell does not
+   load this stylesheet. So the tenant's only analytics page rendered them
+   completely unstyled: two full-width stacked cards with no padding, against
+   18px-padded .stat-cards directly above. They are now in components.css, the
+   shared layer both shells load. Nothing in the operator shell used them.
 
-.analytics-grid {
-    display: grid;
-    gap: 16px;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-}
-
-.chart-card {
-    min-width: 0;          /* charts shrink with the cell instead of overflowing */
-}
-
-.chart-card:hover {
-    transform: none;       /* a chart is read, not clicked */
-}
-
-.chart-head {
-    margin-bottom: 14px;
-}
-
-.chart-head h2 {
-    font-size: 15px;
-    font-weight: 750;
-    margin: 0;
-}
-
-.chart-head small {
-    display: block;
-    font-size: 12px;
-    margin-top: 2px;
-}
-
-/* Payroll activity timeline. One list, two sources (domain events + curated
+   Payroll activity timeline. One list, two sources (domain events + curated
    audit entries) — see app/events.py:platform_activity. */
 .activity-feed {
     display: flex;

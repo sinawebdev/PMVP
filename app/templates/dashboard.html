@@ -246,6 +246,53 @@
       {% endif %}
     </section>
 
+    {# --- Quick actions ----------------------------------------------------
+       The tenant dashboard's tile pattern (macros/dashboard.html::action_tile
+       in a .qa-grid), carrying the operator surfaces the page does not already
+       reach.
+
+       Deliberately NOT the three header buttons. Create Payroll Run, Review
+       approvals and Risk queue are already the header's one-dominant-plus-two
+       row, and this page holds itself to offering an action once — the same
+       rule that keeps `run_payroll` out of the tenant dashboard's tile grid.
+       Repeating them here would read as two different actions until checked.
+
+       Placed LAST, not second as on the tenant dashboard, because Risk & action
+       leads this page by design: these tiles are navigation to other surfaces,
+       not work to do today, and they must not displace the panel that is.
+
+       Each `show` mirrors the target route's own decorator, so a tile is never
+       offered to a role the route would bounce — the gate stays on the route;
+       this only stops the dashboard advertising a dead end. main.clients and
+       payslip.index are @platform_required, which every reader of this page
+       already is, so they carry no role test. #}
+    {% set ops_actions = [
+         {"label": "Client companies", "hint": "Onboarding, contacts and billing details",
+          "icon": "grid", "endpoint": "main.clients", "show": true},
+         {"label": "Payslips", "hint": "Generate and reissue worker payslips",
+          "icon": "file-text", "endpoint": "payslip.index", "show": true},
+         {"label": "Expenses & audit", "hint": "Recorded spend and the full action log",
+          "icon": "receipt", "endpoint": "audit.audit_trail", "show": can_view_audit(role)},
+         {"label": "Statutory rates", "hint": "GRA PAYE bands and SSNIT rate versions",
+          "icon": "bank", "endpoint": "statutory.index", "show": can_manage_statutory(role)}
+       ] | selectattr("show") | list %}
+    {% if ops_actions %}
+    <section class="xpanel area-actions ops-reveal" style="--i: 10"
+             aria-labelledby="ops-actions-heading">
+      <div class="panel-head">
+        <div>
+          <h2 id="ops-actions-heading">Quick actions</h2>
+          <p class="panel-sub">Other operator surfaces available to your role.</p>
+        </div>
+      </div>
+      <div class="qa-grid">
+        {% for action in ops_actions %}
+        {{ ui.action_tile(action, url_for(action.endpoint)) }}
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
   </div>
 </div>
 
