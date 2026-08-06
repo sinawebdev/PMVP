@@ -1,5 +1,6 @@
 import os
 import re
+import secrets
 import threading
 import time
 from datetime import timedelta
@@ -192,8 +193,18 @@ def create_app():
         or os.getenv("FLASK_ENV") == "production"
     )
     app.config["IS_PRODUCTION"] = is_production
-    _INSECURE_SECRET_KEY = "dev-secret-change-me"
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", _INSECURE_SECRET_KEY)
+    # There is deliberately NO hardcoded fallback secret. A committed fallback is
+    # a published signing key: any deployment that failed to identify itself as
+    # production (the Dockerfile used to do exactly that) would sign session
+    # cookies and payslip links with a value anyone can read out of git, and
+    # forging a cookie for any user — including payrolla_admin — becomes trivial.
+    #
+    # Absent SECRET_KEY, dev/test get a fresh random key per process. That keeps
+    # local work and the suite running, while making a misidentified deployment
+    # fail LOUDLY (sessions stop surviving a restart, and every gunicorn worker
+    # disagrees) instead of silently signing with a known key.
+    _secret_from_env = os.getenv("SECRET_KEY")
+    app.config["SECRET_KEY"] = _secret_from_env or secrets.token_hex(32)
     # --- Product identity (single config seam) ---
     # De-hardcodes the product/company names so a rebrand or white-label is a
     # config change, not a cross-template sweep. Every user-facing surface reads
@@ -226,14 +237,15 @@ def create_app():
         os.path.join(app.instance_path, "payrolla.db")
     )
     assert_persistent_database_config(app)
-    # Never sign production sessions with the shared dev fallback: anyone who knows
-    # it could forge a session cookie for any user. Refuse to boot in production
-    # without a real SECRET_KEY (the fallback stays for local/tests). Ordered after
-    # the persistence check so the DATABASE_URL failure still surfaces first.
-    if is_production and app.config["SECRET_KEY"] == _INSECURE_SECRET_KEY:
+    # Production must sign with a key the operator set and can rotate. An
+    # ephemeral per-process key would log every user out on each restart and
+    # differ between gunicorn workers, so refuse to boot rather than limp.
+    # Ordered after the persistence check so the DATABASE_URL failure still
+    # surfaces first.
+    if is_production and not _secret_from_env:
         raise RuntimeError(
             "SECRET_KEY must be set to a strong random value in production — "
-            "refusing to start with the insecure development fallback."
+            "refusing to start without one."
         )
     database_type = database_type_label(app.config["SQLALCHEMY_DATABASE_URI"])
     app.config["DATABASE_TYPE_LABEL"] = database_type
