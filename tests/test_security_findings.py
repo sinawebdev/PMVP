@@ -32,7 +32,7 @@ from app.distribution.channels import (  # noqa: E402
     ConsoleWhatsAppSender,
     OutboundMessage,
 )
-from app.models import User  # noqa: E402
+from app.models import AuditTrail, User  # noqa: E402
 from app.spreadsheet_uploads import (  # noqa: E402
     ZIP_WORKBOOK_EXTENSIONS,
     SpreadsheetValidationError,
@@ -365,6 +365,9 @@ class _LoginTestCase(unittest.TestCase):
 
     def tearDown(self):
         login_throttle.reset()
+        with self.app.app_context():
+            AuditTrail.query.delete()
+            db.session.commit()
 
     def post(self, email, password="wrong", ip="10.0.0.1"):
         return self.client.post(
@@ -516,6 +519,43 @@ class F7ProductionDetectionTests(_EnvGuard):
             content = handle.read()
         self.assertIn("FLASK_ENV", content)
         self.assertIn("value: production", content)
+
+
+class F9AuthAuditTests(_LoginTestCase):
+    """F9 — login success, failure and logout all reach the audit trail."""
+
+    def _rows(self, action):
+        with self.app.app_context():
+            return AuditTrail.query.filter_by(action=action).all()
+
+    def test_a_failed_login_is_recorded_with_ip_and_user_agent(self):
+        self.client.post(
+            "/login", data={"email": "real@example.com", "password": "wrong"},
+            headers={"X-Forwarded-For": "203.0.113.9", "User-Agent": "probe/1.0"},
+        )
+        rows = self._rows("login.failure")
+        self.assertEqual(len(rows), 1)
+        self.assertIn("ip=203.0.113.9", rows[0].notes)
+        self.assertIn("agent=probe/1.0", rows[0].notes)
+
+    def test_a_successful_login_is_attributed_to_the_user(self):
+        self.post("real@example.com", "correct-horse-battery-staple", ip="203.0.113.10")
+        rows = self._rows("login.success")
+        self.assertEqual(len(rows), 1)
+        self.assertIsNotNone(rows[0].user_id)
+        self.assertIn("ip=203.0.113.10", rows[0].notes)
+
+    def test_logout_is_recorded_and_still_names_the_actor(self):
+        self.post("real@example.com", "correct-horse-battery-staple")
+        self.client.get("/logout")
+        rows = self._rows("logout")
+        self.assertEqual(len(rows), 1)
+        self.assertIsNotNone(rows[0].user_id, "logout must be recorded before logout_user()")
+
+    def test_a_rate_limited_attempt_is_recorded_too(self):
+        for _ in range(6):
+            self.post("real@example.com", ip="203.0.113.11")
+        self.assertTrue(self._rows("login.blocked"))
 
 
 if __name__ == "__main__":
