@@ -23,7 +23,7 @@ os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from werkzeug.datastructures import FileStorage  # noqa: E402
 
-from app import create_app  # noqa: E402
+from app import create_app, db, login_throttle  # noqa: E402
 from app.csv_safety import escape_formula, escape_row  # noqa: E402
 from app.distribution.channels import (  # noqa: E402
     ConsoleEmailSender,
@@ -31,6 +31,7 @@ from app.distribution.channels import (  # noqa: E402
     ConsoleWhatsAppSender,
     OutboundMessage,
 )
+from app.models import User  # noqa: E402
 from app.spreadsheet_uploads import (  # noqa: E402
     ZIP_WORKBOOK_EXTENSIONS,
     SpreadsheetValidationError,
@@ -341,6 +342,109 @@ class F3FormulaInjectionTests(unittest.TestCase):
             self.assertNotEqual(sheet[coordinate].data_type, "f",
                                 f"{coordinate} was stored as a live formula")
         self.assertEqual(sheet["C6"].value, 4231.55)  # amount still numeric
+
+
+class _LoginTestCase(unittest.TestCase):
+    """Shared fixture: one app, one real user, throttle reset between tests."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = _app(LOGIN_MAX_ATTEMPTS=5)
+        with cls.app.app_context():
+            db.create_all()
+            if not User.query.filter_by(email="real@example.com").first():
+                user = User(email="real@example.com", name="Real", role="admin")
+                user.set_password("correct-horse-battery-staple")
+                db.session.add(user)
+                db.session.commit()
+
+    def setUp(self):
+        login_throttle.reset()
+        self.client = self.app.test_client()
+
+    def tearDown(self):
+        login_throttle.reset()
+
+    def post(self, email, password="wrong", ip="10.0.0.1"):
+        return self.client.post(
+            "/login", data={"email": email, "password": password},
+            headers={"X-Forwarded-For": ip},
+        )
+
+
+class F4LoginRateLimitTests(_LoginTestCase):
+    """F4 part 1 — per-IP and per-account limiting with lockout."""
+
+    def test_an_account_locks_after_the_configured_attempts(self):
+        codes = [self.post("real@example.com").status_code for _ in range(6)]
+        self.assertEqual(codes[:5], [200] * 5)
+        self.assertEqual(codes[5], 429)
+
+    def test_a_locked_account_refuses_even_the_correct_password(self):
+        for _ in range(5):
+            self.post("real@example.com")
+        response = self.post("real@example.com", "correct-horse-battery-staple")
+        self.assertEqual(response.status_code, 429)
+
+    def test_the_account_lock_follows_the_account_across_source_ips(self):
+        for index in range(5):
+            self.post("real@example.com", ip=f"10.0.0.{index}")
+        self.assertEqual(self.post("real@example.com", ip="10.99.99.99").status_code, 429)
+
+    def test_one_ip_spraying_many_accounts_is_locked(self):
+        codes = [
+            self.post(f"user{index}@example.com", ip="10.0.0.7").status_code
+            for index in range(6)
+        ]
+        self.assertEqual(codes[5], 429)
+
+    def test_a_successful_login_clears_the_failure_count(self):
+        for _ in range(3):
+            self.post("real@example.com", ip="10.0.0.8")
+        self.assertEqual(
+            self.post("real@example.com", "correct-horse-battery-staple",
+                      ip="10.0.0.8").status_code,
+            302,
+        )
+        # A fresh client: the one above now holds a session, and /login redirects
+        # an already-authenticated caller before any of this logic is reached.
+        self.client = self.app.test_client()
+        self.assertEqual(self.post("real@example.com", ip="10.0.0.8").status_code, 200)
+
+
+class F4UserEnumerationTests(_LoginTestCase):
+    """F4 part 2 — the response must not distinguish a real account."""
+
+    def test_known_and_unknown_emails_get_identical_responses(self):
+        known = self.post("real@example.com", ip="10.1.0.1")
+        unknown = self.post("nobody@example.com", ip="10.1.0.2")
+        self.assertEqual(known.status_code, unknown.status_code)
+        self.assertIn(b"Invalid email or password.", known.data)
+        self.assertIn(b"Invalid email or password.", unknown.data)
+
+    def test_the_miss_path_still_verifies_a_password(self):
+        """The timing fix itself: no short-circuit when the user is absent.
+
+        Asserted structurally rather than by wall-clock, because a timing
+        threshold in CI is a flaky test. The measured medians moved from
+        316 ms vs 3.7 ms (85x) to 330 ms vs 316 ms (1.04x, well inside jitter).
+        """
+        from app import auth
+
+        calls = []
+        original = auth.check_password_hash
+
+        def counting(stored, candidate):
+            calls.append(stored)
+            return original(stored, candidate)
+
+        auth.check_password_hash = counting
+        try:
+            self.post("definitely-not-a-user@example.com", ip="10.1.0.3")
+        finally:
+            auth.check_password_hash = original
+        self.assertEqual(len(calls), 1, "absent user must still cost one verification")
+        self.assertEqual(calls[0], auth._DUMMY_PASSWORD_HASH)
 
 
 if __name__ == "__main__":

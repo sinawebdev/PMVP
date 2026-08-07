@@ -21,6 +21,7 @@ non-negotiables:
 | `SEED_DEMO_DATA` | `false` | Never seed demo tenants/users into a real deployment. |
 | `SESSION_COOKIE_SECURE` | `true` | HTTPS-only session cookie. |
 | `LOG_MESSAGE_BODIES` | unset | Development only — production refuses to boot with it enabled. |
+| `LOGIN_MAX_ATTEMPTS` | `5` | Failed logins per IP and per account before lockout. |
 
 Optional groups (all documented in [.env.example](.env.example)): the branding
 seam (`APP_NAME`, …), distribution channels and their credentials, webhook

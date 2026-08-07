@@ -306,6 +306,15 @@ def create_app():
         == "true"
     )
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
+    # Login rate limiting (app/login_throttle.py). Counted per IP and per account
+    # independently; whichever trips first locks the login route for that key.
+    # Five attempts in fifteen minutes leaves room for ordinary mistyping while
+    # making an online guessing run useless.
+    app.config["LOGIN_MAX_ATTEMPTS"] = int(os.getenv("LOGIN_MAX_ATTEMPTS", 5))
+    app.config["LOGIN_ATTEMPT_WINDOW_SECONDS"] = int(
+        os.getenv("LOGIN_ATTEMPT_WINDOW_SECONDS", 900)
+    )
+    app.config["LOGIN_LOCKOUT_SECONDS"] = int(os.getenv("LOGIN_LOCKOUT_SECONDS", 900))
     app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 16 * 1024 * 1024))
     # Standard uploads stream through tempfile and raw uploads stage in
     # IMPORT_SESSION_FOLDER; there is no reader for a persistent UPLOAD_FOLDER, so
