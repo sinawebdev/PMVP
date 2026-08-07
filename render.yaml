@@ -21,6 +21,13 @@ services:
     envVars:
       - key: FLASK_APP
         value: run.py
+      # Asserted explicitly rather than inferred. Production used to be detected
+      # only from Render's implicit RENDER=true, which this file never declared —
+      # so the security posture (Secure cookies, HSTS, no demo hints, the
+      # SECRET_KEY guard) hung on a platform detail nothing here guaranteed.
+      # Detection now fails closed as well, making this the belt to that braces.
+      - key: FLASK_ENV
+        value: production
       - key: SECRET_KEY
         generateValue: true
       # DATABASE_URL points at the Supabase-hosted Postgres and is managed in the

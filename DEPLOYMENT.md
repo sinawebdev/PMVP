@@ -9,11 +9,15 @@ non-negotiables:
    SQLite (ephemeral filesystems lose data).
 2. **A strong `SECRET_KEY`** — the app refuses to boot in production with the
    insecure development fallback.
+3. **`FLASK_ENV=production`** — declared explicitly. Detection fails closed (an
+   undeclared environment is treated as production), but the deploy states it
+   rather than relying on the platform's implicit `RENDER` variable.
 
 ## Environment variables
 
 | Variable | Prod value | Purpose |
 |---|---|---|
+| `FLASK_ENV` | `production` | Declares the environment. Unset/unknown is treated as production. |
 | `SECRET_KEY` | strong random | Signs sessions and payslip links. |
 | `DATABASE_URL` | Postgres URL | `postgres://` is auto-normalised to `postgresql://`. |
 | `PERSISTENCE_REQUIRED` | `true` | Fail fast if Postgres is missing. |
@@ -59,7 +63,8 @@ Go-live checklist:
 
 1. Create a PostgreSQL database and copy its internal URL.
 2. Set `DATABASE_URL` and `SECRET_KEY` on the web service.
-3. Set `SEED_DEMO_DATA=false`, `PERSISTENCE_REQUIRED=true`, `AUTO_INIT_DB=false`.
+3. Set `FLASK_ENV=production`, `SEED_DEMO_DATA=false`, `PERSISTENCE_REQUIRED=true`,
+   `AUTO_INIT_DB=false`.
 4. Deploy, then open `/admin/db-health` (admin login) and confirm it reports
    **PostgreSQL** and `DATABASE_URL Detected: Yes`.
 5. Upload a payroll workbook, restart the service, and confirm the records persist.
@@ -75,6 +80,7 @@ Go-live checklist:
 `railway.toml` is included. Create a Railway PostgreSQL service, connect it, and set:
 
 ```env
+FLASK_ENV=production
 SECRET_KEY=your-secret
 DATABASE_URL=${{ Postgres.DATABASE_URL }}
 AUTO_INIT_DB=true

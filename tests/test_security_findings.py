@@ -23,6 +23,7 @@ os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from werkzeug.datastructures import FileStorage  # noqa: E402
 
+import app as app_module  # noqa: E402
 from app import create_app, db, login_throttle  # noqa: E402
 from app.csv_safety import escape_formula, escape_row  # noqa: E402
 from app.distribution.channels import (  # noqa: E402
@@ -480,6 +481,41 @@ class F6SecurityHeaderTests(unittest.TestCase):
         self.assertNotIn(
             "Strict-Transport-Security", self.app.test_client().get("/login").headers
         )
+
+
+class F7ProductionDetectionTests(_EnvGuard):
+    """F7 — unknown environments must be treated as production."""
+
+    def _detect(self, **env):
+        for key in ("RENDER", "RAILWAY_ENVIRONMENT", "FLASK_ENV", "APP_ENV"):
+            os.environ.pop(key, None)
+        os.environ.update(env)
+        return app_module.detect_is_production()
+
+    def test_an_undeclared_environment_is_production(self):
+        """The finding itself: render.yaml asserted nothing, so this was False."""
+        self.assertTrue(self._detect())
+
+    def test_an_unrecognised_or_empty_value_is_production(self):
+        self.assertTrue(self._detect(FLASK_ENV="wat"))
+        self.assertTrue(self._detect(FLASK_ENV=""))
+
+    def test_explicit_production_and_platform_hints_are_production(self):
+        self.assertTrue(self._detect(FLASK_ENV="production"))
+        self.assertTrue(self._detect(RENDER="true"))
+        self.assertTrue(self._detect(RAILWAY_ENVIRONMENT="prod"))
+
+    def test_only_an_explicit_development_claim_disables_production(self):
+        for value in ("development", "dev", "local", "test", "testing", " Development "):
+            with self.subTest(value=value):
+                self.assertFalse(self._detect(FLASK_ENV=value))
+
+    def test_render_yaml_declares_the_environment_explicitly(self):
+        """The config half of F7 — detection alone is not the whole fix."""
+        with io.open("render.yaml", encoding="utf8") as handle:
+            content = handle.read()
+        self.assertIn("FLASK_ENV", content)
+        self.assertIn("value: production", content)
 
 
 if __name__ == "__main__":

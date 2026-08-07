@@ -182,16 +182,47 @@ def format_role_label(value):
     return labels.get(canonical, canonical.replace("_", " ").title())
 
 
+# Environments that must be told to us explicitly. Anything not on one of these
+# lists is treated as production — see detect_is_production.
+_DEVELOPMENT_ENVIRONMENTS = {"development", "dev", "local", "test", "testing"}
+_PRODUCTION_ENVIRONMENTS = {"production", "prod", "staging", "live"}
+
+
+def detect_is_production():
+    """Whether this process is a real deployment. **Fails closed.**
+
+    The old rule was ``RENDER == "true"`` or ``RAILWAY_ENVIRONMENT`` set or
+    ``FLASK_ENV == "production"``, and ``render.yaml`` asserted none of them — it
+    relied entirely on Render happening to inject ``RENDER=true``. Anything that
+    detail missed (a container built from the Dockerfile, a new host, a shell
+    running ``flask`` for a migration, a platform that renames its variables)
+    silently ran as *development*: session cookies without ``Secure``, no HSTS,
+    demo login hints eligible, and — before the SECRET_KEY guard — a published
+    signing key. Every one of those failures is silent, and each defaults to the
+    less safe answer.
+
+    So the question is inverted. Development is the claim that has to be made,
+    by setting ``APP_ENV``/``FLASK_ENV`` to a development value. An environment
+    that says nothing is assumed to be production, where a mistake costs an
+    unnecessary boot failure (loud, and fixed by one env var) rather than a
+    quietly insecure deployment. Same principle as the SECRET_KEY guard.
+    """
+    declared = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").strip().lower()
+    if declared in _DEVELOPMENT_ENVIRONMENTS:
+        return False
+    # Everything else is production: an explicit production value, a platform
+    # hint (RENDER / RAILWAY_ENVIRONMENT), an unrecognised value, and — the case
+    # that matters — nothing at all. Those all share one answer now, so there is
+    # no branch left to write; the lists above stay as the documented vocabulary.
+    return True
+
+
 def create_app():
     if os.getenv("SKIP_DOTENV", "false").lower() != "true":
         load_dotenv()
 
     app = Flask(__name__, instance_relative_config=True)
-    is_production = (
-        os.getenv("RENDER") == "true"
-        or os.getenv("RAILWAY_ENVIRONMENT") is not None
-        or os.getenv("FLASK_ENV") == "production"
-    )
+    is_production = detect_is_production()
     app.config["IS_PRODUCTION"] = is_production
     # There is deliberately NO hardcoded fallback secret. A committed fallback is
     # a published signing key: any deployment that failed to identify itself as
