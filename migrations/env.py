@@ -11,7 +11,17 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-fileConfig(config.config_file_name)
+#
+# disable_existing_loggers=False is not cosmetic. fileConfig() defaults it to
+# True, which silences every logger that already exists — including Flask's
+# ``app`` logger, since ``current_app`` is imported above and the app is built
+# before a migration runs. The effect outlives the migration: anything in the
+# same process that logs afterwards writes nothing. That is invisible in
+# production (the deploy runs `flask db upgrade` and exits) but not in the test
+# suite, where one module running migrations leaves later modules unable to
+# capture log output — and a test asserting a value is *absent* from the log
+# then passes against an empty string no matter what the code does.
+fileConfig(config.config_file_name, disable_existing_loggers=False)
 logger = logging.getLogger('alembic.env')
 
 
