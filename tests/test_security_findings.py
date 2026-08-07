@@ -5,9 +5,12 @@ its current implementation, so a refactor stays free but a regression does not:
 these are the checks that would have failed before the fix and must keep failing
 if it is ever undone.
 """
+import io
 import logging
 import os
+import tempfile
 import unittest
+import zipfile
 
 os.environ["SKIP_DOTENV"] = "true"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
@@ -18,12 +21,20 @@ os.environ["PERSISTENCE_REQUIRED"] = "false"
 # (test_mvp, test_tenant_isolation, ...) depend on. The two tests that need it
 # off set it themselves, inside the _EnvGuard save/restore.
 
+from werkzeug.datastructures import FileStorage  # noqa: E402
+
 from app import create_app  # noqa: E402
 from app.distribution.channels import (  # noqa: E402
     ConsoleEmailSender,
     ConsoleSmsSender,
     ConsoleWhatsAppSender,
     OutboundMessage,
+)
+from app.spreadsheet_uploads import (  # noqa: E402
+    ZIP_WORKBOOK_EXTENSIONS,
+    SpreadsheetValidationError,
+    assert_workbook_within_limits,
+    validate_spreadsheet_upload,
 )
 
 
@@ -175,6 +186,105 @@ class F1ProductionRefusesBodyLoggingTests(_EnvGuard):
         self._production_env()
         os.environ["LOG_MESSAGE_BODIES"] = "false"
         self.assertFalse(create_app().config["LOG_MESSAGE_BODIES"])
+
+
+class F2SpreadsheetUploadValidationTests(unittest.TestCase):
+    """F2 — type, size and zip-bomb gates on the workbook upload path."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = _app()
+        cls.real_xlsx = cls._build_workbook()
+
+    @staticmethod
+    def _build_workbook():
+        from openpyxl import Workbook
+
+        buffer = io.BytesIO()
+        workbook = Workbook()
+        workbook.active.append(["Staff ID", "Name"])
+        workbook.active.append(["DCL9", "Ama"])
+        workbook.save(buffer)
+        return buffer.getvalue()
+
+    @staticmethod
+    def _upload(name, data, mimetype=None):
+        return FileStorage(stream=io.BytesIO(data), filename=name, content_type=mimetype)
+
+    def test_a_genuine_workbook_is_accepted(self):
+        with self.app.app_context():
+            name, extension, size = validate_spreadsheet_upload(
+                self._upload("payroll.xlsx", self.real_xlsx)
+            )
+        self.assertEqual(extension, ".xlsx")
+        self.assertEqual(size, len(self.real_xlsx))
+        self.assertTrue(name.endswith(".xlsx"))
+
+    def test_magic_bytes_beat_the_extension(self):
+        """The decisive check: an executable renamed .xlsx must be refused."""
+        with self.app.app_context():
+            for data, label in (
+                (b"MZ\x90\x00" + b"\x00" * 512, "PE executable"),
+                (b"staff,name\n1,Ama\n", "CSV renamed .xlsx"),
+                (b"<?xml version='1.0'?><x/>", "bare XML"),
+            ):
+                with self.subTest(label=label):
+                    with self.assertRaises(SpreadsheetValidationError):
+                        validate_spreadsheet_upload(self._upload("evil.xlsx", data))
+
+    def test_a_workbook_renamed_csv_is_refused(self):
+        with self.app.app_context():
+            with self.assertRaises(SpreadsheetValidationError):
+                validate_spreadsheet_upload(self._upload("evil.csv", self.real_xlsx))
+
+    def test_empty_and_oversized_uploads_are_refused(self):
+        with self.app.app_context():
+            with self.assertRaises(SpreadsheetValidationError):
+                validate_spreadsheet_upload(self._upload("e.xlsx", b""))
+            oversized = b"PK\x03\x04" + b"\x00" * (9 * 1024 * 1024)
+            with self.assertRaises(SpreadsheetValidationError):
+                validate_spreadsheet_upload(self._upload("big.xlsx", oversized))
+
+    def test_per_file_cap_stays_below_the_global_content_length(self):
+        with self.app.app_context():
+            from app.spreadsheet_uploads import max_bytes
+
+            self.assertLess(max_bytes(), self.app.config["MAX_CONTENT_LENGTH"])
+
+    def test_the_raw_importer_accepts_xlsx_only(self):
+        with self.app.app_context():
+            with self.assertRaises(SpreadsheetValidationError):
+                validate_spreadsheet_upload(
+                    self._upload("d.csv", b"a,b\n1,2\n"), allowed=ZIP_WORKBOOK_EXTENSIONS
+                )
+
+    def test_a_high_ratio_zip_bomb_is_refused_before_parsing(self):
+        directory = tempfile.mkdtemp()
+        path = os.path.join(directory, "bomb.xlsx")
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("xl/worksheets/sheet1.xml", b"\0" * (64 * 1024 * 1024))
+        self.assertLess(os.path.getsize(path), 1024 * 1024)  # tiny on the wire
+        with self.app.app_context():
+            with self.assertRaises(SpreadsheetValidationError):
+                assert_workbook_within_limits(path)
+
+    def test_an_entry_count_bomb_is_refused(self):
+        directory = tempfile.mkdtemp()
+        path = os.path.join(directory, "many.xlsx")
+        with zipfile.ZipFile(path, "w") as archive:
+            for index in range(1200):
+                archive.writestr(f"part{index}.xml", b"x")
+        with self.app.app_context():
+            with self.assertRaises(SpreadsheetValidationError):
+                assert_workbook_within_limits(path)
+
+    def test_a_real_workbook_passes_the_bomb_gate(self):
+        directory = tempfile.mkdtemp()
+        path = os.path.join(directory, "good.xlsx")
+        with open(path, "wb") as handle:
+            handle.write(self.real_xlsx)
+        with self.app.app_context():
+            assert_workbook_within_limits(path)  # must not raise
 
 
 if __name__ == "__main__":

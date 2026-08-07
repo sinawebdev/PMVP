@@ -53,6 +53,12 @@ from app.raw_engine.seed import parse_rich_workbook
 from app.raw_engine.store import archive_upload, persist_seed, write_payroll_items
 from app.raw_engine.template import generate_monthly_template
 from app.raw_engine.thin import ThinFormatError, join_and_compute, parse_thin_workbook
+from app.spreadsheet_uploads import (
+    ZIP_WORKBOOK_EXTENSIONS,
+    SpreadsheetValidationError,
+    assert_workbook_within_limits,
+    validate_spreadsheet_upload,
+)
 
 raw_engine_bp = Blueprint("raw_engine", __name__, url_prefix="/raw")
 
@@ -128,6 +134,13 @@ def upload():
     if not file or not file.filename:
         return jsonify({"error": "No file provided."}), 400
 
+    # Type/size gate before the bytes are written anywhere (app/spreadsheet_uploads.py).
+    # This importer is .xlsx only, so the narrower allow-list applies.
+    try:
+        validate_spreadsheet_upload(file, allowed=ZIP_WORKBOOK_EXTENSIONS)
+    except SpreadsheetValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
+
     content = file.read()
     if not content:
         return jsonify({"error": "The uploaded file is empty."}), 400
@@ -136,6 +149,13 @@ def upload():
     bin_path, json_path = _stage_paths(token)
     with open(bin_path, "wb") as handle:
         handle.write(content)
+
+    # Zip-bomb gate: after the bytes land, before anything opens them.
+    try:
+        assert_workbook_within_limits(bin_path)
+    except SpreadsheetValidationError as exc:
+        _cleanup(token)
+        return jsonify({"error": str(exc)}), 400
 
     # Shape Guard: a Standard Payroll workbook uploaded here belongs to the
     # other importer — stop before the seed/thin branch and point the user back

@@ -96,6 +96,11 @@ from app.payroll_status import (
 from app.pdf_service import generate_payslip_pdf
 from app.raw_engine.detection import looks_like_raw_hours
 from app.raw_import import normalise_emp_id
+from app.spreadsheet_uploads import (
+    SpreadsheetValidationError,
+    assert_workbook_within_limits,
+    validate_spreadsheet_upload,
+)
 from app.validators import collect_blocking_errors, validate_payroll_rows
 
 payroll_bp = Blueprint("payroll", __name__, url_prefix="/payroll")
@@ -222,11 +227,26 @@ def replace_existing_runs(client_id, month, year):
 
 
 def save_temporary_upload(file_storage):
-    """Render files are ephemeral; uploaded workbooks are saved only long enough to parse."""
-    suffix = os.path.splitext(file_storage.filename or "")[1]
-    handle = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    """Render files are ephemeral; uploaded workbooks are saved only long enough to parse.
+
+    The single choke point for standard payroll uploads, so both gates live here
+    rather than in each calling route: type/size before the bytes are written,
+    and the zip-bomb check after, while the file is still unparsed. Raises
+    :class:`~app.spreadsheet_uploads.SpreadsheetValidationError`, which the
+    callers turn into a flash — the extension is no longer taken on trust from
+    the filename (``allowed_excel_file`` alone let a renamed file straight
+    through to the parser).
+    """
+    safe_name, extension, _size = validate_spreadsheet_upload(file_storage)
+    handle = tempfile.NamedTemporaryFile(delete=False, suffix=extension)
     handle.close()
+    file_storage.stream.seek(0)
     file_storage.save(handle.name)
+    try:
+        assert_workbook_within_limits(handle.name)
+    except SpreadsheetValidationError:
+        os.unlink(handle.name)
+        raise
     return handle.name
 
 
@@ -477,7 +497,11 @@ def handle_payroll_upload(now):
         return redirect(url_for("payroll.new_run"))
 
     source_filename = file_storage.filename
-    file_path = save_temporary_upload(file_storage)
+    try:
+        file_path = save_temporary_upload(file_storage)
+    except SpreadsheetValidationError as exc:
+        flash(str(exc), "warning")
+        return redirect(url_for("payroll.new_run"))
     try:
         # Shape Guard: refuse a Raw Hours workbook before any column mapping,
         # preview, or validation runs — otherwise the standard importer chews a

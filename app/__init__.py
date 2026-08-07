@@ -335,6 +335,22 @@ def create_app():
     app.config["RECEIPT_MAX_BYTES"] = int(
         os.getenv("RECEIPT_MAX_BYTES", 10 * 1024 * 1024)
     )
+    # Per-spreadsheet ceiling, enforced in app/spreadsheet_uploads.py. Also well
+    # under MAX_CONTENT_LENGTH, for the same reason as receipts: a field-level
+    # message beats Werkzeug's bare 413, which fires before any view runs.
+    app.config["SPREADSHEET_MAX_BYTES"] = int(
+        os.getenv("SPREADSHEET_MAX_BYTES", 8 * 1024 * 1024)
+    )
+    # Zip-bomb thresholds for .xlsx (a zip archive). Defaults leave a wide margin
+    # over real workbooks — this repo's own exports run 2-5x on 9-17 entries —
+    # while staying far below DEFLATE's ~1032:1 theoretical maximum.
+    app.config["WORKBOOK_MAX_ENTRIES"] = int(os.getenv("WORKBOOK_MAX_ENTRIES", 1024))
+    app.config["WORKBOOK_MAX_UNCOMPRESSED_BYTES"] = int(
+        os.getenv("WORKBOOK_MAX_UNCOMPRESSED_BYTES", 256 * 1024 * 1024)
+    )
+    app.config["WORKBOOK_MAX_COMPRESSION_RATIO"] = float(
+        os.getenv("WORKBOOK_MAX_COMPRESSION_RATIO", 200.0)
+    )
 
     # Raw-hours engine bank whitelist (config, never hardcoded in a formula —
     # the DZ workbook's nested-IF listed 10 banks inline). A net-pay worker whose
