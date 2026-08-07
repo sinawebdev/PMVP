@@ -1,5 +1,6 @@
 import os
 import re
+import secrets
 import threading
 import time
 from datetime import timedelta
@@ -181,19 +182,60 @@ def format_role_label(value):
     return labels.get(canonical, canonical.replace("_", " ").title())
 
 
+# Environments that must be told to us explicitly. Anything not on one of these
+# lists is treated as production — see detect_is_production.
+_DEVELOPMENT_ENVIRONMENTS = {"development", "dev", "local", "test", "testing"}
+_PRODUCTION_ENVIRONMENTS = {"production", "prod", "staging", "live"}
+
+
+def detect_is_production():
+    """Whether this process is a real deployment. **Fails closed.**
+
+    The old rule was ``RENDER == "true"`` or ``RAILWAY_ENVIRONMENT`` set or
+    ``FLASK_ENV == "production"``, and ``render.yaml`` asserted none of them — it
+    relied entirely on Render happening to inject ``RENDER=true``. Anything that
+    detail missed (a container built from the Dockerfile, a new host, a shell
+    running ``flask`` for a migration, a platform that renames its variables)
+    silently ran as *development*: session cookies without ``Secure``, no HSTS,
+    demo login hints eligible, and — before the SECRET_KEY guard — a published
+    signing key. Every one of those failures is silent, and each defaults to the
+    less safe answer.
+
+    So the question is inverted. Development is the claim that has to be made,
+    by setting ``APP_ENV``/``FLASK_ENV`` to a development value. An environment
+    that says nothing is assumed to be production, where a mistake costs an
+    unnecessary boot failure (loud, and fixed by one env var) rather than a
+    quietly insecure deployment. Same principle as the SECRET_KEY guard.
+    """
+    declared = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").strip().lower()
+    if declared in _DEVELOPMENT_ENVIRONMENTS:
+        return False
+    # Everything else is production: an explicit production value, a platform
+    # hint (RENDER / RAILWAY_ENVIRONMENT), an unrecognised value, and — the case
+    # that matters — nothing at all. Those all share one answer now, so there is
+    # no branch left to write; the lists above stay as the documented vocabulary.
+    return True
+
+
 def create_app():
     if os.getenv("SKIP_DOTENV", "false").lower() != "true":
         load_dotenv()
 
     app = Flask(__name__, instance_relative_config=True)
-    is_production = (
-        os.getenv("RENDER") == "true"
-        or os.getenv("RAILWAY_ENVIRONMENT") is not None
-        or os.getenv("FLASK_ENV") == "production"
-    )
+    is_production = detect_is_production()
     app.config["IS_PRODUCTION"] = is_production
-    _INSECURE_SECRET_KEY = "dev-secret-change-me"
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", _INSECURE_SECRET_KEY)
+    # There is deliberately NO hardcoded fallback secret. A committed fallback is
+    # a published signing key: any deployment that failed to identify itself as
+    # production (the Dockerfile used to do exactly that) would sign session
+    # cookies and payslip links with a value anyone can read out of git, and
+    # forging a cookie for any user — including payrolla_admin — becomes trivial.
+    #
+    # Absent SECRET_KEY, dev/test get a fresh random key per process. That keeps
+    # local work and the suite running, while making a misidentified deployment
+    # fail LOUDLY (sessions stop surviving a restart, and every gunicorn worker
+    # disagrees) instead of silently signing with a known key.
+    _secret_from_env = os.getenv("SECRET_KEY")
+    app.config["SECRET_KEY"] = _secret_from_env or secrets.token_hex(32)
     # --- Product identity (single config seam) ---
     # De-hardcodes the product/company names so a rebrand or white-label is a
     # config change, not a cross-template sweep. Every user-facing surface reads
@@ -226,15 +268,36 @@ def create_app():
         os.path.join(app.instance_path, "payrolla.db")
     )
     assert_persistent_database_config(app)
-    # Never sign production sessions with the shared dev fallback: anyone who knows
-    # it could forge a session cookie for any user. Refuse to boot in production
-    # without a real SECRET_KEY (the fallback stays for local/tests). Ordered after
-    # the persistence check so the DATABASE_URL failure still surfaces first.
-    if is_production and app.config["SECRET_KEY"] == _INSECURE_SECRET_KEY:
+    # Production must sign with a key the operator set and can rotate. An
+    # ephemeral per-process key would log every user out on each restart and
+    # differ between gunicorn workers, so refuse to boot rather than limp.
+    # Ordered after the persistence check so the DATABASE_URL failure still
+    # surfaces first.
+    if is_production and not _secret_from_env:
         raise RuntimeError(
             "SECRET_KEY must be set to a strong random value in production — "
-            "refusing to start with the insecure development fallback."
+            "refusing to start without one."
         )
+
+    # --- Message-body logging (development only) ---
+    # A rendered payslip message is the worker's net pay, deductions and name,
+    # and the recipient is their personal phone/email. Logging either ships PII
+    # and salary data to wherever logs are aggregated, retained far longer than
+    # the payslip, and readable by a much wider audience than the one worker.
+    #
+    # So the bodies are off by default and can only be turned on deliberately,
+    # by name. Production does not merely ignore the flag — it refuses to boot
+    # with it enabled, because a deployment that *thinks* it wants payslip text
+    # in its logs is misconfigured, and silently ignoring the request would hide
+    # that. Same fail-loud principle as the SECRET_KEY guard above.
+    _log_bodies = os.getenv("LOG_MESSAGE_BODIES", "false").lower() in {"1", "true", "yes", "on"}
+    if is_production and _log_bodies:
+        raise RuntimeError(
+            "LOG_MESSAGE_BODIES must not be enabled in production — it writes "
+            "payslip contents (salary, deductions, names) into the application "
+            "log. Unset it, or run with it only on a development machine."
+        )
+    app.config["LOG_MESSAGE_BODIES"] = _log_bodies and not is_production
     database_type = database_type_label(app.config["SQLALCHEMY_DATABASE_URI"])
     app.config["DATABASE_TYPE_LABEL"] = database_type
 
@@ -274,6 +337,15 @@ def create_app():
         == "true"
     )
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
+    # Login rate limiting (app/login_throttle.py). Counted per IP and per account
+    # independently; whichever trips first locks the login route for that key.
+    # Five attempts in fifteen minutes leaves room for ordinary mistyping while
+    # making an online guessing run useless.
+    app.config["LOGIN_MAX_ATTEMPTS"] = int(os.getenv("LOGIN_MAX_ATTEMPTS", 5))
+    app.config["LOGIN_ATTEMPT_WINDOW_SECONDS"] = int(
+        os.getenv("LOGIN_ATTEMPT_WINDOW_SECONDS", 900)
+    )
+    app.config["LOGIN_LOCKOUT_SECONDS"] = int(os.getenv("LOGIN_LOCKOUT_SECONDS", 900))
     app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 16 * 1024 * 1024))
     # Standard uploads stream through tempfile and raw uploads stage in
     # IMPORT_SESSION_FOLDER; there is no reader for a persistent UPLOAD_FOLDER, so
@@ -302,6 +374,22 @@ def create_app():
     # validation message rather than Werkzeug's bare 413.
     app.config["RECEIPT_MAX_BYTES"] = int(
         os.getenv("RECEIPT_MAX_BYTES", 10 * 1024 * 1024)
+    )
+    # Per-spreadsheet ceiling, enforced in app/spreadsheet_uploads.py. Also well
+    # under MAX_CONTENT_LENGTH, for the same reason as receipts: a field-level
+    # message beats Werkzeug's bare 413, which fires before any view runs.
+    app.config["SPREADSHEET_MAX_BYTES"] = int(
+        os.getenv("SPREADSHEET_MAX_BYTES", 8 * 1024 * 1024)
+    )
+    # Zip-bomb thresholds for .xlsx (a zip archive). Defaults leave a wide margin
+    # over real workbooks — this repo's own exports run 2-5x on 9-17 entries —
+    # while staying far below DEFLATE's ~1032:1 theoretical maximum.
+    app.config["WORKBOOK_MAX_ENTRIES"] = int(os.getenv("WORKBOOK_MAX_ENTRIES", 1024))
+    app.config["WORKBOOK_MAX_UNCOMPRESSED_BYTES"] = int(
+        os.getenv("WORKBOOK_MAX_UNCOMPRESSED_BYTES", 256 * 1024 * 1024)
+    )
+    app.config["WORKBOOK_MAX_COMPRESSION_RATIO"] = float(
+        os.getenv("WORKBOOK_MAX_COMPRESSION_RATIO", 200.0)
     )
 
     # Raw-hours engine bank whitelist (config, never hardcoded in a formula —
@@ -369,9 +457,37 @@ def create_app():
     # No-login payslip links: PUBLIC_BASE_URL is the public host used in the link we send
     # (falls back to the request host when unset); PAYSLIP_LINK_MAX_AGE is the link lifetime.
     app.config["PUBLIC_BASE_URL"] = os.getenv("PUBLIC_BASE_URL")
+    # 5 days, down from 30. A payslip link is opened within hours of delivery in
+    # practice, so a month-long window was exposure bought for almost nothing —
+    # and a worker who misses it can be sent a fresh link. Tunable without a
+    # code change; revocation (below) is the answer to a link sent in error.
     app.config["PAYSLIP_LINK_MAX_AGE"] = int(
-        os.getenv("PAYSLIP_LINK_MAX_AGE", str(60 * 60 * 24 * 30))
+        os.getenv("PAYSLIP_LINK_MAX_AGE", str(60 * 60 * 24 * 5))
     )
+    # Payslip links are signed with their OWN key, never the session key. The
+    # whole point of the separation is that a leaked SECRET_KEY must not also
+    # mint payslip links for arbitrary item ids — so this is a genuinely
+    # independent secret, not one derived from SECRET_KEY (a derivation shares
+    # the compromise it is meant to contain).
+    #
+    # Same fail-closed contract as SECRET_KEY: production must be given one and
+    # refuses to boot otherwise, while dev/test get a per-process random value
+    # so local work and the suite still run.
+    _payslip_key_from_env = os.getenv("PAYSLIP_TOKEN_KEY")
+    if is_production and not _payslip_key_from_env:
+        raise RuntimeError(
+            "PAYSLIP_TOKEN_KEY must be set to a strong random value in production "
+            "— payslip links are signed with a key separate from SECRET_KEY, so "
+            "that a compromised session key cannot forge payslip links."
+        )
+    # Setting it to a copy of SECRET_KEY satisfies the check above while
+    # delivering none of the separation, so that is refused too.
+    if is_production and _payslip_key_from_env == _secret_from_env:
+        raise RuntimeError(
+            "PAYSLIP_TOKEN_KEY must differ from SECRET_KEY — an identical value "
+            "provides no separation between session cookies and payslip links."
+        )
+    app.config["PAYSLIP_TOKEN_KEY"] = _payslip_key_from_env or secrets.token_hex(32)
 
     # --- Distribution queue worker (Phase 3, Slice 1) ---
     # No separate worker dyno/service exists yet (Render's plan is a single web
@@ -672,6 +788,60 @@ def create_app():
             "visible_nav": visible_nav,
             "active_nav": active_nav_key(request.endpoint, request.blueprint),
         }
+
+    # --- Security response headers (applied to every response) ---------------
+    # Previously only one route set one header (the receipt download's nosniff,
+    # in app/client/expenses.py), so every HTML page shipped with none of these.
+    # An after_request is the right home because the guarantee is "no response
+    # leaves without them" — a per-blueprint or per-route version is one new
+    # route away from being wrong.
+    #
+    # The CDN hosts below are the ones the base templates actually load
+    # (Bootstrap + icons from jsdelivr, Font Awesome from cdnjs, Google Fonts);
+    # anything else is refused, which is most of the value here.
+    _CSP = "; ".join([
+        "default-src 'self'",
+        # 'unsafe-inline' is required, not preferred: the templates carry inline
+        # <script> blocks and ~10 on*= handlers. A nonce would cover the blocks
+        # but NOT the inline handlers, so dropping it means rewriting those
+        # first — a template refactor, deliberately not bundled into a header
+        # change. Even so this still blocks script from any unlisted origin.
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net "
+        "https://cdnjs.cloudflare.com https://fonts.googleapis.com",
+        "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net "
+        "https://cdnjs.cloudflare.com",
+        "img-src 'self' data:",
+        "connect-src 'self'",
+        # No object/embed anywhere in the app, and nothing may frame us — this is
+        # the modern half of the X-Frame-Options pair set below.
+        "object-src 'none'",
+        "frame-ancestors 'none'",
+        # Stops an injected <base> redirecting every relative URL, and stops a
+        # form posting credentials to someone else's host.
+        "base-uri 'self'",
+        "form-action 'self'",
+    ])
+
+    @app.after_request
+    def set_security_headers(response):
+        # setdefault, not assignment: a route that has deliberately set one of
+        # these for its own content keeps its value. That is what preserves the
+        # receipt download's explicit nosniff rather than silently overriding it.
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault(
+            "Referrer-Policy", "strict-origin-when-cross-origin"
+        )
+        response.headers.setdefault("Content-Security-Policy", _CSP)
+        # HSTS only in production, and only ever over HTTPS. Sending it from a
+        # plain-HTTP dev server would pin localhost to HTTPS in the developer's
+        # browser — a self-inflicted outage that survives clearing the cache.
+        if is_production and request.is_secure:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response
 
     # Branded error pages (A4). DEBUG is False under gunicorn in production (it
     # imports run:app, so app.run(debug=...) never executes), which is what lets

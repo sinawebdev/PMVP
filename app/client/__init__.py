@@ -78,6 +78,7 @@ from app.payroll_status import AUTO_ACCEPTED, HELD, PROCESSED, SENDABLE_STATUSES
 from app.pdf_service import generate_payslip_pdf, payslip_filename
 from app.raw_engine.detection import looks_like_raw_hours
 from app.raw_import import normalise_emp_id
+from app.spreadsheet_uploads import SpreadsheetValidationError
 from app.risk import apply_risk_gate
 from app.roles import CLIENT_ADMIN, CLIENT_PREPARER
 from app.tenancy import (
@@ -384,7 +385,11 @@ def run_upload():
         return _form()
 
     source_filename = file_storage.filename
-    file_path = save_temporary_upload(file_storage)
+    try:
+        file_path = save_temporary_upload(file_storage)
+    except SpreadsheetValidationError as exc:
+        flash(str(exc), "warning")
+        return _form()
     try:
         if looks_like_raw_hours(file_path):
             flash(

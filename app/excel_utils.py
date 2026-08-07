@@ -8,6 +8,8 @@ import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 
+from app.csv_safety import escape_formula
+
 
 logger = logging.getLogger(__name__)
 
@@ -782,23 +784,28 @@ def create_workbook(report_title, org_name="Chrisnat Limited"):
     # Only the sheet tab name is constrained by Excel; the A2 header cell keeps
     # the original title (slash and all) so the report still reads correctly.
     sheet.title = safe_sheet_title(report_title)
-    sheet["A1"] = org_name
+    # org_name is the tenant's own company name and report_title embeds it, so
+    # both are imported text reaching a cell — escaped like any other.
+    sheet["A1"] = escape_formula(org_name)
     sheet["A1"].font = Font(bold=True, size=14)
-    sheet["A2"] = report_title
+    sheet["A2"] = escape_formula(report_title)
     sheet["A2"].font = Font(bold=True)
     sheet["A3"] = f"Date generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     return workbook, sheet
 
 
 def write_table(sheet, start_row, headers, rows):
+    """The shared table writer for every report workbook — and therefore the one
+    place worth escaping, since each caller's rows carry imported employee and
+    company text."""
     header_fill = PatternFill("solid", fgColor="D9EAF7")
     for col_index, header in enumerate(headers, start=1):
-        cell = sheet.cell(row=start_row, column=col_index, value=header)
+        cell = sheet.cell(row=start_row, column=col_index, value=escape_formula(header))
         cell.font = Font(bold=True)
         cell.fill = header_fill
     for row_index, row in enumerate(rows, start=start_row + 1):
         for col_index, value in enumerate(row, start=1):
-            sheet.cell(row=row_index, column=col_index, value=value)
+            sheet.cell(row=row_index, column=col_index, value=escape_formula(value))
     for column_cells in sheet.columns:
         max_length = max(len(str(cell.value or "")) for cell in column_cells)
         sheet.column_dimensions[column_cells[0].column_letter].width = min(
@@ -1063,7 +1070,7 @@ def export_bank_listing(payroll_run, export_folder, org_name=None):
     row_index = 5
     for group in groups:
         bank, items = group["bank"], group["items"]
-        band = sheet.cell(row=row_index, column=1, value=bank)
+        band = sheet.cell(row=row_index, column=1, value=escape_formula(bank))
         band.font = Font(bold=True, color="FFFFFF")
         band.fill = band_fill
         for col in range(2, 6):
@@ -1077,13 +1084,17 @@ def export_bank_listing(payroll_run, export_folder, org_name=None):
             cell.fill = header_fill
         row_index += 1
         for item in items:
-            sheet.cell(row=row_index, column=1, value=item.staff_id)
-            sheet.cell(row=row_index, column=2, value=item.full_name)
-            sheet.cell(row=row_index, column=3, value=item.bank_branch)
-            sheet.cell(row=row_index, column=4, value=item.bank_account_number)
+            # staff id, name, branch and account number are all imported text.
+            sheet.cell(row=row_index, column=1, value=escape_formula(item.staff_id))
+            sheet.cell(row=row_index, column=2, value=escape_formula(item.full_name))
+            sheet.cell(row=row_index, column=3, value=escape_formula(item.bank_branch))
+            sheet.cell(row=row_index, column=4, value=escape_formula(item.bank_account_number))
             sheet.cell(row=row_index, column=5, value=round(item.net_pay or 0, 2))
             row_index += 1
-        total_cell = sheet.cell(row=row_index, column=2, value=f"{bank} Total ({len(items)} workers)")
+        total_cell = sheet.cell(
+            row=row_index, column=2,
+            value=escape_formula(f"{bank} Total ({len(items)} workers)"),
+        )
         total_cell.font = Font(bold=True)
         amount_cell = sheet.cell(row=row_index, column=5, value=group["subtotal"])
         amount_cell.font = Font(bold=True)
@@ -1236,11 +1247,11 @@ def _fill_gra_skeleton_workbook(
     sheet = workbook.active
 
     # --- header block (write to the top-left cell of each merged range) ---
-    sheet["D9"] = employer_name                            # NAME OF EMPLOYER
-    sheet["D11"] = employer_tin or ""                      # EMPLOYER'S TIN
+    sheet["D9"] = escape_formula(employer_name)            # NAME OF EMPLOYER
+    sheet["D11"] = escape_formula(employer_tin or "")      # EMPLOYER'S TIN
     sheet["U9"] = _gra_month_code(payroll_run.month, payroll_run.year)
     if tax_office:
-        sheet["G7"] = tax_office                           # Name of Tax Office
+        sheet["G7"] = escape_formula(tax_office)           # Name of Tax Office
 
     count = 0
     for offset, item in enumerate(
@@ -1302,7 +1313,10 @@ def _fill_gra_skeleton_workbook(
             "AB": "",                                # Remarks
         }
         for column, value in cells.items():
-            sheet[f"{column}{row}"] = value          # overwrites GRA's 2022 formula
+            # Escaped on the way in: B/C/D carry TIN, worker name and job role,
+            # all imported. The numeric cells pass through escape_formula
+            # untouched, so the filed schedule still sums.
+            sheet[f"{column}{row}"] = escape_formula(value)  # overwrites GRA's 2022 formula
 
     # Drop the template's unused formula rows below the last worker so the file
     # doesn't ship hundreds of blank =IF(...) rows.

@@ -393,6 +393,18 @@ class PayrollItem(db.Model):
     validation_status = db.Column(db.String(40), default="OK")
     warning_notes = db.Column(db.Text)
 
+    # Revocation counter for the no-login payslip link (app/distribution/tokens.py).
+    # A payslip token carries the value this column held when it was issued; the
+    # link is honoured only while the two still match. Incrementing the column is
+    # therefore what revocation *is* — it invalidates every link already sent for
+    # this payslip without touching the signing key or anyone else's link.
+    #
+    # A signed token is otherwise irrevocable by construction: it is not stored
+    # anywhere, so before this column the only way to withdraw a mis-sent link
+    # was to wait out its expiry. Per-item, because "this worker's payslip went
+    # to the wrong number" is a per-worker problem.
+    payslip_token_version = db.Column(db.Integer, nullable=False, default=0)
+
     payroll_run = db.relationship("PayrollRun", back_populates="items")
     employee = db.relationship("Employee")
 

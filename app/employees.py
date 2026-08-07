@@ -37,6 +37,13 @@ from app.htmx_utils import wants_htmx, with_toast
 from app.paging import paginate
 from app.models import ClientCompany, Employee, PayrollItem, WageRateProfile
 from app.raw_import import normalise_emp_id
+from app.payroll import save_temporary_upload
+from app.spreadsheet_uploads import (
+    LEGACY_WORKBOOK_EXTENSIONS,
+    ZIP_WORKBOOK_EXTENSIONS,
+    SpreadsheetValidationError,
+    validate_spreadsheet_upload,
+)
 
 employees_bp = Blueprint("employees", __name__, url_prefix="/employees")
 
@@ -446,11 +453,31 @@ def bulk_import(client_id):
         flash("No file uploaded.", "danger")
         return redirect(request.url)
 
+    # Validate before pandas sees the stream: this route previously handed an
+    # unchecked upload straight to read_excel, which opens (and expands) whatever
+    # it is given. .csv is not offered here, so the workbook extensions only.
     try:
-        df = pd.read_excel(file, dtype=str)
+        validate_spreadsheet_upload(
+            file, allowed=ZIP_WORKBOOK_EXTENSIONS | LEGACY_WORKBOOK_EXTENSIONS
+        )
+        # read_excel needs a real file to seek over for the bomb check, so stage
+        # it first; the roster import is a one-shot parse and the temp file goes
+        # away in the finally below.
+        staged = save_temporary_upload(file)
+    except SpreadsheetValidationError as exc:
+        flash(str(exc), "danger")
+        return redirect(request.url)
+
+    try:
+        df = pd.read_excel(staged, dtype=str)
     except Exception as exc:  # noqa: BLE001 - surfaced to the rep
         flash(f"Could not read file: {exc}", "danger")
         return redirect(request.url)
+    finally:
+        try:
+            os.unlink(staged)
+        except OSError:
+            pass
 
     reverse = {}
     for canonical, aliases in COLUMN_ALIASES.items():

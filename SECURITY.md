@@ -66,10 +66,21 @@ they authenticate by HMAC signature / shared secret and carry no browser session
 ## No-login payslip links
 
 Workers receive a tokenised link to their own payslip with no login
-(`app/distribution/tokens.py`). The token is a **signed, expiring**
-`URLSafeTimedSerializer` value (not encrypted) bound to a single payslip item and
-the app `SECRET_KEY`; it expires after `PAYSLIP_LINK_MAX_AGE` (default 30 days)
-and authorises exactly one payslip — no session, no tenant surface.
+(`app/distribution/tokens.py`). The token is a **signed, expiring, revocable**
+`URLSafeTimedSerializer` value (not encrypted) bound to a single payslip item; it
+authorises exactly one payslip — no session, no tenant surface.
+
+- *Key:* signed with `PAYSLIP_TOKEN_KEY`, **separate from `SECRET_KEY`**, so a
+  compromised session key cannot also forge payslip links. (`itsdangerous`'s
+  `salt` is domain separation between uses of one key, not key separation.)
+  Production refuses to boot if it is unset or a copy of `SECRET_KEY`. Rotating
+  it invalidates every outstanding link at once — one key, no overlap window.
+- *Lifetime:* `PAYSLIP_LINK_MAX_AGE`, default **5 days**.
+- *Revocation:* the payload carries the item's `payslip_token_version`, and a
+  link is honoured only while it still matches the row. `revoke_payslip_links()`
+  increments that counter, invalidating every link already issued for that one
+  payslip — per worker, affecting no one else. An expired, forged and revoked
+  link are indistinguishable to the reader.
 
 ## Data handling
 

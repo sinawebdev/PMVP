@@ -11,11 +11,64 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required, login_user, logout_user
+from werkzeug.security import check_password_hash, generate_password_hash
 
+from app import db, login_throttle
 from app.models import User
 from app.roles import normalise_role
 
 auth_bp = Blueprint("auth", __name__)
+
+# A real hash of an unguessable value, computed once at import under the same
+# algorithm and cost as every stored password (Werkzeug's current default, via
+# the same generate_password_hash the User model uses).
+#
+# It exists to be verified against and fail. When the submitted email matches no
+# user there is nothing to check, so the naive route returns immediately — and
+# that shortcut is a user-enumeration oracle: a wrong password on a real account
+# costs a full scrypt verification (~300 ms here), a wrong password on an unknown
+# address costs ~4 ms. Anyone can read the difference over the network and
+# enumerate the entire user list without a single successful login. Burning the
+# same work on the miss path removes the signal.
+_DUMMY_PASSWORD_HASH = generate_password_hash("payrolla-nonexistent-account-placeholder")
+
+
+def _verify_credentials(user, password):
+    """True when ``password`` authenticates ``user``.
+
+    Always performs one password verification, whether or not ``user`` exists, so
+    the two paths cost the same. Never short-circuits on ``user is None``.
+    """
+    if user is None:
+        check_password_hash(_DUMMY_PASSWORD_HASH, password)
+        return False
+    return user.check_password(password)
+
+
+def _record_audit(*args, **kwargs):
+    """Local indirection for :func:`app.audit.record_audit`.
+
+    Imported inside the call rather than at module scope because ``app.audit``
+    imports ``role_required`` from this module — a module-level import here would
+    close that cycle. Same lazy pattern ``login()`` uses for ``landing_endpoint``.
+    """
+    from app.audit import record_audit
+
+    return record_audit(*args, **kwargs)
+
+
+def _request_fingerprint():
+    """(ip, user_agent) for the current request, for the audit trail.
+
+    Prefers the left-most X-Forwarded-For hop because the app runs behind
+    Render's proxy, where ``remote_addr`` is the proxy rather than the client.
+    Both values are attacker-controlled headers and are recorded as claims, not
+    facts — they are evidence for an investigator, never an access decision.
+    """
+    forwarded = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+    ip = forwarded or request.remote_addr or "unknown"
+    agent = (request.headers.get("User-Agent") or "")[:200]
+    return ip, agent
 
 # Superuser access is NOT a special case here (Phase 1, Task 1.1). ``md`` and
 # ``payrolla_admin`` used to short-circuit every check below, which meant a route
@@ -116,23 +169,62 @@ def login():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
+        ip, agent = _request_fingerprint()
+        keys = [login_throttle.ip_key(ip), login_throttle.account_key(email)]
+
+        def _render(error):
+            # Re-render with the submitted email preserved (never the password) and
+            # an inline error, instead of wiping the form. Not a flash — the message
+            # is bound to the fields it concerns.
+            return render_template(
+                "login.html",
+                email=email,
+                login_error=error,
+                demo_logins=demo_login_hints(),
+                demo_password=demo_login_password(),
+            )
+
+        # Checked before the user lookup, and phrased identically either way, so a
+        # locked response reveals nothing about whether the address is real.
+        locked_for = login_throttle.retry_after(keys)
+        if locked_for > 0:
+            minutes = max(1, int(locked_for // 60) + (1 if locked_for % 60 else 0))
+            _record_audit(
+                "login.blocked",
+                notes=f"email={email or '(blank)'} ip={ip} agent={agent} "
+                      f"reason=rate-limited retry_after_s={int(locked_for)}",
+            )
+            db.session.commit()
+            return _render(
+                f"Too many sign-in attempts. Try again in about {minutes} minute(s)."
+            ), 429
+
         user = User.query.filter_by(email=email).first()
-        if user and user.check_password(password):
+        if _verify_credentials(user, password):
             session.clear()
             login_user(user)
+            login_throttle.clear(keys)
+            # After login_user so record_audit attributes the row to the new user.
+            _record_audit("login.success", related_record=user,
+                         notes=f"email={email} ip={ip} agent={agent}")
+            db.session.commit()
             # Resolve the landing plane AFTER login so current_user is the new user:
             # tenant users -> Company Dashboard, platform users -> oversight console.
             return redirect(url_for(landing_endpoint()))
-        # Re-render with the submitted email preserved (never the password) and an
-        # inline error, instead of wiping the form. Not a flash — the message is
-        # bound to the fields it concerns.
-        return render_template(
-            "login.html",
-            email=email,
-            login_error="Invalid email or password.",
-            demo_logins=demo_login_hints(),
-            demo_password=demo_login_password(),
+
+        now_locked = login_throttle.register_failure(keys)
+        # `known` records whether the address exists — useful to an investigator
+        # reading the trail, and safe here because the audit row is never shown to
+        # the person signing in. The HTTP response stays identical either way.
+        _record_audit(
+            "login.failure",
+            related_record=user,
+            notes=f"email={email or '(blank)'} ip={ip} agent={agent} "
+                  f"known={'yes' if user else 'no'}"
+                  f"{' locked=yes' if now_locked else ''}",
         )
+        db.session.commit()
+        return _render("Invalid email or password.")
 
     return render_template(
         "login.html",
@@ -144,6 +236,13 @@ def login():
 @auth_bp.route("/logout")
 @login_required
 def logout():
+    # Recorded BEFORE logout_user(): record_audit reads current_user for the
+    # actor, and after logout that is the anonymous user, so the row would lose
+    # the very attribution it exists to provide.
+    ip, agent = _request_fingerprint()
+    _record_audit("logout", related_record=current_user,
+                 notes=f"email={current_user.email} ip={ip} agent={agent}")
+    db.session.commit()
     logout_user()
     flash("You have been logged out.", "info")
     return redirect(url_for("auth.login"))

@@ -9,17 +9,27 @@ non-negotiables:
    SQLite (ephemeral filesystems lose data).
 2. **A strong `SECRET_KEY`** — the app refuses to boot in production with the
    insecure development fallback.
+3. **A strong `PAYSLIP_TOKEN_KEY`, different from `SECRET_KEY`** — the app
+   refuses to boot in production without it, or if the two match.
+4. **`FLASK_ENV=production`** — declared explicitly. Detection fails closed (an
+   undeclared environment is treated as production), but the deploy states it
+   rather than relying on the platform's implicit `RENDER` variable.
 
 ## Environment variables
 
 | Variable | Prod value | Purpose |
 |---|---|---|
-| `SECRET_KEY` | strong random | Signs sessions and payslip links. |
+| `FLASK_ENV` | `production` | Declares the environment. Unset/unknown is treated as production. |
+| `SECRET_KEY` | strong random | Signs session cookies. |
+| `PAYSLIP_TOKEN_KEY` | strong random, ≠ `SECRET_KEY` | Signs no-login payslip links. Rotating it invalidates every outstanding link. |
+| `PAYSLIP_LINK_MAX_AGE` | `432000` (5 days) | Payslip link lifetime, in seconds. |
 | `DATABASE_URL` | Postgres URL | `postgres://` is auto-normalised to `postgresql://`. |
 | `PERSISTENCE_REQUIRED` | `true` | Fail fast if Postgres is missing. |
 | `AUTO_INIT_DB` | `false` | Schema is owned by Alembic migrations in prod. |
 | `SEED_DEMO_DATA` | `false` | Never seed demo tenants/users into a real deployment. |
 | `SESSION_COOKIE_SECURE` | `true` | HTTPS-only session cookie. |
+| `LOG_MESSAGE_BODIES` | unset | Development only — production refuses to boot with it enabled. |
+| `LOGIN_MAX_ATTEMPTS` | `5` | Failed logins per IP and per account before lockout. |
 
 Optional groups (all documented in [.env.example](.env.example)): the branding
 seam (`APP_NAME`, …), distribution channels and their credentials, webhook
@@ -56,8 +66,10 @@ starter seed only run locally when `AUTO_INIT_DB=true`.
 Go-live checklist:
 
 1. Create a PostgreSQL database and copy its internal URL.
-2. Set `DATABASE_URL` and `SECRET_KEY` on the web service.
-3. Set `SEED_DEMO_DATA=false`, `PERSISTENCE_REQUIRED=true`, `AUTO_INIT_DB=false`.
+2. Set `DATABASE_URL`, `SECRET_KEY` and `PAYSLIP_TOKEN_KEY` (a *different* random
+   value) on the web service. `render.yaml` generates the two keys for you.
+3. Set `FLASK_ENV=production`, `SEED_DEMO_DATA=false`, `PERSISTENCE_REQUIRED=true`,
+   `AUTO_INIT_DB=false`.
 4. Deploy, then open `/admin/db-health` (admin login) and confirm it reports
    **PostgreSQL** and `DATABASE_URL Detected: Yes`.
 5. Upload a payroll workbook, restart the service, and confirm the records persist.
@@ -73,7 +85,9 @@ Go-live checklist:
 `railway.toml` is included. Create a Railway PostgreSQL service, connect it, and set:
 
 ```env
+FLASK_ENV=production
 SECRET_KEY=your-secret
+PAYSLIP_TOKEN_KEY=a-different-secret
 DATABASE_URL=${{ Postgres.DATABASE_URL }}
 AUTO_INIT_DB=true
 PERSISTENCE_REQUIRED=true

@@ -12,6 +12,7 @@ from app.excel_utils import (
     slug_filename,
     write_table,
 )
+from app.csv_safety import escape_formula
 from app.money import money
 from app.raw_engine.exports.bank_routing import normalise_bank, route_payments
 from app.raw_engine.icu_distribution import distribute_union_dues
@@ -43,7 +44,7 @@ def export_bank_grouping(payroll_run, export_folder, routing=None, whitelist=Non
     row = 5
     for bank in sorted(groups):
         items = sorted(groups[bank], key=lambda i: (i.full_name or "").upper())
-        band = sheet.cell(row=row, column=1, value=bank)
+        band = sheet.cell(row=row, column=1, value=escape_formula(bank))
         band.font = Font(bold=True, color="FFFFFF")
         for col in range(1, 6):
             sheet.cell(row=row, column=col).fill = band_fill
@@ -59,14 +60,16 @@ def export_bank_grouping(payroll_run, export_folder, routing=None, whitelist=Non
         row += 1
         subtotal = 0.0
         for item in items:
-            sheet.cell(row=row, column=1, value=item.staff_id)
-            sheet.cell(row=row, column=2, value=item.full_name)
-            sheet.cell(row=row, column=3, value=item.bank_branch)
-            sheet.cell(row=row, column=4, value=item.bank_account_number)
+            sheet.cell(row=row, column=1, value=escape_formula(item.staff_id))
+            sheet.cell(row=row, column=2, value=escape_formula(item.full_name))
+            sheet.cell(row=row, column=3, value=escape_formula(item.bank_branch))
+            sheet.cell(row=row, column=4, value=escape_formula(item.bank_account_number))
             sheet.cell(row=row, column=5, value=round(item.net_pay or 0, 2))
             subtotal += item.net_pay or 0
             row += 1
-        label = sheet.cell(row=row, column=2, value=f"{bank} Total ({len(items)} workers)")
+        label = sheet.cell(
+            row=row, column=2, value=escape_formula(f"{bank} Total ({len(items)} workers)")
+        )
         label.font = Font(bold=True)
         amount = sheet.cell(row=row, column=5, value=money(subtotal))
         amount.font = Font(bold=True)
