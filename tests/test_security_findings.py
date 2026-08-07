@@ -447,5 +447,40 @@ class F4UserEnumerationTests(_LoginTestCase):
         self.assertEqual(calls[0], auth._DUMMY_PASSWORD_HASH)
 
 
+class F6SecurityHeaderTests(unittest.TestCase):
+    """F6 — every response carries the headers, not just one route."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = _app()
+        with cls.app.app_context():
+            db.create_all()
+
+    def test_headers_are_present_on_every_response_including_errors(self):
+        client = self.app.test_client()
+        for path in ("/login", "/health", "/no-such-page"):
+            response = client.get(path)
+            with self.subTest(path=path):
+                self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+                self.assertEqual(response.headers["X-Frame-Options"], "DENY")
+                self.assertEqual(
+                    response.headers["Referrer-Policy"], "strict-origin-when-cross-origin"
+                )
+                self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
+
+    def test_the_csp_forbids_framing_and_foreign_form_posts(self):
+        policy = self.app.test_client().get("/login").headers["Content-Security-Policy"]
+        self.assertIn("frame-ancestors 'none'", policy)
+        self.assertIn("form-action 'self'", policy)
+        self.assertIn("base-uri 'self'", policy)
+        self.assertIn("object-src 'none'", policy)
+
+    def test_hsts_is_not_sent_in_development(self):
+        """Pinning a developer's localhost to HTTPS is not recoverable by them."""
+        self.assertNotIn(
+            "Strict-Transport-Security", self.app.test_client().get("/login").headers
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

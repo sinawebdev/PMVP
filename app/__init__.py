@@ -730,6 +730,60 @@ def create_app():
             "active_nav": active_nav_key(request.endpoint, request.blueprint),
         }
 
+    # --- Security response headers (applied to every response) ---------------
+    # Previously only one route set one header (the receipt download's nosniff,
+    # in app/client/expenses.py), so every HTML page shipped with none of these.
+    # An after_request is the right home because the guarantee is "no response
+    # leaves without them" — a per-blueprint or per-route version is one new
+    # route away from being wrong.
+    #
+    # The CDN hosts below are the ones the base templates actually load
+    # (Bootstrap + icons from jsdelivr, Font Awesome from cdnjs, Google Fonts);
+    # anything else is refused, which is most of the value here.
+    _CSP = "; ".join([
+        "default-src 'self'",
+        # 'unsafe-inline' is required, not preferred: the templates carry inline
+        # <script> blocks and ~10 on*= handlers. A nonce would cover the blocks
+        # but NOT the inline handlers, so dropping it means rewriting those
+        # first — a template refactor, deliberately not bundled into a header
+        # change. Even so this still blocks script from any unlisted origin.
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net "
+        "https://cdnjs.cloudflare.com https://fonts.googleapis.com",
+        "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net "
+        "https://cdnjs.cloudflare.com",
+        "img-src 'self' data:",
+        "connect-src 'self'",
+        # No object/embed anywhere in the app, and nothing may frame us — this is
+        # the modern half of the X-Frame-Options pair set below.
+        "object-src 'none'",
+        "frame-ancestors 'none'",
+        # Stops an injected <base> redirecting every relative URL, and stops a
+        # form posting credentials to someone else's host.
+        "base-uri 'self'",
+        "form-action 'self'",
+    ])
+
+    @app.after_request
+    def set_security_headers(response):
+        # setdefault, not assignment: a route that has deliberately set one of
+        # these for its own content keeps its value. That is what preserves the
+        # receipt download's explicit nosniff rather than silently overriding it.
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault(
+            "Referrer-Policy", "strict-origin-when-cross-origin"
+        )
+        response.headers.setdefault("Content-Security-Policy", _CSP)
+        # HSTS only in production, and only ever over HTTPS. Sending it from a
+        # plain-HTTP dev server would pin localhost to HTTPS in the developer's
+        # browser — a self-inflicted outage that survives clearing the cache.
+        if is_production and request.is_secure:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response
+
     # Branded error pages (A4). DEBUG is False under gunicorn in production (it
     # imports run:app, so app.run(debug=...) never executes), which is what lets
     # these handlers run instead of leaking a stack trace.
