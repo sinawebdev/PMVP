@@ -189,7 +189,9 @@ def _payslip_pdf_attachment(item):
 
 
 def _build_message(channel, item, run, client, recipient):
-    link = public_payslip_url(item.id)
+    # The item, not item.id: the token embeds the item's revocation counter, and
+    # passing the loaded row lets tokens.py read it without a second query.
+    link = public_payslip_url(item)
     if channel == CHANNEL_EMAIL:
         subject, text, html = render_payslip_email(item, run, client, link=link)
         attachments = []

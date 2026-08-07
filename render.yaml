@@ -30,6 +30,14 @@ services:
         value: production
       - key: SECRET_KEY
         generateValue: true
+      # Signs the no-login payslip links, deliberately separate from SECRET_KEY
+      # so a compromised session key cannot also forge payslip links. Render
+      # generates an independent value; the app refuses to boot in production if
+      # it is missing, or if it is a copy of SECRET_KEY.
+      # NOTE: rotating this invalidates every outstanding payslip link at once —
+      # there is one key and no overlap window, by design.
+      - key: PAYSLIP_TOKEN_KEY
+        generateValue: true
       # DATABASE_URL points at the Supabase-hosted Postgres and is managed in the
       # Render dashboard. sync:false stops Blueprint syncs from overwriting it
       # (it must NOT be bound to a Render-managed database).

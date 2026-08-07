@@ -92,13 +92,10 @@ class F1MessageBodiesNotLoggedTests(unittest.TestCase):
         passing with the fix reverted. So an empty capture must be a failure,
         not a silent success.
 
-        The way it used to go empty was ``migrations/env.py`` calling
-        ``fileConfig()``, which disables every pre-existing logger by default —
-        so any suite that had already run migrations left ``app``'s logger
-        switched off for the rest of the process. That is fixed at the source
-        now; the explicit re-enable below stays as cheap insurance, and the
-        non-empty assertion stays because it is what would catch the next such
-        cause rather than this one.
+        It can genuinely be empty: any test that has already run Alembic
+        migrations leaves ``logging.getLogger("app").disabled = True``, because
+        ``migrations/env.py`` calls ``fileConfig()``, which disables every
+        pre-existing logger by default. Hence the explicit re-enable.
         """
         handler = _CaptureLog()
         logger = application.logger
@@ -163,7 +160,7 @@ class F1MessageBodiesNotLoggedTests(unittest.TestCase):
 class F1ProductionRefusesBodyLoggingTests(_EnvGuard):
     """F1 — the flag must be impossible to enable on a real deployment."""
 
-    ENV_KEYS = _EnvGuard.ENV_KEYS + ("DISTRIBUTION_WORKER_INLINE",)
+    ENV_KEYS = _EnvGuard.ENV_KEYS + ("DISTRIBUTION_WORKER_INLINE", "PAYSLIP_TOKEN_KEY")
 
     def _production_env(self):
         os.environ["SKIP_DOTENV"] = "true"
@@ -171,6 +168,10 @@ class F1ProductionRefusesBodyLoggingTests(_EnvGuard):
         os.environ["DATABASE_URL"] = "postgresql://u:p@localhost/db"
         os.environ["AUTO_INIT_DB"] = "false"
         os.environ["SECRET_KEY"] = "x" * 64
+        # Production also requires a distinct payslip signing key (F8), so a test
+        # that boots a production app has to supply one or it fails on that guard
+        # instead of the one it means to exercise.
+        os.environ["PAYSLIP_TOKEN_KEY"] = "y" * 64
         # Otherwise the app factory starts the inline distribution worker, which
         # immediately tries to reach the (nonexistent) Postgres above and fills
         # the run with connection-refused thread warnings.
@@ -556,6 +557,156 @@ class F9AuthAuditTests(_LoginTestCase):
         for _ in range(6):
             self.post("real@example.com", ip="203.0.113.11")
         self.assertTrue(self._rows("login.blocked"))
+
+
+class F8PayslipTokenTests(unittest.TestCase):
+    """F8 — payslip links: revocable, short-lived, signed with their own key."""
+
+    @classmethod
+    def setUpClass(cls):
+        from app.models import PayrollItem, PayrollRun
+
+        cls.app = _app()
+        with cls.app.app_context():
+            db.create_all()
+            run = PayrollRun(month="July", year=2026)
+            db.session.add(run)
+            db.session.flush()
+            item = PayrollItem(payroll_run_id=run.id, staff_id="DCL9",
+                               full_name="Ama Mensah", net_pay=100.0)
+            db.session.add(item)
+            db.session.commit()
+            cls.item_id = item.id
+
+    def _item(self):
+        from app.models import PayrollItem
+
+        return db.session.get(PayrollItem, self.item_id)
+
+    def test_a_fresh_link_resolves_to_its_payslip(self):
+        from app.distribution.tokens import issue_payslip_token, resolve_payslip_item
+
+        with self.app.app_context():
+            token = issue_payslip_token(self._item())
+            self.assertEqual(resolve_payslip_item(token).id, self.item_id)
+
+    def test_revoking_kills_a_link_that_was_already_issued(self):
+        """The finding itself: before this, a signed token was irrevocable."""
+        from app.distribution.tokens import (
+            issue_payslip_token, resolve_payslip_item, revoke_payslip_links,
+        )
+
+        with self.app.app_context():
+            item = self._item()
+            token = issue_payslip_token(item)
+            self.assertIsNotNone(resolve_payslip_item(token))
+
+            revoke_payslip_links(item)
+            db.session.commit()
+
+            self.assertIsNone(resolve_payslip_item(token))
+            # and a newly issued link still works, so revocation is not a ban
+            self.assertIsNotNone(resolve_payslip_item(issue_payslip_token(self._item())))
+
+    def test_revocation_does_not_affect_another_payslip(self):
+        from app.models import PayrollItem
+        from app.distribution.tokens import (
+            issue_payslip_token, resolve_payslip_item, revoke_payslip_links,
+        )
+
+        with self.app.app_context():
+            other = PayrollItem(payroll_run_id=self._item().payroll_run_id,
+                                staff_id="DCL10", full_name="Kofi", net_pay=50.0)
+            db.session.add(other)
+            db.session.commit()
+            other_token = issue_payslip_token(other)
+
+            revoke_payslip_links(self._item())
+            db.session.commit()
+
+            self.assertIsNotNone(resolve_payslip_item(other_token),
+                                 "per-item revocation must not touch other payslips")
+
+    def test_the_session_key_cannot_forge_a_payslip_link(self):
+        """Key separation is the point: SECRET_KEY must not mint payslip links."""
+        from itsdangerous import URLSafeTimedSerializer
+
+        from app.distribution.tokens import _SALT, resolve_payslip_item
+
+        with self.app.app_context():
+            forged = URLSafeTimedSerializer(
+                self.app.config["SECRET_KEY"], salt=_SALT
+            ).dumps({"item": self.item_id, "v": 0})
+            self.assertIsNone(resolve_payslip_item(forged))
+            self.assertNotEqual(
+                self.app.config["PAYSLIP_TOKEN_KEY"], self.app.config["SECRET_KEY"]
+            )
+
+    def test_the_link_lifetime_is_under_a_week(self):
+        days = self.app.config["PAYSLIP_LINK_MAX_AGE"] / 86400
+        self.assertLess(days, 7, "payslip links must expire in under 7 days")
+
+    def test_tampered_garbage_and_versionless_tokens_are_refused(self):
+        from app.distribution.tokens import (
+            _serializer, issue_payslip_token, resolve_payslip_item,
+        )
+
+        with self.app.app_context():
+            token = issue_payslip_token(self._item())
+            self.assertIsNone(resolve_payslip_item(token + "x"))
+            self.assertIsNone(resolve_payslip_item("not-a-real-token"))
+            # a payload without the version must fail closed, not default to 0
+            self.assertIsNone(resolve_payslip_item(_serializer().dumps({"item": self.item_id})))
+
+    def test_the_public_route_refuses_a_revoked_link(self):
+        """End to end: revocation must reach the actual /p/<token> route."""
+        from app.distribution.tokens import issue_payslip_token, revoke_payslip_links
+
+        with self.app.app_context():
+            token = issue_payslip_token(self._item())
+        client = self.app.test_client()
+        self.assertEqual(client.get(f"/p/{token}").status_code, 200)
+
+        with self.app.app_context():
+            revoke_payslip_links(self._item())
+            db.session.commit()
+        self.assertEqual(client.get(f"/p/{token}").status_code, 404)
+
+
+class F8ProductionKeyGuardTests(_EnvGuard):
+    """F8 — production must be given a real, distinct payslip key."""
+
+    ENV_KEYS = _EnvGuard.ENV_KEYS + ("PAYSLIP_TOKEN_KEY", "DISTRIBUTION_WORKER_INLINE")
+
+    def _production_env(self):
+        os.environ["SKIP_DOTENV"] = "true"
+        os.environ["FLASK_ENV"] = "production"
+        os.environ["DATABASE_URL"] = "postgresql://u:p@localhost/db"
+        os.environ["AUTO_INIT_DB"] = "false"
+        os.environ["DISTRIBUTION_WORKER_INLINE"] = "false"
+        os.environ["SECRET_KEY"] = "s" * 64
+        os.environ.pop("PERSISTENCE_REQUIRED", None)
+        os.environ.pop("RENDER", None)
+
+    def test_production_refuses_to_boot_without_a_payslip_key(self):
+        self._production_env()
+        os.environ.pop("PAYSLIP_TOKEN_KEY", None)
+        with self.assertRaises(RuntimeError) as ctx:
+            create_app()
+        self.assertIn("PAYSLIP_TOKEN_KEY", str(ctx.exception))
+
+    def test_production_refuses_a_payslip_key_copied_from_secret_key(self):
+        self._production_env()
+        os.environ["PAYSLIP_TOKEN_KEY"] = "s" * 64  # identical to SECRET_KEY
+        with self.assertRaises(RuntimeError) as ctx:
+            create_app()
+        self.assertIn("differ", str(ctx.exception))
+
+    def test_render_yaml_provisions_the_payslip_key(self):
+        """Without this the fail-closed guard would break the deploy."""
+        with io.open("render.yaml", encoding="utf8") as handle:
+            content = handle.read()
+        self.assertIn("PAYSLIP_TOKEN_KEY", content)
 
 
 class F8MigrationTests(unittest.TestCase):

@@ -45,7 +45,7 @@ from .queue import (
 from .service import resolve_channel
 from .status import delivery_status_context
 from app.paging import paginate
-from .tokens import verify_payslip_token
+from .tokens import resolve_payslip_item
 
 distribution_bp = Blueprint("distribution", __name__, url_prefix="/distribution")
 
@@ -349,10 +349,10 @@ payslip_link_bp = Blueprint("payslip_link", __name__)
 
 
 def _item_from_token(token):
-    item_id = verify_payslip_token(token)
-    if not item_id:
-        return None
-    return db.session.get(PayrollItem, item_id)
+    # resolve_payslip_item, not verify_payslip_token: the resolver also checks
+    # the item's revocation counter, and it already loads the row this route
+    # needs — so the revocation check costs no additional query.
+    return resolve_payslip_item(token)
 
 
 @payslip_link_bp.route("/p/<token>")

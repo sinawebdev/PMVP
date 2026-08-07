@@ -457,9 +457,37 @@ def create_app():
     # No-login payslip links: PUBLIC_BASE_URL is the public host used in the link we send
     # (falls back to the request host when unset); PAYSLIP_LINK_MAX_AGE is the link lifetime.
     app.config["PUBLIC_BASE_URL"] = os.getenv("PUBLIC_BASE_URL")
+    # 5 days, down from 30. A payslip link is opened within hours of delivery in
+    # practice, so a month-long window was exposure bought for almost nothing —
+    # and a worker who misses it can be sent a fresh link. Tunable without a
+    # code change; revocation (below) is the answer to a link sent in error.
     app.config["PAYSLIP_LINK_MAX_AGE"] = int(
-        os.getenv("PAYSLIP_LINK_MAX_AGE", str(60 * 60 * 24 * 30))
+        os.getenv("PAYSLIP_LINK_MAX_AGE", str(60 * 60 * 24 * 5))
     )
+    # Payslip links are signed with their OWN key, never the session key. The
+    # whole point of the separation is that a leaked SECRET_KEY must not also
+    # mint payslip links for arbitrary item ids — so this is a genuinely
+    # independent secret, not one derived from SECRET_KEY (a derivation shares
+    # the compromise it is meant to contain).
+    #
+    # Same fail-closed contract as SECRET_KEY: production must be given one and
+    # refuses to boot otherwise, while dev/test get a per-process random value
+    # so local work and the suite still run.
+    _payslip_key_from_env = os.getenv("PAYSLIP_TOKEN_KEY")
+    if is_production and not _payslip_key_from_env:
+        raise RuntimeError(
+            "PAYSLIP_TOKEN_KEY must be set to a strong random value in production "
+            "— payslip links are signed with a key separate from SECRET_KEY, so "
+            "that a compromised session key cannot forge payslip links."
+        )
+    # Setting it to a copy of SECRET_KEY satisfies the check above while
+    # delivering none of the separation, so that is refused too.
+    if is_production and _payslip_key_from_env == _secret_from_env:
+        raise RuntimeError(
+            "PAYSLIP_TOKEN_KEY must differ from SECRET_KEY — an identical value "
+            "provides no separation between session cookies and payslip links."
+        )
+    app.config["PAYSLIP_TOKEN_KEY"] = _payslip_key_from_env or secrets.token_hex(32)
 
     # --- Distribution queue worker (Phase 3, Slice 1) ---
     # No separate worker dyno/service exists yet (Render's plan is a single web
