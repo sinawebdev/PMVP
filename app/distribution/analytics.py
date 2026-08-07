@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from openpyxl import Workbook
 from openpyxl.styles import Font
 
+from app.csv_safety import escape_row
 from app.models import (
     DELIVERY_FAILED,
     DELIVERY_SENT,
@@ -104,10 +105,14 @@ def delivery_analytics(filters):
 
 
 def _row_values(d):
+    """One export row. Escaped here rather than at each writer because this is
+    the single value source both the CSV and XLSX exports below draw from —
+    company name, worker name, recipient and provider error all originate in
+    imported or provider-supplied text."""
     run = d.payroll_run
     item = d.payroll_item
     batch = d.distribution_batch
-    return [
+    return escape_row([
         d.updated_at.strftime("%Y-%m-%d %H:%M") if d.updated_at else "",
         run.client_company.name if run and run.client_company else "",
         f"{run.month} {run.year}" if run else f"#{d.payroll_run_id}",
@@ -119,7 +124,7 @@ def _row_values(d):
         d.attempts,
         (batch.initiated_by.name if batch and batch.initiated_by else "System") if batch else "",
         d.error or "",
-    ]
+    ])
 
 
 def _timestamp():
@@ -157,13 +162,14 @@ def export_deliveries_xlsx(filters):
     summary.append([])
     summary.append(["By channel", "Total", "Sent", "Failed", "Success %", "Failure %"])
     for row in stats["by_channel"]:
-        summary.append([row["key"], row["total"], row["sent"], row["failed"],
-                        row["success_rate"], row["failure_rate"]])
+        summary.append(escape_row([row["key"], row["total"], row["sent"], row["failed"],
+                                   row["success_rate"], row["failure_rate"]]))
     summary.append([])
     summary.append(["By company", "Total", "Sent", "Failed", "Success %", "Failure %"])
     for row in stats["by_company"]:
-        summary.append([row["name"], row["total"], row["sent"], row["failed"],
-                        row["success_rate"], row["failure_rate"]])
+        # row["name"] is the client company's own name — imported text.
+        summary.append(escape_row([row["name"], row["total"], row["sent"], row["failed"],
+                                   row["success_rate"], row["failure_rate"]]))
 
     out = io.BytesIO()
     wb.save(out)
