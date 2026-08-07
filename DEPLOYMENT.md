@@ -2,7 +2,7 @@
 
 Payrolla ships ready to deploy on **Render** (`render.yaml`), **Railway**
 (`railway.toml`), or any container host (`Dockerfile`, `docker-compose.yml`),
-plus a `Procfile` and `runtime.txt`. Every deployed environment must satisfy two
+plus a `Procfile` and `runtime.txt`. Every deployed environment must satisfy four
 non-negotiables:
 
 1. **PostgreSQL** via `DATABASE_URL` — the app refuses to boot in production on
