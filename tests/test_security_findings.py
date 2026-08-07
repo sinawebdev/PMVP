@@ -558,5 +558,48 @@ class F9AuthAuditTests(_LoginTestCase):
         self.assertTrue(self._rows("login.blocked"))
 
 
+class F8MigrationTests(unittest.TestCase):
+    """F8 — the schema change must be reachable by the deploy's `flask db upgrade`."""
+
+    def test_the_revision_chain_has_a_single_head(self):
+        import glob
+        import re
+
+        revisions, parents = {}, {}
+        for path in glob.glob("migrations/versions/*.py"):
+            source = io.open(path, encoding="utf8").read()
+            revision = re.search(r"^revision = ['\"]([^'\"]+)", source, re.M)
+            parent = re.search(
+                r"^down_revision = (?:['\"]([^'\"]+)['\"]|None)", source, re.M
+            )
+            if revision:
+                revisions[revision.group(1)] = os.path.basename(path)
+                parents[revision.group(1)] = parent.group(1) if parent and parent.group(1) else None
+
+        referenced = {p for p in parents.values() if p}
+        heads = [r for r in revisions if r not in referenced]
+        self.assertEqual(len(heads), 1, f"migration chain forked: {heads}")
+
+        walked, node = 0, heads[0]
+        while node is not None:
+            walked += 1
+            node = parents[node]
+        self.assertEqual(walked, len(revisions), "orphaned revisions present")
+
+    def test_the_payslip_version_migration_is_on_the_chain(self):
+        import glob
+
+        sources = [
+            io.open(path, encoding="utf8").read()
+            for path in glob.glob("migrations/versions/*.py")
+        ]
+        adding = [s for s in sources if "payslip_token_version" in s]
+        self.assertEqual(len(adding), 1, "expected exactly one migration for the column")
+        migration = adding[0]
+        self.assertIn("add_column", migration)
+        # The backfill is what makes the NOT NULL safe on a table with rows.
+        self.assertIn("UPDATE payroll_item SET payslip_token_version = 0", migration)
+
+
 if __name__ == "__main__":
     unittest.main()
