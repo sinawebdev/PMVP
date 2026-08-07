@@ -247,6 +247,26 @@ def create_app():
             "SECRET_KEY must be set to a strong random value in production — "
             "refusing to start without one."
         )
+
+    # --- Message-body logging (development only) ---
+    # A rendered payslip message is the worker's net pay, deductions and name,
+    # and the recipient is their personal phone/email. Logging either ships PII
+    # and salary data to wherever logs are aggregated, retained far longer than
+    # the payslip, and readable by a much wider audience than the one worker.
+    #
+    # So the bodies are off by default and can only be turned on deliberately,
+    # by name. Production does not merely ignore the flag — it refuses to boot
+    # with it enabled, because a deployment that *thinks* it wants payslip text
+    # in its logs is misconfigured, and silently ignoring the request would hide
+    # that. Same fail-loud principle as the SECRET_KEY guard above.
+    _log_bodies = os.getenv("LOG_MESSAGE_BODIES", "false").lower() in {"1", "true", "yes", "on"}
+    if is_production and _log_bodies:
+        raise RuntimeError(
+            "LOG_MESSAGE_BODIES must not be enabled in production — it writes "
+            "payslip contents (salary, deductions, names) into the application "
+            "log. Unset it, or run with it only on a development machine."
+        )
+    app.config["LOG_MESSAGE_BODIES"] = _log_bodies and not is_production
     database_type = database_type_label(app.config["SQLALCHEMY_DATABASE_URI"])
     app.config["DATABASE_TYPE_LABEL"] = database_type
 

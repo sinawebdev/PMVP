@@ -8,6 +8,8 @@ raised, so one bad recipient never aborts a whole payroll run's distribution.
 Ported from the standalone payslip distribution system; adapted to the platform Flask config.
 """
 import base64
+import hashlib
+import hmac
 import json as _json
 import re
 import smtplib
@@ -39,6 +41,63 @@ def _header_safe(value):
     return str(value).replace("\r", " ").replace("\n", " ")
 
 
+# --- Log hygiene -----------------------------------------------------------
+# A payslip message body is the worker's net pay, deductions and name; the
+# recipient is their personal phone number or email. Neither belongs in an
+# application log, which is shipped to a third-party aggregator, kept far longer
+# than the payslip itself, and readable by anyone with dashboard access — a
+# wholly different audience from the one worker the message was addressed to.
+#
+# What a log line legitimately needs is enough to answer "did item N go out, on
+# which provider, and did two sends collide?" — that is the provider, the item
+# id, and a stable handle for the recipient. None of that requires the plaintext.
+
+
+def recipient_fingerprint(recipient):
+    """A short, stable, non-reversible handle for a recipient.
+
+    Keyed with SECRET_KEY rather than a bare digest on purpose: a plain
+    SHA-256 of a 10-digit phone number (or an address at a known company
+    domain) is recovered by brute force in seconds, so an unkeyed "hash" in a
+    log is barely better than the number itself. HMAC under a key that never
+    leaves the deployment makes the value correlatable across log lines — the
+    property we actually want — without being reversible by whoever reads them.
+    """
+    value = (recipient or "").strip().lower()
+    if not value:
+        return "-"
+    try:
+        key = current_app.config.get("SECRET_KEY") or ""
+    except RuntimeError:  # no app context (unit tests calling the helper bare)
+        key = ""
+    digest = hmac.new(
+        str(key).encode("utf-8"), value.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return digest[:12]
+
+
+def log_message_bodies_enabled():
+    """True when message bodies may be written to the log.
+
+    Off unless LOG_MESSAGE_BODIES is explicitly turned on, and impossible in
+    production — :func:`app.create_app` refuses to boot with it enabled there,
+    so this can never be True on a real deployment.
+    """
+    try:
+        return bool(current_app.config.get("LOG_MESSAGE_BODIES", False))
+    except RuntimeError:  # no app context
+        return False
+
+
+def _body_for_log(message):
+    """The body as it should appear in a log: the text only when an operator has
+    deliberately opted in on a non-production box, otherwise a length marker that
+    still shows something was rendered."""
+    if log_message_bodies_enabled():
+        return message.body_text
+    return f"<{len(message.body_text or '')} chars withheld>"
+
+
 @dataclass
 class Attachment:
     filename: str
@@ -58,6 +117,10 @@ class OutboundMessage:
     # the global config); None falls back to config.
     from_name: str | None = None
     reply_to: str | None = None
+    # The PayrollItem this message is for. Carried so a sender can identify the
+    # send in a log line without naming the worker (see recipient_fingerprint).
+    # Optional and last, so every existing positional construction still works.
+    item_id: int | None = None
 
 
 @dataclass
@@ -123,7 +186,11 @@ class ConsoleSmsSender(Sender):
     provider = "console-sms"
 
     def send(self, message):
-        current_app.logger.info("[console-sms] to=%s\n%s", message.recipient, message.body_text)
+        current_app.logger.info(
+            "[console-sms] provider=%s item=%s to=%s body=%s",
+            self.provider, message.item_id, recipient_fingerprint(message.recipient),
+            _body_for_log(message),
+        )
         return SendResult(ok=True, provider=self.provider)
 
 
@@ -162,7 +229,9 @@ class ConsoleWhatsAppSender(Sender):
 
     def send(self, message):
         current_app.logger.info(
-            "[console-whatsapp] to=%s\n%s", message.recipient, message.body_text
+            "[console-whatsapp] provider=%s item=%s to=%s body=%s",
+            self.provider, message.item_id, recipient_fingerprint(message.recipient),
+            _body_for_log(message),
         )
         return SendResult(ok=True, provider=self.provider)
 
@@ -237,9 +306,13 @@ class ConsoleEmailSender(Sender):
         if not is_valid_email(message.recipient):
             return SendResult(False, self.provider, f"invalid recipient email: {message.recipient!r}")
         extra = f" +{len(message.attachments)} attachment(s)" if message.attachments else ""
+        # The subject is withheld alongside the body: an email subject line is
+        # rendered per worker and can carry their name, so it is payslip content
+        # too, not routing metadata.
         current_app.logger.info(
-            "[console-email] to=%s subject=%r%s\n%s",
-            message.recipient, message.subject, extra, message.body_text,
+            "[console-email] provider=%s item=%s to=%s%s body=%s",
+            self.provider, message.item_id, recipient_fingerprint(message.recipient),
+            extra, _body_for_log(message),
         )
         return SendResult(ok=True, provider=self.provider)
 
@@ -255,7 +328,10 @@ class SmtpEmailSender(Sender):
         # Validate the recipient before opening a connection — a clear, cheap
         # failure instead of an opaque SMTP rejection.
         if not is_valid_email(message.recipient):
-            current_app.logger.warning("[email] invalid recipient %r", message.recipient)
+            current_app.logger.warning(
+                "[email] invalid recipient to=%s item=%s",
+                recipient_fingerprint(message.recipient), message.item_id,
+            )
             return SendResult(False, self.provider, f"invalid recipient email: {message.recipient!r}")
 
         mime = EmailMessage()
@@ -282,12 +358,21 @@ class SmtpEmailSender(Sender):
             current_app.logger.warning("[email] SMTP auth failed: %s", exc)
             return SendResult(False, self.provider, "SMTP authentication failed")
         except smtplib.SMTPRecipientsRefused:
-            current_app.logger.warning("[email] recipient refused: %s", message.recipient)
+            current_app.logger.warning(
+                "[email] recipient refused to=%s item=%s",
+                recipient_fingerprint(message.recipient), message.item_id,
+            )
             return SendResult(False, self.provider, f"recipient refused: {message.recipient}")
         except (smtplib.SMTPException, OSError) as exc:
-            current_app.logger.warning("[email] send failed to %s: %s", message.recipient, exc)
+            current_app.logger.warning(
+                "[email] send failed to=%s item=%s: %s",
+                recipient_fingerprint(message.recipient), message.item_id, exc,
+            )
             return SendResult(False, self.provider, f"{type(exc).__name__}: {exc}")
-        current_app.logger.info("[email] sent to %s via %s", message.recipient, self.provider)
+        current_app.logger.info(
+            "[email] sent provider=%s item=%s to=%s",
+            self.provider, message.item_id, recipient_fingerprint(message.recipient),
+        )
         return SendResult(True, self.provider)
 
 
