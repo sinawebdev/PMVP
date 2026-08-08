@@ -76,6 +76,7 @@ from app.payroll import (
 )
 from app.payroll_status import AUTO_ACCEPTED, HELD, PROCESSED, SENDABLE_STATUSES, SUBMITTED
 from app.pdf_service import generate_payslip_pdf, payslip_filename
+from app.permissions import can_send_payslips
 from app.raw_engine.detection import looks_like_raw_hours
 from app.raw_import import normalise_emp_id
 from app.spreadsheet_uploads import SpreadsheetValidationError
@@ -603,7 +604,7 @@ def distribute(run_id):
         "client/distribute.html",
         company=_company(),
         can_send=active_tenant_id() is not None
-        and (current_user.role or "").strip().lower() == CLIENT_ADMIN,
+        and can_send_payslips(current_user.role),
         nonce=uuid.uuid4().hex,
         **_distribute_context(run),
     )
@@ -616,7 +617,7 @@ def distribute_status_fragment(run_id):
     return render_template(
         "client/_distribute_status_fragment.html",
         can_send=active_tenant_id() is not None
-        and (current_user.role or "").strip().lower() == CLIENT_ADMIN,
+        and can_send_payslips(current_user.role),
         **_distribute_context(run),
     )
 
