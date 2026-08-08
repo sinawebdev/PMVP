@@ -22,4 +22,9 @@ cloudflared.log
 /acs 1.xlsx
 
 # Test specimen workbooks (real client PII) — decrypted locally, never committed.
-tests/fixtures/*.xlsx
+# Ignore the whole directory, not just *.xlsx: the specimens also arrive as .xls
+# /.xlsm/.csv, and Excel drops ~$ lock files and decryption scratch alongside
+# them. Only .gitkeep is tracked, so the directory exists for the skipUnless
+# gates without any client data ever being committable.
+tests/fixtures/*
+!tests/fixtures/.gitkeep
