@@ -57,10 +57,20 @@
      KPIs (dd77f81). An operator opens this page to GO somewhere; the figures
      below answer a question they did not have to navigate to ask.
 
-     Carries only the surfaces the page does not already reach. Create Payroll
-     Run, Review approvals and Risk queue are the header's own row, and this page
-     offers an action once — the same rule that keeps `run_payroll` out of the
-     tenant tile grid.
+     Carries only the surfaces the header's own action row does not already
+     reach. Create Payroll Run, Review approvals and Risk queue are header
+     buttons, and this page offers an action once — the same rule that keeps
+     `run_payroll` out of the tenant tile grid.
+
+     That rule is about the header's actions, not about every link on the page.
+     Expenses & audit stays even though Recent activity also points at
+     `audit.audit_trail`: that link is a list continuation — three entries shown,
+     the record one click away — and is the whole justification for the 3-entry
+     cap, while this tile is the only thing on the dashboard that names Expenses
+     at all. Same destination, different register and different half of it. Do
+     not "de-duplicate" them by dropping the tile; that silently removes recorded
+     spend from the page, leaving a link labelled "Full audit trail" as the only
+     way to reach it.
 
      Each `show` mirrors the target route's own decorator, so a tile is never
      offered to a role the route would bounce — the gate stays on the route; this

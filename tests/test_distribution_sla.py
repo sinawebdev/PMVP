@@ -148,10 +148,21 @@ class SlaRouteTestCase(unittest.TestCase):
         self.ctx.pop()
 
     def test_dashboard_renders_sla_panel(self):
+        """The service-level panel reaches the page.
+
+        Asserted on the panel's own class as well as its label: 27a7a1f
+        relabelled this panel from "SLA" to "Service level" for the operator
+        audience and this assertion kept looking for the old word, so the panel
+        could have vanished entirely and the failure would have read the same.
+        The class is the panel's identity, the label is what a user actually
+        reads — a rename now has to update both, deliberately.
+        """
         self.http.post("/login", data={"email": "admin@payrolla.com", "password": "password123"})
         resp = self.http.get("/distribution/dashboard")
         self.assertEqual(resp.status_code, 200)
-        self.assertIn("SLA", resp.get_data(as_text=True))
+        body = resp.get_data(as_text=True)
+        self.assertIn("dist-health", body)
+        self.assertIn("Service level", body)
 
 
 if __name__ == "__main__":

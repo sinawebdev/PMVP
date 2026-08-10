@@ -27,8 +27,9 @@ os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from app import create_app, db  # noqa: E402
 from app import permissions as perms  # noqa: E402
-from app.models import PayrollRun, User  # noqa: E402
-from app.roles import normalise_role  # noqa: E402
+from app import seed as seed_mod  # noqa: E402
+from app.models import ClientCompany, PayrollRun, User  # noqa: E402
+from app.roles import TENANT_ROLES, normalise_role  # noqa: E402
 from app.seed import DEMO_PASSWORD, PLATFORM_USERS  # noqa: E402
 
 # Every capability group defined in app.permissions, by name.
@@ -40,10 +41,25 @@ GROUPS = {
 
 # Operator-plane groups only: the tenant groups govern the client portal, whose
 # roles are gated by tenant_role_required and never see an operator route.
-TENANT_GROUP_NAMES = {"EXPENSE_ROLES", "BRANDING_ROLES"}
+TENANT_GROUP_NAMES = {"EXPENSE_ROLES", "BRANDING_ROLES", "DISTRIBUTION_SEND_ROLES"}
 OPERATOR_GROUPS = {n: g for n, g in GROUPS.items() if n not in TENANT_GROUP_NAMES}
+TENANT_GROUPS = {n: g for n, g in GROUPS.items() if n in TENANT_GROUP_NAMES}
 
 SUPERUSERS = {normalise_role(r) for r in perms.SUPERUSERS}
+
+# The seeded tenant logins for one demo company, as (email, role). Derived from
+# the seed definitions rather than hardcoded, so adding a tenant role to the demo
+# roster automatically widens the parity check instead of silently escaping it.
+DEMO_TENANT = "MSC Limited"
+
+
+def _tenant_logins(company_name=DEMO_TENANT):
+    spec = next(s for s in seed_mod.DEMO_COMPANIES if s["name"] == company_name)
+    domain = seed_mod.company_domain(spec)
+    return [
+        (f"{local}@{domain}", role)
+        for local, _title, role in seed_mod.TENANT_USER_TEMPLATE
+    ]
 
 
 class _StubRun:
@@ -286,6 +302,174 @@ class AffordanceParityTests(unittest.TestCase):
                         "can_delete_employee",
                     )
                 self._logout()
+
+
+class TenantGuardShapeTests(unittest.TestCase):
+    """The same anti-drift property, on the client plane.
+
+    Until F11 this file checked the operator plane only, and the tenant plane
+    had no equivalent pin — which is how the distribute page came to answer "may
+    this role send payslips" with an inline
+    ``(current_user.role or "").strip().lower() == CLIENT_ADMIN`` literal in the
+    route, duplicated across two render paths, while the routes it gated used
+    ``@tenant_role_required(CLIENT_ADMIN)``. Two vocabularies, one question.
+
+    ``tenant_role_required`` now publishes ``_required_tenant_roles`` (mirroring
+    ``role_required._required_roles``), so tenant guards are introspectable here.
+    It is a separate attribute on purpose: the planes have different group
+    vocabularies and must never be checked against each other's.
+    """
+
+    def setUp(self):
+        self.app = create_app()
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+
+    def tearDown(self):
+        self.ctx.pop()
+
+    def _tenant_guarded_views(self):
+        """(endpoint, required_roles) for every route behind tenant_role_required."""
+        return [
+            (endpoint, roles)
+            for endpoint, view in self.app.view_functions.items()
+            if (roles := getattr(view, "_required_tenant_roles", None)) is not None
+        ]
+
+    def test_there_are_tenant_guarded_routes_to_check(self):
+        # Guards against this class silently passing on an empty set — the exact
+        # failure mode that let the tenant plane go unchecked in the first place.
+        self.assertGreater(len(self._tenant_guarded_views()), 5)
+
+    def test_every_tenant_guard_is_a_named_capability_group(self):
+        """A literal role tuple in a tenant decorator is just as invisible to a
+        template as an operator one."""
+        known = set(TENANT_GROUPS.values())
+        offenders = [
+            (endpoint, sorted(roles))
+            for endpoint, roles in self._tenant_guarded_views()
+            if roles not in known
+        ]
+        self.assertEqual(
+            offenders,
+            [],
+            "these client-plane routes are gated by an ad-hoc role set rather "
+            "than a named group in app.permissions:\n"
+            + "\n".join(f"  {e}: {r}" for e, r in offenders),
+        )
+
+    def test_no_tenant_group_is_empty(self):
+        for name, group in TENANT_GROUPS.items():
+            self.assertTrue(group, f"{name} is empty")
+
+    def test_tenant_groups_contain_only_tenant_roles(self):
+        """An operator role in a tenant group would be a plane leak in the one
+        direction the plane check cannot catch: tenant_role_required compares the
+        role string, so an operator role listed here would pass it."""
+        for name, group in TENANT_GROUPS.items():
+            stray = sorted(set(group) - set(TENANT_ROLES))
+            self.assertEqual(
+                stray, [], f"{name} contains non-tenant role(s): {stray}"
+            )
+
+    def test_send_routes_agree_with_can_send_payslips(self):
+        """F11's pin: the three client_admin-only distribution routes and the
+        predicate that gates their button must answer identically for every
+        tenant role."""
+        for endpoint in (
+            "client.distribute_send",
+            "client.distribute_resend",
+            "client.distribute_cancel",
+        ):
+            guard = getattr(
+                self.app.view_functions[endpoint], "_required_tenant_roles", None
+            )
+            self.assertIsNotNone(guard, f"{endpoint} is not tenant-guarded")
+            self.assertEqual(
+                guard,
+                perms.DISTRIBUTION_SEND_ROLES,
+                f"{endpoint} no longer matches DISTRIBUTION_SEND_ROLES",
+            )
+            for role in TENANT_ROLES:
+                self.assertEqual(
+                    normalise_role(role) in guard,
+                    perms.can_send_payslips(role),
+                    f"{endpoint}: route access for {role} disagrees with "
+                    "can_send_payslips",
+                )
+
+
+class TenantAffordanceParityTests(unittest.TestCase):
+    """What a tenant role SEES on the distribute page must match what its routes
+    permit — the client-plane half of AffordanceParityTests."""
+
+    def setUp(self):
+        self.app = create_app()
+        self.app.config["TESTING"] = True
+        self.app.config["WTF_CSRF_ENABLED"] = False
+        self.client = self.app.test_client()
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+        company = ClientCompany.query.filter_by(name=DEMO_TENANT).first()
+        self.assertIsNotNone(company, "seed data must contain the demo tenant")
+        self.run = PayrollRun.query.filter_by(
+            client_company_id=company.id, status="Approved"
+        ).first()
+        self.assertIsNotNone(
+            self.run,
+            "the parity check needs an Approved (sendable) run — a run that "
+            "cannot be sent hides the send affordance for everyone, which would "
+            "make this test pass vacuously",
+        )
+
+    def tearDown(self):
+        db.session.remove()
+        self.ctx.pop()
+
+    def _login(self, email):
+        resp = self.client.post(
+            "/login", data={"email": email, "password": DEMO_PASSWORD}
+        )
+        self.assertEqual(resp.status_code, 302, f"could not sign in as {email}")
+
+    def _logout(self):
+        self.client.get("/logout")
+
+    def test_send_affordance_matches_can_send_payslips(self):
+        """Matched on the form's POST target, not its label: an affordance is the
+        route it reaches, so a copy change must not read as a permission change."""
+        send_marker = f'action="/company/runs/{self.run.id}/distribute/send"'
+        for email, role in _tenant_logins():
+            with self.subTest(role=role, email=email):
+                self._login(email)
+                body = self.client.get(
+                    f"/company/runs/{self.run.id}/distribute"
+                ).get_data(as_text=True)
+                self.assertEqual(
+                    send_marker in body,
+                    perms.can_send_payslips(role),
+                    f"{role}: send-payslips affordance disagrees with "
+                    "can_send_payslips",
+                )
+                self._logout()
+
+    def test_preparer_is_told_why_rather_than_shown_nothing(self):
+        """The role that may not send still reaches the page (download stays
+        available) and is given the reason — a blank card would read as a bug."""
+        preparer = next(
+            email for email, role in _tenant_logins()
+            if not perms.can_send_payslips(role)
+        )
+        self._login(preparer)
+        resp = self.client.get(f"/company/runs/{self.run.id}/distribute")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        self.assertIn("limited to a company administrator", body)
+        self.assertIn(
+            f"/company/runs/{self.run.id}/payslips.zip", body,
+            "the preparer must keep the download route it is still allowed",
+        )
+        self._logout()
 
 
 if __name__ == "__main__":

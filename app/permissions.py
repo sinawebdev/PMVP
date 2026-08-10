@@ -276,6 +276,24 @@ def can_manage_branding(role):
     return _in(role, BRANDING_ROLES)
 
 
+# Send, resend or cancel the company's own payslip distribution. client_admin-only,
+# mirroring the routes' ``@tenant_role_required(CLIENT_ADMIN)``. The `can_send`
+# affordance on the distribute page and its status fragment used to test the role
+# with an inline ``(current_user.role or "").strip().lower() == CLIENT_ADMIN``
+# literal — the same two-vocabularies-for-one-question shape this module exists to
+# remove, and duplicated across the two render paths so they could drift from the
+# routes and from each other.
+DISTRIBUTION_SEND_ROLES = frozenset({CLIENT_ADMIN})
+
+
+def can_send_payslips(role):
+    """May send, resend or cancel their own company's payslip distribution
+    (tenant plane). Role only — being on the tenant plane at all is resolved
+    separately from ``User.client_company_id`` (app/tenancy.py), and the run's
+    status is gated by SENDABLE_STATUSES inside the send path."""
+    return _in(role, DISTRIBUTION_SEND_ROLES)
+
+
 def can_delete_run(role, run):
     """May hard-delete a run. Role AND status must both allow it; the delete
     route additionally checks record-level blockers (voucher, remittances, sent

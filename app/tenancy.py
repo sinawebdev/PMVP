@@ -209,6 +209,14 @@ def tenant_role_required(*roles):
                 return redirect(url_for("main.company_dashboard"))
             return view(*args, **kwargs)
 
+        # Publish the canonical tenant role set this route accepts, mirroring
+        # ``role_required._required_roles`` on the operator plane. Kept under a
+        # separate attribute so the operator parity walk stays operator-only:
+        # the two planes have different group vocabularies and must not be
+        # checked against each other's. tests/test_permission_parity.py reads
+        # this to assert every tenant guard is a named group in app.permissions,
+        # the same anti-drift property the operator routes already carry.
+        wrapped._required_tenant_roles = frozenset(allowed)
         return wrapped
 
     return decorator
