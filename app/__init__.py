@@ -186,6 +186,40 @@ def format_role_label(value):
 # lists is treated as production — see detect_is_production.
 _DEVELOPMENT_ENVIRONMENTS = {"development", "dev", "local", "test", "testing"}
 _PRODUCTION_ENVIRONMENTS = {"production", "prod", "staging", "live"}
+# A packaged single-firm desktop install (Payrolla Desktop): a bundled Flask
+# process serving 127.0.0.1 over plain HTTP against a local SQLite file. It is
+# neither of the above and fits badly under both, which is why it is named
+# rather than approximated:
+#
+#   * as *production* it cannot boot at all — persistence would demand
+#     DATABASE_URL/PostgreSQL, and SESSION_COOKIE_SECURE would stop the browser
+#     returning the session cookie over http://127.0.0.1, so login would fail.
+#   * as *development* it would silently accept the things development is
+#     allowed to be sloppy about: per-process signing keys and a boot-time seed.
+#     On a desktop app — which restarts constantly, unlike a Render dyno — an
+#     ephemeral key logs the operator out and breaks every payslip link already
+#     sent on every launch.
+#
+# So desktop takes the deployment-shaped half of each: not production (SQLite
+# and a plain-HTTP cookie are correct here), but held to production's key and
+# seeding contracts. See the guards in create_app.
+_DESKTOP_ENVIRONMENTS = {"desktop"}
+
+
+def declared_environment():
+    """The environment this process claims to be, lowercased. "" when silent."""
+    return (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").strip().lower()
+
+
+def detect_is_desktop():
+    """Whether this process is a packaged desktop install (``APP_ENV=desktop``).
+
+    Never inferred. A desktop install is built deliberately by
+    ``scripts/build_desktop.py`` and launched by a launcher that sets this, so
+    there is no "looks like desktop" heuristic to get wrong — and nothing that
+    forgot to declare itself should be handed desktop's relaxed transport rules.
+    """
+    return declared_environment() in _DESKTOP_ENVIRONMENTS
 
 
 def detect_is_production():
@@ -207,8 +241,8 @@ def detect_is_production():
     unnecessary boot failure (loud, and fixed by one env var) rather than a
     quietly insecure deployment. Same principle as the SECRET_KEY guard.
     """
-    declared = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").strip().lower()
-    if declared in _DEVELOPMENT_ENVIRONMENTS:
+    declared = declared_environment()
+    if declared in _DEVELOPMENT_ENVIRONMENTS or declared in _DESKTOP_ENVIRONMENTS:
         return False
     # Everything else is production: an explicit production value, a platform
     # hint (RENDER / RAILWAY_ENVIRONMENT), an unrecognised value, and — the case
@@ -221,9 +255,28 @@ def create_app():
     if os.getenv("SKIP_DOTENV", "false").lower() != "true":
         load_dotenv()
 
-    app = Flask(__name__, instance_relative_config=True)
+    # instance_path normally derives from where this package sits on disk, which
+    # is correct for a checkout and wrong for anything packaged: under PyInstaller
+    # the package lives in the extracted bundle (a temp dir wiped on exit) or in a
+    # read-only Program Files directory. Three writable locations hang off it —
+    # the SQLite database, IMPORT_SESSION_FOLDER and STORAGE_ROOT — so all three
+    # would silently vanish between launches or fail to open at all.
+    #
+    # PAYROLLA_INSTANCE_PATH relocates the lot to somewhere the installing user
+    # can actually write (%LOCALAPPDATA%\Payrolla\<install_id>). Unset, Flask's
+    # own default applies and nothing changes for the web app. It must be an
+    # absolute path; Flask rejects a relative one, which is the right answer —
+    # resolving it against a packaged process's unpredictable CWD would scatter
+    # databases wherever the shortcut happened to start from.
+    app = Flask(
+        __name__,
+        instance_relative_config=True,
+        instance_path=os.getenv("PAYROLLA_INSTANCE_PATH") or None,
+    )
     is_production = detect_is_production()
+    is_desktop = detect_is_desktop()
     app.config["IS_PRODUCTION"] = is_production
+    app.config["IS_DESKTOP"] = is_desktop
     # There is deliberately NO hardcoded fallback secret. A committed fallback is
     # a published signing key: any deployment that failed to identify itself as
     # production (the Dockerfile used to do exactly that) would sign session
@@ -259,8 +312,12 @@ def create_app():
     # Sign-in hints on the login page. Only meaningful where the demo roster was
     # actually seeded, and hard-off in production — a real deployment must never
     # advertise accounts, seeded or not.
+    # Desktop counts as "a real deployment" here even though it is not
+    # production: it sits in front of a paying firm's staff, so it must never
+    # advertise an account on its login page.
     app.config["SHOW_DEMO_LOGINS"] = (
         not is_production
+        and not is_desktop
         and os.getenv("SEED_DEMO_DATA", "false").lower() == "true"
         and os.getenv("SHOW_DEMO_LOGINS", "true").lower() == "true"
     )
@@ -273,10 +330,17 @@ def create_app():
     # differ between gunicorn workers, so refuse to boot rather than limp.
     # Ordered after the persistence check so the DATABASE_URL failure still
     # surfaces first.
-    if is_production and not _secret_from_env:
+    #
+    # Desktop is held to the same contract, and for a sharper reason: a desktop
+    # app is restarted constantly — every time the operator closes the window —
+    # where a Render dyno restarts on deploy. A per-process key there means being
+    # logged out on every launch. The launcher generates one on first run and
+    # persists it beside the database precisely so this stays stable.
+    if (is_production or is_desktop) and not _secret_from_env:
         raise RuntimeError(
-            "SECRET_KEY must be set to a strong random value in production — "
-            "refusing to start without one."
+            "SECRET_KEY must be set to a strong random value in "
+            f"{'desktop' if is_desktop else 'production'} — refusing to start "
+            "without one."
         )
 
     # --- Message-body logging (development only) ---
@@ -350,8 +414,13 @@ def create_app():
     # Standard uploads stream through tempfile and raw uploads stage in
     # IMPORT_SESSION_FOLDER; there is no reader for a persistent UPLOAD_FOLDER, so
     # it is not configured (removed dead config in Phase 5).
+    # The one writable path that was derived from the package location rather
+    # than the instance path, and the only one with no override — so relocating
+    # instance_path (above) moved the database and left generated exports trying
+    # to write inside the bundle. Same os.getenv shape as STORAGE_ROOT below;
+    # unset, it resolves exactly where it always has.
     app.config["EXPORT_FOLDER"] = os.path.abspath(
-        os.path.join(app.root_path, "..", "exports")
+        os.getenv("EXPORT_FOLDER", os.path.join(app.root_path, "..", "exports"))
     )
     app.config["IMPORT_SESSION_FOLDER"] = os.path.join(
         app.instance_path, "import_sessions"
@@ -470,19 +539,26 @@ def create_app():
     # independent secret, not one derived from SECRET_KEY (a derivation shares
     # the compromise it is meant to contain).
     #
-    # Same fail-closed contract as SECRET_KEY: production must be given one and
-    # refuses to boot otherwise, while dev/test get a per-process random value
-    # so local work and the suite still run.
+    # Same fail-closed contract as SECRET_KEY: production and desktop must be
+    # given one and refuse to boot otherwise, while dev/test get a per-process
+    # random value so local work and the suite still run.
+    #
+    # Desktop is included for a reason beyond consistency: this key is what makes
+    # an already-delivered payslip link keep working. A per-process value would
+    # silently invalidate every link the firm has sent the moment the operator
+    # closes and reopens the app — the failure lands on the worker opening the
+    # link, not on the person who restarted it.
     _payslip_key_from_env = os.getenv("PAYSLIP_TOKEN_KEY")
-    if is_production and not _payslip_key_from_env:
+    if (is_production or is_desktop) and not _payslip_key_from_env:
         raise RuntimeError(
-            "PAYSLIP_TOKEN_KEY must be set to a strong random value in production "
-            "— payslip links are signed with a key separate from SECRET_KEY, so "
-            "that a compromised session key cannot forge payslip links."
+            "PAYSLIP_TOKEN_KEY must be set to a strong random value in "
+            f"{'desktop' if is_desktop else 'production'} — payslip links are "
+            "signed with a key separate from SECRET_KEY, so that a compromised "
+            "session key cannot forge payslip links."
         )
     # Setting it to a copy of SECRET_KEY satisfies the check above while
     # delivering none of the separation, so that is refused too.
-    if is_production and _payslip_key_from_env == _secret_from_env:
+    if (is_production or is_desktop) and _payslip_key_from_env == _secret_from_env:
         raise RuntimeError(
             "PAYSLIP_TOKEN_KEY must differ from SECRET_KEY — an identical value "
             "provides no separation between session cookies and payslip links."
@@ -1015,7 +1091,24 @@ def create_app():
 
     configure_mappers()
 
-    if os.getenv("AUTO_INIT_DB", "true").lower() == "true":
+    _auto_init_db = os.getenv("AUTO_INIT_DB", "true").lower() == "true"
+    # Desktop owns its schema through Alembic, exactly as production does, and
+    # must never take this path — because initialize_database seeds as well as
+    # creates. seed_default_data() is NOT gated by SEED_DEMO_DATA: it always
+    # writes the seven platform logins (admin@payrolla.com and friends, all on
+    # the same published DEMO_PASSWORD), two demo companies and six tenant
+    # logins. Production escapes that only by convention — it happens to set
+    # AUTO_INIT_DB=false. A desktop build shipped to a firm with those rows in
+    # it would be shipping known credentials into a customer's database, so
+    # here the convention is an assertion instead.
+    if is_desktop and _auto_init_db:
+        raise RuntimeError(
+            "AUTO_INIT_DB must be false on a desktop install — schema is owned "
+            "by Alembic (flask db upgrade), and the boot seed would write the "
+            "demo platform roster and its published password into the firm's "
+            "own database."
+        )
+    if _auto_init_db:
         initialize_database(app)
 
     if app.config["DISTRIBUTION_WORKER_INLINE"] and (
