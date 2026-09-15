@@ -119,6 +119,38 @@
 .rq-rules p { padding-left: 14px; }
 .rq-rules strong { color: var(--ink); }
 
+/* The disclosure this sits in is read once, on a reviewer's first day, and
+   skipped forever after (see the note in the template) — which puts it in the
+   one frequency tier where an entrance is affordable rather than a tax.
+
+   It softens the ARRIVAL of the text, not the reflow: the queue table below
+   still shifts down in a single frame, because the only honest ways to animate
+   that are a height transition on content of unknown size or `interpolate-size`,
+   and neither is worth the layout cost for a panel opened once. The 4px lift
+   gives the eye the direction the content came from; the table's jump then
+   reads as the page making room rather than as a glitch.
+
+   180ms and --ease-out are this file's existing vocabulary. Reduced motion
+   keeps the fade and drops the 4px lift: the preference is about movement, and
+   text that appears silently is harder to follow than text that fades in. */
+.rq-rules[open] > ul,
+.rq-rules[open] > p { animation: rq-reveal 180ms var(--ease-out) both; }
+
+@media (prefers-reduced-motion: reduce) {
+    .rq-rules[open] > ul,
+    .rq-rules[open] > p { animation-name: rq-fade; }
+}
+
+@keyframes rq-reveal {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes rq-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 /* --- The queue table -----------------------------------------------------
    Built for ranking: the reason and the movement are the two columns the eye
    travels between, so they sit next to each other, and the action is the last

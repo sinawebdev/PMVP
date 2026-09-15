@@ -527,15 +527,28 @@ button:focus-visible {
     width: 44px;
 }
 
+/* Same argument as the operator shell's scrim in styles.css: the drawer below
+   slides on var(--ease) and this dimmed layer used to appear with an
+   untransitionable `display`, so one gesture animated in halves. `visibility`
+   carries the hit-testing the old `display: none` provided and flips only at
+   the end of its duration, so the way out fades as well as the way in.
+
+   var(--ease) rather than a literal duration, and that is load-bearing twice
+   over: it is the exact value the drawer uses, and this file has no
+   reduced-motion block of its own — tokens.css rewrites the token to
+   `1ms linear` under that preference, which is the whole point of it being a
+   token. Do not inline 180ms here. */
 .nav-backdrop {
     background: rgba(2, 6, 23, 0.5);
-    display: none;
     inset: 0;
+    opacity: 0;
     position: fixed;
+    transition: opacity var(--ease), visibility var(--ease);
+    visibility: hidden;
     z-index: 1080;
 }
 
-.nav-backdrop.show { display: block; }
+.nav-backdrop.show { opacity: 1; visibility: visible; }
 
 @media (max-width: 1000px) {
     .portal-shell { grid-template-columns: 1fr; }

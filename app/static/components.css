@@ -455,6 +455,54 @@
     top: calc(100% + 6px);
     z-index: 20;
 }
+
+/* --- Popover entrance (SHARED) ---------------------------------------------
+   Both shells load this file, so the keyframe is defined once here and the
+   tenant portal's utility menus reference it from portal.css. Keyframe names
+   are global to the document regardless of which stylesheet declares them; if
+   components.css ever stops loading in a shell, those menus simply appear with
+   no animation, which is the old behaviour rather than a break.
+
+   What it buys: these menus are absolutely positioned at `right: 0` under
+   their trigger, and they used to appear with no connection to it at all.
+   Scaling up from the top-right corner says WHERE the menu came from. The
+   translate is 4px, not more — this is a spatial cue, not an entrance.
+
+   150ms because a menu is a menu; the budget for this tier is 150-250ms and
+   the fast end of it is right for something opened to be read immediately.
+
+   Open only. `<details>` removes its content the instant it closes, so there
+   is no exit to animate without taking the open state over in JavaScript, and
+   that trade is not worth making for a menu.
+
+   Reduced motion swaps the KEYFRAME, it does not delete the animation. The
+   preference is about vestibular motion — movement and scale — not about
+   opacity, and a menu that still fades is easier to follow than one that
+   materialises. Same duration, same curve, no transform. (In the operator
+   shell styles.css's global killswitch collapses every duration to 0.01ms and
+   wins on `!important`, so this fade is what the tenant portal gets; the
+   operator shell has made that call globally and this rule does not fight it.) */
+.ab-more[open] > .ab-menu {
+    animation: ui-pop-in 150ms var(--ease-out) both;
+    transform-origin: top right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ab-more[open] > .ab-menu { animation-name: ui-fade-in; }
+}
+
+@keyframes ui-pop-in {
+    from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+    to { opacity: 1; transform: none; }
+}
+
+/* The reduced-motion partner for ui-pop-in. Opacity only — no scale, no
+   translate — so the menu still announces itself without moving. */
+@keyframes ui-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 .ab-menu a, .ab-menu button {
     background: none; border: 0; border-radius: var(--radius-sm); color: inherit;
     font: inherit; padding: 7px 10px; text-align: left; text-decoration: none; width: 100%;

@@ -745,16 +745,34 @@ body {
     width: 44px;
 }
 
+/* The drawer glides in over 220ms (see the media query below) and the scrim
+   behind it used to hard-cut on with `display`, so half of one gesture
+   animated and the other half did not. Opacity plus visibility instead of
+   `display`, because `display` cannot be transitioned:
+
+     - `visibility: hidden` keeps the closed scrim out of hit-testing exactly
+       as `display: none` did, so a full-viewport fixed layer at z-index 1080
+       still cannot swallow clicks on desktop, where the drawer never opens.
+     - visibility flips to hidden only at the END of its duration, so the fade
+       OUT is visible too; opacity alone would leave an invisible blocker.
+
+   220ms and `ease` are the drawer's own values, not new ones — the scrim is
+   part of that gesture, not a second animation running alongside it. Reduced
+   motion needs no rule here: this file's global killswitch (further down)
+   already forces transition-duration to 0.01ms. */
 .nav-backdrop {
     background: rgba(2, 6, 23, 0.5);
-    display: none;
     inset: 0;
+    opacity: 0;
     position: fixed;
+    transition: opacity 220ms ease, visibility 220ms ease;
+    visibility: hidden;
     z-index: 1080;
 }
 
 .nav-backdrop.show {
-    display: block;
+    opacity: 1;
+    visibility: visible;
 }
 
 /* Sidebar global search */
