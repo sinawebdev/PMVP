@@ -4,7 +4,9 @@
 {% block body %}
   <div class="page-head">
     <h1>{{ "Edit expense" if expense else "Add expense" }}</h1>
-    <p class="sub">Expenses you record belong to {{ company.name }} only, and feed your dashboard totals.</p>
+    {# As in client/employee_form.html: the guarantee stays, the repeated name
+       goes — the shell states it once above. #}
+    <p class="sub">Expenses you record belong to this company only, and feed your dashboard totals.</p>
   </div>
 
   {% if errors %}

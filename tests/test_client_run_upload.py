@@ -252,7 +252,7 @@ class ClientRunUploadTestCase(unittest.TestCase):
 
     def test_upload_page_offers_standard_and_raw_choices(self):
         """Regression: the client upload page must expose BOTH workflows, render
-        inside the shared left-sidebar shell, and carry the CSRF token wiring
+        inside the shared tenant shell, and carry the CSRF token wiring
         (meta + app.js) the whole app relies on. The missing wiring is what broke
         client uploads with 'The CSRF token is missing.'"""
         self._login("admin@msc.com")
@@ -261,8 +261,8 @@ class ClientRunUploadTestCase(unittest.TestCase):
         self.assertIn("Standard Payroll Upload", html)
         self.assertIn("Raw Hours Upload", html)
         self.assertIn("/company/runs/raw/upload", html)
-        # Shared design language: the left-sidebar shell, not the old top header.
-        self.assertIn("portal-sidebar", html)
+        # Shared design language: the tenant shell's own chrome, not a bare page.
+        self.assertIn("portal-topbar", html)
         self.assertIn("portal-shell", html)
         # CSRF wiring on the client shell (the regression guard): a rendered token
         # + app.js, which attaches it to every mutating request.

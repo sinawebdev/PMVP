@@ -5,7 +5,11 @@
   <div class="page-bar">
     <div class="page-head">
       <h1>Payroll runs</h1>
-      <p class="sub">Payroll runs for {{ company.name }}. Approval happens with {{ app_brand_name }} oversight.</p>
+      {# The company used to be named here. It is now stated once by the shell,
+         above this heading, so every client page identifies its tenant the same
+         way instead of some pages burying it in a sentence. What is left is the
+         part the heading does not already say. #}
+      <p class="sub">Approval happens with {{ app_brand_name }} oversight.</p>
     </div>
     <a class="btn primary" href="{{ url_for('client.run_upload') }}">Upload payroll</a>
   </div>

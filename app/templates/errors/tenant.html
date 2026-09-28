@@ -1,0 +1,39 @@
+{% extends "client/base.html" %}
+{% import "macros/ui.html" as ui %}
+{#- The tenant plane's own error page.
+
+    errors/404.html and errors/500.html extend the OPERATOR base.html. That is
+    right for an operator and wrong for a tenant: a client_admin who mistyped a
+    URL inside their own portal was handed the operator shell — no company
+    identity anywhere on the page, an operator sidebar offering "Client
+    Companies", and a "Return to Dashboard" button pointing at /dashboard, which
+    bounces a tenant straight back out. It was the one client page rendering
+    company identity zero times.
+
+    Rendering the error inside client/base.html puts it back in the tenant's own
+    shell, so the identity line renders exactly once here like everywhere else,
+    and the way out leads somewhere the tenant can actually go.
+
+    Copy is deliberately identical to the operator pages — the same failure
+    deserves the same words; only the shell around it differs. -#}
+{% block title %}{{ heading }}{% endblock %}
+{% block body %}
+  <div class="page-bar">
+    <div class="page-head">
+      <h1>{{ heading }}</h1>
+    </div>
+    {# A back link lives in the page-bar actions slot on every other client page
+       (run_reports, import_preview, expense_detail); it is not given a new home
+       just because this page is an error. #}
+    <div class="actions">
+      <a class="btn" href="{{ url_for('main.company_dashboard') }}">Back to dashboard</a>
+    </div>
+  </div>
+  <div class="panel">
+    {% if code >= 500 %}
+      {{ ui.error_state(state_title, detail) }}
+    {% else %}
+      {{ ui.empty(state_title, detail) }}
+    {% endif %}
+  </div>
+{% endblock %}

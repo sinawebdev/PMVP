@@ -76,8 +76,8 @@ class ClientReportsTestCase(unittest.TestCase):
         # Download links for each export are present on a completed run.
         self.assertIn(f"/company/runs/{self.run.id}/export/bank-listing", html)
         self.assertIn(f"/company/runs/{self.run.id}/export/gra-paye", html)
-        # Left-sidebar shell (consistent client chrome).
-        self.assertIn("portal-sidebar", html)
+        # Shared tenant chrome (the top-nav shell).
+        self.assertIn("portal-topbar", html)
 
     # --- downloads reuse the shared engine ----------------------------------
     def test_each_export_downloads_as_xlsx_attachment(self):

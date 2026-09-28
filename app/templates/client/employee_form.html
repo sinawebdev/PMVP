@@ -7,7 +7,9 @@
 {% block body %}
   <div class="page-head">
     <h1>{{ 'Edit employee' if employee else 'Add employee' }}</h1>
-    <p class="sub">Employees you add belong to {{ company.name }} only.</p>
+    {# The tenancy guarantee stays; the company name does not, because the shell
+       names it directly above this heading. #}
+    <p class="sub">Employees you add belong to this company only.</p>
   </div>
 
   <form method="post" class="card form">

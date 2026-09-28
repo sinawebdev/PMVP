@@ -7,7 +7,9 @@
   <div class="page-bar">
     <div class="page-head">
       <h1>Expenses</h1>
-      <p class="sub">Operational expenses recorded against {{ company.name }}. These totals feed your dashboard.</p>
+      {# Company name dropped here for the same reason as client/runs.html: the
+         shell states it once, above, on every page. #}
+      <p class="sub">Recorded operational spend. These totals feed your dashboard.</p>
     </div>
     {% if may_record %}
     <a class="btn primary" href="{{ url_for('client.expense_add') }}">+ Add Expense</a>

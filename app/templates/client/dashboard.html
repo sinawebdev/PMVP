@@ -3,6 +3,10 @@
 {% import "macros/dashboard.html" as ui %}
 {% block title %}Dashboard{% endblock %}
 
+{# This page's <h1> IS the company name, so the shell's identity line would
+   state it twice in a row. Suppressed here only. #}
+{% set hide_company_identity = true %}
+
 {# The executive workspace stylesheet loads only here — every other portal page
    is unaffected by it, and cannot be regressed by a change to it. #}
 {% block head %}
@@ -273,7 +277,11 @@
       <div class="panel-head">
         <div>
           <h2 id="compliance-heading">Compliance</h2>
-          <p class="panel-sub">Ghana statutory readiness for {{ company.name }}.</p>
+          {# The company name was here as well as in the page's own <h1> three
+             screens up, so this page stated its tenant twice while four other
+             pages stated it none. Identity is the heading's job; this line's
+             job is to say what the panel measures. #}
+          <p class="panel-sub">Ghana statutory readiness.</p>
         </div>
         <a class="link-action" href="{{ url_for('client.statutory') }}">Rates{{ ui.icon('arrow', 14) }}</a>
       </div>

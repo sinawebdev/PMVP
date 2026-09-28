@@ -4,7 +4,8 @@
   <div class="page-bar">
     <div class="page-head">
       <h1>Upload payroll</h1>
-      <p class="sub">Prepare a new run for {{ company.name }}. Choose the workflow that matches your workbook.</p>
+      {# Company name dropped: the shell states it once above this heading. #}
+      <p class="sub">Choose the workflow that matches your workbook.</p>
     </div>
     <a class="btn" href="{{ url_for('client.runs') }}">Back to runs</a>
   </div>
