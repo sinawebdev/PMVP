@@ -35,6 +35,41 @@ test modules) with CSRF disabled. The full suite is thorough and can take severa
 minutes; run the relevant modules while iterating and the full suite before you
 consider a change done. **No behavioural regression is acceptable.**
 
+`pytest` is pinned but **not** in `requirements.txt` — that file is the exact set
+Render installs into production, and a test framework has no business on a
+payroll dyno. Install it explicitly, the same version CI pins
+(`.github/workflows/ci.yml`):
+
+```bash
+.venv\Scripts\python.exe -m pip install pytest==9.1.1
+```
+
+## Screenshot tooling
+
+`scripts/capture_ui.py` boots the app on an ephemeral port against a throwaway
+seeded database, signs in as the demo tenant, and captures named screenshots —
+including interactive states, which it reaches by **clicking** the control
+rather than by injecting the class the control would have set. A broken toggle
+therefore fails the capture instead of producing a screenshot that looks right.
+
+```bash
+.venv\Scripts\python.exe -m pip install playwright==1.56.0
+.venv\Scripts\python.exe -m playwright install chromium   # Chromium ONLY
+.venv\Scripts\python.exe scripts/capture_ui.py --list
+.venv\Scripts\python.exe scripts/capture_ui.py
+```
+
+Same rule as pytest: **Playwright stays out of `requirements.txt`**, so it never
+reaches the Render build (`render.yaml`) or the deploy image (`Dockerfile`).
+
+Install **only Chromium**. `playwright install` with no argument also pulls
+Firefox and WebKit, roughly half a gigabyte of browser binaries, and nothing
+here ever renders in them.
+
+Output lands in `.screenshots/`, which is gitignored. Add a capture by appending
+a `Capture` to `CAPTURES` in that file; the runner is deliberately free of
+per-capture branching.
+
 ## Conventions
 
 - **Tenancy is never optional.** Any tenant-scoped read/write goes through

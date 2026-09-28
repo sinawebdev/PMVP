@@ -28,3 +28,7 @@ cloudflared.log
 # gates without any client data ever being committable.
 tests/fixtures/*
 !tests/fixtures/.gitkeep
+
+# Design-review screenshots from scripts/capture_ui.py. Regenerated on demand,
+# large, and binary — reviewed in a message or a PR, never committed.
+.screenshots/
