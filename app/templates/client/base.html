@@ -34,45 +34,120 @@
    names are prefixed so a page can never lose one of its own. #}
 {% import "macros/ui.html" as shell_ui %}
   <a class="skip-link" href="#main-content">Skip to content</a>
-  <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="primary-nav" aria-expanded="false">{{ shell_ui.icon('menu', 22) }}</button>
-  <div class="nav-backdrop"></div>
+  {% set ep = request.endpoint %}
+  {# Initials for the account button, from the same resolve_display_name string
+     the greeting uses. Sliced rather than indexed so a blank name is '' and not
+     an IndexError; the template falls back to a glyph below. #}
+  {% set _parts = (user_display_name or '').split() %}
+  {% set _initials = ((_parts[0][:1] if _parts else '') ~ (_parts[1][:1] if _parts | length > 1 else '')) | upper %}
   <div class="portal-shell">
-    <aside class="portal-sidebar" id="primary-nav">
-      <div class="portal-brand">
-        <span class="brand-mark">{{ company.name[:2] | upper }}</span>
-        <div class="portal-brand-copy">
-          <strong>{{ company.name }}</strong>
-          <small>Company portal · {{ user_display_name }}</small>
+
+    {# --- Shell chrome ----------------------------------------------------
+       Horizontal nav carrying six primary destinations and a right utility
+       cluster. Branding and Notifications used to sit in the primary list; they
+       are not peers of the six (Branding is configured once, Notifications are
+       ambient), so they moved into the cluster.
+
+       Company identity is deliberately NOT here. It was a three-line block in
+       the sidebar, it has no room in a nav bar, and the page below already
+       names the company — see the note on .portal-topbar in portal.css. #}
+    <header class="portal-topbar">
+      <div class="portal-topbar-inner">
+        <a class="portal-logo" href="{{ url_for('main.company_dashboard') }}">
+          {# No .brand-mark tile here. That tile is a white rounded square built
+             to lift the icon off the deep-teal sidebar and the dark login card;
+             on a white bar it is a white square on white. The icon's own artwork
+             is a deep-teal gradient drawn for a light ground, so it stands alone. #}
+          <img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" />
+          <span class="portal-logo-name">{{ app_brand_name }}</span>
+        </a>
+
+        <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="primary-nav" aria-expanded="false">{{ shell_ui.icon('menu', 22) }}</button>
+
+        {# Icon + label on every item, matching the operator sidebar. A text-only
+           nav is scanned by reading it; an icon gives each destination a shape
+           the eye can find without reading, which is the difference between
+           navigating on the second visit and re-reading the list every time. The
+           icons are decorative (aria-hidden) — the label is still the accessible
+           name, so nothing here depends on recognising a glyph.
+
+           The active-state tests are carried over verbatim from the sidebar. #}
+        <nav class="portal-nav" id="primary-nav" aria-label="Company portal">
+          <a href="{{ url_for('main.company_dashboard') }}" {% if ep == 'main.company_dashboard' %}aria-current="page"{% endif %}>{{ shell_ui.icon('grid', 18) }}Dashboard</a>
+          <a href="{{ url_for('client.employees') }}" {% if ep and ep.startswith('client.employee') %}aria-current="page"{% endif %}>{{ shell_ui.icon('users', 18) }}Employees</a>
+          <a href="{{ url_for('client.runs') }}" {% if ep in ('client.runs', 'client.run_detail', 'client.run_upload', 'client.import_preview', 'client.distribute') %}aria-current="page"{% endif %}>{{ shell_ui.icon('wallet', 18) }}Payroll</a>
+          <a href="{{ url_for('client.statutory') }}" {% if ep == 'client.statutory' %}aria-current="page"{% endif %}>{{ shell_ui.icon('bank', 18) }}Statutory</a>
+          <a href="{{ url_for('client.expenses') }}" {% if ep and ep.startswith('client.expense') %}aria-current="page"{% endif %}>{{ shell_ui.icon('receipt', 18) }}Expenses</a>
+          <a href="{{ url_for('client.audit') }}" {% if ep == 'client.audit' %}aria-current="page"{% endif %}>{{ shell_ui.icon('list-check', 18) }}Audit</a>
+        </nav>
+
+        {# --- Utility cluster -----------------------------------------------
+           Bell, gear, account. The gear renders only for a role that may manage
+           branding: it is the menu's only destination today, and a menu that
+           opens onto nothing is worse than no menu. Log out sits inside the
+           account menu rather than in the nav, where a mis-click ends the
+           session — placement, not colour, is what protects it. It hovers
+           exactly like its neighbours; see the note in portal.css for why a
+           reversible action gets no danger affordance. #}
+        <div class="portal-utility">
+          <a class="utility-btn" href="{{ url_for('notifications.inbox') }}"
+             {% if ep and ep.startswith('notifications.') %}aria-current="page"{% endif %}>
+            {{ shell_ui.icon('bell', 19) }}
+            <span class="sr-only">Notifications{% if notif_unread %} ({{ notif_unread }} unread){% endif %}</span>
+            {% if notif_unread %}<span class="utility-badge" aria-hidden="true">{{ notif_unread }}</span>{% endif %}
+          </a>
+
+          {% if can_manage_branding(role) %}
+          <details class="utility-menu">
+            <summary class="utility-btn" {% if ep == 'client.branding' %}aria-current="page"{% endif %}>
+              {{ shell_ui.icon('settings', 19) }}<span class="sr-only">Settings</span>
+            </summary>
+            <div class="utility-pop">
+              <a href="{{ url_for('client.branding') }}">{{ shell_ui.icon('palette', 17) }}Branding</a>
+            </div>
+          </details>
+          {% endif %}
+
+          <details class="utility-menu utility-menu--account">
+            <summary class="utility-btn account-btn">
+              <span class="account-avatar" aria-hidden="true">{{ _initials or '·' }}</span>
+              {# First name only. The full name is one line down in the menu and
+                 in the accessible name, so the button carries the shortest thing
+                 that still identifies a person. The seeded "MSC Administrator"
+                 degrades to "MSC", which reads like the company — that is a
+                 fixture artefact, not a naming rule, and a real name ("Ama
+                 Boateng" -> "Ama") reads correctly. #}
+              <span class="account-name">{{ _parts[0] if _parts else 'Account' }}</span>
+              {{ shell_ui.icon('chevron-down', 15) }}
+              <span class="sr-only">Account menu</span>
+            </summary>
+            <div class="utility-pop">
+              <p class="utility-pop-head">{{ user_display_name or 'Signed in' }}</p>
+              <a class="utility-pop-logout" href="{{ url_for('auth.logout') }}">{{ shell_ui.icon('logout', 17) }}Log out</a>
+            </div>
+          </details>
         </div>
       </div>
-      {# Icon + label on every item, matching the operator sidebar. A text-only
-         nav is scanned by reading it; an icon gives each destination a shape
-         the eye can find without reading, which is the difference between
-         navigating on the second visit and re-reading the list every time. The
-         icons are decorative (aria-hidden) — the label is still the accessible
-         name, so nothing here depends on recognising a glyph. #}
-      <nav class="portal-nav" aria-label="Company portal">
-        {% set ep = request.endpoint %}
-        <a href="{{ url_for('main.company_dashboard') }}" {% if ep == 'main.company_dashboard' %}aria-current="page"{% endif %}>{{ shell_ui.icon('grid', 18) }}Dashboard</a>
-        <a href="{{ url_for('client.employees') }}" {% if ep and ep.startswith('client.employee') %}aria-current="page"{% endif %}>{{ shell_ui.icon('users', 18) }}Employees</a>
-        <a href="{{ url_for('client.runs') }}" {% if ep in ('client.runs', 'client.run_detail', 'client.run_upload', 'client.import_preview', 'client.distribute') %}aria-current="page"{% endif %}>{{ shell_ui.icon('wallet', 18) }}Payroll</a>
-        <a href="{{ url_for('client.statutory') }}" {% if ep == 'client.statutory' %}aria-current="page"{% endif %}>{{ shell_ui.icon('bank', 18) }}Statutory</a>
-        <a href="{{ url_for('client.expenses') }}" {% if ep and ep.startswith('client.expense') %}aria-current="page"{% endif %}>{{ shell_ui.icon('receipt', 18) }}Expenses</a>
-        <a href="{{ url_for('client.audit') }}" {% if ep == 'client.audit' %}aria-current="page"{% endif %}>{{ shell_ui.icon('list-check', 18) }}Audit</a>
-        {% if can_manage_branding(role) %}
-        <a href="{{ url_for('client.branding') }}" {% if ep == 'client.branding' %}aria-current="page"{% endif %}>{{ shell_ui.icon('palette', 18) }}Branding</a>
-        {% endif %}
-        <a href="{{ url_for('notifications.inbox') }}" {% if ep and ep.startswith('notifications.') %}aria-current="page"{% endif %}>{{ shell_ui.icon('bell', 18) }}Notifications{% if notif_unread %} <span class="badge warn">{{ notif_unread }}</span>{% endif %}</a>
-        <a class="logout-link" href="{{ url_for('auth.logout') }}">{{ shell_ui.icon('logout', 18) }}Log out</a>
-      </nav>
-      <div class="portal-sidebar-foot">Powered by <strong>{{ app_brand_name }}</strong></div>
-    </aside>
+    </header>
+
+    <div class="nav-backdrop"></div>
+
     <main id="main-content" class="portal-main" tabindex="-1">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
           <div class="flash {{ category }}" role="status">{{ message }}</div>
         {% endfor %}
       {% endwith %}
+      {#- Whose data is this? Rendered once here for every client page rather
+          than in each template, because that is exactly how four pages ended up
+          with no tenant identity at all when the sidebar was removed. A page
+          whose own heading already names the company sets
+          hide_company_identity = true at its top level (Jinja evaluates a
+          child template body before the parent layout renders, so the flag is
+          in scope here). -#}
+      {% if not hide_company_identity %}
+      <p class="portal-pagehead">{{ company.name }}</p>
+      {% endif %}
       {% block body %}{% endblock %}
     </main>
   </div>
@@ -80,7 +155,10 @@
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   <script>
   (function () {
-    // Mobile navigation drawer — mirrors the operator shell (base.html).
+    // Mobile navigation drawer — same contract as the operator shell
+    // (base.html): .nav-toggle flips .open on #primary-nav and .show on the
+    // backdrop. The nav is a horizontal bar above 900px and a slide-in panel
+    // below it; only the CSS differs, so this stayed as it was.
     var toggle = document.querySelector('.nav-toggle');
     var nav = document.getElementById('primary-nav');
     var backdrop = document.querySelector('.nav-backdrop');
@@ -93,6 +171,28 @@
     if (toggle) toggle.addEventListener('click', function () { setOpen(!nav.classList.contains('open')); });
     if (backdrop) backdrop.addEventListener('click', function () { setOpen(false); });
     if (nav) nav.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { setOpen(false); }); });
+
+    // Utility menus are <details>, so they open, close and take focus with no
+    // JS at all. This only adds the two behaviours the element does not give
+    // for free: close on Escape, and close when the pointer goes elsewhere.
+    var menus = document.querySelectorAll('.utility-menu');
+    function closeMenus(except) {
+      menus.forEach(function (m) { if (m !== except) m.removeAttribute('open'); });
+    }
+    menus.forEach(function (menu) {
+      menu.addEventListener('toggle', function () { if (menu.open) closeMenus(menu); });
+    });
+    document.addEventListener('click', function (event) {
+      if (!event.target.closest('.utility-menu')) closeMenus(null);
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') return;
+      var open = document.querySelector('.utility-menu[open]');
+      if (!open) return;
+      open.removeAttribute('open');
+      var summary = open.querySelector('summary');
+      if (summary) summary.focus();
+    });
   })();
   </script>
 </body>

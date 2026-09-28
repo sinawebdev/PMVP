@@ -60,10 +60,28 @@ class PayrollaAdminAccessTestCase(unittest.TestCase):
         self.assertEqual(self.client.get(audit_url).status_code, 200)
 
     def test_sees_operator_nav_links(self):
+        """The role-gated destinations are in the bar this role is served.
+
+        Asserted against the labels app/navigation.py declares rather than
+        against strings spelled here: the two that matter are gated on
+        can_manage_statutory and can_view_audit, and what they are CALLED is not
+        what this test is about. It used to hardcode "Statutory Rates" and
+        "Expenses", and both spellings changed when the sidebar became a bar.
+        """
+        from app.navigation import primary_nav
+
         self._login_platform()
-        body = self.client.get("/dashboard").get_data(as_text=True)
-        self.assertIn("Statutory Rates", body)   # can_manage_statutory
-        self.assertIn("Expenses", body)          # "Expenses & Audit" (can_view_audit)
+        nav = self.client.get("/dashboard").get_data(as_text=True)
+        start = nav.find('<nav class="portal-nav"')
+        self.assertNotEqual(start, -1, "primary nav not rendered")
+        nav = nav[start:nav.find("</nav>", start)]
+
+        labels = {item.key: item.label for item in primary_nav(PAYROLLA_ADMIN)}
+        self.assertIn("statutory", labels, "can_manage_statutory should grant it")
+        self.assertIn("audit", labels, "can_view_audit should grant it")
+        for key in ("statutory", "audit"):
+            with self.subTest(item=key):
+                self.assertIn(labels[key], nav)
 
 
 class LegacyRoleAliasTestCase(unittest.TestCase):

@@ -968,7 +968,11 @@ class MvpTestCase(unittest.TestCase):
         response = self.login_admin()
 
         self.assertEqual(response.status_code, 200)
-        for text in [b"Dashboard", b"Client Companies", b"Payroll Runs", b"Payslip", b"Audit"]:
+        # The nav labels shortened when the sidebar became a top bar (six
+        # one-word nouns, matching the tenant bar). The PAGES they open are
+        # still called "Client Companies" and "Payroll Runs" — see the note in
+        # app/navigation.py — so this asserts the destinations, not the prose.
+        for text in [b"Dashboard", b"Clients", b"Payroll", b"Payslip", b"Audit"]:
             self.assertIn(text, response.data)
         for text in [
             b"Employee Database",

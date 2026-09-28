@@ -9,25 +9,33 @@
 body {
     color: var(--ink);
     font-family: var(--font-sans);
+
+    /* Bootstrap's link colour, retuned to the brand. Nothing in this shell
+       overrode it, so every UNCLASSED <a> drew in #0d6efd — the company names
+       on the client list and a couple on the distribution dashboard were the
+       last Bootstrap blue left in the operator plane. Most pages never showed
+       it only because their links all carry a class that sets its own colour.
+
+       --brand rather than --brand-deep because tokens.css says so: it is
+       annotated "primary — buttons, links, focus", and the tenant portal has
+       always drawn links at that value. The -rgb pair is what Bootstrap 5.3
+       actually reads (`rgba(var(--bs-link-color-rgb), var(--bs-link-opacity))`);
+       setting only the non-rgb variable changes nothing. Keep the two in
+       step if --brand ever moves. */
+    --bs-link-color: var(--brand);
+    --bs-link-color-rgb: 12, 110, 98;
+    --bs-link-hover-color: var(--brand-deep);
+    --bs-link-hover-color-rgb: 13, 77, 77;
 }
 
-.app-shell {
-    display: grid;
-    grid-template-columns: 280px 1fr;
-    min-height: 100vh;
-}
+/* The operator shell's chrome — the top bar that replaced the 280px deep-teal
+   sidebar — is in components.css, which both shells load. `.app-shell`,
+   `.sidebar` and their drawer lived here; they are gone, not moved, because the
+   bar that replaced them was already written for the tenant portal and a second
+   copy of it here is the drift the shared layer exists to prevent.
 
-.sidebar {
-    background:
-        radial-gradient(circle at 20% 0%, rgba(23, 195, 178, 0.22), transparent 18rem),
-        linear-gradient(180deg, #0a2e2c 0%, #0d4d4d 100%);
-    color: #fff;
-    padding: 26px 18px;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    overflow-y: auto;
-}
+   `.brand` below stays: the anonymous screens (login, forgot password, the two
+   error cards) still draw the lockup, and they never had a sidebar. */
 
 .brand {
     align-items: center;
@@ -51,49 +59,6 @@ body {
    persistent chrome and must never animate. */
 .logo-bounce {
     animation: logoIn 420ms var(--ease-out) both;
-}
-
-.sidebar .nav-link {
-    align-items: center;
-    border: 1px solid transparent;
-    border-radius: 10px;
-    color: #d1fae5;
-    display: flex;
-    font-size: 14px;
-    gap: 10px;
-    padding: 10px 12px;
-    transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
-}
-
-.sidebar .nav-link i {
-    color: var(--gold);
-    font-size: 17px;
-    width: 20px;
-}
-
-.sidebar .nav-link:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.18);
-    color: #fff;
-    transform: translateX(4px);
-}
-
-/* Logout is a low-stakes action, not a danger one — keep it subtle and set apart */
-.sidebar .nav-link.logout-link {
-    color: rgba(255, 255, 255, 0.55);
-    margin-top: 6px;
-}
-
-.sidebar .nav-link.logout-link i {
-    color: rgba(255, 255, 255, 0.55);
-}
-
-.sidebar .nav-link.logout-link:hover {
-    color: #fff;
-}
-
-.sidebar .nav-link.logout-link:hover i {
-    color: #fff;
 }
 
 .main-content {
@@ -589,6 +554,37 @@ body {
     --bs-btn-hover-border-color: #0a3d3d;
     --bs-btn-active-bg: #0a3d3d;
     --bs-btn-active-border-color: #0a3d3d;
+    /* The disabled pair, which this rule used to leave to Bootstrap — so a
+       primary button rendered teal while enabled and #0d6efd BLUE the moment
+       it was disabled. The payroll runs queue showed it on every load: its
+       Bulk Distribute button starts disabled until rows are selected, so the
+       page opened with a blue button on it and turned teal when you ticked a
+       row. Bootstrap dims these with opacity, so the hue is all that is set. */
+    --bs-btn-disabled-bg: var(--brand-deep);
+    --bs-btn-disabled-border-color: var(--brand-deep);
+}
+
+/* The outline half of the same idea, which had no override at all: every
+   `btn-outline-primary` in the operator shell — Open on a runs row, Approval
+   Queue, the roster and payslip actions, ten templates in all — drew in
+   Bootstrap's blue, a colour that appears nowhere else in this product.
+   Themed here rather than respelled at each call site: the class means
+   "primary-coloured outline button", and the primary colour is teal.
+
+   --brand-deep for the resting border as well as the text: it measures 8.6:1
+   on white against --brand's 5.67, and a control's boundary has to clear 3:1
+   on its own (WCAG 1.4.11) before the label's contrast is even considered. */
+.btn-outline-primary {
+    --bs-btn-color: var(--brand-deep);
+    --bs-btn-border-color: var(--brand-deep);
+    --bs-btn-hover-bg: var(--brand-deep);
+    --bs-btn-hover-border-color: var(--brand-deep);
+    --bs-btn-hover-color: #fff;
+    --bs-btn-active-bg: var(--brand-deep);
+    --bs-btn-active-border-color: var(--brand-deep);
+    --bs-btn-active-color: #fff;
+    --bs-btn-disabled-color: var(--brand-deep);
+    --bs-btn-disabled-border-color: var(--brand-deep);
 }
 
 /* Bright-teal accent action — the vivid end of the palette for high-emphasis,
@@ -703,23 +699,7 @@ body {
     border-radius: 6px;
 }
 
-.sidebar a:focus-visible {
-    outline: 2px solid var(--gold);
-    outline-offset: 2px;
-}
-
-.sidebar .nav-link[aria-current="page"] {
-    background: rgba(23, 195, 178, 0.16);
-    border-color: rgba(23, 195, 178, 0.42);
-    color: #fff;
-}
-
-.sidebar .nav-link[aria-current="page"] i {
-    color: var(--gold);
-}
-
 /* Touch-friendly target sizes (keep dense table btn-sm compact) */
-.sidebar .nav-link,
 .btn:not(.btn-sm) {
     min-height: 44px;
 }
@@ -728,66 +708,6 @@ body {
     align-items: center;
     display: inline-flex;
     justify-content: center;
-}
-
-/* Mobile nav drawer toggle + backdrop (revealed in the media query below) */
-.nav-toggle {
-    align-items: center;
-    background: var(--brand);
-    border: none;
-    border-radius: 10px;
-    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
-    color: #fff;
-    display: none;
-    font-size: 20px;
-    height: 44px;
-    justify-content: center;
-    width: 44px;
-}
-
-/* The drawer glides in over 220ms (see the media query below) and the scrim
-   behind it used to hard-cut on with `display`, so half of one gesture
-   animated and the other half did not. Opacity plus visibility instead of
-   `display`, because `display` cannot be transitioned:
-
-     - `visibility: hidden` keeps the closed scrim out of hit-testing exactly
-       as `display: none` did, so a full-viewport fixed layer at z-index 1080
-       still cannot swallow clicks on desktop, where the drawer never opens.
-     - visibility flips to hidden only at the END of its duration, so the fade
-       OUT is visible too; opacity alone would leave an invisible blocker.
-
-   220ms and `ease` are the drawer's own values, not new ones — the scrim is
-   part of that gesture, not a second animation running alongside it. Reduced
-   motion needs no rule here: this file's global killswitch (further down)
-   already forces transition-duration to 0.01ms. */
-.nav-backdrop {
-    background: rgba(2, 6, 23, 0.5);
-    inset: 0;
-    opacity: 0;
-    position: fixed;
-    transition: opacity 220ms ease, visibility 220ms ease;
-    visibility: hidden;
-    z-index: 1080;
-}
-
-.nav-backdrop.show {
-    opacity: 1;
-    visibility: visible;
-}
-
-/* Sidebar global search */
-.sidebar-search {
-    margin-bottom: 16px;
-}
-
-.sidebar-search .form-control {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.22);
-    color: #fff;
-}
-
-.sidebar-search .form-control::placeholder {
-    color: #cbd5e1;
 }
 
 /* Collapsible client tabs (details/summary) */
@@ -870,36 +790,17 @@ body {
     }
 }
 
+/* The drawer, the hamburger and the scrim are handled by components.css at the
+   1100px breakpoint both shells share. What is left here is the page itself.
+
+   The top padding dropped from 64px to 18px, and that is a consequence of the
+   bar rather than a taste change: the old hamburger was `position: fixed` over
+   the content and the page had to reserve a strip for it. The new one sits
+   inside the bar, so the strip would now be empty space above every mobile
+   page. */
 @media (max-width: 1000px) {
-    .app-shell {
-        grid-template-columns: 1fr;
-    }
-
-    .nav-toggle {
-        display: inline-flex;
-        left: 12px;
-        position: fixed;
-        top: 12px;
-        z-index: 1100;
-    }
-
-    .sidebar {
-        height: 100vh;
-        left: 0;
-        position: fixed;
-        top: 0;
-        transform: translateX(-100%);
-        transition: transform 220ms ease;
-        width: 280px;
-        z-index: 1090;
-    }
-
-    .sidebar.open {
-        transform: none;
-    }
-
     .main-content {
-        padding: 64px 16px 18px;
+        padding: 18px 16px;
     }
 
     .topbar {
@@ -913,7 +814,7 @@ body {
 
 @media (max-width: 540px) {
     .main-content {
-        padding: 60px 12px 14px;
+        padding: 14px 12px;
     }
 
     .topbar {

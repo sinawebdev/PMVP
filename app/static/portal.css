@@ -19,106 +19,29 @@ body {
     min-height: 100vh;
 }
 
-/* --- Shell + sidebar ----------------------------------------------------
-   The tenant portal shares the operator app's layout language: a permanent
-   left-hand sidebar (deep teal, sticky, 280px) with the content occupying the
-   rest of the row. Proportions, spacing and the mobile drawer mirror the
-   operator shell (styles.css .app-shell/.sidebar) so both planes read as one
-   product. Bootstrap-free — these rules stand alone. */
+/* --- Shell + top navigation ---------------------------------------------
+   The bar itself now lives in components.css, which BOTH shells load: the
+   operator app draws the same chrome since its sidebar was replaced, and one
+   bar defined in two stylesheets is exactly the drift that layer exists to
+   prevent. `.portal-shell`, `.portal-topbar`, `.portal-nav`, the utility
+   cluster, the account menu, the hamburger and the drawer are all there.
 
-.portal-shell {
-    display: grid;
-    grid-template-columns: 280px 1fr;
-    min-height: 100vh;
-}
+   What stays here is tenant-only: the page padding below, and the company
+   identity line, which has no operator counterpart. */
 
-.portal-sidebar {
-    background:
-        radial-gradient(circle at 20% 0%, rgba(23, 195, 178, 0.22), transparent 18rem),
-        linear-gradient(180deg, #0a2e2c 0%, #0d4d4d 100%);
-    color: #fff;
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    overflow-y: auto;
-    padding: 26px 18px;
-    position: sticky;
-    top: 0;
-}
 
-.portal-brand {
-    align-items: center;
-    display: flex;
-    gap: 12px;
-    margin-bottom: 26px;
-}
-
-.portal-brand .brand-mark {
+/* --- Company identity ----------------------------------------------------
+   Multi-tenant safety, not decoration: without it a user on the Audit page has
+   nothing on screen telling them whose audit trail they are reading. Rendered
+   ONCE by the shell on every page, and suppressed by the pages whose own
+   heading already names the company (see client/base.html). */
+.portal-pagehead {
+    color: var(--ink);
     font-size: 15px;
-    height: 40px;
-    width: 40px;
-}
-
-.portal-brand-copy strong {
-    color: #fff;
-    display: block;
-    font-size: 15px;
-    line-height: 1.25;
-}
-
-.portal-brand-copy small {
-    color: #a7f3d0;
-    display: block;
-    font-size: 12px;
-}
-
-.portal-nav {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.portal-nav a {
-    align-items: center;
-    border: 1px solid transparent;
-    border-radius: 10px;
-    color: #d1fae5;
-    display: flex;
-    font-size: 14px;
-    gap: 10px;
-    min-height: 44px;
-    padding: 10px 12px;
-    text-decoration: none;
-    transition: background var(--ease), border-color var(--ease), color var(--ease), transform var(--ease);
-}
-
-.portal-nav a:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.18);
-    color: #fff;
-    transform: translateX(4px);
-}
-
-.portal-nav a[aria-current="page"] {
-    background: rgba(23, 195, 178, 0.16);
-    border-color: rgba(23, 195, 178, 0.42);
-    color: #fff;
     font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 18px;
 }
-
-.portal-nav a.logout-link { color: rgba(255, 255, 255, 0.55); margin-top: 6px; }
-.portal-nav a.logout-link:hover { color: #fff; }
-
-/* Quiet product attribution, pinned to the foot of the sidebar. */
-.portal-sidebar-foot {
-    color: rgba(255, 255, 255, 0.55);
-    font-size: 12px;
-    letter-spacing: .02em;
-    margin-top: auto;
-    padding-top: 24px;
-    text-align: center;
-}
-.portal-sidebar-foot strong { color: #a7f3d0; font-weight: 600; }
 
 /* --- Page frame --------------------------------------------------------- */
 
@@ -449,14 +372,15 @@ input:disabled {
 
 .skip-link:focus { top: 12px; }
 
+/* `summary` is focusable but is none of the three below, so the utility menus
+   would otherwise be the only chrome with no visible focus ring. */
 a:focus-visible,
 .btn:focus-visible,
-button:focus-visible {
+button:focus-visible,
+summary:focus-visible {
     outline: 3px solid var(--brand-soft);
     outline-offset: 2px;
 }
-
-.portal-nav a:focus-visible { outline-color: var(--accent); }
 
 /* Upload workflow chooser (Standard vs Raw Hours) — a segmented control that
    swaps between two upload panes, so a client picks their workflow explicitly. */
@@ -508,73 +432,13 @@ button:focus-visible {
 }
 .upload-status[hidden] { display: none; }
 
-/* --- Mobile nav drawer -------------------------------------------------- */
-/* Same behaviour as the operator shell: below 1000px the sidebar becomes an
-   off-canvas drawer toggled by a fixed hamburger, dimmed by a backdrop. */
-
-.nav-toggle {
-    align-items: center;
-    background: var(--brand);
-    border: none;
-    border-radius: 10px;
-    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
-    color: #fff;
-    cursor: pointer;
-    display: none;
-    font-size: 20px;
-    height: 44px;
-    justify-content: center;
-    width: 44px;
+/* The page gutter alone. Everything the bar does at this width — the drawer,
+   the hamburger, the hidden account name — is in components.css now, at the
+   1100px breakpoint both shells share. */
+@media (max-width: 900px) {
+    .portal-main { padding: 24px 16px 44px; }
 }
 
-/* Same argument as the operator shell's scrim in styles.css: the drawer below
-   slides on var(--ease) and this dimmed layer used to appear with an
-   untransitionable `display`, so one gesture animated in halves. `visibility`
-   carries the hit-testing the old `display: none` provided and flips only at
-   the end of its duration, so the way out fades as well as the way in.
-
-   var(--ease) rather than a literal duration, and that is load-bearing twice
-   over: it is the exact value the drawer uses, and this file has no
-   reduced-motion block of its own — tokens.css rewrites the token to
-   `1ms linear` under that preference, which is the whole point of it being a
-   token. Do not inline 180ms here. */
-.nav-backdrop {
-    background: rgba(2, 6, 23, 0.5);
-    inset: 0;
-    opacity: 0;
-    position: fixed;
-    transition: opacity var(--ease), visibility var(--ease);
-    visibility: hidden;
-    z-index: 1080;
-}
-
-.nav-backdrop.show { opacity: 1; visibility: visible; }
-
-@media (max-width: 1000px) {
-    .portal-shell { grid-template-columns: 1fr; }
-
-    .nav-toggle {
-        display: inline-flex;
-        left: 12px;
-        position: fixed;
-        top: 12px;
-        z-index: 1100;
-    }
-
-    .portal-sidebar {
-        left: 0;
-        position: fixed;
-        top: 0;
-        transform: translateX(-100%);
-        transition: transform 220ms ease;
-        width: 280px;
-        z-index: 1090;
-    }
-
-    .portal-sidebar.open { transform: none; }
-
-    .portal-main { padding: 64px 16px 44px; }
-}
 
 @media (max-width: 540px) {
     .portal-main { padding: 60px 12px 40px; }

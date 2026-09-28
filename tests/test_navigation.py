@@ -3,10 +3,15 @@
 Pins the three properties the phase is judged on:
 
   * no authenticated page carries standing instructional prose in its chrome;
-  * the sidebar is a fixed set of domain nouns whose length does not grow with
-    the customer count;
+  * the navigation is a fixed set of domain nouns whose length does not grow
+    with the customer count;
   * active state comes from route metadata, so adding a route needs no template
     edit to highlight correctly.
+
+None of the three is a claim about the chrome's SHAPE, which is why they all
+survived the sidebar becoming a top bar: what is asserted moved from
+`<aside class="sidebar">` to `<nav class="portal-nav">`, and the properties
+themselves did not change.
 """
 
 import os
@@ -20,13 +25,19 @@ os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from app import create_app, db  # noqa: E402
 from app.models import ClientCompany  # noqa: E402
-from app.navigation import NAV, active_nav_key, visible_nav  # noqa: E402
+from app.navigation import (  # noqa: E402
+    NAV,
+    active_nav_key,
+    primary_nav,
+    utility_nav,
+    visible_nav,
+)
 from app.seed import DEMO_PASSWORD  # noqa: E402
 
-MAX_SIDEBAR_ITEMS = 7
+MAX_NAV_ITEMS = 7
 
 
-class SidebarShapeTests(unittest.TestCase):
+class NavShapeTests(unittest.TestCase):
     def setUp(self):
         self.app = create_app()
         self.app.config["TESTING"] = True
@@ -43,27 +54,34 @@ class SidebarShapeTests(unittest.TestCase):
             "/login", data={"email": "admin@payrolla.com", "password": DEMO_PASSWORD}
         )
 
-    def _sidebar(self, path="/dashboard"):
-        """Just the shell's sidebar. Client names legitimately appear in page
-        *content* (the dashboard ranks companies); the point of this phase is
-        that they are no longer in the navigation."""
+    def _nav(self, path="/dashboard"):
+        """Just the shell's primary nav. Client names legitimately appear in
+        page *content* (the dashboard ranks companies); the point of this phase
+        is that they are no longer in the navigation."""
         body = self.http.get(path).get_data(as_text=True)
-        start = body.find('<aside class="sidebar"')
-        self.assertNotEqual(start, -1, "sidebar not rendered")
-        end = body.find("</aside>", start)
+        start = body.find('<nav class="portal-nav"')
+        self.assertNotEqual(start, -1, "primary nav not rendered")
+        end = body.find("</nav>", start)
         return body[start:end]
 
     def test_at_most_seven_top_level_items(self):
-        self.assertLessEqual(len(NAV), MAX_SIDEBAR_ITEMS)
+        """Both slots together: moving Notifications into the utility cluster
+        must not become a way to smuggle an eighth destination into the bar."""
+        self.assertLessEqual(len(NAV), MAX_NAV_ITEMS)
         for role in ("admin", "md", "payrolla_admin", "payroll_officer"):
             with self.subTest(role=role):
-                self.assertLessEqual(len(visible_nav(role)), MAX_SIDEBAR_ITEMS)
+                self.assertLessEqual(len(visible_nav(role)), MAX_NAV_ITEMS)
+                self.assertEqual(
+                    sorted(primary_nav(role) + utility_nav(role), key=lambda i: i.key),
+                    sorted(visible_nav(role), key=lambda i: i.key),
+                    "every visible item must be drawn in exactly one slot",
+                )
 
-    def test_sidebar_length_does_not_grow_with_the_client_count(self):
+    def test_nav_length_does_not_grow_with_the_client_count(self):
         """The old sidebar listed every client company, so navigation got longer
         as the business got bigger. Adding clients must change nothing."""
         self._login()
-        base_links = self._sidebar().count('class="nav-link"')
+        base_links = self._nav().count("<a href=")
 
         for i in range(25):
             db.session.add(
@@ -76,15 +94,33 @@ class SidebarShapeTests(unittest.TestCase):
             )
         db.session.commit()
 
-        sidebar = self._sidebar()
-        self.assertEqual(base_links, sidebar.count('class="nav-link"'))
-        self.assertNotIn("Scale Co 00", sidebar, "client names must not be in the nav")
+        nav = self._nav()
+        self.assertEqual(base_links, nav.count("<a href="))
+        self.assertNotIn("Scale Co 00", nav, "client names must not be in the nav")
 
     def test_no_client_list_markup_remains_in_the_shell(self):
         self._login()
-        sidebar = self._sidebar()
+        nav = self._nav()
         for marker in ("client-tabs", "client-tab", "Client Payroll Tabs"):
-            self.assertNotIn(marker, sidebar)
+            self.assertNotIn(marker, nav)
+
+    def test_the_bar_draws_both_slots(self):
+        """The utility items are still REACHABLE — the split moved Notifications
+        out of the primary list, it did not delete the destination."""
+        self._login()
+        body = self.http.get("/dashboard").get_data(as_text=True)
+        self.assertIn('class="portal-topbar"', body)
+        self.assertNotIn('<aside class="sidebar"', body)
+        for item in utility_nav("payrolla_admin"):
+            with self.subTest(item=item.key):
+                self.assertNotIn(item.label, self._nav(), "utility item is in the bar")
+                self.assertIn(item.label, body, "utility item is not reachable at all")
+
+    def test_log_out_is_in_the_account_menu_not_the_nav(self):
+        """A mis-click in a six-item row must not be able to end the session."""
+        self._login()
+        self.assertNotIn("Log out", self._nav())
+        self.assertIn("utility-pop-logout", self.http.get("/dashboard").get_data(as_text=True))
 
 
 class ActiveStateComesFromRouteMetadataTests(unittest.TestCase):

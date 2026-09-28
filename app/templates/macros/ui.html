@@ -50,6 +50,14 @@
 {%- elif name == 'bell' %}<path d="M6 9a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 13 6 9z"/><path d="M10 18a2 2 0 0 0 4 0"/>
 {%- elif name == 'logout' %}<path d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3"/><path d="M15.5 16.5 20 12l-4.5-4.5"/><path d="M20 12H9"/>
 {%- elif name == 'menu' %}<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>
+{# Added for the tenant shell's utility cluster — same box, same stroke. #}
+{%- elif name == 'settings' %}<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H2.9a2 2 0 1 1 0-4H3a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V2.9a2 2 0 1 1 4 0V3a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.5 1z"/>
+{%- elif name == 'chevron-down' %}<path d="m6 9.5 6 6 6-6"/>
+{# Added for the operator shell's navigation — same box, same stroke. `building`
+   is Client Companies (the tenant bar has no equivalent destination) and
+   `search` sits inside the bar's global search field. #}
+{%- elif name == 'building' %}<path d="M4 21V5.5A1.5 1.5 0 0 1 5.5 4h7A1.5 1.5 0 0 1 14 5.5V21"/><path d="M14 10h4.5A1.5 1.5 0 0 1 20 11.5V21"/><path d="M3 21h18"/><path d="M7.5 8h3"/><path d="M7.5 12h3"/><path d="M7.5 16h3"/><path d="M17 14.5h.01"/><path d="M17 18h.01"/>
+{%- elif name == 'search' %}<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>
 {%- else %}<circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/>
 {%- endif %}
 </svg>

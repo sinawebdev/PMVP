@@ -852,16 +852,27 @@ def create_app():
 
     @app.context_processor
     def inject_navigation():
-        # The operator sidebar, declared in app/navigation.py. Active state comes
-        # from the request's own blueprint rather than a path.startswith() test
-        # per link, so adding a route needs no template edit (Task 3.2). The
+        # The operator navigation, declared in app/navigation.py. Active state
+        # comes from the request's own blueprint rather than a path.startswith()
+        # test per link, so adding a route needs no template edit (Task 3.2). The
         # per-client list this replaced queried every client on every page —
         # including the branded 500 page, where a dead DB connection made the
         # error handler re-error. Nothing here can raise.
-        from app.navigation import active_nav_key, visible_nav
+        #
+        # Two slot-scoped views as well as the whole list: the top bar draws the
+        # primary items centred and the utility ones in its right cluster, and
+        # which is which is navigation.py's call, not the template's.
+        from app.navigation import (
+            active_nav_key,
+            primary_nav,
+            utility_nav,
+            visible_nav,
+        )
 
         return {
             "visible_nav": visible_nav,
+            "primary_nav": primary_nav,
+            "utility_nav": utility_nav,
             "active_nav": active_nav_key(request.endpoint, request.blueprint),
         }
 
@@ -922,9 +933,45 @@ def create_app():
     # Branded error pages (A4). DEBUG is False under gunicorn in production (it
     # imports run:app, so app.run(debug=...) never executes), which is what lets
     # these handlers run instead of leaking a stack trace.
+    def _render_error(operator_template, code, **context):
+        """Render an error page in the shell the signed-in user actually lives in.
+
+        errors/404.html and errors/500.html extend the operator base, so a
+        tenant who mistyped a URL inside /company was handed the operator shell:
+        no company identity at all, a sidebar offering "Client Companies", and a
+        Return to Dashboard button pointing at /dashboard — a page a tenant is
+        immediately bounced out of. On the tenant plane the error renders in the
+        tenant's own shell instead.
+
+        Falls back to the operator template on ANY failure. The tenant shell
+        needs a ClientCompany row, and an error handler that re-errors while
+        rendering leaves the user with a bare stack trace — the exact failure
+        the per-client sidebar caused on the branded 500 page once already.
+        """
+        from app.models import ClientCompany
+        from app.tenancy import active_tenant_id
+
+        try:
+            tenant_id = active_tenant_id()
+            if tenant_id is not None:
+                company = db.session.get(ClientCompany, tenant_id)
+                if company is not None:
+                    return render_template(
+                        "errors/tenant.html", code=code, company=company, **context
+                    )
+        except Exception:  # noqa: BLE001 - an error handler may never raise
+            db.session.rollback()
+        return render_template(operator_template)
+
     @app.errorhandler(404)
     def handle_not_found(error):
-        return render_template("errors/404.html"), 404
+        return _render_error(
+            "errors/404.html",
+            404,
+            heading="Page not found",
+            state_title="We couldn't find that page (404).",
+            detail="The address may be mistyped, or the item was moved or removed. Nothing was changed.",
+        ), 404
 
     @app.errorhandler(413)
     def handle_payload_too_large(error):
@@ -950,7 +997,16 @@ def create_app():
         # A failed request may have left the session mid-transaction; roll it back
         # so rendering the error page (and the next request) starts clean.
         db.session.rollback()
-        return render_template("errors/500.html"), 500
+        return _render_error(
+            "errors/500.html",
+            500,
+            heading="Something went wrong",
+            state_title="Something went wrong on our end (500).",
+            detail=(
+                "Your last action may not have completed. Please try again in a "
+                "moment — if it keeps happening, let our team know."
+            ),
+        ), 500
 
     @app.cli.command("init-db")
     def init_db_command():

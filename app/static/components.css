@@ -196,6 +196,13 @@
     white-space: nowrap;
 }
 
+/* `td` qualified, and that is the whole point of this rule: .dt-actions above
+   asks for text-align: right, but `.dt td` sets `left` at one class MORE
+   specificity, so it won every time and the buttons sat left under a
+   right-aligned "Actions" header. Affects every .dt with an actions column —
+   the runs queue and the risk queue as well as the client list. */
+.dt td.dt-actions { text-align: right; }
+
 .dt tbody tr:hover .dt-actions { background: var(--surface-alt); }
 
 /* The header cell above it is sticky in BOTH directions — it already sticks to
@@ -225,6 +232,23 @@
     padding: 0 0 8px;
     text-align: left;
 }
+
+/* An identifier cell — a company code, a reference — set in the mono face
+   because it is a string you compare character by character rather than read.
+   It exists because the markup reached for `<code>`, which Bootstrap paints
+   magenta: in the operator shell that put the loudest colour on the page on
+   the least important column, and pink is in neither shell's palette. Ink at
+   --muted, tracking opened slightly so a run of capitals stays countable. */
+.dt-code {
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.02em;
+}
+
+/* A cell with nothing in it. Same muted ink as .dt-code so an em dash and an
+   identifier do not read as two different kinds of absence. */
+.dt-muted { color: var(--muted); }
 
 /* Sortable headers carry the direction in the link itself, so sort state is a
    URL the user can copy, not hidden client state. */
@@ -786,4 +810,521 @@
     line-height: 1.2;
     position: relative;
     z-index: 1;
+}
+
+/* --- Shell chrome: the top navigation bar ---------------------------------
+   Horizontal nav, drawn identically by BOTH shells. It was written for the
+   tenant portal and lived in portal.css; the operator app now draws the same
+   bar in place of its 280px left sidebar, so the rules moved here rather than
+   being copied. One bar, one definition — a second copy in styles.css is the
+   two-meanings failure tests/test_phase6_vocabulary.py exists to catch.
+
+   Everything below must hold in the operator shell too, which loads Bootstrap.
+   That is why the interactive parts state their own background, border and
+   display instead of inheriting: Bootstrap's reboot makes `summary` a
+   list-item and `button` a bordered control, and both would otherwise land
+   inside this bar.
+
+   The bar is a LIGHT surface, not the old sidebar's deep teal. Teal is this
+   design's only accent and the Action Required card uses a teal fill to mean
+   "a decision is required" (UI_ARCHITECTURE section 6). A permanent full-width
+   teal band above that card would spend the same colour on chrome and destroy
+   the signal. So: nav is neutral, teal stays signal. Nothing here carries a
+   teal fill — the exceptions are the logo artwork (a logotype, which WCAG
+   exempts) and the focus ring, which is transient and must be visible. */
+
+.portal-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* Separation is a hairline, not a shadow: the app reserves its one shadow for
+   cards and uses borders for everything nested (tokens.css). --line-control is
+   the token for a boundary that must be seen — measured 3.43:1 against the bar
+   and 3.17:1 against the page behind it. --line and --line-strong are card
+   hairlines and sit at 1.26:1 and 1.48:1 here, which is why neither is used. */
+.portal-topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--line-control);
+    color: var(--ink);
+    position: sticky;
+    top: 0;
+    z-index: 1040;
+}
+
+/* Three columns, not a flex row, and that is what centres the nav.
+   `1fr auto 1fr` gives the logo and the utility cluster equal shares of the
+   free space, so the auto-width nav between them sits on the BAR's midline —
+   not merely midway between its two neighbours, which is what a flex row with
+   `margin-inline: auto` produces and which drifts as soon as one side is
+   heavier than the other (the operator cluster carries a search field the
+   tenant one does not).
+
+   The side columns are plain `1fr`, so they still grow past their share rather
+   than clipping their content when the bar gets tight; the nav then leaves
+   centre, which is the right way round — chrome that is slightly off-centre
+   beats chrome that is cut off. Below the drawer breakpoint this reverts to
+   flex, where the hamburger can take its `order: -1`.
+
+   Same ultra-wide ceiling as the content below, so the nav and the page it
+   governs share one left edge on a wide monitor. */
+.portal-topbar-inner {
+    align-items: stretch;
+    display: grid;
+    gap: 24px;
+    grid-template-columns: 1fr auto 1fr;
+    margin-inline: auto;
+    max-width: 1680px;
+    min-height: 64px;
+    padding: 0 30px;
+    width: 100%;
+}
+
+/* The icon is a deep-teal gradient drawn for a light ground, so it needs no
+   tile here. The sidebar's white .brand-mark tile existed to lift it off deep
+   teal; on white it would be a white square on white. The wordmark stays live
+   text bound to app_brand_name rather than the baked lockup SVG, so a
+   white-label rename still never has to touch a template. */
+.portal-logo {
+    align-items: center;
+    align-self: center;
+    color: var(--brand-deep);
+    display: flex;
+    gap: 9px;
+    justify-self: start;
+    text-decoration: none;
+}
+
+.portal-logo img { display: block; height: 30px; width: auto; }
+
+.portal-logo-name {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+/* --- Primary nav --------------------------------------------------------- */
+
+.portal-nav {
+    align-items: stretch;
+    display: flex;
+    gap: 2px;
+    justify-content: center;
+    min-width: 0;
+}
+
+/* Full-bar-height items, so the active underline lands on the bar's own bottom
+   edge and reads as a tab rather than as a floating rule. The transparent
+   border is always present, so becoming active never shifts the row. */
+.portal-nav a {
+    align-items: center;
+    border-bottom: 2px solid transparent;
+    color: var(--ink-soft);
+    display: flex;
+    font-size: 15px;
+    gap: 8px;
+    padding: 0 12px;
+    text-decoration: none;
+    transition: background var(--ease), color var(--ease);
+    white-space: nowrap;
+}
+
+.portal-nav a:hover { background: var(--surface-alt); color: var(--ink); }
+
+/* Three signals, none of them colour alone and none of them teal: the label
+   goes to full ink, the weight steps up, and the tab underlines. */
+.portal-nav a[aria-current="page"] {
+    border-bottom-color: var(--ink);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.portal-nav .ico { opacity: 0.75; }
+.portal-nav a:hover .ico,
+.portal-nav a[aria-current="page"] .ico { opacity: 1; }
+
+/* --- Right utility cluster ----------------------------------------------- */
+
+.portal-utility {
+    align-items: center;
+    display: flex;
+    gap: 4px;
+    justify-self: end;
+    margin-left: auto;
+}
+
+.utility-btn {
+    align-items: center;
+    background: none;
+    border: 0;
+    border-radius: 10px;
+    color: var(--muted);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    gap: 7px;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0 9px;
+    position: relative;
+    text-decoration: none;
+    transition: background var(--ease), color var(--ease);
+}
+
+.utility-btn:hover { background: var(--surface-alt); color: var(--ink); }
+.utility-btn[aria-current="page"] { background: var(--surface-alt); color: var(--ink); }
+
+/* --- Global search (operator only) ---------------------------------------
+   The tenant portal has no global search, so this renders only where the
+   markup asks for it. It sits at the head of the utility cluster rather than
+   beside the logo because it is a tool, not an identity — and because the
+   cluster is the one part of the bar whose width may vary without moving the
+   centred nav off the midline.
+
+   Bootstrap-free on purpose even though only the Bootstrap shell draws it: the
+   old field was a `.form-control` tinted for a deep-teal sidebar, and
+   inheriting Bootstrap's focus shadow here would put a blue-tinted ring on a
+   bar whose focus colour is the brand (see the focus rules below). */
+.portal-search {
+    align-items: center;
+    display: flex;
+    position: relative;
+}
+
+.portal-search .ico {
+    color: var(--muted);
+    left: 10px;
+    pointer-events: none;
+    position: absolute;
+}
+
+.portal-search input {
+    background: var(--surface-alt);
+    border: 1px solid var(--line-control);
+    border-radius: var(--radius-pill);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    height: 38px;
+    padding: 0 12px 0 32px;
+    transition: border-color var(--ease), background var(--ease);
+    width: 190px;
+}
+
+.portal-search input::placeholder { color: var(--muted); }
+
+.portal-search input:focus {
+    background: var(--surface);
+    border-color: var(--brand);
+}
+
+/* Ink, not amber. tokens.css reserves --warn and --danger for the Urgent state
+   (UI_ARCHITECTURE section 9); a badge that is amber on every render would
+   spend that reservation on an ambient count. Notifications are ambient by
+   definition (section 3), so the count is legible and quiet rather than
+   alarming. */
+.utility-badge {
+    background: var(--ink);
+    border-radius: var(--radius-pill);
+    color: var(--surface);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    min-width: 17px;
+    padding: 3px 5px;
+    position: absolute;
+    right: 2px;
+    text-align: center;
+    top: 3px;
+}
+
+/* Neutral, not a teal tint: an avatar is identity, and on this bar teal would
+   read as the decision signal it is reserved for. */
+.account-avatar {
+    align-items: center;
+    background: var(--surface-alt);
+    border: 1px solid var(--line-control);
+    border-radius: 50%;
+    color: var(--ink);
+    display: inline-flex;
+    flex: none;
+    font-size: 12px;
+    font-weight: 700;
+    height: 28px;
+    justify-content: center;
+    letter-spacing: 0.02em;
+    width: 28px;
+}
+
+.account-name {
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 600;
+    max-width: 18ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* --- Utility dropdowns ---------------------------------------------------
+   <details>/<summary>, so open, close, focus and keyboard activation all come
+   from the element. The inline script in each shell adds only the two
+   behaviours it does not give for free: Escape, and click-away. */
+
+.utility-menu { align-items: center; display: flex; position: relative; }
+
+/* `list-style` alone is not enough in the Bootstrap shell: its reboot sets
+   `summary { display: list-item }`, which would break the summary out of the
+   inline-flex .utility-btn gives it. .utility-btn wins on specificity, and
+   this rule keeps the marker off in every engine. */
+.utility-menu > summary {
+    list-style: none;      /* Firefox */
+    user-select: none;
+}
+
+.utility-menu > summary::-webkit-details-marker { display: none; }
+.utility-menu > summary::marker { content: ""; }
+
+.utility-menu[open] > summary { background: var(--surface-alt); color: var(--ink); }
+
+/* The popover is the one place in this bar a shadow is right: it floats above
+   the page rather than sitting nested in it. */
+.utility-pop {
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    padding: 6px;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 1050;
+}
+
+/* Settings and account both used to appear with no relationship to the button
+   that opened them. They are pinned to `right: 0` under their trigger, so
+   growing from the top-right corner is a statement of fact about where they
+   came from rather than an effect applied to them.
+
+   `ui-pop-in` and the reasoning behind its values live further up this file.
+   It is the same entrance the operator shell's overflow menu uses,
+   deliberately, because they are the same gesture. Open only — `<details>`
+   drops its content on close, so there is no exit to animate. */
+.utility-menu[open] > .utility-pop {
+    animation: ui-pop-in 150ms var(--ease-out) both;
+    transform-origin: top right;
+}
+
+/* Gentler, not gone: reduced motion drops the scale and the lift and keeps the
+   fade. */
+@media (prefers-reduced-motion: reduce) {
+    .utility-menu[open] > .utility-pop { animation-name: ui-fade-in; }
+}
+
+.utility-pop a {
+    align-items: center;
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    display: flex;
+    font-size: 14px;
+    gap: 9px;
+    padding: 9px 10px;
+    text-decoration: none;
+}
+
+.utility-pop a:hover { background: var(--surface-alt); color: var(--brand); }
+.utility-pop .ico { color: var(--muted); }
+.utility-pop a:hover .ico { color: var(--brand); }
+
+/* The signed-in name labels the menu it sits in; it is not a destination. */
+.utility-pop-head {
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px;
+    margin: 2px 0 6px;
+    overflow: hidden;
+    padding: 4px 10px 8px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Log out hovers like every other row in this menu. It is REVERSIBLE — you
+   sign back in and nothing is lost — and a danger tint on a reversible action
+   is what teaches people that red does not reliably mean "this cannot be
+   undone". The reservation is being kept for the genuinely unrecoverable
+   actions in Employees and Payroll. No red or amber anywhere in this bar. */
+
+/* --brand-soft is 1.17:1 on white — invisible on this bar. --brand measures
+   6.14:1 on the bar and 5.67:1 on the page, so the ring is the one place teal
+   still appears in the chrome: it is transient, only ever on the focused
+   element, and an indicator nobody can see is not an indicator.
+
+   Scoped under .portal-topbar so it wins in the operator shell too, where
+   styles.css gives :focus-visible a --brand ring at 2px and the old sidebar a
+   --gold one; the bar is neither of those surfaces. */
+.portal-topbar .portal-nav a:focus-visible,
+.portal-topbar .utility-btn:focus-visible,
+.portal-topbar .nav-toggle:focus-visible,
+.portal-topbar .portal-logo:focus-visible,
+.portal-topbar .portal-search input:focus-visible,
+.utility-pop a:focus-visible {
+    outline: 3px solid var(--brand);
+    outline-offset: 2px;
+}
+
+/* --- Mobile nav drawer ---------------------------------------------------
+   Sits inside the bar rather than floating over the page, so it scrolls and
+   stacks with the rest of the chrome instead of covering content. */
+.nav-toggle {
+    align-items: center;
+    align-self: center;
+    background: none;
+    border: none;
+    border-radius: 10px;
+    color: var(--muted);
+    cursor: pointer;
+    display: none;
+    flex: none;
+    height: 40px;
+    justify-content: center;
+    padding: 0;
+    width: 40px;
+}
+
+.nav-toggle:hover { background: var(--surface-alt); color: var(--ink); }
+
+/* The scrim. It used to appear with an untransitionable `display`, so one
+   gesture animated in halves. `visibility` carries the hit-testing the old
+   `display: none` provided and flips only at the end of its duration, so the
+   way out fades as well as the way in.
+
+   var(--ease) rather than a literal duration, and that is load-bearing twice
+   over: it is the exact value the drawer uses, and this file has no
+   reduced-motion block for it — tokens.css rewrites the token to `1ms linear`
+   under that preference, which is the whole point of it being a token. Do not
+   inline 180ms here.
+
+   z-index 1030 is BELOW the bar's 1040, and that is not a preference. The
+   drawer IS the desktop nav bar, so it lives inside .portal-topbar; a sticky
+   element with a z-index is a stacking context, so the drawer's 1090 resolves
+   inside the bar's 1040 and a 1080 scrim would paint straight over the open
+   drawer — every item under 50% black. Raising the drawer cannot escape the
+   bar's context, and dropping the bar's z-index lets scrolled content paint
+   through a sticky header. Lowering the scrim fixes it at the one end with no
+   side effect: page content dims, the bar and the drawer that slides out from
+   under it stay lit. */
+.nav-backdrop {
+    background: rgba(2, 6, 23, 0.5);
+    inset: 0;
+    opacity: 0;
+    position: fixed;
+    transition: opacity var(--ease), visibility var(--ease);
+    visibility: hidden;
+    z-index: 1030;
+}
+
+.nav-backdrop.show { opacity: 1; visibility: visible; }
+
+/* The primary nav stops fitting one row here and becomes a slide-in drawer.
+   The utility cluster stays in the bar — a notification count you have to open
+   a drawer to see is not an ambient signal.
+
+   1100px, not the tenant portal's old 900px, and the number is measured rather
+   than chosen. Both bars now carry six one-word domain nouns and need about the
+   same row — the operator's were "Client Companies", "Payroll Runs", "Expenses
+   & Audit" and "Statutory Rates" until they were shortened to fit a bar rather
+   than the 280px sidebar they were written for (app/navigation.py). Below this
+   width the flex items start shrinking and clipping their own text, and a
+   destination you cannot read is worse than one behind a hamburger.
+
+   One breakpoint for both shells, not one each: two shells disagreeing about
+   when the same bar becomes the same drawer is exactly the drift this file
+   exists to prevent, and the alternative is a second copy of every rule below.
+   It is the operator bar that sets the number, because it also carries a 190px
+   search field the tenant does not have. If a seventh destination is ever added
+   to either bar, re-measure — do not just nudge this up. */
+@media (max-width: 1100px) {
+    /* Back to flex, so the hamburger can take `order: -1` — a grid item's
+       position comes from the track it sits in, not from `order`. */
+    .portal-topbar-inner {
+        display: flex;
+        gap: 12px;
+        padding: 0 16px;
+    }
+
+    .nav-toggle {
+        display: inline-flex;
+        order: -1;          /* hamburger first, then the logo */
+    }
+
+    /* The drawer is LIGHT, like the bar it replaces. Two reasons: it holds the
+       same items, so one surface means one set of colour and weight rules to
+       keep true at both breakpoints; and the dark backdrop behind it already
+       supplies the separation a dark panel would have been providing. Only the
+       active INDICATOR changes axis — an underline cannot read as "current" in
+       a vertical list, so it becomes a leading bar on the same ink. */
+    .portal-nav {
+        align-items: stretch;
+        background: var(--surface);
+        border-right: 1px solid var(--line-control);
+        flex-direction: column;
+        gap: 2px;
+        height: 100vh;
+        justify-content: flex-start;
+        left: 0;
+        overflow-y: auto;
+        padding: 74px 12px 24px;
+        position: fixed;
+        top: 0;
+        transform: translateX(-100%);
+        transition: transform var(--ease);
+        width: 268px;
+        z-index: 1090;
+    }
+
+    .portal-nav.open { transform: none; }
+
+    .portal-nav a {
+        border-bottom: 0;
+        border-left: 3px solid transparent;
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        font-size: 15px;
+        min-height: 44px;
+        padding: 10px 12px;
+    }
+
+    .portal-nav a[aria-current="page"] {
+        background: var(--surface-alt);
+        border-left-color: var(--ink);
+    }
+
+    /* The name is the widest thing in the cluster and the avatar already
+       identifies the account. */
+    .account-name { display: none; }
+}
+
+/* Between the ultra-wide ceiling and the drawer, the search field is the only
+   thing keeping the nav off the bar's midline: the grid centres the nav on the
+   free space the two side columns share equally, and the operator cluster
+   (search + bell + account) outweighs a 91px logo by enough to eat into it.
+   140px buys back the difference, so the nav is centred at 1366 as well as at
+   1440. It is also why the placeholder is the bare "Search…": the field is the
+   one part of this bar that changes width, and a placeholder that fits at
+   1680 and is cut off at 1440 reads as a bug rather than as a hint. The
+   accessible name on the label still says what is searchable. The tenant bar
+   has no search field and is unaffected. */
+@media (max-width: 1450px) {
+    .portal-search input { width: 140px; }
+}
+
+/* The search field is the first thing to go: below this the bar is the
+   hamburger, the logo and the two icon buttons, and /search is still one tap
+   away from the drawer's Clients page. */
+@media (max-width: 720px) {
+    .portal-search { display: none; }
 }
