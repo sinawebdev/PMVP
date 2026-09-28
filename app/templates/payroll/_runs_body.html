@@ -80,7 +80,13 @@
                       hx-target="#runs-body" hx-swap="outerHTML"
                       hx-confirm="Reject the {{ run.client_company.name if run.client_company else '' }} {{ run.month }} {{ run.year }} payroll run? It goes back to the preparer.">Reject</button>
               {% endif %}
-              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.detail', run_id=run.id) }}">Open</a>
+              {# Bare `class="btn"`, like Edit on the client list: inside
+                 .dt-actions components.css styles
+                 `.btn:not([class*="btn-"])` into the neutral row control, and
+                 any btn-* modifier opts back out of it. Open is navigation, so
+                 it takes no semantic colour — Approve and Reject keep theirs
+                 above because those are decisions. #}
+              <a class="btn" href="{{ url_for('payroll.detail', run_id=run.id) }}">Open</a>
           </td>
       </tr>
       {% endfor %}

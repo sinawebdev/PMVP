@@ -2,57 +2,103 @@
 {% import "macros/ui.html" as ui %}
 {% block title %}Client Companies · {{ app_name }}{% endblock %}
 {% block page_title %}Client Companies{% endblock %}
+{% block page_actions %}
+{# The one primary action, in the header where every other list page puts it
+   (payroll_runs.html, statutory_rates.html). It used to float on its own row
+   between the header and the panel, which is the only place on the operator
+   plane a page action did that. btn-light, because this bar is the teal
+   header — the same pair those pages use. #}
+<a class="btn btn-light btn-sm" href="{{ url_for('main.add_client') }}"><i class="bi bi-building-add"></i>Add Client Company</a>
+{% endblock %}
 {% block content %}
-<div class="toolbar">
-    <a class="btn btn-primary" href="{{ url_for('main.add_client') }}"><i class="bi bi-building-add"></i>Add Client Company</a>
-</div>
 <section class="panel">
     <form class="toolbar" method="get" action="{{ url_for('main.clients') }}" role="search">
         <label class="visually-hidden" for="clients-filter">Filter client companies</label>
         <input id="clients-filter" name="q" class="form-control" type="search" value="{{ search or '' }}"
                placeholder="Filter clients by name, code, contact, or location…">
         <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-search"></i>Filter</button>
-        {% if search %}<a class="btn btn-link" href="{{ url_for('main.clients') }}">Clear</a>{% endif %}
+        {# btn-link is Bootstrap's blue anchor-button. With the table's Edit and
+           the <code> magenta gone, this was the last blue on the page. It
+           matches the Filter button beside it instead. #}
+        {% if search %}<a class="btn btn-outline-secondary" href="{{ url_for('main.clients') }}">Clear</a>{% endif %}
     </form>
     {% if search %}
     <p class="mini-note mb-2"><i class="bi bi-funnel"></i> {{ page.total }} compan{{ "y" if page.total == 1 else "ies" }} matching &ldquo;{{ search }}&rdquo;.</p>
     {% endif %}
-    <div class="excel-grid-wrap">
-        <table id="clients-table" class="table table-sm align-middle excel-grid">
-            <thead><tr><th scope="col">Name</th><th scope="col">Code</th><th scope="col">Contact</th><th scope="col">Email</th><th scope="col">Location</th><th scope="col">Status</th><th scope="col"></th></tr></thead>
-            <tbody>
-            {% for client in page.items %}
-                <tr>
-                    <td><a href="{{ url_for('main.client_detail', client_id=client.id) }}">{{ client.name }}</a></td>
-                    <td>{% if client.company_code %}<code>{{ client.company_code }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</td>
-                    <td>{{ client.contact_person }}</td>
-                    <td>{{ client.email }}</td>
-                    <td>{{ client.location }}</td>
-                    <td>
-                        <span class="badge text-bg-{{ 'success' if client.status == 'Active' else 'danger' }}">
-                            {{ client.status }}
-                        </span>
-                        {# Onboarded, but nobody there can sign in. Payrolla
-                           never mints auth identities itself, so this state is
-                           invisible until the client complains — the badge is
-                           derived from the User table, never stored. #}
-                        {% if client.id in awaiting_credentials %}
-                        <span class="badge text-bg-warning" title="No login identity is linked to this company yet — provision credentials before they can sign in.">
-                            Awaiting credentials
-                        </span>
-                        {% endif %}
-                    </td>
-                    <td class="text-nowrap">
-                        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.edit_client', client_id=client.id) }}">Edit</a>
-                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.client_onboarding', client_id=client.id) }}">Onboarding</a>
-                    </td>
-                </tr>
-            {% else %}
-                <tr><td colspan="7" class="text-muted">No client companies onboarded yet.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
+    {# The shared data table (macros/ui.html::data_table), not a Bootstrap
+       `.table excel-grid`. This page was the last operator list still drawing
+       its own: it rendered with Bootstrap's borders and its own empty row while
+       Payroll Runs and the Risk Queue next to it drew `.dt`. The macro also
+       owns the footer, so the manual pagination call below it is gone.
+
+       `params` carries the filter into the page links. Without it, filtering to
+       a term with more than one page of matches and clicking Next dropped `q`
+       and silently paged the UNFILTERED list — the same class of bug the
+       server-side filter in routes.clients was written to avoid. #}
+    {% set columns = [
+         {"label": "Name"},
+         {"label": "Code"},
+         {"label": "Contact"},
+         {"label": "Email"},
+         {"label": "Location"},
+         {"label": "Status"},
+         {"label": "Actions", "align": "num"},
+       ] %}
+    {# Two different empties. "None onboarded yet" is true of an empty book and
+       is an invitation to add one; it is a lie when the book is full and the
+       filter simply matched nothing, which is the state a search lands in most
+       often. The old Bootstrap row said "No client companies onboarded yet" in
+       both cases. #}
+    {% call ui.data_table(columns, page=page, params={"q": search} if search else {},
+                          caption="Client companies",
+                          empty_title=("No companies match that filter" if search
+                                       else "No client companies onboarded yet"),
+                          empty_detail=("Try a shorter term, or clear the filter to see every company."
+                                        if search
+                                        else "Add the first company to start running payroll for it."),
+                          table_id="clients-table") %}
+      {% for client in page.items %}
+        <tr>
+            <td><a href="{{ url_for('main.client_detail', client_id=client.id) }}">{{ client.name }}</a></td>
+            {# .dt-code, not a bare <code>: Bootstrap styles <code> magenta, and
+               pink is not in this palette — it was the loudest thing on the
+               page. Monospace is kept because a company code is a string you
+               compare character by character. #}
+            <td>{% if client.company_code %}<span class="dt-code">{{ client.company_code }}</span>{% else %}<span class="dt-muted">—</span>{% endif %}</td>
+            <td>{{ client.contact_person }}</td>
+            <td>{{ client.email }}</td>
+            <td>{{ client.location }}</td>
+            <td>
+                {# Red for Inactive is deliberate and pinned by
+                   test_mvp.test_inactive_client_status_is_red — an inactive
+                   company is one whose payroll silently will not run, which is
+                   the operator's problem to notice. Do not "correct" it to a
+                   neutral badge on palette-reservation grounds. #}
+                <span class="badge {{ 'text-bg-success' if client.status == 'Active' else 'text-bg-danger' }}">
+                    {{ client.status }}
+                </span>
+                {# Onboarded, but nobody there can sign in. Payrolla
+                   never mints auth identities itself, so this state is
+                   invisible until the client complains — the badge is
+                   derived from the User table, never stored. #}
+                {% if client.id in awaiting_credentials %}
+                <span class="badge text-bg-warning" title="No login identity is linked to this company yet — provision credentials before they can sign in.">
+                    Awaiting credentials
+                </span>
+                {% endif %}
+            </td>
+            {# Bare `class="btn"`, deliberately. components.css styles
+               `.dt-actions .btn:not([class*="btn-"])` — adding btn-outline-primary
+               here is what made Edit render in Bootstrap's blue, a colour used
+               nowhere else in this product. Both of these are plain navigation,
+               so neither takes a semantic colour; the runs queue keeps its
+               green/red because approve and reject are decisions. #}
+            <td class="dt-actions">
+                <a class="btn" href="{{ url_for('main.edit_client', client_id=client.id) }}">Edit</a>
+                <a class="btn" href="{{ url_for('main.client_onboarding', client_id=client.id) }}">Onboarding</a>
+            </td>
+        </tr>
+      {% endfor %}
+    {% endcall %}
 </section>
 {% endblock %}
