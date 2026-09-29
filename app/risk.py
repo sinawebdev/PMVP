@@ -6,7 +6,7 @@ trips none is AUTO-ACCEPTED. The rules are pure functions of the run and the
 client's previous *closed* run (Approved/Processed) — no side effects, no
 randomness — so the same run always yields the same verdict.
 
-Thresholds settled with Sina (2026-07-16); see the pmvp-v1-decisions memory:
+Thresholds settled with Sina (2026-07-16); see the project decisions notes:
 
   Rule 1 — New-client hold: a client's first ``FIRST_N_RUNS_HELD`` runs are held.
   Rule 2 — Net-pay variance: total net pay differs from the previous closed run

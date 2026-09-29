@@ -167,7 +167,7 @@ def add(client_id):
             # Standing identity fields (GRA/SSNIT/MoMo). Safe to capture manually;
             # pay-driving fields (basic salary, pay_type, ICU membership) stay
             # import/seed-only so manual entry can't collide with the raw-engine
-            # seed guards. See PMVP_INVESTIGATION notes / B6 decision.
+            # seed guards. See the B6 decision in the early investigation notes.
             ssnit_number=request.form.get("ssnit_number", "").strip() or None,
             ghana_card_number=request.form.get("ghana_card_number", "").strip() or None,
             tin=request.form.get("tin", "").strip() or None,
@@ -412,7 +412,7 @@ def roster_template(client_id):
     buf.seek(0)
     return send_file(
         buf,
-        download_name="chrisnat_employee_roster_template.xlsx",
+        download_name="payrolla_employee_roster_template.xlsx",
         as_attachment=True,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )

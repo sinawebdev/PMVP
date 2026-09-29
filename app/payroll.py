@@ -279,7 +279,7 @@ def build_run_payload_from_extraction(
     # "GH CARD" column header) is gone. PayrollRun.detected_company_name is
     # deliberately left null: it no longer represents anything and will be
     # dropped in a future schema cleanup rather than repurposed into the client
-    # name. See PMVP_INVESTIGATION_02_COMPANY_ARCHITECTURE.md.
+    # name. See investigation 02 (company architecture).
     detected_company_name = None
     validation = validate_payroll_rows(mapped_rows, client, month, year, detected_company_name)
     # Mapping conflicts surface on the preview as warnings and hard-stop the

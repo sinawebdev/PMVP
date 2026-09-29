@@ -271,14 +271,16 @@ options, and the go-live checklist are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## A note on the name
 
-This repository directory is historically named `pmvp-v1`, and a few identifiers
-still carry the founding operator's name (**Chrisnat Limited**): the GRA employer
-defaults (`CHRISNAT_EMPLOYER_TIN`, `CHRISNAT_TAX_OFFICE`), the operator-side
-export filenames and report letterhead, and the `chrisnat-payroll-mvp` service
-name in `render.yaml`. Those are **business entities and live deployment
-identifiers** — the bureau that the reports are printed for, and a running
-service whose rename would orphan its `DATABASE_URL` binding — so they are
-deliberately left alone. The **product** is Payrolla throughout.
+The repository was called `pmvp-v1` ("Payroll MVP") until it was renamed to
+`payrolla`. One live identifier still carries the old name: the hosted URL,
+`pmvp-v1.onrender.com`, because Render fixes a service's `onrender.com` subdomain
+when the service is created. A custom domain is the way to move off it.
+
+A few identifiers also carry the founding operator's name (**Chrisnat Limited**):
+the GRA employer defaults (`CHRISNAT_EMPLOYER_TIN`, `CHRISNAT_TAX_OFFICE`) and the
+operator-side export filenames and report letterhead. Those name the **bureau**
+the reports are printed for, not the software, so they are deliberately left
+alone. The **product** is Payrolla throughout.
 
 The platform *role* strings were in that list until the brand cleanup; they are
 now `payrolla_admin` / `payrolla_reviewer`, moved by a reversible data migration

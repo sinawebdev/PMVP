@@ -74,11 +74,11 @@ Go-live checklist:
    **PostgreSQL** and `DATABASE_URL Detected: Yes`.
 5. Upload a payroll workbook, restart the service, and confirm the records persist.
 
-> **Service name:** the Render service is historically named
-> `chrisnat-payroll-mvp` in `render.yaml`. It is a live deployment identifier —
-> renaming it in the Blueprint would create a new service and orphan the running
-> one and its `DATABASE_URL` binding, so it is intentionally left unchanged. Rename
-> it only as a deliberate, planned infra migration.
+> **Service name:** the live service (`pmvp-v1.onrender.com`) is configured in the
+> Render dashboard, not by this Blueprint, so the `name` in `render.yaml` does not
+> bind to it. Render fixes the `onrender.com` subdomain at creation and cannot
+> rename it; serving Payrolla on its own hostname means adding a custom domain to
+> the existing service, not changing this file.
 
 ## Railway
 

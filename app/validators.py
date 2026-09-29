@@ -118,7 +118,7 @@ def validate_payroll_rows(
     # (they produced the false "GH CARD") and have been removed. The per-row
     # name guard in validate_single_row still flags genuinely data-shifted rows,
     # and collect_blocking_errors still hard-stops a corroborated shift.
-    # See PMVP_INVESTIGATION_02_COMPANY_ARCHITECTURE.md.
+    # See investigation 02 (company architecture).
 
     # One query each instead of one per row — the per-row versions of these
     # lookups were the bulk of the confirm request's DB round trips and pushed

@@ -24,7 +24,7 @@ repo. No plan modifies anything outside the files it names.
 ## Execution status
 
 All six were applied on branch **`fix/animation-audit`**, in the worktree at
-`../pmvp-v1-animations`, on top of `34b11fd`, and committed as `352c44f`.
+`../payrolla-animations`, on top of `34b11fd`, and committed as `352c44f`.
 
 **Status corrected 2026-08-08.** This section previously said the changes were
 uncommitted working-tree modifications that had never been merged. That was true
