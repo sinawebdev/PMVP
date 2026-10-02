@@ -11,6 +11,7 @@ compatible with in-memory SQLite's per-connection isolation.
 import os
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest import mock
 
 os.environ["SKIP_DOTENV"] = "true"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
@@ -18,6 +19,7 @@ os.environ["SEED_DEMO_DATA"] = "true"
 os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from app import create_app, db  # noqa: E402
+from app.distribution.channels import ConsoleSmsSender, SendResult  # noqa: E402
 from app.distribution import queue as queue_mod  # noqa: E402
 from app.distribution.queue import enqueue_distribution, run_worker, run_worker_loop  # noqa: E402
 from app.models import (  # noqa: E402
@@ -28,6 +30,20 @@ from app.models import (  # noqa: E402
     PayslipDelivery,
     User,
 )
+
+
+def _provider_down_for(item_id):
+    """The SMS provider failing one payslip the way an outage does: a retryable
+    error. (A missing contact no longer works for this: since the SMS work it is
+    a permanent failure that is never retried automatically.)"""
+    real_send = ConsoleSmsSender.send
+
+    def send(sender, message):
+        if message.item_id == item_id:
+            return SendResult(False, sender.provider, "provider unavailable", retryable=True)
+        return real_send(sender, message)
+
+    return mock.patch.object(ConsoleSmsSender, "send", send)
 
 
 class _StopAfter:
@@ -97,23 +113,15 @@ class WorkerLoopIntegrationTestCase(unittest.TestCase):
         # delivery retryable (not yet exhausted) after the first pass.
         self.app.config["DISTRIBUTION_MAX_ATTEMPTS"] = 5
         item = self.run.items[0]
-        item.momo_number = None
-        item.email = None
-        if item.employee:
-            item.employee.phone = None
-            item.employee.momo_number = None
-            item.employee.email = None
-        db.session.commit()
 
         enqueue_distribution(self.run, "sms", False, self.operator)
-        run_worker_loop(poll_interval=0, stop_event=_StopAfter(1))  # send: item fails
+        with _provider_down_for(item.id):
+            run_worker_loop(poll_interval=0, stop_event=_StopAfter(1))  # send: item fails
         d = PayslipDelivery.query.filter_by(payroll_item_id=item.id).first()
         self.assertEqual(d.status, "failed")
         self.assertIsNotNone(d.next_retry_at)
 
-        # Operator fixes the roster; next loop pass runs the due retry.
-        item.momo_number = "0241234567"
-        db.session.commit()
+        # The provider recovers; the next loop pass runs the due retry.
         run_worker_loop(poll_interval=0, stop_event=_StopAfter(1))
         db.session.refresh(d)
         self.assertEqual(d.status, "sent")

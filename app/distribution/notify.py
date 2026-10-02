@@ -33,26 +33,48 @@ def _recipients(*users):
     return out
 
 
+def _unconfirmed_note(unknown, initiator):
+    """What to say about sends that may have gone out. An operator can check the
+    provider's portal; a tenant cannot (that login is the platform's), so a
+    tenant is told the platform is checking instead."""
+    noun = "payslip" if unknown == 1 else "payslips"
+    if initiator is not None and initiator.client_company_id is not None:
+        return f" {unknown} {noun} may have been sent; Payrolla is checking."
+    return f" {unknown} may have been sent. Check SasuSync before resending."
+
+
 def notify_completion(batch, run, summary):
     """A batch finished: tell the initiator whether it fully/partially/entirely
-    failed, and alert platform admins when the failure rate is high."""
+    failed, and alert platform admins when the failure rate is high.
+
+    Sends that may have gone out (`unknown`) are neither: they never make the
+    notice say "completed" unqualified, they raise it to a warning, and they do
+    not count toward the failure-rate escalation. Platform admins hear about
+    them through the SLA `unknown` breach instead, so not twice."""
     total = summary.get("total", 0) or 0
     failed = summary.get("failed", 0) or 0
     sent = summary.get("sent", 0) or 0
+    unknown = summary.get("unknown", 0) or 0
     initiator = _initiator(batch)
 
-    if failed == 0:
+    if failed == 0 and unknown == 0:
         event_type, level, headline = "distribution.completed", "success", "completed"
+    elif failed == 0:
+        event_type, level, headline = (
+            "distribution.unconfirmed", "warning", "finished with some unconfirmed"
+        )
     elif total and failed >= total:
         event_type, level, headline = "distribution.failed", "warning", "failed"
     else:
         event_type, level, headline = "distribution.partial", "warning", "partially completed"
 
-    summary_text = (
-        f"{run.month} {run.year}: distribution {headline} — "
-        f"{sent} sent, {failed} failed of {total}."
-    )
-    payload = {k: summary.get(k) for k in ("sent", "failed", "skipped", "total")}
+    counts = f"{sent} sent, {failed} failed"
+    if unknown:
+        counts += f", {unknown} unconfirmed"
+    summary_text = f"{run.month} {run.year}: distribution {headline} — {counts} of {total}."
+    if unknown:
+        summary_text += _unconfirmed_note(unknown, initiator)
+    payload = {k: summary.get(k) for k in ("sent", "failed", "unknown", "skipped", "total")}
 
     recipients = _recipients(initiator)
     # High failure rate escalates to platform oversight.

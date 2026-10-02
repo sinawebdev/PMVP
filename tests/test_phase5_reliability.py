@@ -3,7 +3,9 @@
 Covers the three behaviour bugs closed in Workstream A:
   * A1 — a worker crash mid-distribution never causes a duplicate send, because
     each delivery is persisted as it is sent (the skip-if-sent guard then makes a
-    re-run idempotent).
+    re-run idempotent). Since the SMS work each delivery is also claimed before it
+    is sent, so the one in flight at the crash is not resent blind either: it
+    stays `sending` until the stale-claim recovery marks it `unknown`.
   * A2 — a batch left `running` by a dead worker is reclaimed (requeued) and, past
     a cap, failed rather than stuck forever.
   * A3 — a failure during a raw-engine confirm rolls the run back, so a Draft run
@@ -27,6 +29,7 @@ from app.distribution.queue import (  # noqa: E402
     enqueue_distribution,
     reclaim_stale_batches,
 )
+from app.distribution.recovery import recover_stale_claims  # noqa: E402
 from app.distribution.service import distribute_run  # noqa: E402
 from app.models import (  # noqa: E402
     BATCH_COMPLETED,
@@ -81,7 +84,8 @@ class DistributeCrashIdempotencyTests(unittest.TestCase):
             item.email = f"worker{item.id}@example.com"
         db.session.commit()
 
-        # Crash on the 2nd send: item[0] is sent + committed, item[1] blows up.
+        # Crash on the 2nd send: item[0] is sent + committed; item[1] had been
+        # claimed (committed as `sending`) when the sender blew up mid-call.
         with mock.patch(
             "app.distribution.service.get_sender", return_value=_CrashingSender(crash_on=2)
         ):
@@ -90,16 +94,20 @@ class DistributeCrashIdempotencyTests(unittest.TestCase):
         # A real worker (process_batch) rolls back the failed transaction.
         db.session.rollback()
 
-        rows = PayslipDelivery.query.filter_by(payroll_run_id=self.run.id).all()
-        self.assertEqual(len(rows), 1, "only the already-sent delivery should persist")
-        self.assertEqual(rows[0].status, DELIVERY_SENT)
-        self.assertEqual(rows[0].attempts, 1)
-        sent_item_id = rows[0].payroll_item_id
+        rows = {
+            r.payroll_item_id: r
+            for r in PayslipDelivery.query.filter_by(payroll_run_id=self.run.id).all()
+        }
+        self.assertEqual(len(rows), 2, "nothing after the crash was touched")
+        sent, in_flight = rows[items[0].id], rows[items[1].id]
+        self.assertEqual((sent.status, sent.attempts), (DELIVERY_SENT, 1))
+        # It may or may not have reached the provider, so it is not resent blind.
+        self.assertEqual((in_flight.status, in_flight.attempts), ("sending", 1))
 
-        # Re-run with a healthy sender: the already-sent item must be SKIPPED, not
-        # resent (no duplicate), and the rest complete.
+        # Re-run with a healthy sender: the sent item and the in-flight one are
+        # both SKIPPED, not resent (no duplicate), and the rest complete.
         summary = distribute_run(self.run, channel="email")
-        self.assertGreaterEqual(summary["skipped"], 1)
+        self.assertEqual(summary["skipped"], 2)
 
         all_rows = PayslipDelivery.query.filter_by(payroll_run_id=self.run.id).all()
         # Exactly one delivery per item — no duplicate for the crash-time item.
@@ -108,9 +116,21 @@ class DistributeCrashIdempotencyTests(unittest.TestCase):
         for r in all_rows:
             by_item.setdefault(r.payroll_item_id, []).append(r)
         self.assertTrue(all(len(v) == 1 for v in by_item.values()))
-        # The originally-sent item was not attempted again.
-        self.assertEqual(by_item[sent_item_id][0].attempts, 1)
-        self.assertTrue(all(r.status == DELIVERY_SENT for r in all_rows))
+        # Neither the sent item nor the crash-time item was attempted again.
+        self.assertEqual(by_item[items[0].id][0].attempts, 1)
+        self.assertEqual(by_item[items[1].id][0].attempts, 1)
+        self.assertTrue(all(
+            r.status == DELIVERY_SENT for r in all_rows if r.payroll_item_id != items[1].id
+        ))
+
+        # Once its claim is stale, the crash-time send is `unknown`: flagged for a
+        # person to settle, still never resent automatically.
+        in_flight = by_item[items[1].id][0]
+        in_flight.claimed_at = datetime.now(timezone.utc) - timedelta(minutes=11)
+        db.session.commit()
+        self.assertEqual(recover_stale_claims(), 1)
+        db.session.refresh(in_flight)
+        self.assertEqual(in_flight.status, "unknown")
 
 
 class StaleBatchReclaimTests(unittest.TestCase):

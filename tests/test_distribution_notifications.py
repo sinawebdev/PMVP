@@ -9,6 +9,7 @@ exhaustion, scheduled start, and worker stop.
 import os
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest import mock
 
 os.environ["SKIP_DOTENV"] = "true"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
@@ -16,6 +17,7 @@ os.environ["SEED_DEMO_DATA"] = "true"
 os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from app import create_app, db  # noqa: E402
+from app.distribution.channels import ConsoleSmsSender, SendResult  # noqa: E402
 from app.distribution.queue import (  # noqa: E402
     activate_due_scheduled,
     enqueue_distribution,
@@ -31,6 +33,20 @@ from app.models import (  # noqa: E402
     PayrollRun,
     User,
 )
+
+
+def _provider_down_for(item_id):
+    """The SMS provider failing one payslip the way an outage does: a retryable
+    error. (A missing contact no longer works for this: since the SMS work it is
+    a permanent failure that is never retried automatically.)"""
+    real_send = ConsoleSmsSender.send
+
+    def send(sender, message):
+        if message.item_id == item_id:
+            return SendResult(False, sender.provider, "provider unavailable", retryable=True)
+        return real_send(sender, message)
+
+    return mock.patch.object(ConsoleSmsSender, "send", send)
 
 
 class NotificationTestCase(unittest.TestCase):
@@ -94,10 +110,10 @@ class NotificationTestCase(unittest.TestCase):
 
     def test_retry_exhaustion_notifies(self):
         item = self.run.items[0]
-        self._strip(item)  # permanent failure, max_attempts=2
         enqueue_distribution(self.run, "sms", False, self.operator)
-        process_all_queued()  # attempt 1 -> scheduled retry
-        process_due_retries()  # attempt 2 -> exhausted
+        with _provider_down_for(item.id):  # max_attempts=2
+            process_all_queued()  # attempt 1 -> scheduled retry
+            process_due_retries()  # attempt 2 -> exhausted
         self.assertIsNotNone(
             DomainEvent.query.filter_by(event_type="distribution.retry_exhausted").first()
         )

@@ -46,6 +46,12 @@ class SlaEvaluateTestCase(unittest.TestCase):
         reset()
         self.run = PayrollRun.query.filter_by(status="Approved").first()
         self.operator = User.query.filter_by(email="admin@payrolla.com").first()
+        # A payslip has at most one delivery per channel (a unique constraint),
+        # so volume is built across the run's payslips and channels.
+        self._slots = iter([
+            (item.id, channel)
+            for item in self.run.items for channel in ("sms", "whatsapp", "email")
+        ])
 
     def tearDown(self):
         reset()
@@ -53,9 +59,10 @@ class SlaEvaluateTestCase(unittest.TestCase):
         self.ctx.pop()
 
     def _delivery(self, status, **kw):
+        item_id, channel = next(self._slots)
         d = PayslipDelivery(
-            payroll_item_id=self.run.items[0].id, payroll_run_id=self.run.id,
-            channel="sms", status=status, **kw,
+            payroll_item_id=item_id, payroll_run_id=self.run.id,
+            channel=channel, status=status, **kw,
         )
         db.session.add(d)
         return d

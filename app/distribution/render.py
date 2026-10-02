@@ -7,6 +7,13 @@ from html import escape
 
 from app import format_ghana_cedis as cedis
 
+from .gsm7 import clean_for_sms, fit, septets
+
+# Stored on each SMS delivery instead of the body. Bump it whenever the SMS
+# wording below changes, so a delivery record says which text the worker got.
+SMS_TEMPLATE_VERSION = "sms-link-v1"
+SMS_MAX_SEPTETS = 160
+
 
 def _line_items(item):
     """(label, amount) pairs for the non-zero parts of the breakdown."""
@@ -52,6 +59,49 @@ def render_payslip_text(item, run, client, link=None) -> str:
     if link:
         lines.append(f"View payslip + PDF: {link}")
     return "\n".join(lines)
+
+
+def _config(name, default):
+    try:
+        from flask import current_app
+
+        return current_app.config.get(name, default)
+    except RuntimeError:  # no app context (pure-unit render tests)
+        return default
+
+
+def render_payslip_sms(run, client, link):
+    """The payslip SMS: link only, GSM-7 only, one part.
+
+    ``{Company}: your {Month YYYY} payslip is ready. View (valid {N} days): {link}``
+
+    No pay figures and no worker name: an SMS sits unencrypted on a shared or
+    lost phone, and the link is the part that needs a payslip-specific secret.
+    ``N`` is ``PAYSLIP_SMS_LINK_DAYS``, the same setting the link's expiry is
+    minted from, so the text cannot promise a different lifetime than the link
+    has. The company name gets whatever room the rest leaves and is cut to fit;
+    the result is checked to be all GSM-7 and at most 160 septets, and a body
+    that cannot be made to fit raises ValueError rather than going out as three
+    billed parts.
+    """
+    days = int(_config("PAYSLIP_SMS_LINK_DAYS", 30))
+    tail = f": your {clean_for_sms(_period(run))} payslip is ready."
+    if link:
+        tail += f" View (valid {days} day{'' if days == 1 else 's'}): {link}"
+    tail_cost = septets(tail)
+    if tail_cost is None:
+        raise ValueError("the payslip link is not GSM-7; check PUBLIC_BASE_URL")
+    budget = SMS_MAX_SEPTETS - tail_cost
+    name = fit(clean_for_sms(client.name if client else ""), budget, whole_words=True) or fit(
+        clean_for_sms(_config("APP_BRAND_NAME", "Payrolla")), budget, whole_words=True
+    )
+    if not name:
+        raise ValueError("the payslip link leaves no room in one SMS; check PUBLIC_BASE_URL")
+    body = name + tail
+    cost = septets(body)
+    if cost is None or cost > SMS_MAX_SEPTETS:  # unreachable unless the code above is wrong
+        raise ValueError(f"payslip SMS would cost {cost} septets")
+    return body
 
 
 def _brand(client=None):

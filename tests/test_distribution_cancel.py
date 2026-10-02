@@ -8,6 +8,7 @@ touched, and cancelled deliveries leave the retry pool.
 
 import os
 import unittest
+from unittest import mock
 
 os.environ["SKIP_DOTENV"] = "true"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
@@ -15,6 +16,7 @@ os.environ["SEED_DEMO_DATA"] = "true"
 os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from app import create_app, db  # noqa: E402
+from app.distribution.channels import ConsoleSmsSender, SendResult  # noqa: E402
 from app.distribution.queue import (  # noqa: E402
     cancel_distribution,
     enqueue_distribution,
@@ -35,6 +37,20 @@ from app.models import (  # noqa: E402
     PayslipDelivery,
     User,
 )
+
+
+def _provider_down_for(item_id):
+    """The SMS provider failing one payslip the way an outage does: a retryable
+    error. (A missing contact no longer works for this: since the SMS work it is
+    a permanent failure that is never retried automatically.)"""
+    real_send = ConsoleSmsSender.send
+
+    def send(sender, message):
+        if message.item_id == item_id:
+            return SendResult(False, sender.provider, "provider unavailable", retryable=True)
+        return real_send(sender, message)
+
+    return mock.patch.object(ConsoleSmsSender, "send", send)
 
 
 class CancelDistributionTestCase(unittest.TestCase):
@@ -80,8 +96,8 @@ class CancelDistributionTestCase(unittest.TestCase):
         )
 
     def test_cancel_stops_pending_retries_but_not_sent_deliveries(self):
-        self._strip(self.item)  # this one will fail and schedule a retry
-        distribute_run(self.run, channel="sms")
+        with _provider_down_for(self.item.id):  # fails and schedules a retry
+            distribute_run(self.run, channel="sms")
         failed = PayslipDelivery.query.filter_by(payroll_item_id=self.item.id).first()
         self.assertIsNotNone(failed.next_retry_at)
         sent = PayslipDelivery.query.filter_by(

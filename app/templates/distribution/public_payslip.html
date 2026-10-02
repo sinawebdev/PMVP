@@ -81,7 +81,7 @@
                 <strong>{{ item.net_pay|cedis }}</strong>
             </div>
 
-            <a class="download" href="{{ url_for('payslip_link.public_payslip_pdf', token=token) }}">Download PDF</a>
+            <a class="download" href="{{ pdf_url }}">Download PDF</a>
             <p class="foot">
                 This is your salary breakdown, not a payment confirmation.<br>
                 Sent securely by {{ client.name if client else app_brand_name }} via {{ app_brand_name }}.

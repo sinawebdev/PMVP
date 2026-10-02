@@ -637,6 +637,9 @@ def create_app():
     app.config["SLA_DELIVERY_CONFIRM_HOURS"] = int(
         os.getenv("SLA_DELIVERY_CONFIRM_HOURS", "0")
     )
+    # Minutes an `unknown` send (may have gone out) can stay unsettled before
+    # platform admins are alerted; 0 turns the check off.
+    app.config["SLA_UNKNOWN_MINUTES"] = int(os.getenv("SLA_UNKNOWN_MINUTES", "30"))
     app.config["SLA_CHECK_INTERVAL_SECONDS"] = int(
         os.getenv("SLA_CHECK_INTERVAL_SECONDS", "300")
     )

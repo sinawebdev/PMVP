@@ -21,10 +21,7 @@ from app import create_app, db  # noqa: E402
 
 EXPECTED = {
     "payroll_item": {"ix_payroll_item_payroll_run_id"},
-    "payslip_delivery": {
-        "ix_payslip_delivery_status_next_retry",
-        "ix_payslip_delivery_item_channel",
-    },
+    "payslip_delivery": {"ix_payslip_delivery_status_next_retry"},
     "distribution_batch": {"ix_distribution_batch_status_created"},
 }
 
@@ -45,6 +42,15 @@ class Phase5IndexTests(unittest.TestCase):
             names = {ix["name"] for ix in insp.get_indexes(table)}
             missing = expected - names
             self.assertFalse(missing, f"{table} missing indexes: {missing}")
+
+    def test_the_item_channel_lookup_is_backed_by_its_unique_constraint(self):
+        """ix_payslip_delivery_item_channel became uq_payslip_delivery_item_channel
+        in the SMS work: the same (payroll_item_id, channel) lookup, now also one
+        row per payslip per channel. SQLite reports the constraint's index as a
+        constraint, not an index, so it is checked as one."""
+        uniques = sa.inspect(db.engine).get_unique_constraints("payslip_delivery")
+        self.assertIn(("payroll_item_id", "channel"),
+                      [tuple(u["column_names"]) for u in uniques])
 
     def test_migrations_have_single_head(self):
         from alembic.config import Config

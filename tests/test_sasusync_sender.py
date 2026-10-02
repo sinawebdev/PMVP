@@ -274,8 +274,8 @@ class WiringTests(_SenderCase):
 
 
 class NoAutomaticResendTests(_SenderCase):
-    """Until Phase 2 adds the `unknown` status, a refused or ambiguous SasuSync
-    send is a failure with no retry scheduled, so the sweep cannot re-send it."""
+    """Only a retryable SasuSync failure is retried automatically. A refusal is
+    a final failure; an ambiguous send is `unknown`, which nothing resends."""
 
     def setUp(self):
         super().setUp()
@@ -304,21 +304,26 @@ class NoAutomaticResendTests(_SenderCase):
         self.assertEqual(delivery.status, DELIVERY_FAILED)
         self.assertIsNone(delivery.next_retry_at)
 
-    def test_an_ambiguous_send_is_not(self):
+    def test_an_ambiguous_send_is_unknown_not_failed(self):
         delivery = self._delivery_after(side_effect=TimeoutError("timed out"))
-        self.assertEqual(delivery.status, DELIVERY_FAILED)
+        self.assertEqual(delivery.status, "unknown")
         self.assertIsNone(delivery.next_retry_at)
         self.assertIn("may have been sent", delivery.error)
 
-    def test_the_delivery_id_reaches_sasusync_as_metadata(self):
-        first = self._delivery_after(return_value=(503, "{}"))
+    def test_the_delivery_id_reaches_sasusync_as_metadata_on_every_send(self):
+        def mine(post):
+            payloads = [c.kwargs["json"] for c in post.call_args_list]
+            return [p for p in payloads if p["recipients"] == ["233241234567"]]
+
+        with mock.patch("app.distribution.sasusync._http_post",
+                        return_value=(503, "{}")) as post:
+            distribute_run(self.run, channel="sms")
+        first = PayslipDelivery.query.filter_by(payroll_item_id=self.item.id, channel="sms").one()
+        self.assertEqual(mine(post)[0]["metadata"], {"delivery_id": first.id})
         with mock.patch("app.distribution.sasusync._http_post",
                         return_value=(200, OK_BODY)) as post:
             distribute_run(self.run, channel="sms", only_failed=True)
-        payloads = [c.kwargs["json"] for c in post.call_args_list]
-        mine = [p for p in payloads if p["recipients"] == ["233241234567"]]
-        self.assertTrue(mine)
-        self.assertEqual(mine[0]["metadata"], {"delivery_id": first.id})
+        self.assertEqual(mine(post)[0]["metadata"], {"delivery_id": first.id})
 
 
 if __name__ == "__main__":
