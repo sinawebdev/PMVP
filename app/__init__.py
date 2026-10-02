@@ -479,7 +479,7 @@ def create_app():
     # --- Payslip distribution channels ---
     # Each channel defaults to a console backend (logs only, no credentials, no network).
     # Set the matching *_BACKEND + credentials to go live per channel.
-    app.config["SMS_BACKEND"] = os.getenv("SMS_BACKEND", "console")          # console|hubtel
+    app.config["SMS_BACKEND"] = os.getenv("SMS_BACKEND", "console")  # console|hubtel|sasusync
     app.config["SMS_SENDER_ID"] = os.getenv("SMS_SENDER_ID")
     app.config["SMS_HUBTEL_CLIENT_ID"] = os.getenv("SMS_HUBTEL_CLIENT_ID")
     app.config["SMS_HUBTEL_CLIENT_SECRET"] = os.getenv("SMS_HUBTEL_CLIENT_SECRET")
@@ -564,6 +564,12 @@ def create_app():
             "provides no separation between session cookies and payslip links."
         )
     app.config["PAYSLIP_TOKEN_KEY"] = _payslip_key_from_env or secrets.token_hex(32)
+
+    # SasuSync settings and the SMS boot guards (PUBLIC_BASE_URL, credentials,
+    # no SMS on desktop) — see app/sms_config.py.
+    from app.sms_config import load_sms_config
+
+    load_sms_config(app, is_production=is_production, is_desktop=is_desktop)
 
     # --- Distribution queue worker (Phase 3, Slice 1) ---
     # No separate worker dyno/service exists yet (Render's plan is a single web

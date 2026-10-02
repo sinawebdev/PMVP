@@ -121,6 +121,9 @@ class OutboundMessage:
     # send in a log line without naming the worker (see recipient_fingerprint).
     # Optional and last, so every existing positional construction still works.
     item_id: int | None = None
+    # The PayslipDelivery being attempted. SasuSync echoes it back as metadata
+    # on its delivery webhooks, which is how a report finds its row.
+    delivery_id: int | None = None
 
 
 @dataclass
@@ -129,6 +132,10 @@ class SendResult:
     provider: str
     error: str | None = None
     message_id: str | None = None
+    # Message parts the provider billed, when it says.
+    units: int | None = None
+    retryable: bool | None = None   # None = legacy sender, keeps today's auto-retry
+    ambiguous: bool = False         # may have been sent; never re-sent automatically
 
 
 def _extract_message_id(body):
@@ -386,11 +393,11 @@ def simulated_channels():
     callers use this to render that disclosure. Empty once every channel is live.
     """
     cfg = current_app.config
-    live = {"sms": "hubtel", "whatsapp": "cloud", "email": "smtp"}
+    live = {"sms": {"hubtel", "sasusync"}, "whatsapp": {"cloud"}, "email": {"smtp"}}
     return [
         channel
-        for channel, real in live.items()
-        if cfg.get(f"{channel.upper()}_BACKEND") != real
+        for channel in sendable_channels()
+        if cfg.get(f"{channel.upper()}_BACKEND") not in live[channel]
     ]
 
 
@@ -407,11 +414,41 @@ def simulated_channel_labels():
     return [CHANNEL_LABELS.get(c, c) for c in simulated_channels()]
 
 
+def sms_blocked():
+    """True on a desktop install. SMS is never sent from one (decision 11): the
+    SasuSync account and its sender ID belong to Payrolla, not to the firm
+    running the desktop app."""
+    return bool(current_app.config.get("IS_DESKTOP"))
+
+
+SMS_BLOCKED_MESSAGE = "SMS isn't available in the desktop app. Choose another channel."
+
+
+def sms_refused(channel):
+    """True when an explicit send on ``channel`` must be refused at enqueue."""
+    return channel == "sms" and sms_blocked()
+
+
+def sendable_channels():
+    """The delivery channels this deployment may offer and route to, in
+    routing order. Everything except SMS on a desktop install."""
+    from app.models import CHANNEL_SMS, DELIVERY_CHANNELS
+
+    if sms_blocked():
+        return tuple(c for c in DELIVERY_CHANNELS if c != CHANNEL_SMS)
+    return DELIVERY_CHANNELS
+
+
 def get_sender(channel: str) -> Sender:
     """Return the Sender for a channel, console vs real per the *_BACKEND config."""
     cfg = current_app.config
     if channel == "sms":
-        return HubtelSmsSender() if cfg.get("SMS_BACKEND") == "hubtel" else ConsoleSmsSender()
+        backend = cfg.get("SMS_BACKEND")
+        if backend == "sasusync":
+            from .sasusync import SasuSyncSmsSender
+
+            return SasuSyncSmsSender()
+        return HubtelSmsSender() if backend == "hubtel" else ConsoleSmsSender()
     if channel == "whatsapp":
         return (
             CloudWhatsAppSender()

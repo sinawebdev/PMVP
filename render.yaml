@@ -56,6 +56,30 @@ services:
       # here and enable the `worker` service below (needs a paid Background Worker).
       - key: DISTRIBUTION_WORKER_INLINE
         value: "true"
+      # SMS payslips (SasuSync). This file is inert: the live service is set up
+      # in the Render dashboard, so each of these must be set THERE before the
+      # deploy whose code checks it, or the boot guards crash-loop the service.
+      # Any SMS_BACKEND other than console refuses to boot without an https://
+      # PUBLIC_BASE_URL; sasusync also needs the key, base URL and sender ID.
+      # Keep SMS_BACKEND=console until the sandbox check has passed.
+      - key: PUBLIC_BASE_URL
+        value: https://pmvp-v1.onrender.com
+      - key: SMS_BACKEND
+        value: console
+      - key: SMS_SENDER_ID
+        value: Payrolla
+      - key: SASUSYNC_API_KEY
+        sync: false
+      - key: SASUSYNC_BASE_URL
+        value: https://sms.sasusync.com
+      - key: SASUSYNC_SANDBOX
+        value: "true"
+      - key: SASUSYNC_WEBHOOK_SECRET
+        sync: false
+      - key: PAYSLIP_SMS_LINK_DAYS
+        value: "30"
+      - key: PAYSLIP_LINK_RATE_PER_MIN
+        value: "30"
 
   # --- Optional dedicated distribution worker (Phase 4) --------------------
   # Uncomment to run sending on its own process. Requires a paid Render

@@ -630,6 +630,11 @@ def _do_client_send(run, only_failed):
     if channel not in _VALID_SEND_CHANNELS:
         flash(f"Unknown channel: {channel}", "warning")
         return redirect(url_for("client.distribute", run_id=run.id))
+    from app.distribution.channels import SMS_BLOCKED_MESSAGE, sms_refused
+
+    if sms_refused(channel):
+        flash(SMS_BLOCKED_MESSAGE, "warning")
+        return redirect(url_for("client.distribute", run_id=run.id))
     nonce = request.form.get("nonce")
     action = "resend-failed" if only_failed else "send"
     key = f"client-distribute:{run.id}:{action}:{channel}:{nonce}" if nonce else None

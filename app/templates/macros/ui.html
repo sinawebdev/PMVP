@@ -319,7 +319,7 @@
 {% macro contact_badge(employee, show_ok=false) %}
 {%- if not employee.has_contact -%}
 <span class="ds-pill ds-pill--warn"
-      title="No email or phone on record — this worker cannot receive a payslip until one is added.">No contact</span>
+      title="No email or valid mobile number on record — this worker cannot receive a payslip until one is added.">No contact</span>
 {%- elif show_ok -%}
 <span class="ds-pill ds-pill--ok" title="Reachable at {{ employee.email or employee.phone }}">Contactable</span>
 {%- endif -%}

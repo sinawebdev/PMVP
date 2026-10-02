@@ -118,9 +118,18 @@ class _ContactCompleteness:
 
     @property
     def has_contact(self):
-        """Email or phone. Matches the import-time `no_contact` rule exactly —
-        `momo_number` is a payment destination, not a delivery channel."""
-        return bool(self.email or self.phone)
+        """Email, or a roster phone or MoMo number that ``normalise_gh_mobile``
+        accepts. The MoMo number counts because SMS goes to it when there is no
+        phone (Q4, 2026-10-01), but only a valid one: a number that cannot be
+        sent to is not a contact. The import-time `no_contact` warning reads
+        this property too."""
+        from app.distribution.phones import normalise_gh_mobile
+
+        return bool(
+            self.email
+            or normalise_gh_mobile(self.phone)
+            or normalise_gh_mobile(self.momo_number)
+        )
 
 
 class Employee(_ContactCompleteness, db.Model):

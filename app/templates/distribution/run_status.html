@@ -18,7 +18,7 @@
             <label class="form-label mb-1">Channel</label>
             <select class="form-select form-select-sm" name="channel">
                 <option value="auto" selected>Auto (per worker)</option>
-                <option value="sms">SMS</option>
+                {% if "sms" in channels %}<option value="sms">SMS</option>{% endif %}
                 <option value="whatsapp">WhatsApp</option>
                 <option value="email">Email</option>
             </select>

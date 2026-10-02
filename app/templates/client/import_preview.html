@@ -40,7 +40,7 @@
       {% endif %}
       {% if no_contact %}
       <li>
-        <strong>{{ no_contact|length }} employee{{ "" if no_contact|length == 1 else "s" }} have no email or phone</strong>
+        <strong>{{ no_contact|length }} employee{{ "" if no_contact|length == 1 else "s" }} have no email or valid mobile number</strong>
         ({{ no_contact|map(attribute="name")|join(", ") }}), so payslips cannot be delivered to them.
       </li>
       {% endif %}

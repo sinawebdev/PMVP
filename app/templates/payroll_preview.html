@@ -107,7 +107,7 @@
         {% endif %}
         {% if client and no_contact %}
         <li class="mb-2">
-            <strong>{{ no_contact|length }} registered employee{{ "" if no_contact|length == 1 else "s" }} have no email or phone</strong>
+            <strong>{{ no_contact|length }} registered employee{{ "" if no_contact|length == 1 else "s" }} have no email or valid mobile number</strong>
             ({{ no_contact|map(attribute="name")|join(", ") }}). Payslips cannot be distributed to them.
             <a href="{{ url_for('employees.roster', client_id=client.id) }}">Open the employee roster</a>.
         </li>

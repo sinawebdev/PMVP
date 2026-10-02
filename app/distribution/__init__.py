@@ -35,6 +35,7 @@ from app.models import (
 from app.payroll_status import SENDABLE_STATUSES
 from app.pdf_service import generate_payslip_pdf
 
+from .channels import SMS_BLOCKED_MESSAGE, sms_refused
 from .idempotency import replay_or_run
 from .queue import (
     cancel_distribution,
@@ -214,6 +215,9 @@ def _do_send(run_id, only_failed):
     if channel not in VALID_SEND_CHANNELS:
         flash(f"Unknown channel: {channel}", "danger")
         return redirect(url_for("distribution.run_status", run_id=run.id))
+    if sms_refused(channel):
+        flash(SMS_BLOCKED_MESSAGE, "warning")
+        return redirect(url_for("distribution.run_status", run_id=run.id))
 
     nonce = request.form.get("nonce")
     action = "resend-failed" if only_failed else "send"
@@ -289,6 +293,9 @@ def schedule(run_id):
     channel = request.form.get("channel", CHANNEL_AUTO)
     if channel not in VALID_SEND_CHANNELS:
         flash(f"Unknown channel: {channel}", "danger")
+        return redirect(url_for("distribution.run_status", run_id=run.id))
+    if sms_refused(channel):
+        flash(SMS_BLOCKED_MESSAGE, "warning")
         return redirect(url_for("distribution.run_status", run_id=run.id))
     when = _parse_schedule(request.form.get("scheduled_for"))
     if when is None or when <= datetime.now(timezone.utc):

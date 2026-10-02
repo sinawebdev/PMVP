@@ -13,7 +13,6 @@ from app.audit import record_audit
 from app.models import (
     CHANNEL_AUTO,
     CHANNEL_EMAIL,
-    DELIVERY_CHANNELS,
     DELIVERY_FAILED,
     DELIVERY_SENT,
     Employee,
@@ -23,7 +22,7 @@ from app.models import (
 )
 from app.raw_import import normalise_emp_id
 
-from .channels import OutboundMessage, get_sender
+from .channels import OutboundMessage, get_sender, sendable_channels
 from .render import render_payslip_email, render_payslip_text
 from .tokens import public_payslip_url
 
@@ -138,14 +137,18 @@ def _contact_for(channel, item):
 
 def resolve_channel(item, default_pref=None):
     """Pick the channel for an item: the roster employee's preference first, then the
-    remaining channels in order, choosing the first with a usable contact."""
+    remaining channels in order, choosing the first with a usable contact. Only
+    channels this deployment may send on are considered (no SMS on desktop)."""
     employee = _roster_employee(item)
+    channels = sendable_channels()
     pref = (employee.preferred_channel if employee else None) or default_pref
-    order = ([pref] if pref else []) + [c for c in DELIVERY_CHANNELS if c != pref]
+    if pref not in channels:
+        pref = None
+    order = ([pref] if pref else []) + [c for c in channels if c != pref]
     for channel in order:
         if _contact_for(channel, item):
             return channel
-    return pref or DELIVERY_CHANNELS[0]
+    return pref or channels[0]
 
 
 def _latest_delivery(item, channel):
@@ -234,7 +237,9 @@ def _attempt_send(delivery, item, run, client, ch, sender, max_attempts, backoff
     from .throttle import throttle
 
     throttle(ch)
-    result = sender.send(_build_message(ch, item, run, client, recipient))
+    message = _build_message(ch, item, run, client, recipient)
+    message.delivery_id = delivery.id
+    result = sender.send(message)
     if result.ok:
         _mark_sent(delivery, result.provider, message_id=result.message_id)
         return True
@@ -242,6 +247,10 @@ def _attempt_send(delivery, item, run, client, ch, sender, max_attempts, backoff
         delivery, result.error,
         provider=result.provider, max_attempts=max_attempts, backoff_base=backoff_base,
     )
+    if result.retryable is False or result.ambiguous:
+        # Refused outright, or it may already have gone out: neither is ever
+        # re-sent automatically. (retryable=None is a legacy sender; unchanged.)
+        delivery.next_retry_at = None
     return False
 
 
