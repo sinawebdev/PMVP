@@ -4,6 +4,7 @@ import secrets
 import threading
 import time
 from datetime import timedelta
+from urllib.parse import urlsplit
 
 import click
 
@@ -21,6 +22,15 @@ csrf = CSRFProtect()
 from flask_migrate import Migrate
 
 migrate = Migrate()
+
+
+def https_url_or_none(value):
+    """``value`` if it is an absolute https:// URL, else None."""
+    value = (value or "").strip()
+    parts = urlsplit(value)
+    if parts.scheme == "https" and parts.netloc and not any(c.isspace() for c in value):
+        return value
+    return None
 
 
 def resolve_database_uri(local_sqlite_path):
@@ -309,6 +319,17 @@ def create_app():
     )
     app.config["COMPANY_NAME"] = os.getenv("COMPANY_NAME", "Sinaforte Technologies")
     app.config["SERVICE_SLUG"] = os.getenv("SERVICE_SLUG", "payrolla")
+    # Where the landing page's "Download for Windows" button points. Unset, the
+    # button is not rendered at all: the installer is hosted outside this app
+    # (it is ~240 MB), and a button with nowhere real to go is worse than none.
+    # The value lands in an href on a public page, so only an absolute https://
+    # URL is accepted. Anything else (javascript:, plain http, a typo) is dropped
+    # with a warning rather than rendered -- and rather than failing the boot,
+    # because a bad download link must not take payroll down with it.
+    _download = os.getenv("DESKTOP_DOWNLOAD_URL", "")
+    app.config["DESKTOP_DOWNLOAD_URL"] = https_url_or_none(_download)
+    if _download.strip() and not app.config["DESKTOP_DOWNLOAD_URL"]:
+        app.logger.warning("DESKTOP_DOWNLOAD_URL ignored: it must be an absolute https:// URL")
     # Sign-in hints on the login page. Only meaningful where the demo roster was
     # actually seeded, and hard-off in production — a real deployment must never
     # advertise accounts, seeded or not.
