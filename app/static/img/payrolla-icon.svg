@@ -1,66 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 138" role="img" aria-label="Payrolla">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 136 158" role="img" aria-label="Payrolla">
   <!--
-    PAYROLLA ICON — hand-constructed geometry. No tracing, no auto-vectorisation,
-    no embedded bitmap. Every number is derived, not eyeballed.
+    PAYROLLA ICON — the folded-ribbon P. Master geometry for every static mark.
 
-    The body is delivered as an OUTLINED shape rather than a live stroke. That is
-    deliberate: a stroke's inner corners are always sharp, so a stroked form
-    cannot produce the rounded cut-out this mark needs. Outlining puts every
-    radius under explicit control while keeping the wall thickness constant.
+    Drawn from the same numbers as the animated logo
+    (scripts/logo/logo_parts.py: turtle_program and stem_outline), so the
+    animation lands exactly on this shape. One ribbon unit = 40 here, with
+    10 of padding all round:
 
-      wall thickness   18, everywhere:
-                         outer top    11 -> opening top     29
-                         opening base 89 -> outer base     107
-                         stem edge    23 -> opening left    41
-                         outer bend   48 -> opening bend    30
-      bend             outer r48 and inner r30 are CONCENTRIC on (62,59), which
-                       is what holds the thickness at exactly 18 around the
-                       whole curve; both chords equal their diameters, so each
-                       is an exact semicircle and meets the horizontal runs with
-                       a horizontal tangent — G1 continuous, no visible kink
-      cut-out          51 x 60 rounded slot: r30 semicircular right end (exactly
-                       half its height), r12 corners at the left
-      junction         r3 concave fillet where the bowl underside meets the stem,
-                       so that corner is eased rather than cut
-      artwork          99 x 117 (height slightly greater than width), centred in
-                       the 120 x 138 viewBox with balanced 10-11 unit padding
+      column           x 0..1,  y -1.1..1.1      ->  X 10..50,  Y 10..98
+      top band         y 0.1..1.1                ->  Y 10..50 (sharp top-left corner)
+      bowl             centre (1.8, 0), outer r 1.1, inner r 0.1
+                                                 ->  centre (82,54), r44 / r4
+      bottom band      y -1.1..-0.1, x 1..1.8    ->  Y 58..98, X 50..82
+      counter          the 0.2 slit between the bands: square at the column,
+                       round at the bowl         ->  X 50..86, Y 50..58
+      stem (the fold)  quarter ellipse below the column, rx 1, ry 1.25,
+                       down to a point at y -2.35 ->  rx40 ry50, tip (10,148)
 
-    Drawing order matters: the leaf is laid down FIRST so the body covers where
-    the teardrop closes back into it. That is what makes the blend seamless —
-    there is no seam to hide because the join sits underneath.
+    The body is one shape: outer contour, then the counter knocked out with
+    evenodd. The stem is the ribbon's BACK side folded under, so it is a flat,
+    darker teal rather than part of the gradient.
+
+    Gradient: the animation's front-face ramp, deep at f=0.1 to bright at
+    f=0.8 along the direction (0.45, 0.89). Blender blends in linear light, so
+    the mid stops are the linear-light blend converted back to sRGB; an
+    sRGB-blended two-stop gradient would sag dark through the middle.
   -->
   <defs>
-    <!-- Primary gradient, a true 45 degrees: dx and dy are equal (+99, -99),
-         running bottom-left (deep) to top-right (bright). -->
-    <linearGradient id="pa-body" x1="11" y1="119" x2="110" y2="20" gradientUnits="userSpaceOnUse">
+    <linearGradient id="pa-front" x1="40.49" y1="133.41" x2="88.63" y2="38.2" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#0D4D4D"/>
+      <stop offset=".25" stop-color="#107972"/>
+      <stop offset=".5" stop-color="#13978B"/>
+      <stop offset=".75" stop-color="#15AFA0"/>
       <stop offset="1" stop-color="#17C3B2"/>
     </linearGradient>
-    <!-- Leaf gradient, vertical. -->
-    <linearGradient id="pa-leaf" x1="20" y1="82" x2="20" y2="128" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#063737"/>
-      <stop offset="1" stop-color="#0D4D4D"/>
-    </linearGradient>
-    <!-- The only lighting in the mark: a very subtle white wash that fades out
-         by mid-height. No shadow, no bevel, no emboss. -->
-    <linearGradient id="pa-sheen" x1="32" y1="11" x2="32" y2="76" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffffff" stop-opacity=".14"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
   </defs>
-
-  <!-- Leaf: a teardrop, not a stroke. Rises from beneath the left of the stem,
-       sweeps down and out, and converges to a true point at (11,128) where its
-       two flanks meet at a cusp. Its closing edge lies inside the stem band
-       (x 23-41), so the body covers it completely. -->
-  <path d="M23 82C21 100 17 116 11 128C22 117 32 109 40 92Z" fill="url(#pa-leaf)"/>
-
-  <!-- Body: outer contour first, then the cut-out. evenodd knocks the second
-       subpath out of the first, so the two are one shape with one fill. -->
-  <path fill-rule="evenodd" fill="url(#pa-body)"
-        d="M32 11H62A48 48 0 0 1 62 107H44A3 3 0 0 0 41 110A9 9 0 0 1 23 110V20A9 9 0 0 1 32 11Z
-           M53 29H62A30 30 0 0 1 62 89H53A12 12 0 0 1 41 77V41A12 12 0 0 1 53 29Z"/>
-  <path fill-rule="evenodd" fill="url(#pa-sheen)"
-        d="M32 11H62A48 48 0 0 1 62 107H44A3 3 0 0 0 41 110A9 9 0 0 1 23 110V20A9 9 0 0 1 32 11Z
-           M53 29H62A30 30 0 0 1 62 89H53A12 12 0 0 1 41 77V41A12 12 0 0 1 53 29Z"/>
+  <path fill="#0B4A48" d="M10 98H50A40 50 0 0 1 10 148Z"/>
+  <path fill="url(#pa-front)" fill-rule="evenodd" d="M10 10H82A44 44 0 0 1 82 98H10Z M50 50H82A4 4 0 0 1 82 58H50Z"/>
 </svg>
