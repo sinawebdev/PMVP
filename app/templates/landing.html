@@ -57,7 +57,7 @@
   .lp-root .brand{display:flex;align-items:center;gap:12px}
   .lp-root .cn{width:44px;height:44px;border-radius:12px;background:#fff;
     display:grid;place-items:center;box-shadow:0 8px 22px rgba(0,0,0,.28)}
-  /* Height drives, width follows — the mark is taller than wide (99x117). */
+  /* Height drives, width follows — the mark is taller than wide (116x138). */
   .lp-root .cn img{width:auto;height:32px;display:block}
   .lp-root .brand b{font-family:'Plus Jakarta Sans';font-weight:600;letter-spacing:.5px;font-size:16px}
   .lp-root .brand small{display:block;color:var(--muted);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;margin-top:1px}
@@ -126,6 +126,32 @@
   .lp-root .hbtn.gold:hover{transform:translateY(-3px);box-shadow:0 16px 42px rgba(23,195,178,.5);color:#06302b}
   .lp-root .hbtn.ghost{border:1px solid var(--card-brd);background:var(--card);color:var(--cream)}
   .lp-root .hbtn.ghost:hover{border-color:var(--gold);transform:translateY(-3px);color:var(--cream)}
+  /* ---------- animated mark (static/logo-player.js) ----------
+     .hero-mark is the finished P's own box. The media inside is the larger
+     render box -- the unwound ribbon starts well above the P -- placed so the
+     P lands exactly on .hero-mark and the entrance overflows it. The four
+     numbers are where the P sits in that box, as scripts/logo/
+     build_logo_assets.py reports them; re-paste them if the framing changes. */
+  /* align-self: the hero is a flex column, and a stretched item has a definite
+     width, which makes the browser ignore aspect-ratio and squash the P. */
+  .lp-root .hero-mark{--mark-left:.2030;--mark-top:.4815;--mark-width:.5396;--mark-height:.4802;
+    position:relative;align-self:flex-start;height:64px;aspect-ratio:2.9/3.45;margin-bottom:22px;
+    pointer-events:none}
+  .lp-root .hero-mark-media{position:absolute;display:block;
+    left:calc(-100% * var(--mark-left) / var(--mark-width));
+    top:calc(-100% * var(--mark-top) / var(--mark-height));
+    width:calc(100% / var(--mark-width));height:calc(100% / var(--mark-height))}
+  .lp-root .hero-mark-still{display:block;width:100%;height:100%}
+  /* Animating: the still waits (it is the final frame) until the player
+     finishes or gives up. Without .mark-motion it simply shows. */
+  .mark-motion .lp-root .hero-mark-still{visibility:hidden}
+  .lp-root .hero-mark.is-still .hero-mark-still{visibility:visible}
+  @media(min-width:921px){
+    /* The headline leaves the right of the hero empty: the mark takes it,
+       behind the text should a narrow window ever bring the two together. */
+    .lp-root .hero-mark{position:absolute;right:34px;top:50%;margin:0;z-index:-1;
+      height:clamp(180px,18vw,260px);transform:translateY(-50%)}
+  }
   .lp-root .scrollcue{position:absolute;bottom:34px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;
     color:var(--muted);font-family:'Plus Jakarta Sans';font-size:11px;letter-spacing:.2em;text-transform:uppercase;
     opacity:0;animation:lp-fadeUp 1s ease 1.9s forwards}
@@ -360,6 +386,22 @@
     .lp-root .hero-title .w{opacity:1;transform:none;animation:none}
   }
 </style>
+<script>
+  // Decide before the hero paints whether the mark animates, so its still --
+  // the finished mark -- never shows only to vanish into the empty first frame.
+  // No motion for reduced-motion or Save-Data users, or without WebGL; then the
+  // still simply stands. The timer reveals it if the player never reports in.
+  (function () {
+    var c = navigator.connection;
+    if (!window.matchMedia || !matchMedia('(prefers-reduced-motion: no-preference)').matches ||
+        (c && c.saveData) || !window.WebGLRenderingContext) return;
+    document.documentElement.classList.add('mark-motion');
+    setTimeout(function () {
+      var box = document.querySelector('[data-mark-anim]');
+      if (box && !box.classList.contains('is-playing')) box.classList.add('is-still');
+    }, 8000);
+  })();
+</script>
 
 <div class="lp-root">
 <div class="aurora"><span class="a1"></span><span class="a2"></span><span class="a3"></span></div>
@@ -383,6 +425,16 @@
 
   <!-- HERO -->
   <section class="sec" id="hero" data-label="Intro">
+    {# The P folds itself together once (scripts/logo/), then stands. Decorative:
+       the brand name is in the eyebrow and the top bar. #}
+    <div class="hero-mark" aria-hidden="true" data-mark-anim data-media-class="hero-mark-media"
+         data-video-lg="{{ url_for('static', filename='img/payrolla-mark-dark-lg.mp4') }}"
+         data-video-sm="{{ url_for('static', filename='img/payrolla-mark-dark-sm.mp4') }}">
+      <picture class="hero-mark-media">
+        <source media="(min-width: 921px)" srcset="{{ url_for('static', filename='img/payrolla-mark-dark-lg.webp') }}">
+        <img class="hero-mark-still" src="{{ url_for('static', filename='img/payrolla-mark-dark-sm.webp') }}" alt="" width="230" height="308">
+      </picture>
+    </div>
     <div class="hero-eyebrow">{{ app_brand_name }} · {{ app_short_name }}</div>
     <h1 class="hero-title"><span class="w">Calculated.</span> <span class="w">Delivered.</span> <span class="w">Proven.</span></h1>
     <p class="hero-sub"><b>{{ app_brand_name }}</b> is a modern payroll, compliance &amp; workforce platform — calculate accurately, then deliver every payslip by <b>Email</b>, <b>WhatsApp</b> &amp; <b>SMS</b>, with proof it reached the worker.</p>
@@ -743,4 +795,5 @@
   // dot nav above.
 })();
 </script>
+<script src="{{ url_for('static', filename='logo-player.js') }}" defer></script>
 {% endblock %}
