@@ -707,6 +707,9 @@
       </div>
       <div class="close-cta rv" style="--d:520ms">
         <a class="hbtn gold" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-arrow-right-to-bracket"></i> Log in to {{ app_brand_name }}</a>
+        {% if desktop_download_url %}
+        <a class="hbtn ghost" href="{{ desktop_download_url }}"><i class="fa-brands fa-windows" aria-hidden="true"></i> Download for Windows</a>
+        {% endif %}
       </div>
       <div class="close-foot rv" style="--d:560ms">© 2026 {{ app_brand_name }}. Built by {{ company_name }}.</div>
     </div>
