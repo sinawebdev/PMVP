@@ -20,7 +20,8 @@
         <h2><i class="bi bi-building"></i>{{ run.client_company.name if run.client_company else "Client" }} — {{ run.month }} {{ run.year }}</h2>
         <span class="badge text-bg-{{ 'success' if sendable else 'secondary' }}">{{ run.status }}</span>
     </div>
-    {{ ds.totals(rows, sent_count, failed_count, net_total=run.total_net_pay|cedis) }}
+    {{ ds.totals(rows, sent_count, failed_count, net_total=run.total_net_pay|cedis,
+                 unknown_count=unknown_count) }}
     {% if not sendable %}
     <div class="mini-note"><i class="bi bi-info-circle"></i> Payslips can be distributed once this payroll run is <strong>Approved</strong>.</div>
     {% endif %}

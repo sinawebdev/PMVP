@@ -373,12 +373,17 @@ input:disabled {
 .skip-link:focus { top: 12px; }
 
 /* `summary` is focusable but is none of the three below, so the utility menus
-   would otherwise be the only chrome with no visible focus ring. */
+   would otherwise be the only chrome with no visible focus ring.
+
+   --brand, not --brand-soft: the soft tint measured 1.17:1 on white, so the
+   ring was drawn and nobody could see it (WCAG 1.4.11 needs 3:1;
+   plans/focus-indicator-contrast-defect.md). --brand is 5.67:1 on the page.
+   --brand-soft keeps its value for the fills it is meant for. */
 a:focus-visible,
 .btn:focus-visible,
 button:focus-visible,
 summary:focus-visible {
-    outline: 3px solid var(--brand-soft);
+    outline: 3px solid var(--brand);
     outline-offset: 2px;
 }
 

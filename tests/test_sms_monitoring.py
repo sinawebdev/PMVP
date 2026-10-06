@@ -190,14 +190,15 @@ class DashboardTests(_MonitorCase):
 
 
 class TenantIsolationTests(_MonitorCase):
-    """Tenant A's client_admin gets 404 on tenant B's run for every action that
-    exists so far. (The confirm step joins this list in Phase 3.)"""
+    """Tenant A's client_admin gets 404 on tenant B's run for view, send, resend,
+    cancel and the SMS confirm step."""
 
-    def test_another_tenants_run_is_404_for_view_send_resend_and_cancel(self):
+    def test_another_tenants_run_is_404_for_view_send_resend_cancel_and_confirm(self):
         self.login("admin@acme.com")
         base = f"/company/runs/{self.run.id}/distribute"
         self.assertEqual(self.http.get(base).status_code, 404)
         self.assertEqual(self.http.get(f"{base}/status-fragment").status_code, 404)
+        self.assertEqual(self.http.get(f"{base}/confirm?channel=sms&action=send").status_code, 404)
         for path in (f"{base}/send", f"{base}/resend-failed"):
             response = self.http.post(path, data={"channel": "sms", "nonce": path})
             self.assertEqual(response.status_code, 404, path)

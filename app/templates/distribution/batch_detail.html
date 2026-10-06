@@ -45,11 +45,13 @@
             {% for d in page.items %}
                 <tr>
                     <td>{{ d.payroll_item.staff_id if d.payroll_item }} · {{ d.payroll_item.full_name if d.payroll_item }}</td>
-                    <td>{{ d.recipient or "—" }}</td>
+                    <td>{{ d|shown_recipient }}</td>
                     <td>{{ d.channel }}</td>
                     <td>
                         {% if d.status == "sent" %}<span class="badge text-bg-success">sent</span>
                         {% elif d.status == "cancelled" %}<span class="badge text-bg-dark">cancelled</span>
+                        {% elif d.status == "unknown" %}<span class="badge text-bg-warning" title="May have been sent. Check the SasuSync portal, then mark it on the run's delivery page.">unconfirmed</span>
+                        {% elif d.status == "sending" %}<span class="badge text-bg-info">sending</span>
                         {% elif d.status == "failed" %}
                             {% set rs = delivery_retry_state(d) %}
                             {% if rs.final %}<span class="badge text-bg-danger">failed · final</span>

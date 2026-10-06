@@ -37,6 +37,7 @@ from app.payroll_status import SENDABLE_STATUSES
 from app.pdf_service import generate_payslip_pdf
 
 from .channels import SMS_BLOCKED_MESSAGE, sms_refused
+from .confirm import confirm_url, needs_confirm
 from .idempotency import replay_or_run
 from .links import resolve_payslip_link
 from .queue import (
@@ -220,6 +221,9 @@ def _do_send(run_id, only_failed):
     if sms_refused(channel):
         flash(SMS_BLOCKED_MESSAGE, "warning")
         return redirect(url_for("distribution.run_status", run_id=run.id))
+    if needs_confirm(channel, request.form):  # SMS / auto: show who it reaches first
+        return redirect(confirm_url("distribution.confirm_send", run, channel,
+                                    "resend" if only_failed else "send", request.form))
 
     nonce = request.form.get("nonce")
     action = "resend-failed" if only_failed else "send"
@@ -303,6 +307,9 @@ def schedule(run_id):
     if when is None or when <= datetime.now(timezone.utc):
         flash("Pick a valid future date and time to schedule the distribution.", "warning")
         return redirect(url_for("distribution.run_status", run_id=run.id))
+    if needs_confirm(channel, request.form):
+        return redirect(confirm_url("distribution.confirm_send", run, channel, "schedule",
+                                    request.form))
     summary = enqueue_distribution(run, channel, False, current_user, scheduled_for=when)
     if summary.get("already_in_progress"):
         flash("A distribution is already scheduled or in progress for this run.", "warning")
@@ -456,3 +463,9 @@ def short_payslip_pdf(code):
     if item is None:
         return _short_link_expired()
     return _no_store(_payslip_pdf_response(item))
+
+
+# The SMS confirm step and the settle action (SMS Phase 3). Imported last so its
+# routes attach once distribution_bp and the send routes above exist; kept in
+# its own module so this file stays under 500 lines.
+from app.distribution import run_actions as _run_actions  # noqa: E402,F401

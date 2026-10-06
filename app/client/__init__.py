@@ -631,10 +631,14 @@ def _do_client_send(run, only_failed):
         flash(f"Unknown channel: {channel}", "warning")
         return redirect(url_for("client.distribute", run_id=run.id))
     from app.distribution.channels import SMS_BLOCKED_MESSAGE, sms_refused
+    from app.distribution.confirm import confirm_url, needs_confirm
 
     if sms_refused(channel):
         flash(SMS_BLOCKED_MESSAGE, "warning")
         return redirect(url_for("client.distribute", run_id=run.id))
+    if needs_confirm(channel, request.form):  # SMS / auto: show who it reaches first
+        return redirect(confirm_url("client.distribute_confirm", run, channel,
+                                    "resend" if only_failed else "send", request.form))
     nonce = request.form.get("nonce")
     action = "resend-failed" if only_failed else "send"
     key = f"client-distribute:{run.id}:{action}:{channel}:{nonce}" if nonce else None
@@ -753,3 +757,7 @@ from app.client import reports as _reports  # noqa: E402,F401
 # expenses), tenant-scoped. Same import-at-the-bottom pattern; its totals feed
 # the company dashboard analytics.
 from app.client import expenses as _expenses  # noqa: E402,F401
+
+# The confirm step before an SMS or auto send (SMS Phase 3), on the same
+# distribute page. Same import-at-the-bottom pattern.
+from app.client import distribute_confirm as _distribute_confirm  # noqa: E402,F401

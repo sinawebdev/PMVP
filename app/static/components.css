@@ -633,6 +633,20 @@
     color: inherit; font: inherit; font-size: 12.5px; padding: 3px 6px; max-width: 160px;
 }
 .ds-select:disabled { opacity: .55; }
+.ds-total--warn dd { color: var(--warn); }
+
+/* Settling an unconfirmed send: two secondary buttons in a table cell — the
+   action bar's own buttons (so they render in both shells), at table scale. */
+.ds-settle { gap: 6px; margin-top: 8px; }
+.ds-settle.ab form > .btn { border-radius: 8px; font-size: 12px; padding: 4px 10px; }
+
+/* The confirm step before an SMS or auto send (macros/distribution.html). Its
+   one primary button is the action bar's, which already reads in both shells. */
+.ds-confirm h2 { font-size: 16px; font-weight: 750; margin: 0 0 4px; }
+.ds-confirm-lead { color: var(--muted); font-size: 13.5px; margin: 0 0 16px; }
+.ds-confirm-sub { font-size: 14px; font-weight: 700; margin: 22px 0 0; }
+.ds-confirm .ds-table-wrap { margin-top: 10px; }
+.ds-confirm-actions { margin-top: 20px; }
 
 /* Import preview: the blockers list and the note voice, shared by both portals
    (macros/import_preview.html). */

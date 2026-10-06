@@ -42,6 +42,8 @@ OUTPUT_DIR = os.path.join(REPO_ROOT, ".screenshots")
 # The seeded tenant admin. Same identity the tests use.
 DEMO_EMAIL = "admin@msc.com"
 DEMO_PASSWORD = "password123"
+# The seeded platform admin, for operator-console captures.
+OPERATOR_EMAIL = "admin@payrolla.com"
 
 
 # --- The capture list -------------------------------------------------------
@@ -56,6 +58,9 @@ class Capture:
     viewport: tuple[int, int]
     actions: tuple[tuple[str, str], ...] = field(default=())
     full_page: bool = False
+    # Who signs in first. Most captures are the client portal; the operator
+    # console's own screens sign in as OPERATOR_EMAIL.
+    email: str = DEMO_EMAIL
 
 
 CAPTURES: tuple[Capture, ...] = (
@@ -100,6 +105,68 @@ CAPTURES: tuple[Capture, ...] = (
         name="shell-404-tenant",
         route="/company/no-such-page",
         viewport=(1280, 800),
+    ),
+    # SMS Phase 3: both send pages and the confirm step each one gains. The
+    # seeded database holds one approved run, id 1.
+    Capture(
+        name="distribute-tenant",
+        route="/company/runs/1/distribute",
+        viewport=(1280, 900),
+        full_page=True,
+    ),
+    Capture(
+        name="distribute-confirm-tenant",
+        route="/company/runs/1/distribute/confirm?channel=sms&action=send",
+        viewport=(1280, 900),
+        full_page=True,
+    ),
+    Capture(
+        name="distribute-confirm-tenant-390",
+        route="/company/runs/1/distribute/confirm?channel=sms&action=send",
+        viewport=(390, 900),
+        full_page=True,
+    ),
+    # Keyboard focus on the tenant page has to be visible (WCAG 1.4.11; see
+    # plans/focus-indicator-contrast-defect.md). Tabbed to, not focused by
+    # script, so the shot shows what a keyboard user sees.
+    Capture(
+        name="distribute-confirm-tenant-focus",
+        route="/company/runs/1/distribute/confirm?channel=sms&action=send",
+        viewport=(1280, 900),
+        actions=(
+            ("focus", ".ds-confirm-actions a.btn"),
+            ("press", "Shift+Tab"),
+            ("settle", "150"),
+        ),
+    ),
+    Capture(
+        name="run-delivery-operator",
+        route="/distribution/run/1",
+        viewport=(1280, 900),
+        full_page=True,
+        email=OPERATOR_EMAIL,
+    ),
+    Capture(
+        name="run-delivery-confirm-operator",
+        route="/distribution/run/1/confirm?channel=sms&action=send",
+        viewport=(1280, 900),
+        full_page=True,
+        email=OPERATOR_EMAIL,
+    ),
+    # Bulk Distribute on the runs list stops at the same step, for its selection.
+    Capture(
+        name="bulk-confirm-operator",
+        route="/distribution/runs/confirm?run_ids=1",
+        viewport=(1280, 900),
+        full_page=True,
+        email=OPERATOR_EMAIL,
+    ),
+    Capture(
+        name="bulk-confirm-operator-390",
+        route="/distribution/runs/confirm?run_ids=1",
+        viewport=(390, 900),
+        full_page=True,
+        email=OPERATOR_EMAIL,
     ),
 )
 
@@ -173,18 +240,18 @@ def _serve():
         shutil.rmtree(workdir, ignore_errors=True)
 
 
-def _login(page, base_url: str) -> None:
-    """Sign in as the demo tenant through the real form.
+def _login(page, base_url: str, email: str = DEMO_EMAIL) -> None:
+    """Sign in through the real form, as the demo tenant unless told otherwise.
 
     Posting the session cookie directly would be faster and would skip the one
     thing worth confirming for free on every run: that the portal is reachable
     the way a user reaches it.
     """
     page.goto(f"{base_url}/login", wait_until="domcontentloaded")
-    page.fill("#email", DEMO_EMAIL)
+    page.fill("#email", email)
     page.fill("#password", DEMO_PASSWORD)
     page.click("form button[type=submit], form input[type=submit], form .btn")
-    page.wait_for_url(f"{base_url}/company**", timeout=15000)
+    page.wait_for_url(lambda url: "/login" not in url, timeout=15000)
 
 
 # --- Runner -----------------------------------------------------------------
@@ -216,7 +283,7 @@ def capture_all(selected: list[str] | None = None) -> int:
                 )
                 page = context.new_page()
                 try:
-                    _login(page, base_url)
+                    _login(page, base_url, cap.email)
                     page.goto(f"{base_url}{cap.route}", wait_until="networkidle")
                     for verb, argument in cap.actions:
                         _run_action(page, verb, argument)

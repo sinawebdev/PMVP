@@ -93,7 +93,7 @@ class EventFanoutTestCase(unittest.TestCase):
         self._login("admin@msc.com")
         self.client.post(
             f"/company/runs/{msc_run.id}/distribute/send",
-            data={"channel": "auto", "nonce": "n1"},
+            data={"channel": "auto", "confirmed": "1", "nonce": "n1"},
         )
         # Sending only queues the batch now; a worker runs it and fires the event.
         process_all_queued()

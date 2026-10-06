@@ -4,6 +4,7 @@ import secrets
 import threading
 import time
 from datetime import timedelta
+from urllib.parse import urlsplit
 
 import click
 
@@ -21,6 +22,18 @@ csrf = CSRFProtect()
 from flask_migrate import Migrate
 
 migrate = Migrate()
+
+
+def https_url_or_none(value):
+    """Accept an absolute HTTPS download URL; ignore invalid configuration."""
+    value = (value or "").strip()
+    try:
+        parts = urlsplit(value)
+        if parts.scheme == "https" and parts.hostname and not any(c.isspace() for c in value):
+            return value
+    except ValueError:
+        pass
+    return None
 
 
 def resolve_database_uri(local_sqlite_path):
@@ -309,6 +322,12 @@ def create_app():
     )
     app.config["COMPANY_NAME"] = os.getenv("COMPANY_NAME", "Sinaforte Technologies")
     app.config["SERVICE_SLUG"] = os.getenv("SERVICE_SLUG", "payrolla")
+    # Public desktop installer hosted outside this app. Per-firm builds carry
+    # their customer's license and must not be used for a general download.
+    _download = os.getenv("DESKTOP_DOWNLOAD_URL", "")
+    app.config["DESKTOP_DOWNLOAD_URL"] = https_url_or_none(_download)
+    if _download.strip() and not app.config["DESKTOP_DOWNLOAD_URL"]:
+        app.logger.warning("DESKTOP_DOWNLOAD_URL ignored: it must be an absolute https:// URL")
     # Sign-in hints on the login page. Only meaningful where the demo roster was
     # actually seeded, and hard-off in production — a real deployment must never
     # advertise accounts, seeded or not.

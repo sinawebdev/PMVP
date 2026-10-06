@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% import "macros/breadcrumbs.html" as bc %}
 {% import "macros/delivery.html" as dm %}
+{% import "macros/distribution.html" as ds %}
 {% block title %}Payslip Delivery · {{ app_name }}{% endblock %}
 {% block page_title %}Payslip Delivery{% endblock %}
 {% block breadcrumbs %}
@@ -11,7 +12,11 @@
     + [(run.month ~ " " ~ run.year, url_for('payroll.detail', run_id=run.id)), ("Payslip Delivery", None)]) }}
 {% endblock %}
 {% block page_actions %}
-    {% if sendable and not in_flight %}
+    {# While the SMS confirm step is up it is the screen's one decision, so the
+       send controls (and everything else that acts) stand aside until it is
+       answered or abandoned with Back. #}
+    {% if confirm %}
+    {% elif sendable and not in_flight %}
     <form method="post" class="d-flex flex-wrap gap-2 align-items-end">
         <input type="hidden" name="nonce" value="{{ nonce }}">
         <div>
@@ -43,7 +48,7 @@
     {% elif sendable and in_flight %}
     <span class="badge text-bg-info"><i class="bi bi-hourglass-split"></i> Distribution in progress…</span>
     {% endif %}
-    {% if cancellable %}
+    {% if cancellable and not confirm %}
     <button class="btn btn-outline-danger btn-sm"
             hx-post="{{ url_for('distribution.cancel', run_id=run.id) }}"
             hx-confirm="Cancel this distribution? Any scheduled or queued send and pending retries will be stopped. Already-sent payslips are unaffected."
@@ -54,5 +59,9 @@
 {% endblock %}
 {% block content %}
 {{ dm.simulated_notice() }}
+{% if confirm %}
+<section class="panel">{{ ds.send_confirm(confirm) }}</section>
+{% else %}
 {% include "distribution/_status_fragment.html" %}
+{% endif %}
 {% endblock %}

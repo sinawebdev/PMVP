@@ -1881,9 +1881,13 @@ def bulk_reject():
 @payroll_bp.route("/runs/bulk/distribute", methods=["POST"])
 @role_required(*PAYROLL_ROLES)
 def bulk_distribute():
+    from app.distribution.confirm import bulk_confirm_url, needs_confirm
     from app.distribution.queue import enqueue_distribution
     from app.models import CHANNEL_AUTO
 
+    # An auto send shows who it reaches first, as it does on a single run.
+    if request.form.getlist("run_ids") and needs_confirm(CHANNEL_AUTO, request.form):
+        return redirect(bulk_confirm_url(request.form))
     done, skipped = _bulk_apply(
         request.form.getlist("run_ids"),
         can_distribute_run,

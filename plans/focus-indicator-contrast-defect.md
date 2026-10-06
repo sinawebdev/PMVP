@@ -1,7 +1,10 @@
 # Keyboard focus is invisible across the tenant portal — WCAG 1.4.11 failure
 
-- **Status**: OPEN accessibility defect. Not a redesign item, not a style
-  preference, and it does not close when any feature branch merges.
+- **Status**: Tenant portal FIXED on `feature/sms-distribution` (SMS Phase 3,
+  2026-10-02): the `portal.css` rule now uses `--brand` (5.67:1 on the page).
+  Still open: `.upload-tab:focus-visible` in `styles.css` (operator shell), not
+  yet re-measured. The `.portal-topbar` override was kept rather than deleted:
+  it also covers the search input, which the portal-wide rule does not.
 - **Severity**: fails a Level AA success criterion on every focusable control in
   the client portal except the shell chrome.
 - **Where**: `app/static/portal.css`, the global focus rule; `app/static/styles.css`,

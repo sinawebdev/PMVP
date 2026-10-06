@@ -45,7 +45,10 @@ def index():
         from app.tenancy import landing_endpoint
 
         return redirect(url_for(landing_endpoint()))
-    return render_template("landing.html")
+    return render_template(
+        "landing.html",
+        desktop_download_url=current_app.config.get("DESKTOP_DOWNLOAD_URL"),
+    )
 
 
 @main_bp.route("/health")

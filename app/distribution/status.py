@@ -87,6 +87,8 @@ def delivery_status_context(run, now=None):
 
     sent = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "sent")
     failed = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "failed")
+    # May have been sent (a provider timeout); counted apart, never as failed.
+    unknown = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "unknown")
 
     batch = latest_batch(run.id)
     # A pending automatic retry (a failed delivery still scheduled) keeps the
@@ -120,6 +122,7 @@ def delivery_status_context(run, now=None):
         "sendable": run.status in SENDABLE_STATUSES,
         "sent_count": sent,
         "failed_count": failed,
+        "unknown_count": unknown,
         "batch": batch,
         "in_flight": batch_active or pending_retry or scheduled,
         # Drives live polling — a far-future scheduled batch changes nothing

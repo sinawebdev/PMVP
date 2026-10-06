@@ -212,16 +212,26 @@
   // Submit feedback: disable button + spinner on full-page form submits.
   // htmx-driven forms are skipped — htmx has its own hx-indicator, and a
   // cancelled hx-confirm would otherwise leave the button stuck on "Working…".
+  // Bubble phase, not capture. app.js's data-confirm handler holds a submit in
+  // the capture phase and stops it there, so a submit waiting on (or cancelled
+  // in) the styled modal never reaches this; only the confirmed re-submit does.
+  // As a capture listener this ran first (this inline script registers before
+  // the deferred app.js), so a cancelled modal left the button stuck until a
+  // reload. The submitter is what gets marked, so on a form with several
+  // buttons (bulk approve / reject / distribute) the one pressed shows busy.
   document.addEventListener('submit', function (e) {
+    if (e.defaultPrevented) return;
     var form = e.target;
     if (!form || !form.matches('form')) return;
     if (form.matches('[hx-post],[hx-get],[hx-put],[hx-delete],[hx-patch]')) return;
-    var btn = form.querySelector('button[type="submit"], button:not([type])');
+    var btn = e.submitter && e.submitter.tagName === 'BUTTON'
+      ? e.submitter
+      : form.querySelector('button[type="submit"], button:not([type])');
     if (btn && !btn.disabled) {
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Working…';
     }
-  }, true);
+  });
 
   // The client-side table filter (input[data-table-filter] -> #tableId) now lives
   // in app.js as a delegated handler so it survives htmx partial swaps.

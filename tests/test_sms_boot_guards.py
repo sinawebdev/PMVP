@@ -233,7 +233,7 @@ class DesktopBlocksSmsTests(unittest.TestCase):
         self._login("admin@payrolla.com")
         before = self._batches()
         self.client.post(f"/distribution/run/{self.run.id}/send",
-                         data={"channel": "auto", "nonce": "a1"})
+                         data={"channel": "auto", "confirmed": "1", "nonce": "a1"})
         self.assertEqual(self._batches(), before + 1)
 
 
