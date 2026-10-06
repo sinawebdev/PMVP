@@ -193,7 +193,7 @@ def _run_action(page, verb: str, argument: str) -> None:
 
 
 @contextmanager
-def _serve():
+def _serve(*, with_app=False):
     """Boot the app on an ephemeral port, seeded, in a background thread.
 
     Port 0 lets the OS pick a free one. That sidesteps the trap this project
@@ -208,12 +208,15 @@ def _serve():
     workdir = tempfile.mkdtemp(prefix="payrolla-capture-")
     os.environ.update(
         SKIP_DOTENV="true",
+        FLASK_SKIP_DOTENV="1",
         FLASK_ENV="development",
         SECRET_KEY="capture-ui-ephemeral-key",
         DATABASE_URL="sqlite:///" + os.path.join(workdir, "capture.db").replace("\\", "/"),
         SEED_DEMO_DATA="true",
         PERSISTENCE_REQUIRED="false",
         WTF_CSRF_ENABLED="false",
+        SMS_BACKEND="console",
+        DESKTOP_DOWNLOAD_URL="https://github.com/sinawebdev/PMVP/releases/download/desktop-v0.1.0-20261005/Payrolla-Desktop-Setup.exe",
     )
     if REPO_ROOT not in sys.path:
         sys.path.insert(0, REPO_ROOT)
@@ -233,7 +236,8 @@ def _serve():
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        yield f"http://127.0.0.1:{server.server_port}"
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        yield (base_url, app) if with_app else base_url
     finally:
         server.shutdown()
         thread.join(timeout=5)

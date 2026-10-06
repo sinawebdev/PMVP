@@ -183,6 +183,8 @@
 
       var title = document.createElement("div");
       title.className = "cn-modal-title";
+      title.id = "payrolla-confirm-title";
+      modal.setAttribute("aria-labelledby", title.id);
       var icon = document.createElement("i");
       icon.className = "bi " + (opts.danger ? "bi-exclamation-octagon-fill" : "bi-question-circle-fill");
       var titleText = document.createElement("span");
@@ -193,6 +195,8 @@
       var text = document.createElement("p");
       text.className = "cn-modal-text";
       text.textContent = question || "Are you sure?";
+      text.id = "payrolla-confirm-description";
+      modal.setAttribute("aria-describedby", text.id);
 
       // Typed confirmation — the top tier of the consequence scale, for actions
       // with no undo. Making the user reproduce the subject's name turns a reflex
@@ -253,9 +257,15 @@
       function onKey(e) {
         if (e.key === "Escape") { e.preventDefault(); close(false); }
         else if (e.key === "Tab") {
-          // Trap focus between the two buttons.
-          e.preventDefault();
-          (document.activeElement === ok ? cancel : ok).focus();
+          // Include the typed input and omit a disabled confirm button.
+          var focusable = modal.querySelectorAll('input:not([disabled]), button:not([disabled])');
+          var first = focusable[0];
+          var last = focusable[focusable.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault(); last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault(); first.focus();
+          }
         }
       }
       cancel.addEventListener("click", function () { close(false); });

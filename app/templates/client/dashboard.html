@@ -54,12 +54,7 @@
        the workforce, what else are we spending, and are we safe. Run STATUS is
        deliberately not a tile — it needs a reason and a next step, which is the
        Payroll Health panel's whole job. #}
-    <section class="area-kpis" aria-labelledby="kpi-heading">
-      <h2 id="kpi-heading" class="sr-only">Executive summary</h2>
-      <div class="kpi-band">
-        {% for kpi in overview.kpis %}{{ ui.kpi_card(kpi, url_for(kpi.endpoint)) }}{% endfor %}
-      </div>
-    </section>
+    {# KPI band moved: it now renders after health and risk, below. #}
 
     {# --- 2. Quick actions -----------------------------------------------
        Role-filtered in app/dashboard.py against the same roles the target
@@ -74,22 +69,7 @@
        panel was the last place the two dashboards disagreed about it. The tile
        is dropped, never the capability — the header button is role-gated on
        exactly the same key. #}
-    {% set shortcuts = overview.actions | rejectattr('key', 'equalto', 'run_payroll') | list %}
-    {% if shortcuts %}
-    <section class="xpanel area-actions" aria-labelledby="actions-heading">
-      <div class="panel-head">
-        <div>
-          <h2 id="actions-heading">Quick actions</h2>
-          <p class="panel-sub">Shortcuts available to your role.</p>
-        </div>
-      </div>
-      <div class="qa-grid">
-        {% for action in shortcuts %}
-        {{ ui.action_tile(action, url_for(action.endpoint, run_id=action.run_id) if action.run_id else url_for(action.endpoint)) }}
-        {% endfor %}
-      </div>
-    </section>
-    {% endif %}
+    {# Quick actions moved: compact shortcuts now render at the foot of the grid. #}
 
     {# --- 3. Payroll Health Center --------------------------------------- #}
     <section class="xpanel area-health" aria-labelledby="health-heading">
@@ -204,6 +184,17 @@
       {% else %}
       {{ ui.empty("Nothing to review", "Risk checks run the moment a payroll is submitted.") }}
       {% endif %}
+    </section>
+
+    {# --- Executive KPIs, second row -----------------------------------------
+       Health and risk say where this period stands and whether anything
+       needs a decision; the four tiles answer the follow-up questions about
+       cost and size. Same macro call, same links, trend chips unchanged. #}
+    <section class="area-kpis" aria-labelledby="kpi-heading">
+      <h2 id="kpi-heading" class="sr-only">Executive summary</h2>
+      <div class="kpi-band">
+        {% for kpi in overview.kpis %}{{ ui.kpi_card(kpi, url_for(kpi.endpoint)) }}{% endfor %}
+      </div>
     </section>
 
     {# --- 5. Financial analytics -----------------------------------------
@@ -339,6 +330,29 @@
       {{ ui.empty("No activity yet", "Uploads, approvals, payslip runs and employee changes are recorded here automatically.") }}
       {% endif %}
     </section>
+
+    {# --- Shortcuts, compact, last -------------------------------------------
+       Every tile is kept and role-filtered exactly as before, and a tile that
+       carries a run_id still links to that run. run_payroll stays filtered
+       out because it is the header's one primary button. These are
+       navigation, so they follow the panels that report instead of leading
+       them. #}
+    {% set shortcuts = overview.actions | rejectattr('key', 'equalto', 'run_payroll') | list %}
+    {% if shortcuts %}
+    <section class="xpanel area-actions area-actions--compact" aria-labelledby="actions-heading">
+      <div class="panel-head">
+        <div>
+          <h2 id="actions-heading">Quick actions</h2>
+          <p class="panel-sub">Shortcuts available to your role.</p>
+        </div>
+      </div>
+      <div class="qa-grid">
+        {% for action in shortcuts %}
+        {{ ui.action_tile(action, url_for(action.endpoint, run_id=action.run_id) if action.run_id else url_for(action.endpoint)) }}
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
 
   </div>
 </div>

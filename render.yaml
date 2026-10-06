@@ -3,7 +3,7 @@ services:
     name: payrolla
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && python scripts/fetch_fonts.py
     # Apply Alembic migrations before serving so schema changes actually reach
     # the database. (Previously nothing ran migrations, so columns added in
     # migrations never existed in the deployed DB and pages 500'd.)

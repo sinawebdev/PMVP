@@ -10,6 +10,7 @@ the lay of the land.
 python -m venv .venv
 .venv\Scripts\activate            # source .venv/bin/activate on POSIX
 pip install -r requirements.txt
+python scripts/fetch_fonts.py      # original Satoshi assets, served locally
 copy .env.example .env            # cp on POSIX
 python run.py                     # http://127.0.0.1:5000
 ```
@@ -57,6 +58,7 @@ therefore fails the capture instead of producing a screenshot that looks right.
 .venv\Scripts\python.exe -m playwright install chromium   # Chromium ONLY
 .venv\Scripts\python.exe scripts/capture_ui.py --list
 .venv\Scripts\python.exe scripts/capture_ui.py
+.venv\Scripts\python.exe scripts/review_interface.py
 ```
 
 Same rule as pytest: **Playwright stays out of `requirements.txt`**, so it never

@@ -49,3 +49,24 @@ jobs:
           SEED_DEMO_DATA: "true"
           PERSISTENCE_REQUIRED: "false"
         run: python -m pytest tests/ -q
+
+  interface:
+    name: Desktop and mobile interface
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt playwright==1.56.0
+      - run: python scripts/fetch_fonts.py
+      - run: python -m playwright install --with-deps chromium
+      - name: Real forms, keyboard controls and responsive views
+        run: python scripts/review_interface.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interface-review
+          path: .screenshots/
+          retention-days: 7
