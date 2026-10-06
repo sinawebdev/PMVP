@@ -69,4 +69,5 @@ jobs:
         with:
           name: interface-review
           path: .screenshots/
+          include-hidden-files: true
           retention-days: 7

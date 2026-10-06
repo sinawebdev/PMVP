@@ -46,7 +46,7 @@ def main() -> int:
         if not condition:
             report["failures"].append(description)
 
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import expect, sync_playwright
 
     with _serve(with_app=True) as (base, app), sync_playwright() as pw:
         # Exercise real CSRF-protected login and form fields, not cookie injection.
@@ -168,7 +168,7 @@ def main() -> int:
                 toggle.click()
                 check(nav.evaluate("e => e.contains(document.activeElement)"), f"{actor}: tablet drawer focus")
                 page.set_viewport_size({"width": 1280, "height": 900})
-                page.wait_for_function("document.querySelector('.nav-toggle').getAttribute('aria-expanded') === 'false'")
+                expect(toggle).to_have_attribute("aria-expanded", "false")
                 check(first.is_visible() and not toggle.is_visible(), f"{actor}: desktop resize restores navigation")
                 context.close()
         finally:
