@@ -138,6 +138,39 @@ def main() -> int:
             check(page.locator(".portal-logo").evaluate("e => e === document.activeElement"),
                   "Cancel returns focus without submitting an action")
             context.close()
+
+            for actor, email, route in (("company", DEMO_EMAIL, "/company"),
+                                        ("operator", OPERATOR_EMAIL, "/dashboard")):
+                context = browser.new_context(viewport={"width": 390, "height": 900})
+                page = context.new_page()
+                _login(page, base, email)
+                page.goto(base + route, wait_until="networkidle")
+                nav = page.locator("#primary-nav")
+                toggle = page.locator(".nav-toggle")
+                first, last = nav.locator("a[href]").first, nav.locator("a[href]").last
+                check(not first.is_visible(), f"{actor}: closed drawer links are hidden")
+                toggle.focus()
+                page.keyboard.press("Tab")
+                check(not nav.evaluate("e => e.contains(document.activeElement)"),
+                      f"{actor}: closed drawer skipped by keyboard")
+                toggle.click()
+                check(nav.evaluate("e => e.contains(document.activeElement)"),
+                      f"{actor}: opening drawer moves focus inside")
+                last.focus()
+                page.keyboard.press("Tab")
+                check(first.evaluate("e => e === document.activeElement"), f"{actor}: drawer Tab wraps")
+                page.keyboard.press("Shift+Tab")
+                check(last.evaluate("e => e === document.activeElement"), f"{actor}: drawer Shift+Tab wraps")
+                page.keyboard.press("Escape")
+                check(toggle.evaluate("e => e === document.activeElement"), f"{actor}: Escape restores focus")
+                page.set_viewport_size({"width": 1000, "height": 900})
+                check(toggle.is_visible() and not first.is_visible(), f"{actor}: tablet drawer starts closed")
+                toggle.click()
+                check(nav.evaluate("e => e.contains(document.activeElement)"), f"{actor}: tablet drawer focus")
+                page.set_viewport_size({"width": 1280, "height": 900})
+                page.wait_for_function("document.querySelector('.nav-toggle').getAttribute('aria-expanded') === 'false'")
+                check(first.is_visible() and not toggle.is_visible(), f"{actor}: desktop resize restores navigation")
+                context.close()
         finally:
             browser.close()
     (output / "interface-report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")

@@ -164,7 +164,7 @@
   (function () {
     // Mobile navigation drawer — same contract as the operator shell
     // (base.html): .nav-toggle flips .open on #primary-nav and .show on the
-    // backdrop. The nav is a horizontal bar above 900px and a slide-in panel
+    // backdrop. The nav is a horizontal bar above 1100px and a slide-in panel
     // below it; only the CSS differs, so this stayed as it was.
     var toggle = document.querySelector('.nav-toggle');
     var nav = document.getElementById('primary-nav');
@@ -177,7 +177,9 @@
       nav.classList.toggle('open', open);
       if (backdrop) backdrop.classList.toggle('show', open);
       if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (toggle) toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
       if (open) {
+        closeMenus(null);
         // Into the drawer, on the current page's link when there is one.
         var start = nav.querySelector('a[aria-current="page"]') || nav.querySelector('a');
         if (start) start.focus();
@@ -187,10 +189,23 @@
     }
     if (toggle) toggle.addEventListener('click', function () { setOpen(!isOpen(), true); });
     if (backdrop) backdrop.addEventListener('click', function () { setOpen(false, true); });
+    window.addEventListener('resize', function () {
+      if (toggle && getComputedStyle(toggle).display === 'none') setOpen(false, false);
+    });
     if (nav) nav.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { setOpen(false, false); }); });
     // Escape closes the drawer and hands focus back to the button that opened it.
     document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape' && isOpen()) setOpen(false, true);
+      if (!isOpen()) return;
+      if (event.key === 'Escape') setOpen(false, true);
+      else if (event.key === 'Tab') {
+        var links = nav.querySelectorAll('a[href]');
+        var first = links[0], last = links[links.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault(); last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault(); first.focus();
+        }
+      }
     });
 
     // Utility menus are <details>, so they open, close and take focus with no
