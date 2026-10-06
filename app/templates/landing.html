@@ -2,60 +2,68 @@
 {% block title %}{{ app_name }} — {{ app_tagline }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='landing.css') }}">{% endblock %}
 {% block public_content %}
-<script>
-(function(){var c=navigator.connection;if(!window.matchMedia||!matchMedia('(prefers-reduced-motion: no-preference)').matches||(c&&c.saveData)||!window.WebGLRenderingContext)return;document.documentElement.classList.add('mark-motion');setTimeout(function(){var box=document.querySelector('[data-mark-anim]');if(box&&!box.classList.contains('is-playing'))box.classList.add('is-still');},8000);})();
-</script>
 <div class="marketing">
   <a class="marketing-skip" href="#marketing-main">Skip to content</a>
-  <header class="marketing-nav">
-    <a class="marketing-brand" href="{{ url_for('main.index') }}"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="29" height="34"><span>{{ app_brand_name }}</span></a>
-    <nav aria-label="Site"><a href="#how-it-works">How it works</a><a href="#made-for-your-team">For your team</a></nav>
-    <a class="marketing-login" href="{{ url_for('auth.login') }}">Log in <span aria-hidden="true">↗</span></a>
-  </header>
-  <main id="marketing-main">
-    <section class="marketing-hero" aria-labelledby="hero-title">
-      <div class="hero-copy">
-        <p class="marketing-eyebrow"><span class="eyebrow-line" aria-hidden="true"></span> Payroll, with a little more peace of mind</p>
-        <h1 id="hero-title">A calmer way<br>to <em>payday.</em></h1>
-        <p class="hero-description">From the first spreadsheet to the last payslip. Calculate accurately, keep approvals moving, and know where every payday stands.</p>
-        <div class="marketing-actions"><a class="marketing-button marketing-button--primary" href="{{ url_for('auth.login') }}">Log in to {{ app_brand_name }} <span aria-hidden="true">↗</span></a><a class="marketing-text-link" href="#how-it-works">See how it works <span aria-hidden="true">↓</span></a></div>
-        <p class="hero-note">Built for Ghanaian payroll. PAYE, SSNIT and your people, together.</p>
-      </div>
-      <div class="brand-scene" aria-label="The {{ app_brand_name }} ribbon mark">
-        <div class="scene-top"><span>{{ app_brand_name }}</span><span>{{ app_short_name }}</span></div>
-        <div class="scene-orbit scene-orbit--one" aria-hidden="true"></div><div class="scene-orbit scene-orbit--two" aria-hidden="true"></div>
-        <div class="hero-mark" aria-hidden="true" data-mark-anim data-media-class="hero-mark-media"
-          data-video-lg="{{ url_for('static', filename='img/payrolla-mark-dark-lg.mp4') }}"
-          data-video-sm="{{ url_for('static', filename='img/payrolla-mark-dark-sm.mp4') }}">
-          <picture class="hero-mark-media"><source media="(min-width: 921px)" srcset="{{ url_for('static', filename='img/payrolla-mark-dark-lg.webp') }}"><img class="hero-mark-still" src="{{ url_for('static', filename='img/payrolla-mark-dark-sm.webp') }}" alt="" width="230" height="308"></picture>
+  <main id="marketing-main" tabindex="-1">
+    <div class="landing-dark" data-mark-stage>
+      <div class="scroll-mark-layer" aria-hidden="true">
+        <div class="scroll-mark-window">
+          <div class="hero-mark" aria-hidden="true" data-mark-anim data-mark-scroll data-media-class="hero-mark-media"
+            data-video-lg="{{ url_for('static', filename='img/payrolla-mark-scroll-lg.mp4') }}"
+            data-video-sm="{{ url_for('static', filename='img/payrolla-mark-scroll-sm.mp4') }}">
+            <picture class="hero-mark-media"><source media="(min-width: 921px)" srcset="{{ url_for('static', filename='img/payrolla-mark-dark-lg.webp') }}"><img class="hero-mark-still" src="{{ url_for('static', filename='img/payrolla-mark-dark-lg.webp') }}" alt="" width="230" height="308"></picture>
+          </div>
         </div>
-        <div class="scene-bottom"><span>Clarity in every step.</span><span aria-hidden="true">01 — 04</span></div>
+      </div>
+      <header class="marketing-nav landing-container">
+        <a class="marketing-brand" href="{{ url_for('main.index') }}"><span class="brand-icon"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="24" height="28"></span><span>{{ app_brand_name }}</span></a>
+        <nav aria-label="Site"><a href="#how-it-works">How it works</a><a href="#made-for-your-team">Your workspace</a>{% if desktop_download_url %}<a href="#desktop">Desktop app</a>{% endif %}</nav>
+        <a class="marketing-login" href="{{ url_for('auth.login') }}">Log in <span aria-hidden="true">↗</span></a>
+      </header>
+      <section class="marketing-hero landing-container" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="marketing-eyebrow"><span aria-hidden="true"></span> Payroll &amp; HR, built for Ghana</p>
+          <h1 id="hero-title">From payroll<br>to payslip.<br><em>All in hand.</em></h1>
+          <p class="hero-description">Import the workbook you already keep. Work out pay, PAYE and SSNIT, review the run, and keep every approval and payslip on record.</p>
+          <div class="marketing-actions"><a class="marketing-button marketing-button--primary" href="{{ url_for('auth.login') }}">Log in to {{ app_brand_name }} <span aria-hidden="true">↗</span></a>{% if desktop_download_url %}<a class="marketing-button marketing-button--secondary" href="{{ desktop_download_url }}">Download for Windows <span aria-hidden="true">↓</span></a>{% endif %}</div>
+          {% if desktop_download_url %}<p class="hero-note">Windows app · activates with your company license.</p>{% endif %}
+        </div>
+        <div class="hero-visual">
+          <picture><source media="(min-width: 921px)" srcset="{{ url_for('static', filename='img/payrolla-payday-hand-lg.webp') }}"><img class="hero-art" src="{{ url_for('static', filename='img/payrolla-payday-hand-sm.webp') }}" alt="A sculptural teal hand holding a payslip and a payroll register." width="1536" height="1024" fetchpriority="high" decoding="async"></picture>
+          <p class="art-caption">The work behind every payday.</p>
+        </div>
+      </section>
+      <div class="hero-foot landing-container">
+        <div class="hero-proof"><span class="proof-number" aria-hidden="true">01</span><div><h2>PAYE &amp; SSNIT, per person.</h2><p>Calculated from the payroll details you bring in.</p></div></div>
+        <div class="hero-proof"><span class="proof-number" aria-hidden="true">02</span><div><h2>On record, per company.</h2><p>Approvals, payslips and the decisions behind them.</p></div></div>
+        <a class="scroll-cue" href="#how-it-works">Scroll to follow the flow <span aria-hidden="true">↓</span></a>
+      </div>
+      <section class="payday-flow landing-container" id="how-it-works" aria-labelledby="flow-heading">
+        <div class="flow-heading"><div><p class="marketing-eyebrow">The work, from start to finish</p><h2 id="flow-heading">Every step.<br>A little more clarity.</h2></div><p>Your payroll has a path. Follow the details through calculation, approval and payslip delivery.</p></div>
+        <ol class="flow-path">
+          <li><div class="flow-step"><span aria-hidden="true">01</span><h3>Bring it in.</h3></div><p>Import your workbook and match the details to your employee roster.</p><div class="flow-fragment file-fragment"><span class="file-symbol" aria-hidden="true">X</span><div><strong>Payroll workbook</strong><span>Import &amp; check</span></div><span aria-hidden="true">↗</span></div></li>
+          <li><div class="flow-step"><span aria-hidden="true">02</span><h3>Work it out.</h3></div><p>Calculate pay and statutory deductions. Review the details that need attention.</p><div class="flow-fragment check-fragment"><span class="fragment-dot" aria-hidden="true"></span><div><strong>Review required</strong><span>Exceptions stay visible</span></div></div></li>
+          <li><div class="flow-step"><span aria-hidden="true">03</span><h3>Keep control.</h3></div><p>Prepare, review and approve the run, with a record of the decision.</p><div class="flow-fragment approval-fragment"><span class="fragment-check" aria-hidden="true">✓</span><div><strong>Approval recorded</strong><span>A decision in the audit trail</span></div></div></li>
+          <li><div class="flow-step"><span aria-hidden="true">04</span><h3>Follow through.</h3></div><p>Prepare and send payslips. Follow each recorded delivery result.</p><div class="flow-fragment delivery-fragment"><span>Sent</span><span>Failed</span><span>Unconfirmed</span></div></li>
+        </ol>
+        <p class="flow-note">Illustrative workflow states. Approval records a decision; it does not move money.</p>
+      </section>
+    </div>
+    <section class="workspace-section landing-container" id="made-for-your-team" aria-labelledby="workspace-heading">
+      <div class="workspace-copy"><p class="marketing-eyebrow">Inside your workspace</p><h2 id="workspace-heading">The details stay<br>with the work.</h2><p>Give each company its own space for people, payroll and records. See where the run stands, what needs attention, and what comes next.</p><a class="marketing-text-link" href="{{ url_for('auth.login') }}">Open your workspace <span aria-hidden="true">↗</span></a></div>
+      <div class="workspace-preview" aria-label="Illustrative company workspace">
+        <div class="preview-bar"><span><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="18" height="21">{{ app_brand_name }}</span><span>Sample workspace</span></div>
+        <div class="preview-body"><div class="preview-title"><h3>Payroll health</h3><span class="preview-badge">Approved</span></div><p class="preview-description">The run is approved. Payslips can now be prepared and sent.</p>
+          <ol class="preview-progress" aria-label="Illustrative payroll lifecycle"><li class="complete">Draft</li><li class="complete">Calculated</li><li class="complete">Submitted</li><li class="current">Approved</li><li>Processed</li><li>Distributed</li></ol>
+          <div class="preview-next"><span aria-hidden="true">↗</span><div><strong>Distribute payslips</strong><p>Follow the result for each recipient.</p></div></div>
+          <div class="preview-records"><span>People &amp; permissions</span><span>Statutory reports</span><span>Audit history</span></div>
+        </div>
       </div>
     </section>
-    <div class="marketing-capabilities" aria-label="Core capabilities"><span>Payroll &amp; compliance</span><span>Payslip delivery</span><span>Approvals &amp; audit trails</span><span>Company workspaces</span></div>
-    <section class="marketing-section" id="how-it-works" aria-labelledby="flow-heading">
-      <div class="section-heading"><div><p class="marketing-eyebrow">The payday flow</p><h2 id="flow-heading">From spreadsheet<br>to <em>all sorted.</em></h2></div><p>Four clear steps. One place to follow the work, without losing sight of the people it matters to.</p></div>
-      <ol class="flow-grid">
-        <li><span class="flow-number">01</span><h3>Bring the details in</h3><p>Upload your payroll file and match the information to your employee roster.</p><span class="flow-tag">Upload &amp; check</span></li>
-        <li><span class="flow-number">02</span><h3>Make the numbers clear</h3><p>Review pay, deductions, PAYE and SSNIT. See what needs attention before you move on.</p><span class="flow-tag">Calculate &amp; review</span></li>
-        <li><span class="flow-number">03</span><h3>Keep the right people in control</h3><p>Prepare, review and approve the run, with clear roles and a record of each decision.</p><span class="flow-tag">Review &amp; approve</span></li>
-        <li><span class="flow-number">04</span><h3>Close the loop</h3><p>Deliver payslips by Email, WhatsApp or SMS, then follow sent, failed and unconfirmed results.</p><span class="flow-tag">Deliver &amp; follow up</span></li>
-      </ol>
-    </section>
-    <section class="workspace-section" id="made-for-your-team" aria-labelledby="workspace-heading">
-      <div class="workspace-copy"><p class="marketing-eyebrow">Made for the people doing the work</p><h2 id="workspace-heading">Everything has<br>its <em>place.</em></h2><p>Give your team a clear view of today’s work, your companies their own workspace, and every decision a traceable record.</p><a class="marketing-text-link" href="{{ url_for('auth.login') }}">Open your workspace <span aria-hidden="true">↗</span></a></div>
-      <div class="workspace-map" aria-label="Workspace responsibilities">
-        <div><span class="workspace-index">01</span><div><h3>A clear view</h3><p>Payroll health, company activity and what needs attention.</p></div><span class="workspace-kind">Oversight</span></div>
-        <div><span class="workspace-index">02</span><div><h3>A focused flow</h3><p>Employees, payroll, approvals, expenses and statutory reports.</p></div><span class="workspace-kind">Work</span></div>
-        <div><span class="workspace-index">03</span><div><h3>A reliable record</h3><p>Payslips, delivery history and the decisions behind each run.</p></div><span class="workspace-kind">Record</span></div>
-      </div>
-    </section>
-    <section class="marketing-section details-section" aria-labelledby="details-heading"><div class="section-heading"><div><p class="marketing-eyebrow">The details matter</p><h2 id="details-heading">Less chasing.<br>More <em>confidence.</em></h2></div><p>Thoughtful tools for the everyday details that make a payday go smoothly.</p></div>
-      <div class="feature-grid"><article><span class="feature-symbol" aria-hidden="true">↗</span><h3>Company portals</h3><p>Each company sees its own staff, payroll runs and records, with access suited to each person’s role.</p></article><article><span class="feature-symbol" aria-hidden="true">✓</span><h3>Useful delivery status</h3><p>Know what was sent, what failed, and what still needs checking. Clear results, without a wall of server logs.</p></article><article><span class="feature-symbol" aria-hidden="true">≡</span><h3>The full picture</h3><p>Payroll reports, statutory exports, expenses and audit trails stay close to the work they explain.</p></article></div>
-    </section>
-    <section class="marketing-close" aria-labelledby="close-heading"><p class="marketing-eyebrow">Your next payday, a little clearer</p><h2 id="close-heading">Good work starts<br>with a <em>clear workspace.</em></h2><div class="marketing-actions"><a class="marketing-button marketing-button--primary" href="{{ url_for('auth.login') }}">Log in to {{ app_brand_name }} <span aria-hidden="true">↗</span></a>{% if desktop_download_url %}<a class="marketing-button marketing-button--secondary" href="{{ desktop_download_url }}">Download for Windows <span aria-hidden="true">↓</span></a>{% endif %}</div></section>
+    <section class="record-section landing-container" aria-labelledby="record-heading"><h2 id="record-heading">A payday ends.<br>The record stays.</h2><div class="record-list"><div><h3>Company workspaces</h3><p>Each company sees its own staff, payroll runs and records, with access suited to each person's role.</p></div><div><h3>Delivery history</h3><p>Keep sent, failed and unconfirmed results visible, so the next follow-up starts with the facts.</p></div><div><h3>Reports &amp; audit trails</h3><p>Payroll exports, statutory reports and the decisions behind each run stay close to the work.</p></div></div></section>
+    <section class="marketing-close" id="desktop" aria-labelledby="close-heading"><div class="close-inner landing-container"><div class="close-heading"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="44" height="51"><div><p class="marketing-eyebrow">Your next payday</p><h2 id="close-heading">All in hand.</h2></div></div><div class="close-access"><div class="marketing-actions"><a class="marketing-button marketing-button--primary" href="{{ url_for('auth.login') }}">Log in to {{ app_brand_name }} <span aria-hidden="true">↗</span></a>{% if desktop_download_url %}<a class="marketing-button marketing-button--secondary" href="{{ desktop_download_url }}">Download for Windows <span aria-hidden="true">↓</span></a>{% endif %}</div>{% if desktop_download_url %}<p>Windows app · activates with your company license.</p>{% else %}<p>Your payroll workspace, ready when you are.</p>{% endif %}</div></div></section>
   </main>
-  <footer class="marketing-footer"><a class="marketing-brand" href="{{ url_for('main.index') }}"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="22" height="26"><span>{{ app_brand_name }}</span></a><p>© 2026 {{ app_brand_name }}. By {{ company_name }}.</p><a href="#hero-title">Back to top ↑</a></footer>
+  <footer class="marketing-footer landing-container"><a class="marketing-brand" href="{{ url_for('main.index') }}"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="22" height="26"><span>{{ app_brand_name }}</span></a><p>© 2026 {{ app_brand_name }}. By {{ company_name }}.</p><a href="#hero-title">Back to top ↑</a></footer>
 </div>
 <script src="{{ url_for('static', filename='logo-player.js') }}" defer></script>
 {% endblock %}
