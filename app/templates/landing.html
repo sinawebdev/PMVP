@@ -51,13 +51,38 @@
     </div>
     <section class="workspace-section landing-container" id="made-for-your-team" aria-labelledby="workspace-heading">
       <div class="workspace-copy"><p class="marketing-eyebrow">Inside your workspace</p><h2 id="workspace-heading">The details stay<br>with the work.</h2><p>Give each company its own space for people, payroll and records. See where the run stands, what needs attention, and what comes next.</p><a class="marketing-text-link" href="{{ url_for('auth.login') }}">Open your workspace <span aria-hidden="true">↗</span></a></div>
-      <div class="workspace-preview" aria-label="Illustrative company workspace">
+      <div class="workspace-preview" role="group" aria-label="Illustrative company workspace">
         <div class="preview-bar"><span><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="18" height="21">{{ app_brand_name }}</span><span>Sample workspace</span></div>
-        <div class="preview-body"><div class="preview-title"><h3>Payroll health</h3><span class="preview-badge">Approved</span></div><p class="preview-description">The run is approved. Payslips can now be prepared and sent.</p>
-          <ol class="preview-progress" aria-label="Illustrative payroll lifecycle"><li class="complete">Draft</li><li class="complete">Calculated</li><li class="complete">Submitted</li><li class="current">Approved</li><li>Processed</li><li>Distributed</li></ol>
-          <div class="preview-next"><span aria-hidden="true">↗</span><div><strong>Distribute payslips</strong><p>Follow the result for each recipient.</p></div></div>
-          <div class="preview-records"><span>People &amp; permissions</span><span>Statutory reports</span><span>Audit history</span></div>
+        <div class="preview-body">
+          <div class="preview-title"><h3>Payroll health</h3><span class="preview-badge"><span aria-hidden="true">✓</span> Approved</span></div>
+          <div class="preview-ready"><span class="preview-ready-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><h4>Ready for payslips.</h4><p>The run is approved. Every decision stays on record.</p></div></div>
+          <div class="preview-detail">
+            <div class="preview-lifecycle">
+              <p class="preview-label">Typical run progress</p>
+              <ol class="preview-progress" aria-label="Illustrative payroll lifecycle">
+                <li class="complete"><span class="preview-node" aria-hidden="true">✓</span><span>Draft<span class="sr-only">, completed</span></span></li>
+                <li class="complete"><span class="preview-node" aria-hidden="true">✓</span><span>Calculated<span class="sr-only">, completed</span></span></li>
+                <li class="complete"><span class="preview-node" aria-hidden="true">✓</span><span>Submitted<span class="sr-only">, completed</span></span></li>
+                <li class="current" aria-current="step"><span class="preview-node" aria-hidden="true">04</span><span>Approved<small>Current stage</small></span></li>
+                <li><span class="preview-node" aria-hidden="true">05</span><span>Processed<span class="sr-only">, pending</span></span></li>
+                <li><span class="preview-node" aria-hidden="true">06</span><span>Distributed<span class="sr-only">, pending</span></span></li>
+              </ol>
+            </div>
+            <div class="preview-payslip" aria-hidden="true">
+              <div class="preview-document">
+                <div class="preview-document-head"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="16" height="19"><span>PAYSLIP</span></div>
+                <div class="preview-document-person"><span>Employee payslip</span><i class="preview-paper-line"></i><i class="preview-paper-line preview-paper-line--short"></i></div>
+                <div class="preview-document-row"><span>Earnings</span><i class="preview-paper-line"></i></div>
+                <div class="preview-document-row"><span>Deductions</span><i class="preview-paper-line preview-paper-line--short"></i></div>
+                <div class="preview-document-total"><span>Net pay</span><i class="preview-paper-line"></i></div>
+                <div class="preview-document-foot">Your payroll, per person.</div>
+              </div>
+              <p>Payslip layout</p>
+            </div>
+          </div>
+          <div class="preview-next"><div><span class="preview-label">Next step</span><strong>Prepare and send payslips</strong><p>Follow delivery for each recipient.</p></div><a class="preview-action" href="{{ url_for('auth.login') }}">Log in to workspace <span aria-hidden="true">↗</span></a></div>
         </div>
+        <div class="preview-records"><span><span aria-hidden="true">✓</span> Approval on record</span><span>Delivery still pending</span></div>
       </div>
     </section>
     <section class="record-section landing-container" aria-labelledby="record-heading"><h2 id="record-heading">A payday ends.<br>The record stays.</h2><div class="record-list"><div><h3>Company workspaces</h3><p>Each company sees its own staff, payroll runs and records, with access suited to each person's role.</p></div><div><h3>Delivery history</h3><p>Keep sent, failed and unconfirmed results visible, so the next follow-up starts with the facts.</p></div><div><h3>Reports &amp; audit trails</h3><p>Payroll exports, statutory reports and the decisions behind each run stay close to the work.</p></div></div></section>

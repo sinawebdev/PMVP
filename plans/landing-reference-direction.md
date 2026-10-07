@@ -63,3 +63,20 @@ Completed on 7 October 2026:
 On this Windows machine, Playwright's bundled Chromium reports no H.264 support and correctly shows the static fallback. Installed Chrome and Edge decode both the original and the new scroll MP4s. Use `--browser-channel chrome` or `--browser-channel msedge` to verify the actual animation here; the browser review fails rather than silently accepting a static mark as animated.
 
 Headless-browser results establish layout and behaviour under that browser; they do not establish physical iPhone or integrated-GPU performance. Live deployment and a new desktop installer are separate release steps.
+
+## Payroll health card refinement
+
+The landing's sample workspace now uses a clear approval banner, a connected vertical lifecycle and a flat ivory payslip illustration. The next-step area has a real sign-in link. This is an illustrative landing component; the customer dashboard and its payroll behaviour have not changed.
+
+| Before | After | Why |
+| --- | --- | --- |
+| Small status badge and introductory sentence | Prominent approved-run message in a dark teal banner | Makes the state and its meaning easier to scan |
+| Tiny horizontal dots, wrapped into two rows on phones | Connected vertical timeline with a labelled current stage | Keeps the stage order readable at every width |
+| A panel that looked actionable but was not a link | Native Log in to workspace link beside the next step | Gives visitors a working route into the product |
+| Generic footer labels | Approval on record and Delivery still pending | Separates approval from delivery |
+
+The timeline labels were checked against `LIFECYCLE_STAGES` in `app/payroll_status.py`. It illustrates the ordinary path without a hold; Approved is current and Processed/Distributed remain pending. The document is decorative HTML/CSS, has no invented amounts and requires no new image or dependency. Phones omit this illustration and use 15px stage labels with rows at least 47px high.
+
+Claude reviewed only the new card planning brief with tools disabled. Its suggestions informed the explicit sign-in wording and larger mobile timeline. Its concern about stage vocabulary was checked against the current source before retaining the actual product labels.
+
+The focused Chrome review passed at 1440, 1280, 960, 768, 390, 360 and 320px, checking the status, current stage, overflow, keyboard sign-in and password form. Reduced-motion and no-JavaScript modes also passed. Desktop and phone captures are in `.screenshots/payroll-health/`. The local preview was restarted with template reload enabled, so both this card and the user's earlier pipeline copy render immediately.
