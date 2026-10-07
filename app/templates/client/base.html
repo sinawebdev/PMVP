@@ -61,12 +61,8 @@
     <header class="portal-topbar">
       <div class="portal-topbar-inner">
         <a class="portal-logo" href="{{ url_for('main.company_dashboard') }}">
-          {# No .brand-mark tile here. That tile is a white rounded square built
-             to lift the icon off the deep-teal sidebar and the dark login card;
-             on a white bar it is a white square on white. The icon's own artwork
-             is a deep-teal gradient drawn for a light ground, so it stands alone. #}
-          <img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" />
-          <span class="portal-logo-name">{{ app_brand_name }}</span>
+          {% from 'macros/brand.html' import logo with context %}
+          {{ logo(compact=true) }}
         </a>
 
         <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="primary-nav" aria-expanded="false">{{ shell_ui.icon('menu', 22) }}</button>

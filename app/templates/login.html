@@ -2,9 +2,10 @@
 {% block title %}Log in · {{ app_name }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">{% endblock %}
 {% block public_content %}
+{% from 'macros/brand.html' import logo with context %}
 <main class="auth-page">
   <aside class="auth-story" aria-label="About {{ app_brand_name }}">
-    <a class="auth-brand" href="{{ url_for('main.index') }}"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="31" height="37"><span>{{ app_brand_name }}</span></a>
+    <a class="auth-brand" href="{{ url_for('main.index') }}">{{ logo(dark=true) }}</a>
     <div class="auth-story-copy">
       <p class="auth-eyebrow">A little more clarity. Every payday.</p>
       <h2>Good payroll.<br>A clear head.</h2>
@@ -18,7 +19,7 @@
     <p class="auth-story-foot">{{ app_short_name }} · By {{ company_name }}</p>
   </aside>
   <section class="auth-form-side" aria-labelledby="sign-in-heading">
-    <a class="auth-mobile-brand" href="{{ url_for('main.index') }}"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="24" height="28">{{ app_brand_name }}</a>
+    <a class="auth-mobile-brand" href="{{ url_for('main.index') }}">{{ logo() }}</a>
     <div class="auth-form-card">
       <p class="auth-eyebrow">Welcome back</p><h1 id="sign-in-heading">Your workspace<br>is ready.</h1>
       <p class="auth-intro">Sign in to pick up where you left off.</p>

@@ -180,6 +180,10 @@
       box.classList.remove('is-scroll-ready');
       box.classList.add('is-still');
       box.dataset.markState = 'still';
+      box.style.removeProperty('--scroll-x');
+      box.style.removeProperty('--scroll-y');
+      box.style.removeProperty('--scroll-turn');
+      box.style.removeProperty('--scroll-scale');
       canvas.remove();
       video.removeAttribute('src');
       video.load();
@@ -205,13 +209,21 @@
       raf = 0;
       if (stopped || !visible || document.visibilityState === 'hidden') return;
       var bounds = stage.getBoundingClientRect();
-      var range = window.innerHeight * (window.matchMedia(WIDE).matches ? 0.8 : 1.1);
+      // Let the turn unfold through the hero and first workflow section.
+      var range = Math.max(window.innerHeight * 1.5,
+        Math.min(bounds.height - window.innerHeight, window.innerHeight * 2.2));
       var progress = Math.max(0, Math.min(1, -bounds.top / Math.max(range, 1)));
       box.dataset.scrollProgress = progress.toFixed(3);
+      var arc = Math.sin(progress * Math.PI);
+      var travel = window.matchMedia(WIDE).matches ? 1 : 0.55;
+      box.style.setProperty('--scroll-x', (-26 * arc * travel).toFixed(2) + 'px');
+      box.style.setProperty('--scroll-y', (-42 * arc * travel).toFixed(2) + 'px');
+      box.style.setProperty('--scroll-turn', (-1.8 * arc).toFixed(2) + 'deg');
+      box.style.setProperty('--scroll-scale', (1 + 0.035 * arc).toFixed(4));
       if (!ready || video.seeking) return;
       // Start with a recognisable ribbon, then scrub the approved frames.
       var end = Math.max(0, video.duration - 1 / 30);
-      var beginning = end * 0.18;
+      var beginning = end * 0.03;
       var target = Math.min(end, Math.round((beginning + progress * (end - beginning)) * 30) / 30);
       if (Math.abs(target - lastTime) < 1 / 60) return;
       clearTimeout(seekTimer);

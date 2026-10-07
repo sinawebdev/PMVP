@@ -2,6 +2,7 @@
 {% block title %}{{ app_name }} — {{ app_tagline }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='landing.css') }}">{% endblock %}
 {% block public_content %}
+{% from 'macros/brand.html' import logo with context %}
 <div class="marketing">
   <a class="marketing-skip" href="#marketing-main">Skip to content</a>
   <main id="marketing-main" tabindex="-1">
@@ -16,7 +17,7 @@
         </div>
       </div>
       <header class="marketing-nav landing-container">
-        <a class="marketing-brand" href="{{ url_for('main.index') }}"><span class="brand-icon"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="24" height="28"></span><span>{{ app_brand_name }}</span></a>
+        <a class="marketing-brand" href="{{ url_for('main.index') }}">{{ logo(dark=true) }}</a>
         <nav aria-label="Site"><a href="#how-it-works">How it works</a><a href="#made-for-your-team">Your workspace</a>{% if desktop_download_url %}<a href="#desktop">Desktop app</a>{% endif %}</nav>
         <a class="marketing-login" href="{{ url_for('auth.login') }}">Log in <span aria-hidden="true">↗</span></a>
       </header>
@@ -40,11 +41,52 @@
       </div>
       <section class="payday-flow landing-container" id="how-it-works" aria-labelledby="flow-heading">
         <div class="flow-heading"><div><p class="marketing-eyebrow">How It Works</p><h2 id="flow-heading">One pipeline, end to end.</h2></div><p>Raw hours go in. A calculated, delivered, and tracked payslip comes out — for every employee, on every payday.</p></div>
-        <ol class="flow-path">
-          <li><div class="flow-step"><span aria-hidden="true">01</span><h3>Bring it in.</h3></div><p>Import your workbook and match the details to your employee roster.</p><div class="flow-fragment file-fragment"><span class="file-symbol" aria-hidden="true">X</span><div><strong>Payroll workbook</strong><span>Import &amp; check</span></div><span aria-hidden="true">↗</span></div></li>
-          <li><div class="flow-step"><span aria-hidden="true">02</span><h3>Work it out.</h3></div><p>Calculate pay and statutory deductions. Review the details that need attention.</p><div class="flow-fragment check-fragment"><span class="fragment-dot" aria-hidden="true"></span><div><strong>Review required</strong><span>Exceptions stay visible</span></div></div></li>
-          <li><div class="flow-step"><span aria-hidden="true">03</span><h3>Keep control.</h3></div><p>Prepare, review and approve the run, with a record of the decision.</p><div class="flow-fragment approval-fragment"><span class="fragment-check" aria-hidden="true">✓</span><div><strong>Approval recorded</strong><span>A decision in the audit trail</span></div></div></li>
-          <li><div class="flow-step"><span aria-hidden="true">04</span><h3>Follow through.</h3></div><p>Prepare and send payslips. Follow each recorded delivery result.</p><div class="flow-fragment delivery-fragment"><span>Sent</span><span>Failed</span><span>Unconfirmed</span></div></li>
+        <ol class="flow-path" aria-label="Payroll pipeline">
+          <li class="flow-stage">
+            <span class="flow-index" aria-hidden="true">01</span>
+            <div class="flow-content">
+              <h3>Bring your workbook.</h3>
+              <p>Import your workbook and match the details to your employee roster.</p>
+              <div class="flow-evidence flow-workbook" aria-hidden="true">
+                <span class="flow-file"><svg width="24" height="28" viewBox="0 0 24 28" fill="none"><path d="M5 1h9l7 7v19H3V1h2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M14 1v7h7M7 13h10M7 17h10M7 21h6" stroke="currentColor" stroke-width="1.5"/></svg></span>
+                <div><strong>Payroll workbook</strong><span>Hours · Rates · Employee details</span></div>
+                <span class="flow-evidence-arrow">↗</span>
+              </div>
+            </div>
+          </li>
+          <li class="flow-stage">
+            <span class="flow-index" aria-hidden="true">02</span>
+            <div class="flow-content">
+              <h3>Make the numbers work.</h3>
+              <p>Calculate pay, PAYE, SSNIT and applicable deductions. Review any details that need attention.</p>
+              <div class="flow-evidence flow-calculation" aria-hidden="true"><span>Gross pay</span><b>−</b><span>Deductions</span><span class="flow-net"><b>=</b><strong>Net pay</strong></span></div>
+            </div>
+          </li>
+          <li class="flow-stage">
+            <span class="flow-index" aria-hidden="true">03</span>
+            <div class="flow-content">
+              <h3>Put approval on record.</h3>
+              <p>Review and approve the run. Keep the decision and its audit trail together.</p>
+              <div class="flow-evidence flow-approval" aria-hidden="true"><span class="flow-seal"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><strong>Decision recorded</strong><span>Review · Approve · Audit trail</span></div></div>
+            </div>
+          </li>
+          <li class="flow-result">
+            <div class="flow-result-heading"><span class="flow-index" aria-hidden="true">04</span><p>The output, per employee</p></div>
+            <h3>A payslip.<br>And a paper trail.</h3>
+            <p>Prepare and send payslips. Follow the delivery result for every recipient.</p>
+            <div class="flow-payslip" aria-hidden="true">
+              <div class="flow-paper-header"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="22" height="26"><strong>PAYSLIP</strong><span>Employee copy</span></div>
+              <div class="flow-paper-person"><span>Prepared for your employee</span><i></i></div>
+              <div class="flow-paper-row"><span>Gross pay</span><i></i></div>
+              <div class="flow-paper-row"><span>Deductions</span><i></i></div>
+              <div class="flow-paper-total"><span>Net pay</span><i></i></div>
+              <div class="flow-paper-footer"><span>From the approved run</span><span>PDF copy</span></div>
+            </div>
+            <div class="flow-delivery">
+              <p>Delivery record<span>Possible outcomes, per recipient</span></p>
+              <ul aria-label="Possible payslip delivery outcomes"><li><span class="flow-outcome-symbol" aria-hidden="true">✓</span>Sent</li><li><span class="flow-outcome-symbol" aria-hidden="true">!</span>Failed</li><li><span class="flow-outcome-symbol" aria-hidden="true">—</span>Unconfirmed</li></ul>
+            </div>
+          </li>
         </ol>
         <p class="flow-note">Illustrative workflow states. Approval records a decision; it does not move money.</p>
       </section>
@@ -88,7 +130,7 @@
     <section class="record-section landing-container" aria-labelledby="record-heading"><h2 id="record-heading">A payday ends.<br>The record stays.</h2><div class="record-list"><div><h3>Company workspaces</h3><p>Each company sees its own staff, payroll runs and records, with access suited to each person's role.</p></div><div><h3>Delivery history</h3><p>Keep sent, failed and unconfirmed results visible, so the next follow-up starts with the facts.</p></div><div><h3>Reports &amp; audit trails</h3><p>Payroll exports, statutory reports and the decisions behind each run stay close to the work.</p></div></div></section>
     <section class="marketing-close" id="desktop" aria-labelledby="close-heading"><div class="close-inner landing-container"><div class="close-heading"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="44" height="51"><div><p class="marketing-eyebrow">Your next payday</p><h2 id="close-heading">All in hand.</h2></div></div><div class="close-access"><div class="marketing-actions"><a class="marketing-button marketing-button--primary" href="{{ url_for('auth.login') }}">Log in to {{ app_brand_name }} <span aria-hidden="true">↗</span></a>{% if desktop_download_url %}<a class="marketing-button marketing-button--secondary" href="{{ desktop_download_url }}">Download for Windows <span aria-hidden="true">↓</span></a>{% endif %}</div>{% if desktop_download_url %}<p>Windows app · activates with your company license.</p>{% else %}<p>Your payroll workspace, ready when you are.</p>{% endif %}</div></div></section>
   </main>
-  <footer class="marketing-footer landing-container"><a class="marketing-brand" href="{{ url_for('main.index') }}"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="22" height="26"><span>{{ app_brand_name }}</span></a><p>© 2026 {{ app_brand_name }}. By {{ company_name }}.</p><a href="#hero-title">Back to top ↑</a></footer>
+  <footer class="marketing-footer landing-container"><a class="marketing-brand" href="{{ url_for('main.index') }}">{{ logo() }}</a><p>© 2026 {{ app_brand_name }}. By {{ company_name }}.</p><a href="#hero-title">Back to top ↑</a></footer>
 </div>
 <script src="{{ url_for('static', filename='logo-player.js') }}" defer></script>
 {% endblock %}

@@ -12,6 +12,8 @@ a{ text-underline-offset:3px }
 .portal-logo{gap:10px}
 .portal-logo-name{font-size:20px;letter-spacing:-.7px;font-weight:900}
 .portal-logo img{height:31px}
+.portal-logo .payrolla-lockup{width:140px;height:auto}
+.portal-logo .payrolla-compact{display:none}
 .portal-nav{gap:3px}
 .portal-nav a{font-size:13px;font-weight:700;gap:7px;padding-inline:12px}
 .portal-nav a[aria-current=page]{color:var(--brand-deep);background:var(--brand-tint);border-bottom-color:var(--brand)}
@@ -107,9 +109,11 @@ a{ text-underline-offset:3px }
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn:active{transform:none}.dt-table tbody tr,.table tbody tr{transition:none}}
 
-@media(max-width:359px){
+@media(max-width:420px){
  .portal-shell .portal-logo{position:relative;min-width:44px;justify-content:center}
  /* Retain the brand's accessible name while leaving room for account tools. */
  .portal-shell .portal-logo-name{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+ .portal-shell .portal-logo .payrolla-lockup{display:none}
+ .portal-shell .portal-logo .payrolla-compact{display:block;width:auto;height:27px}
 }
 @media print{.portal-topbar,.nav-backdrop,.topbar-actions,.utility-pop{display:none}.main-content,.portal-main{padding:0;max-width:none}.panel,.xpanel,.chart-card{box-shadow:none;break-inside:avoid}body{background:white}}

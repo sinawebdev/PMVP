@@ -36,6 +36,7 @@
    plain `ui` here would silently shadow a page's own `{% raw %}{% import ... as ui %}{% endraw %}`.
    Same lesson, same fix, as client/base.html. #}
 {% import "macros/ui.html" as shell_ui %}
+{% import "macros/brand.html" as brand with context %}
 <a class="skip-link" href="#main-content">Skip to content</a>
 {# Initials for the account button, from the same resolve_display_name string
    the dashboard greeting uses. Sliced rather than indexed so a blank name is ''
@@ -68,12 +69,7 @@
         <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="primary-nav" aria-expanded="false">{{ shell_ui.icon('menu', 22) }}</button>
 
         <a class="portal-logo" href="{{ url_for('main.dashboard') }}">
-          {# No .brand-mark tile here. That tile is a white rounded square built
-             to lift the icon off the deep-teal sidebar; on a white bar it is a
-             white square on white. The icon's own artwork is a deep-teal
-             gradient drawn for a light ground, so it stands alone. #}
-          <img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" />
-          <span class="portal-logo-name">{{ app_brand_name }}</span>
+          {{ brand.logo(compact=true) }}
         </a>
 
         <nav class="portal-nav" id="primary-nav" aria-label="Operator">

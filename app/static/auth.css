@@ -2,7 +2,9 @@
 .auth-story{background:#0a3530;color:#f2f8f4;padding:48px clamp(32px,5vw,80px);display:flex;flex-direction:column;justify-content:space-between;min-height:100vh;position:relative;overflow:hidden}
 .auth-story::after{content:'';width:320px;height:320px;position:absolute;right:-180px;top:120px;border:1px solid rgba(143,240,228,.15);border-radius:50%;box-shadow:0 0 0 60px rgba(143,240,228,.025),0 0 0 120px rgba(143,240,228,.025);pointer-events:none}
 .auth-brand{display:inline-flex;align-items:center;gap:12px;font-size:25px;font-weight:900;letter-spacing:-1px;color:var(--brand-deep);text-decoration:none;position:relative;z-index:1}
-.auth-story .auth-brand{color:white}.auth-story .auth-brand img{background:#f5faf7;border-radius:8px;padding:4px;width:36px;height:42px}
+.auth-story .auth-brand{color:white}
+.auth-brand .payrolla-lockup{width:180px;height:auto}
+.auth-mobile-brand .payrolla-lockup{width:148px;height:auto}
 .auth-story-copy{margin:64px 0;position:relative;z-index:1;max-width:460px}
 .auth-eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--brand);margin:0 0 20px}.auth-story .auth-eyebrow{color:#8ff0e4}
 .auth-story h2{font-size:clamp(40px,4.4vw,64px);line-height:1.04;letter-spacing:-2.5px;color:#f5faf7;margin:0 0 24px;font-weight:700}
