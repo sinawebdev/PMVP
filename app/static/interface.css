@@ -106,4 +106,10 @@ a{ text-underline-offset:3px }
  .dt-table td,.table td,.portal-main table td{padding:13px 12px}.cn-modal{padding:22px;margin:16px;width:calc(100% - 32px)}
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn:active{transform:none}.dt-table tbody tr,.table tbody tr{transition:none}}
+
+@media(max-width:359px){
+ .portal-shell .portal-logo{position:relative;min-width:44px;justify-content:center}
+ /* Retain the brand's accessible name while leaving room for account tools. */
+ .portal-shell .portal-logo-name{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+}
 @media print{.portal-topbar,.nav-backdrop,.topbar-actions,.utility-pop{display:none}.main-content,.portal-main{padding:0;max-width:none}.panel,.xpanel,.chart-card{box-shadow:none;break-inside:avoid}body{background:white}}

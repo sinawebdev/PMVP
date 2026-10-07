@@ -59,7 +59,8 @@ from building and reviewing the interface.
 - New marketing and authentication layouts; approved one-shot P animation,
   motion fallback and conditional Windows download retained.
 - Claude supplied the dashboard composition, portal drawer focus handling and
-  public payslip layouts. Health/risk now lead; figures and shortcuts follow.
+  public payslip layouts. Quick actions now lead on both dashboards, followed
+  by health/risk and figures, per the user's updated placement preference.
 - Typed-confirm input participates in normal Tab/Shift+Tab navigation; Escape
   cancels and returns focus without submitting an action.
 - Original fonts are fetched and hash-checked during build, then served locally.
@@ -71,3 +72,29 @@ from building and reviewing the interface.
   motion fallback, drawer focus, confirmation focus and page overflow.
 - CI now repeats browser review and retains disposable-demo screenshots. The
   full backend suite remains a required CI gate before merging.
+
+## Quick-action placement
+
+The user's updated preference puts quick actions at the top of every page.
+The company dashboard now renders its shortcuts directly after the page header,
+with matching CSS order on phone, tablet and desktop. The operator dashboard
+and both payroll-run headers already place their actions at the top.
+
+| Before | After | Why |
+| --- | --- | --- |
+| Company shortcuts below activity | Shortcuts immediately after the page heading | Makes actions available before dashboard reports |
+| Actions in the final CSS grid row | Actions in the first row at every breakpoint | Keeps visual and keyboard order aligned |
+| Narrow phone figures and navigation could overflow | Paired figure rows and an accessible compact brand; risk cards fit their container | Preserves readable actions and figures on small screens |
+
+The primary Run payroll link still appears once. Existing role filtering and
+run-specific destinations are preserved. These bars stay in normal document
+flow. Claude reviewed only the placement planning brief with tools disabled;
+its checks emphasised DOM/CSS agreement, keyboard order and Desktop sync.
+
+Verification: 156 browser checks passed across 18 dashboard views from 320 to
+1440px, including shortcut HTTP responses, company keyboard order, reduced
+motion, no JavaScript, and top action bars on both payroll-run detail pages.
+Ten affected route/UI tests and four subtests passed; the eight constitution
+tests were rerun after the final responsive fixes. Captures and the report are
+in `.screenshots/quick-actions/`. Desktop receives the current source through
+`scripts/sync_upstream.py --working-tree`, rather than independent vendor edits.
