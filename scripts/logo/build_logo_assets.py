@@ -1,4 +1,8 @@
-"""Build the animated-logo assets the landing page and the desktop splash ship.
+"""Encoding helpers and compatibility entry point for Payrolla logo assets.
+
+The current reference master lives in build_brand_assets.py. The older Blender
+render helpers below are retained for scene experimentation; the CLI delegates
+to the vector master so a normal rebuild cannot restore the superseded mark.
 
 Dev tooling, like capture_ui.py: needs Blender 5.x (headless) and Pillow +
 numpy from the dev venv. Nothing here runs in production.
@@ -312,19 +316,15 @@ def build(name: str, spec: dict, skip_render: bool) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--only", choices=sorted(VARIANTS) + ["icons"])
-    parser.add_argument("--skip-render", action="store_true",
-                        help=f"re-encode the frames already in {WORK}")
-    args = parser.parse_args()
-    if args.only != "icons" and not os.path.isfile(BLENDER):
-        print(f"Blender not found at {BLENDER}; set $BLENDER", file=sys.stderr)
-        return 2
-    for name, spec in VARIANTS.items():
-        if args.only in (None, name):
-            build(name, spec, args.skip_render)
-    if args.only in (None, "icons"):
-        build_icons()
+    from build_brand_assets import main as build_reference
+    # Old per-surface invocations now rebuild both motion surfaces from the
+    # same master. Cached Blender frames belong to the previous logo design.
+    for index, argument in enumerate(sys.argv):
+        if argument in ("splash", "landing") and index and sys.argv[index - 1] == "--only":
+            sys.argv[index] = "motion"
+    if "--skip-render" in sys.argv:
+        sys.argv.remove("--skip-render")
+    build_reference()
     return 0
 
 

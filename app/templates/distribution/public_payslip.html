@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <link rel="stylesheet" href="{{ url_for('static', filename='fonts.css') }}">
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
@@ -8,38 +9,63 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
     <style>
         /* Self-contained on purpose: workers open this from an SMS link on
-           mobile data. Colours come from the shared token file. */
-        body { color: var(--ink); font-family: var(--font-sans); margin: 0; min-height: 100vh; }
-        .payslip-wrap { max-width: 520px; margin: 0 auto; padding: 18px 14px 40px; }
-        .payslip-card { background: var(--surface); border-radius: var(--radius-lg);
-            box-shadow: 0 12px 34px rgba(15, 118, 110, .12); overflow: hidden; }
-        .payslip-head { align-items: center; background: var(--brand); color: #fff;
-            display: flex; gap: 14px; padding: 18px 20px; }
-        .payslip-head .brand-mark { height: 44px; width: 44px; font-size: 1.1rem; }
-        .payslip-head-name { font-weight: 700; }
-        .payslip-head-meta { font-size: .9rem; opacity: .85; }
-        .payslip-body { padding: 18px 20px 22px; }
-        .payslip-body h1 { font-size: 18px; font-weight: 750; margin: 0; }
-        .line { border-bottom: 1px solid #eef2f1; display: flex; justify-content: space-between; padding: 7px 0; }
-        .line span:last-child { font-variant-numeric: tabular-nums; }
-        .line.sub span:first-child { color: var(--muted); }
+           mobile data, so it loads tokens.css and nothing else: no app chrome,
+           no script, no third-party asset. Satoshi is named first and resolves
+           only if its same-origin @font-face is loaded; otherwise the token
+           stack renders at the same sizes. */
+        body { color: var(--ink); font-family: "Satoshi", var(--font-sans); font-size: 16px;
+            line-height: 1.5; margin: 0; min-height: 100vh; }
+        .payslip-wrap { display: block; max-width: 540px; margin: 0 auto; padding: 20px 16px 48px; }
+        /* The teal rule is an inset shadow on the card, so it follows the radius
+           without overflow: hidden, which could clip an unusually long figure. */
+        .payslip-card { background: var(--surface); border: 1px solid var(--line);
+            border-radius: var(--radius); box-shadow: inset 0 4px 0 var(--brand), var(--shadow-sm); }
+        .payslip-head { align-items: center; border-bottom: 1px solid var(--line);
+            display: flex; gap: 14px; padding: 22px 20px 18px; }
+        .payslip-head .brand-mark { box-shadow: none; font-size: 1.1rem; height: 44px; width: 44px; }
+        .payslip-head-name { color: var(--brand-deep); font-size: 17px; font-weight: 700; line-height: 1.3; }
+        .payslip-head-meta { color: var(--muted); font-size: 14px; }
+        .payslip-body { padding: 20px 20px 24px; }
+        .payslip-body h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.25; margin: 0 0 4px; }
+        .muted { color: var(--muted); font-size: 14px; }
+        .group-label { color: var(--brand); font-size: 12px; font-weight: 700;
+            letter-spacing: .08em; margin: 22px 0 4px; text-transform: uppercase; }
+        /* The label may wrap; the amount never does, so a long label cannot push
+           a figure onto two lines or out of its column. */
+        .line { align-items: baseline; border-bottom: 1px solid var(--line); display: flex;
+            gap: 16px; justify-content: space-between; padding: 10px 0; }
+        .line span:last-child { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+        .line.sub span:first-child { color: var(--ink-soft); }
         .line.total { border-bottom: none; font-weight: 700; }
-        .net { align-items: center; background: var(--brand-tint);
-            border: 1px solid rgba(15, 118, 110, .2); border-radius: var(--radius);
-            display: flex; justify-content: space-between; margin-top: 14px; padding: 14px 16px; }
-        .net strong { color: var(--brand); font-size: 1.35rem; font-variant-numeric: tabular-nums; }
-        .group-label { color: var(--brand); font-size: .72rem; font-weight: 700;
-            letter-spacing: .06em; margin: 16px 0 4px; text-transform: uppercase; }
-        .muted { color: #94a3b8; font-size: .8rem; }
-        .download { background: var(--green); border-radius: 10px; color: #fff; display: block;
-            font-size: 16px; font-weight: 700; margin-top: 18px; padding: 13px 16px;
-            text-align: center; text-decoration: none; }
-        .download:hover { background: #15803d; }
-        .foot { color: #94a3b8; font-size: .8rem; line-height: 1.6; margin: 16px 0 0; text-align: center; }
+        .net { align-items: center; background: var(--brand-tint); border: 1px solid var(--line-strong);
+            border-radius: var(--radius-sm); display: flex; flex-wrap: wrap; gap: 4px 16px;
+            justify-content: space-between; margin-top: 18px; padding: 16px; }
+        .net span { color: var(--brand-deep); font-weight: 700; }
+        .net strong { color: var(--brand-deep); font-size: 1.6rem; font-variant-numeric: tabular-nums;
+            letter-spacing: -0.01em; white-space: nowrap; }
+        /* --brand, not --green: white on --green is about 3.3:1, under the 4.5:1
+           this 16px label owes. 48px tall so a thumb finds it. */
+        .download { align-items: center; background: var(--brand); border-radius: var(--radius-sm);
+            color: #fff; display: flex; font-size: 16px; font-weight: 700; justify-content: center;
+            margin-top: 20px; min-height: 48px; padding: 12px 16px; text-decoration: none; }
+        .download:hover { background: var(--brand-dark); }
+        .download:focus-visible { outline: 3px solid var(--brand-deep); outline-offset: 3px; }
+        .foot { color: var(--muted); font-size: 14px; line-height: 1.6; margin: 18px 0 0; text-align: center; }
+        @media (max-width: 380px) {
+            .payslip-head, .payslip-body { padding-left: 16px; padding-right: 16px; }
+        }
+        /* Printable: the full breakdown on plain paper, without the button. */
+        @media print {
+            body.brand-shell-bg { background: none; }
+            .payslip-wrap { max-width: none; padding: 0; }
+            .payslip-card { border: 0; box-shadow: none; }
+            .net { background: none; }
+            .download { display: none; }
+        }
     </style>
 </head>
 <body class="brand-shell-bg">
-<div class="payslip-wrap">
+<main class="payslip-wrap">
     <div class="payslip-card">
         <div class="payslip-head">
             <span class="brand-mark">{{ app_brand_mark }}</span>
@@ -52,7 +78,7 @@
             <h1>{{ item.full_name }}</h1>
             <div class="muted" style="margin-bottom:8px;">Staff ID: {{ item.staff_id or "—" }}{% if item.job_role %} · {{ item.job_role }}{% endif %}</div>
 
-            <div class="group-label">Earnings</div>
+            <h2 class="group-label">Earnings</h2>
             {% for label, amount in [
                 ("Basic salary", item.basic_salary),
                 ("Transport", item.transport_allowance),
@@ -64,7 +90,7 @@
             {% endfor %}
             <div class="line total"><span>Gross pay</span><span>{{ item.gross_pay|cedis }}</span></div>
 
-            <div class="group-label">Deductions</div>
+            <h2 class="group-label">Deductions</h2>
             {% for label, amount in [
                 ("PAYE (income tax)", item.paye),
                 ("SSNIT", item.ssnit),
@@ -81,13 +107,13 @@
                 <strong>{{ item.net_pay|cedis }}</strong>
             </div>
 
-            <a class="download" href="{{ url_for('payslip_link.public_payslip_pdf', token=token) }}">Download PDF</a>
+            <a class="download" href="{{ pdf_url }}">Download PDF</a>
             <p class="foot">
                 This is your salary breakdown, not a payment confirmation.<br>
                 Sent securely by {{ client.name if client else app_brand_name }} via {{ app_brand_name }}.
             </p>
         </div>
     </div>
-</div>
+</main>
 </body>
 </html>

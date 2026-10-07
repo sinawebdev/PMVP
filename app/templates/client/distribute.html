@@ -1,5 +1,6 @@
 {% extends "client/base.html" %}
 {% import "macros/delivery.html" as dm %}
+{% import "macros/distribution.html" as ds %}
 {% block title %}Distribute — {{ run.month }} {{ run.year }}{% endblock %}
 {% block body %}
   <div class="page-bar">
@@ -19,7 +20,9 @@
   <div class="card form stack">
     <h2>Send to workers</h2>
     {{ dm.simulated_notice("flash warning") }}
-    {% if not sendable %}
+    {% if confirm %}
+      {{ ds.send_confirm(confirm) }}
+    {% elif not sendable %}
       <p class="sub">Payslips can be sent once the run is <strong>Approved</strong>. This run is <strong>{{ run.status }}</strong>.</p>
     {% elif not can_send %}
       <p class="sub">Sending payslips to workers is limited to a company administrator. You can still download payslips above.</p>
@@ -51,5 +54,7 @@
     {% endif %}
   </div>
 
+  {% if not confirm %}
   {% include "client/_distribute_status_fragment.html" %}
+  {% endif %}
 {% endblock %}

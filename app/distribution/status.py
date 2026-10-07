@@ -23,10 +23,11 @@ which is a shell concern and lives in ``macros/distribution.html``.
 
 from datetime import datetime, timezone
 
-from app.models import DELIVERY_CHANNELS, DistributionBatch, PayslipDelivery
+from app.models import DistributionBatch, PayslipDelivery
 from app.paging import paginate_list
 from app.payroll_status import SENDABLE_STATUSES
 
+from .channels import sendable_channels
 from .service import resolve_channel
 
 # Batch states that mean work is actively moving through a worker right now.
@@ -86,6 +87,8 @@ def delivery_status_context(run, now=None):
 
     sent = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "sent")
     failed = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "failed")
+    # May have been sent (a provider timeout); counted apart, never as failed.
+    unknown = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "unknown")
 
     batch = latest_batch(run.id)
     # A pending automatic retry (a failed delivery still scheduled) keeps the
@@ -114,10 +117,12 @@ def delivery_status_context(run, now=None):
         # otherwise drew 400 rows every three seconds while the batch was live.
         "rows": rows,
         "rows_page": paginate_list(rows),
-        "channels": DELIVERY_CHANNELS,
+        # Desktop installs never offer SMS (decision 11).
+        "channels": sendable_channels(),
         "sendable": run.status in SENDABLE_STATUSES,
         "sent_count": sent,
         "failed_count": failed,
+        "unknown_count": unknown,
         "batch": batch,
         "in_flight": batch_active or pending_retry or scheduled,
         # Drives live polling — a far-future scheduled batch changes nothing

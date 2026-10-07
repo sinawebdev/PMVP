@@ -1,40 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 136 158" role="img" aria-label="Payrolla">
-  <!--
-    PAYROLLA ICON — the folded-ribbon P. Master geometry for every static mark.
-
-    Drawn from the same numbers as the animated logo
-    (scripts/logo/logo_parts.py: turtle_program and stem_outline), so the
-    animation lands exactly on this shape. One ribbon unit = 40 here, with
-    10 of padding all round:
-
-      column           x 0..1,  y -1.1..1.1      ->  X 10..50,  Y 10..98
-      top band         y 0.1..1.1                ->  Y 10..50 (sharp top-left corner)
-      bowl             centre (1.8, 0), outer r 1.1, inner r 0.1
-                                                 ->  centre (82,54), r44 / r4
-      bottom band      y -1.1..-0.1, x 1..1.8    ->  Y 58..98, X 50..82
-      counter          the 0.2 slit between the bands: square at the column,
-                       round at the bowl         ->  X 50..86, Y 50..58
-      stem (the fold)  quarter ellipse below the column, rx 1, ry 1.25,
-                       down to a point at y -2.35 ->  rx40 ry50, tip (10,148)
-
-    The body is one shape: outer contour, then the counter knocked out with
-    evenodd. The stem is the ribbon's BACK side folded under, so it is a flat,
-    darker teal rather than part of the gradient.
-
-    Gradient: the animation's front-face ramp, deep at f=0.1 to bright at
-    f=0.8 along the direction (0.45, 0.89). Blender blends in linear light, so
-    the mid stops are the linear-light blend converted back to sRGB; an
-    sRGB-blended two-stop gradient would sag dark through the middle.
-  -->
-  <defs>
-    <linearGradient id="pa-front" x1="40.49" y1="133.41" x2="88.63" y2="38.2" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#0D4D4D"/>
-      <stop offset=".25" stop-color="#107972"/>
-      <stop offset=".5" stop-color="#13978B"/>
-      <stop offset=".75" stop-color="#15AFA0"/>
-      <stop offset="1" stop-color="#17C3B2"/>
-    </linearGradient>
-  </defs>
-  <path fill="#0B4A48" d="M10 98H50A40 50 0 0 1 10 148Z"/>
-  <path fill="url(#pa-front)" fill-rule="evenodd" d="M10 10H82A44 44 0 0 1 82 98H10Z M50 50H82A4 4 0 0 1 82 58H50Z"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 168 188" role="img" aria-label="Payrolla"><defs>
+      <linearGradient id="ribbon" x1="10" y1="142" x2="105" y2="0" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#008F8B"/><stop offset=".6" stop-color="#17C3B2"/><stop offset="1" stop-color="#42CBBB"/>
+      </linearGradient>
+      <linearGradient id="fold" x1="0" y1="168" x2="40" y2="111" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#073B3D"/><stop offset="1" stop-color="#0D4D4D"/>
+      </linearGradient>
+      <linearGradient id="tile" x2="1" y2="1"><stop stop-color="#073B3D"/><stop offset="1" stop-color="#08675F"/></linearGradient>
+      <linearGradient id="word" x2="1" y2=".65"><stop stop-color="#0D4D4D"/><stop offset=".86" stop-color="#0D4D4D"/><stop offset="1" stop-color="#17C3B2"/></linearGradient>
+    </defs><g transform="translate(10 10)"><path fill="url(#fold)" d="M0 128C4 117 17 111 30 111H46V126C46 150 26 168 0 168Z"/><path fill="url(#ribbon)" d="M0 40C7 16 24 0 48 0H91C124 0 148 23 148 55.5C148 87 125 111 92 111H46C23 111 6 123 0 140V128C0 96 21 72 48 72H90C99 72 106 65 106 56C106 47 99 40 90 40Z"/></g></svg>

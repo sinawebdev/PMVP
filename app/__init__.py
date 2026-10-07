@@ -25,11 +25,14 @@ migrate = Migrate()
 
 
 def https_url_or_none(value):
-    """``value`` if it is an absolute https:// URL, else None."""
+    """Accept an absolute HTTPS download URL; ignore invalid configuration."""
     value = (value or "").strip()
-    parts = urlsplit(value)
-    if parts.scheme == "https" and parts.netloc and not any(c.isspace() for c in value):
-        return value
+    try:
+        parts = urlsplit(value)
+        if parts.scheme == "https" and parts.hostname and not any(c.isspace() for c in value):
+            return value
+    except ValueError:
+        pass
     return None
 
 
@@ -319,13 +322,8 @@ def create_app():
     )
     app.config["COMPANY_NAME"] = os.getenv("COMPANY_NAME", "Sinaforte Technologies")
     app.config["SERVICE_SLUG"] = os.getenv("SERVICE_SLUG", "payrolla")
-    # Where the landing page's "Download for Windows" button points. Unset, the
-    # button is not rendered at all: the installer is hosted outside this app
-    # (it is ~240 MB), and a button with nowhere real to go is worse than none.
-    # The value lands in an href on a public page, so only an absolute https://
-    # URL is accepted. Anything else (javascript:, plain http, a typo) is dropped
-    # with a warning rather than rendered -- and rather than failing the boot,
-    # because a bad download link must not take payroll down with it.
+    # Public desktop installer hosted outside this app. Per-firm builds carry
+    # their customer's license and must not be used for a general download.
     _download = os.getenv("DESKTOP_DOWNLOAD_URL", "")
     app.config["DESKTOP_DOWNLOAD_URL"] = https_url_or_none(_download)
     if _download.strip() and not app.config["DESKTOP_DOWNLOAD_URL"]:
@@ -500,7 +498,7 @@ def create_app():
     # --- Payslip distribution channels ---
     # Each channel defaults to a console backend (logs only, no credentials, no network).
     # Set the matching *_BACKEND + credentials to go live per channel.
-    app.config["SMS_BACKEND"] = os.getenv("SMS_BACKEND", "console")          # console|hubtel
+    app.config["SMS_BACKEND"] = os.getenv("SMS_BACKEND", "console")  # console|hubtel|sasusync
     app.config["SMS_SENDER_ID"] = os.getenv("SMS_SENDER_ID")
     app.config["SMS_HUBTEL_CLIENT_ID"] = os.getenv("SMS_HUBTEL_CLIENT_ID")
     app.config["SMS_HUBTEL_CLIENT_SECRET"] = os.getenv("SMS_HUBTEL_CLIENT_SECRET")
@@ -586,6 +584,12 @@ def create_app():
         )
     app.config["PAYSLIP_TOKEN_KEY"] = _payslip_key_from_env or secrets.token_hex(32)
 
+    # SasuSync settings and the SMS boot guards (PUBLIC_BASE_URL, credentials,
+    # no SMS on desktop) — see app/sms_config.py.
+    from app.sms_config import load_sms_config
+
+    load_sms_config(app, is_production=is_production, is_desktop=is_desktop)
+
     # --- Distribution queue worker (Phase 3, Slice 1) ---
     # No separate worker dyno/service exists yet (Render's plan is a single web
     # process), so the default is an in-process polling thread inside the web
@@ -652,6 +656,9 @@ def create_app():
     app.config["SLA_DELIVERY_CONFIRM_HOURS"] = int(
         os.getenv("SLA_DELIVERY_CONFIRM_HOURS", "0")
     )
+    # Minutes an `unknown` send (may have gone out) can stay unsettled before
+    # platform admins are alerted; 0 turns the check off.
+    app.config["SLA_UNKNOWN_MINUTES"] = int(os.getenv("SLA_UNKNOWN_MINUTES", "30"))
     app.config["SLA_CHECK_INTERVAL_SECONDS"] = int(
         os.getenv("SLA_CHECK_INTERVAL_SECONDS", "300")
     )

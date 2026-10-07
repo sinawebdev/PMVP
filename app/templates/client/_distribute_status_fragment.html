@@ -16,7 +16,7 @@
      hx-swap="outerHTML"
      {% endif %}>
 
-{{ ds.totals(rows, sent_count, failed_count) }}
+{{ ds.totals(rows, sent_count, failed_count, unknown_count=unknown_count) }}
 
 {{ ds.queue_status(batch, in_flight=in_flight, scheduled=scheduled,
                    seconds_until=seconds_until_scheduled) }}

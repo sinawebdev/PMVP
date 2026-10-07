@@ -9,6 +9,7 @@
   <meta name="csrf-token" content="{{ csrf_token() }}" />
   <title>{% block title %}{{ company.name }}{% endblock %} — Company Portal</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='fonts.css') }}" />
   {# Shared tokens first, then the portal layer. No Bootstrap here on purpose —
      see the note at the top of portal.css. #}
   <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}" />
@@ -20,6 +21,12 @@
      today). Loading them here rather than in portal.css keeps a page's styles
      off every other page, so they cannot regress one. #}
   {% block head %}{% endblock %}
+  {# Facelift layers load last so they settle ties with any page-scoped sheet
+     above: interface.css is the shared design system (fonts, nav, cards,
+     tables, buttons, forms) and client-interface.css refines what only this
+     portal composes. #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='interface.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='client-interface.css') }}" />
 </head>
 <body class="brand-shell-bg">
 {# The shared icon set (macros/ui.html) — inline SVG, no icon font, so the
@@ -54,12 +61,8 @@
     <header class="portal-topbar">
       <div class="portal-topbar-inner">
         <a class="portal-logo" href="{{ url_for('main.company_dashboard') }}">
-          {# No .brand-mark tile here. That tile is a white rounded square built
-             to lift the icon off the deep-teal sidebar and the dark login card;
-             on a white bar it is a white square on white. The icon's own artwork
-             is a deep-teal gradient drawn for a light ground, so it stands alone. #}
-          <img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" />
-          <span class="portal-logo-name">{{ app_brand_name }}</span>
+          {% from 'macros/brand.html' import logo with context %}
+          {{ logo(compact=true) }}
         </a>
 
         <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="primary-nav" aria-expanded="false">{{ shell_ui.icon('menu', 22) }}</button>
@@ -157,20 +160,49 @@
   (function () {
     // Mobile navigation drawer — same contract as the operator shell
     // (base.html): .nav-toggle flips .open on #primary-nav and .show on the
-    // backdrop. The nav is a horizontal bar above 900px and a slide-in panel
+    // backdrop. The nav is a horizontal bar above 1100px and a slide-in panel
     // below it; only the CSS differs, so this stayed as it was.
     var toggle = document.querySelector('.nav-toggle');
     var nav = document.getElementById('primary-nav');
     var backdrop = document.querySelector('.nav-backdrop');
-    function setOpen(open) {
+    // The toggle's aria-expanded IS the drawer's state; .open and .show only
+    // follow it, so what a screen reader announces is what the page does.
+    function isOpen() { return !!toggle && toggle.getAttribute('aria-expanded') === 'true'; }
+    function setOpen(open, returnFocus) {
       if (!nav) return;
       nav.classList.toggle('open', open);
       if (backdrop) backdrop.classList.toggle('show', open);
       if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (toggle) toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+      if (open) {
+        closeMenus(null);
+        // Into the drawer, on the current page's link when there is one.
+        var start = nav.querySelector('a[aria-current="page"]') || nav.querySelector('a');
+        if (start) start.focus();
+      } else if (returnFocus && toggle) {
+        toggle.focus();
+      }
     }
-    if (toggle) toggle.addEventListener('click', function () { setOpen(!nav.classList.contains('open')); });
-    if (backdrop) backdrop.addEventListener('click', function () { setOpen(false); });
-    if (nav) nav.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { setOpen(false); }); });
+    if (toggle) toggle.addEventListener('click', function () { setOpen(!isOpen(), true); });
+    if (backdrop) backdrop.addEventListener('click', function () { setOpen(false, true); });
+    window.addEventListener('resize', function () {
+      if (toggle && getComputedStyle(toggle).display === 'none') setOpen(false, false);
+    });
+    if (nav) nav.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { setOpen(false, false); }); });
+    // Escape closes the drawer and hands focus back to the button that opened it.
+    document.addEventListener('keydown', function (event) {
+      if (!isOpen()) return;
+      if (event.key === 'Escape') setOpen(false, true);
+      else if (event.key === 'Tab') {
+        var links = nav.querySelectorAll('a[href]');
+        var first = links[0], last = links[links.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault(); last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault(); first.focus();
+        }
+      }
+    });
 
     // Utility menus are <details>, so they open, close and take focus with no
     // JS at all. This only adds the two behaviours the element does not give

@@ -30,6 +30,15 @@ non-negotiables:
 | `SESSION_COOKIE_SECURE` | `true` | HTTPS-only session cookie. |
 | `LOG_MESSAGE_BODIES` | unset | Development only — production refuses to boot with it enabled. |
 | `LOGIN_MAX_ATTEMPTS` | `5` | Failed logins per IP and per account before lockout. |
+| `PUBLIC_BASE_URL` | `https://pmvp-v1.onrender.com` | Host used in payslip links. Required (and `https://` in production) whenever `SMS_BACKEND` isn't `console`. |
+| `SMS_BACKEND` | `console` until the sandbox check passes, then `sasusync` | `console` logs only. Any other value is refused on a desktop install. |
+| `SMS_SENDER_ID` | `Payrolla` | Must be approved on the SasuSync account. Required in production with `sasusync`. |
+| `SASUSYNC_API_KEY` | secret | Required in production with `sasusync`. Never logged. |
+| `SASUSYNC_BASE_URL` | `https://sms.sasusync.com` | Required in production with `sasusync`. |
+| `SASUSYNC_SANDBOX` | `true`, then `false` to go live | `true` posts to the free sandbox endpoint, which delivers nothing. |
+| `SASUSYNC_WEBHOOK_SECRET` | secret | Signs SasuSync delivery reports. |
+| `PAYSLIP_SMS_LINK_DAYS` | `30` | Lifetime of the short link in an SMS. |
+| `PAYSLIP_LINK_RATE_PER_MIN` | `30` | Requests per minute per IP on `/s/<code>`. |
 
 Optional groups (all documented in [.env.example](.env.example)): the branding
 seam (`APP_NAME`, …), distribution channels and their credentials, webhook
@@ -79,6 +88,21 @@ Go-live checklist:
 > bind to it. Render fixes the `onrender.com` subdomain at creation and cannot
 > rename it; serving Payrolla on its own hostname means adding a custom domain to
 > the existing service, not changing this file.
+
+### SMS (SasuSync): set the dashboard first
+
+`render.yaml` is inert, so nothing in it reaches the live service. The SMS boot
+guards refuse to start the app when their variables are missing, which means a
+deploy that adds a guard before its variable exists puts the service into a
+crash-restart loop. That is exactly how the `PAYSLIP_TOKEN_KEY` outage happened.
+
+1. In the **Render dashboard**, set `PUBLIC_BASE_URL`, `SMS_SENDER_ID` and the
+   `SASUSYNC_*` variables **before** deploying the code that checks them.
+2. Keep `SMS_BACKEND=console` until a sandbox run (`SASUSYNC_SANDBOX=true`) has
+   passed end to end. Register the sender ID on SasuSync first: the sandbox
+   returns 403 for an unapproved sender, the same as live.
+3. Then set `SMS_BACKEND=sasusync`, and `SASUSYNC_SANDBOX=false` only once the
+   sender ID shows `approved`.
 
 ## Railway
 

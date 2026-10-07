@@ -92,18 +92,22 @@
 .dist-window-opt.is-current:hover { background: var(--brand-dark); color: var(--surface); }
 
 /* --- KPI band ------------------------------------------------------------
-   Five tiles that must read as ONE band. Below a laptop they reflow to
-   whatever fits; from a laptop up they are five equal columns, always — the
-   same rule (and the same reasoning) as .ops .kpi-band: auto-fit alone drops
-   to 4+1 at around 1280px, and a band with one tile hanging off the end reads
-   as a mistake rather than as a band. */
+   Six tiles that must read as ONE band. They only ever split evenly: six
+   columns from a laptop up, three from a tablet, two on a phone. Auto-fit alone
+   would drop to 5+1 or 4+2 somewhere in between, and a band with tiles hanging
+   off the end reads as a mistake rather than as a band — the same rule (and
+   the same reasoning) as .ops .kpi-band. */
 
 .dist-kpis { margin-bottom: var(--space-section); }
 
-.dist .kpi-band { gap: 12px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.dist .kpi-band { gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+@media (min-width: 640px) {
+    .dist .kpi-band { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 
 @media (min-width: 1080px) {
-    .dist .kpi-band { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .dist .kpi-band { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
 
 .dist .kpi-value { font-size: clamp(18px, 1.35vw, 21px); margin-top: 6px; white-space: nowrap; }

@@ -1,0 +1,236 @@
+/* ---------------------------------------------------------------------------
+   Payrolla - company portal interface layer.
+
+   Loaded by client/base.html on every company portal page, after the page's
+   own head block and after the shared interface.css. On the dashboard that
+   puts it on top of dashboard.css, so its dashboard rules are scoped under
+   .exec: one extra class settles every tie with dashboard.css, and no other
+   page can be reached by them.
+
+   interface.css owns the shared nav, cards, tables, buttons and forms. This
+   file refines only what the company portal alone composes: the executive
+   dashboard, the portal page header, and the figures in its records.
+
+     1. Tokens only. The one local value is --ci-paper, declared once below.
+     2. No entrance animation, and nothing that is not a control responds to
+        the pointer. Panels are read, not clicked.
+     3. Figures are tabular and never clipped: a money value may shrink with
+        its tile, never lose a digit to an ellipsis or overflow: hidden.
+     4. Trend chips (.delta inside .kpi-move) are not restyled here; they
+        render exactly as tokens.css and macros/charts.html draw them.
+   --------------------------------------------------------------------------- */
+
+.portal-shell {
+    /* Cream inset well. If interface.css defines a cream/paper token, point
+       this at it instead of the literal. */
+    --ci-paper: #fbf9f4;
+}
+
+/* --- Portal page header ---------------------------------------------------
+   The single company identity line base.html renders above every page that
+   does not name the company itself. An orienting label, not a title: small,
+   deep teal, and quieter than the page's own h1 beneath it. */
+.portal-pagehead {
+    color: var(--brand-deep);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin: 0 0 6px;
+}
+
+/* --- Records ----------------------------------------------------------------
+   Every number in a client table lines up digit under digit, so a column of
+   cedi amounts can be compared by eye. */
+.portal-main td,
+.portal-main th,
+.portal-main .nums {
+    font-variant-numeric: tabular-nums;
+}
+
+/* --- Dashboard: reading order -----------------------------------------------
+   Quick actions lead, followed by health, risk, KPIs, charts, compliance and
+   activity. Every width follows the template's reading order, so keyboard
+   focus moves with the layout. These rules outrank dashboard.css's grid at
+   each breakpoint. */
+.exec .exec-grid {
+    grid-template-areas: "actions" "health" "risk" "kpis" "charts" "compliance" "activity";
+}
+
+@media (min-width: 860px) {
+    .exec .exec-grid {
+        grid-template-areas:
+            "actions    actions"
+            "health     risk"
+            "kpis       kpis"
+            "charts     charts"
+            "compliance activity";
+    }
+}
+
+@media (min-width: 1180px) {
+    .exec .exec-grid {
+        grid-template-areas:
+            "actions actions actions actions actions actions actions actions actions actions actions actions"
+            "health health health health health health health health risk risk risk risk"
+            "kpis kpis kpis kpis kpis kpis kpis kpis kpis kpis kpis kpis"
+            "charts charts charts charts charts charts charts charts charts charts charts charts"
+            "compliance compliance compliance compliance compliance activity activity activity activity activity activity activity";
+    }
+}
+
+/* --- Dashboard: header --------------------------------------------------- */
+.exec .exec-head h1 {
+    font-size: clamp(24px, 2.4vw, 28px);
+    font-weight: 700;
+    letter-spacing: -0.018em;
+}
+
+.exec .exec-head .sub { color: var(--ink-soft); font-size: 15px; }
+
+/* --- Dashboard: panels ------------------------------------------------------
+   12px cards on a solid surface with one soft shadow. No hover: only the
+   links and tiles inside a panel respond. */
+.exec .xpanel {
+    background: var(--surface);
+    border-radius: var(--radius);
+}
+
+.exec .panel-head h2 {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.exec .panel-sub { font-size: 13px; }
+
+/* Payroll health leads the page, so it alone carries the teal: a 3px rule
+   along its top edge, drawn as an inset shadow so it follows the radius. */
+.exec .area-health {
+    box-shadow: inset 0 3px 0 var(--brand), var(--shadow-sm);
+}
+
+.exec .health-period {
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.exec .health-next {
+    border-left: 3px solid var(--brand);
+    border-radius: var(--radius-sm);
+}
+
+.exec .health-next--warn { border-left-color: var(--warn); }
+
+/* The run's figures sit in a cream well, so the arithmetic (gross + employer
+   SSF = total cost) reads as one block, apart from the narrative above it. */
+.exec .figures {
+    background: var(--ci-paper);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+}
+
+.exec .figure dd { font-weight: 700; }
+
+.exec .signal { border-radius: var(--radius-sm); }
+
+/* --- Dashboard: KPI tiles ---------------------------------------------------
+   Size and wrapping stay exactly as dashboard.css set them; that clamp is
+   what keeps a cedi figure on one line. This only settles weight and radius,
+   and makes the hover a border change rather than a lift. */
+.exec .kpi { border-radius: var(--radius); }
+.exec .kpi:hover { border-color: var(--line-control); box-shadow: var(--shadow-sm); }
+.exec .kpi-value { font-weight: 700; }
+
+/* --- Dashboard: explicit controls -------------------------------------------
+   Panel links (Open run, Rates, Full audit trail) and each signal's Review
+   were teal text with a sliding arrow. They are now small outlined buttons:
+   a 3:1 boundary (--line-control), a 32px target and a still arrow, so a
+   link reads as a control before it is hovered. */
+.exec .link-action,
+.exec .signal-link {
+    background: var(--surface);
+    border: 1px solid var(--line-control);
+    border-radius: var(--radius-sm);
+    gap: 4px;
+    min-height: 32px;
+    padding: 5px 10px;
+}
+
+.exec .link-action:hover,
+.exec .signal-link:hover {
+    background: var(--brand-tint);
+    border-color: var(--brand);
+    color: var(--brand-dark);
+    gap: 4px;
+    text-decoration: none;
+}
+
+.exec .creq-link {
+    align-items: center;
+    border: 1px solid var(--line-control);
+    border-radius: var(--radius-sm);
+    color: var(--brand);
+    display: inline-flex;
+    height: 32px;
+    justify-content: center;
+    width: 32px;
+}
+
+.exec .creq-link:hover { background: var(--brand-tint); border-color: var(--brand); }
+
+/* --- Dashboard: shortcuts (compact) -----------------------------------------
+   Compact navigation at the top, using the same role-filtered destinations. */
+.exec .area-actions--compact { padding-bottom: 16px; padding-top: 16px; }
+.exec .area-actions--compact .panel-head { margin-bottom: 12px; }
+
+.exec .area-actions--compact .qa-grid {
+    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.exec .area-actions--compact .qa {
+    border-color: var(--line-control);
+    border-radius: var(--radius-sm);
+    gap: 10px;
+    min-height: 48px;
+    padding: 8px 12px;
+}
+
+.exec .area-actions--compact .qa:hover { background: var(--brand-tint); border-color: var(--brand); }
+.exec .area-actions--compact .qa-ico { height: 28px; width: 28px; }
+.exec .area-actions--compact .qa-ico svg { height: 18px; width: 18px; }
+.exec .area-actions--compact .qa-body small { font-size: 12px; }
+
+/* --- Focus ------------------------------------------------------------------
+   dashboard.css's ring, re-cut to each control's new radius. */
+.exec .link-action:focus-visible,
+.exec .signal-link:focus-visible,
+.exec .creq-link:focus-visible,
+.exec .area-actions--compact .qa:focus-visible {
+    border-radius: var(--radius-sm);
+}
+
+/* --- Phone ------------------------------------------------------------------ */
+@media (max-width: 640px) {
+    /* Keep four figures in paired rows; a third narrow tile overflows at
+       intermediate phone widths. Money stays visible in full. */
+    .exec .kpi-band { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .exec .link-action, .exec .signal-link { min-height: 44px; }
+    .exec .creq-link { height: 44px; width: 44px; }
+    .exec .health-period { font-size: 20px; }
+    .exec .figures { padding: 12px; }
+    .exec .area-actions--compact .qa-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 359px) {
+    .exec .kpi-band { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-contrast: more) {
+    .exec .link-action,
+    .exec .signal-link,
+    .exec .creq-link,
+    .exec .area-actions--compact .qa,
+    .exec .figures { border-color: var(--ink-soft); }
+}

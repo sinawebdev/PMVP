@@ -195,7 +195,8 @@ class BulkActionsTestCase(unittest.TestCase):
         draft = self._run(DRAFT)
         resp = self.http.post(
             "/payroll/runs/bulk/distribute",
-            data={"run_ids": [str(seeded_approved.id), str(draft.id)]},
+            # Past the confirm step (tests/test_sms_send_pages.py covers it).
+            data={"run_ids": [str(seeded_approved.id), str(draft.id)], "confirmed": "1"},
             follow_redirects=True,
         )
         body = resp.get_data(as_text=True)
@@ -233,7 +234,7 @@ class BulkActionsTestCase(unittest.TestCase):
         run = self._run(PROCESSED)
         resp = self.http.post(
             "/payroll/runs/bulk/distribute",
-            data={"run_ids": [str(run.id)]},
+            data={"run_ids": [str(run.id)], "confirmed": "1"},
             follow_redirects=True,
         )
         self.assertIn("1 run(s) queued", resp.get_data(as_text=True))

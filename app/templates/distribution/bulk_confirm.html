@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
+{% import "macros/delivery.html" as dm %}
+{% import "macros/distribution.html" as ds %}
+{# Bulk Distribute's confirm step. The same component as a single run's
+   (distribution/run_status.html), handed several runs by
+   app/distribution/confirm.py::bulk_confirm_context. #}
+{% block title %}Distribute selected runs · {{ app_name }}{% endblock %}
+{% block page_title %}Distribute selected runs{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Payroll Runs", confirm.back_url),
+    ("Distribute selected runs", None),
+]) }}
+{% endblock %}
+{% block content %}
+{{ dm.simulated_notice() }}
+<section class="panel">{{ ds.send_confirm(confirm) }}</section>
+{% endblock %}

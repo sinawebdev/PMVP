@@ -12,6 +12,7 @@ from flask import (
     Blueprint,
     current_app,
     flash,
+    make_response,
     redirect,
     render_template,
     request,
@@ -35,7 +36,10 @@ from app.models import (
 from app.payroll_status import SENDABLE_STATUSES
 from app.pdf_service import generate_payslip_pdf
 
+from .channels import SMS_BLOCKED_MESSAGE, sms_refused
+from .confirm import confirm_url, needs_confirm
 from .idempotency import replay_or_run
+from .links import resolve_payslip_link
 from .queue import (
     cancel_distribution,
     cancel_flash_message,
@@ -214,6 +218,12 @@ def _do_send(run_id, only_failed):
     if channel not in VALID_SEND_CHANNELS:
         flash(f"Unknown channel: {channel}", "danger")
         return redirect(url_for("distribution.run_status", run_id=run.id))
+    if sms_refused(channel):
+        flash(SMS_BLOCKED_MESSAGE, "warning")
+        return redirect(url_for("distribution.run_status", run_id=run.id))
+    if needs_confirm(channel, request.form):  # SMS / auto: show who it reaches first
+        return redirect(confirm_url("distribution.confirm_send", run, channel,
+                                    "resend" if only_failed else "send", request.form))
 
     nonce = request.form.get("nonce")
     action = "resend-failed" if only_failed else "send"
@@ -290,10 +300,16 @@ def schedule(run_id):
     if channel not in VALID_SEND_CHANNELS:
         flash(f"Unknown channel: {channel}", "danger")
         return redirect(url_for("distribution.run_status", run_id=run.id))
+    if sms_refused(channel):
+        flash(SMS_BLOCKED_MESSAGE, "warning")
+        return redirect(url_for("distribution.run_status", run_id=run.id))
     when = _parse_schedule(request.form.get("scheduled_for"))
     if when is None or when <= datetime.now(timezone.utc):
         flash("Pick a valid future date and time to schedule the distribution.", "warning")
         return redirect(url_for("distribution.run_status", run_id=run.id))
+    if needs_confirm(channel, request.form):
+        return redirect(confirm_url("distribution.confirm_send", run, channel, "schedule",
+                                    request.form))
     summary = enqueue_distribution(run, channel, False, current_user, scheduled_for=when)
     if summary.get("already_in_progress"):
         flash("A distribution is already scheduled or in progress for this run.", "warning")
@@ -340,9 +356,10 @@ def set_preferred_channel(item_id):
 
 # ---------------------------------------------------------------------------
 # Public, no-login payslip link (the worker-facing surface).
-# Reached only via a signed, expiring token carried in the SMS/WhatsApp/email.
-# These routes are deliberately NOT behind @login_required — the token IS the
-# credential, scoped to one payslip and time-limited.
+# Reached only via a signed, expiring /p/ token (email, WhatsApp) or a short,
+# expiring /s/ code (SMS). These routes are deliberately NOT behind
+# @login_required — the token IS the credential, scoped to one payslip and
+# time-limited.
 # ---------------------------------------------------------------------------
 
 payslip_link_bp = Blueprint("payslip_link", __name__)
@@ -365,7 +382,17 @@ def public_payslip(token):
         item=item,
         run=item.payroll_run,
         client=item.payroll_run.client_company if item.payroll_run else None,
-        token=token,
+        pdf_url=url_for("payslip_link.public_payslip_pdf", token=token),
+    )
+
+
+def _payslip_pdf_response(item):
+    file_path = generate_payslip_pdf(item, current_app.config["EXPORT_FOLDER"])
+    return send_file(
+        file_path,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=os.path.basename(file_path),
     )
 
 
@@ -374,10 +401,71 @@ def public_payslip_pdf(token):
     item = _item_from_token(token)
     if item is None:
         return render_template("distribution/link_expired.html"), 404
-    file_path = generate_payslip_pdf(item, current_app.config["EXPORT_FOLDER"])
-    return send_file(
-        file_path,
-        mimetype="application/pdf",
-        as_attachment=True,
-        download_name=os.path.basename(file_path),
-    )
+    return _payslip_pdf_response(item)
+
+
+# --- Short links, the form an SMS carries (see links.py) ---------------------
+# The same page and PDF as /p/<token>. Every failure is the same 404, whatever
+# the cause, and nothing here is cacheable: the URL is a bearer credential.
+# Requests are counted per client IP before the code is even looked at, so a
+# guessing run is throttled whether its guesses are well-formed or not.
+
+
+def _no_store(response):
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def _short_link_limited():
+    """A 429 response if this client has opened too many short links in the
+    last minute, else None."""
+    from app.auth import _request_fingerprint
+
+    from .request_limit import allow
+
+    ip, _agent = _request_fingerprint()
+    per_minute = int(current_app.config.get("PAYSLIP_LINK_RATE_PER_MIN", 30))
+    if allow("payslip-link", ip, per_minute):
+        return None
+    response = make_response("Too many requests. Wait a minute, then open the link again.", 429)
+    response.mimetype = "text/plain"
+    response.headers["Retry-After"] = "60"
+    return _no_store(response)
+
+
+def _short_link_expired():
+    return _no_store(make_response(render_template("distribution/link_expired.html"), 404))
+
+
+@payslip_link_bp.route("/s/<code>")
+def short_payslip(code):
+    limited = _short_link_limited()
+    if limited is not None:
+        return limited
+    item = resolve_payslip_link(code)
+    if item is None:
+        return _short_link_expired()
+    return _no_store(make_response(render_template(
+        "distribution/public_payslip.html",
+        item=item,
+        run=item.payroll_run,
+        client=item.payroll_run.client_company if item.payroll_run else None,
+        pdf_url=url_for("payslip_link.short_payslip_pdf", code=code),
+    )))
+
+
+@payslip_link_bp.route("/s/<code>/pdf")
+def short_payslip_pdf(code):
+    limited = _short_link_limited()
+    if limited is not None:
+        return limited
+    item = resolve_payslip_link(code)
+    if item is None:
+        return _short_link_expired()
+    return _no_store(_payslip_pdf_response(item))
+
+
+# The SMS confirm step and the settle action (SMS Phase 3). Imported last so its
+# routes attach once distribution_bp and the send routes above exist; kept in
+# its own module so this file stays under 500 lines.
+from app.distribution import run_actions as _run_actions  # noqa: E402,F401

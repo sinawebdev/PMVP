@@ -1,0 +1,9 @@
+{% macro logo(dark=false, compact=false) -%}
+  {% if app_brand_name == 'Payrolla' %}
+    <img class="payrolla-lockup" src="{{ url_for('static', filename='img/payrolla-logo-dark.svg' if dark else 'img/payrolla-logo.svg') }}" alt="Payrolla" width="156" height="42">
+    {% if compact %}<img class="payrolla-compact" src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="Payrolla" width="28" height="31">{% endif %}
+  {% else %}
+    <img src="{{ url_for('static', filename='img/payrolla-icon-dark.svg' if dark else 'img/payrolla-icon.svg') }}" alt="" width="28" height="31">
+    <span class="portal-logo-name">{{ app_brand_name }}</span>
+  {% endif %}
+{%- endmacro %}

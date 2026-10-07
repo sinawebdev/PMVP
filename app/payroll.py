@@ -112,8 +112,8 @@ def crossref_employee_records(client_id, mapped_rows):
     Returns ``(unregistered, no_contact)`` — both non-blocking warnings:
       * unregistered: normalised staff IDs in the file with no roster record yet.
         They import fine but cannot receive payslips until their record is created.
-      * no_contact: active roster employees present in the file that have neither
-        email nor phone, so distribution is unavailable for them.
+      * no_contact: active roster employees present in the file with no usable
+        contact (``Employee.has_contact``), so distribution is unavailable for them.
     Contact details for distribution always come from the roster, never the upload.
     """
     file_ids = {
@@ -133,7 +133,7 @@ def crossref_employee_records(client_id, mapped_rows):
         (
             {"staff_id": e.staff_id, "name": e.full_name}
             for e in db_employees.values()
-            if e.staff_id in file_ids and not e.email and not e.phone
+            if e.staff_id in file_ids and not e.has_contact
         ),
         key=lambda r: r["name"] or r["staff_id"],
     )
@@ -1881,9 +1881,13 @@ def bulk_reject():
 @payroll_bp.route("/runs/bulk/distribute", methods=["POST"])
 @role_required(*PAYROLL_ROLES)
 def bulk_distribute():
+    from app.distribution.confirm import bulk_confirm_url, needs_confirm
     from app.distribution.queue import enqueue_distribution
     from app.models import CHANNEL_AUTO
 
+    # An auto send shows who it reaches first, as it does on a single run.
+    if request.form.getlist("run_ids") and needs_confirm(CHANNEL_AUTO, request.form):
+        return redirect(bulk_confirm_url(request.form))
     done, skipped = _bulk_apply(
         request.form.getlist("run_ids"),
         can_distribute_run,

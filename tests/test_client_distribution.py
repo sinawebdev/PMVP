@@ -74,7 +74,7 @@ class ClientDistributionTestCase(unittest.TestCase):
         nonce = "fixed-nonce-1"
         first = self.client.post(
             f"/company/runs/{self.msc_run.id}/distribute/send",
-            data={"channel": "auto", "nonce": nonce},
+            data={"channel": "auto", "confirmed": "1", "nonce": nonce},
         )
         self.assertEqual(first.status_code, 302)
         # Sending queues a batch — no deliveries yet, request wasn't blocked on a send.
@@ -85,7 +85,7 @@ class ClientDistributionTestCase(unittest.TestCase):
         # Same nonce replays — no duplicate batch.
         self.client.post(
             f"/company/runs/{self.msc_run.id}/distribute/send",
-            data={"channel": "auto", "nonce": nonce},
+            data={"channel": "auto", "confirmed": "1", "nonce": nonce},
         )
         self.assertEqual(
             DistributionBatch.query.filter_by(payroll_run_id=self.msc_run.id).count(), 1
@@ -151,7 +151,7 @@ class ClientDistributionTestCase(unittest.TestCase):
         self._login("admin@msc.com")
         self.client.post(
             f"/company/runs/{self.msc_run.id}/distribute/send",
-            data={"channel": "auto", "nonce": "n2"},
+            data={"channel": "auto", "confirmed": "1", "nonce": "n2"},
         )
         resp = self.client.get(f"/company/runs/{self.msc_run.id}/distribute")
         body = resp.get_data(as_text=True)
@@ -160,7 +160,7 @@ class ClientDistributionTestCase(unittest.TestCase):
         # A second send while one is in flight doesn't queue a duplicate batch.
         self.client.post(
             f"/company/runs/{self.msc_run.id}/distribute/send",
-            data={"channel": "auto", "nonce": "n3"},
+            data={"channel": "auto", "confirmed": "1", "nonce": "n3"},
         )
         self.assertEqual(
             DistributionBatch.query.filter_by(payroll_run_id=self.msc_run.id).count(), 1
@@ -184,7 +184,7 @@ class SimulatedDeliveryIsDisclosedTests(ClientDistributionTestCase):
         self._login("admin@msc.com")
         body = self.client.post(
             f"/company/runs/{self.msc_run.id}/distribute/send",
-            data={"channel": "auto", "nonce": "disclosure-1"},
+            data={"channel": "auto", "confirmed": "1", "nonce": "disclosure-1"},
             follow_redirects=True,
         ).get_data(as_text=True)
         self.assertIn("not actually sent", body)

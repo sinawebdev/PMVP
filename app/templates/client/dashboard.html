@@ -49,34 +49,13 @@
 
   <div class="exec-grid">
 
-    {# --- 1. Executive KPIs ---------------------------------------------
-       Four tiles, four distinct questions: what is payroll costing, how big is
-       the workforce, what else are we spending, and are we safe. Run STATUS is
-       deliberately not a tile — it needs a reason and a next step, which is the
-       Payroll Health panel's whole job. #}
-    <section class="area-kpis" aria-labelledby="kpi-heading">
-      <h2 id="kpi-heading" class="sr-only">Executive summary</h2>
-      <div class="kpi-band">
-        {% for kpi in overview.kpis %}{{ ui.kpi_card(kpi, url_for(kpi.endpoint)) }}{% endfor %}
-      </div>
-    </section>
-
-    {# --- 2. Quick actions -----------------------------------------------
-       Role-filtered in app/dashboard.py against the same roles the target
-       routes are decorated with, so a preparer is never shown a button that
-       would bounce them. Actions needing a completed run disappear when the
-       company has none, rather than linking into an error.
-
-       `run_payroll` is filtered out here: it is already the page's one primary
-       button in the header above, and the same action offered twice on one
-       screen reads as two different actions until the reader checks. The
-       operator dashboard has held itself to that rule since its redesign; this
-       panel was the last place the two dashboards disagreed about it. The tile
-       is dropped, never the capability — the header button is role-gated on
-       exactly the same key. #}
+    {# Quick actions open the workspace at every width. Keep their DOM order
+       aligned with the visual order for keyboard navigation. Role filtering
+       and run-specific destinations come from overview.actions; Run payroll
+       is already the header's primary action, so it is not repeated here. #}
     {% set shortcuts = overview.actions | rejectattr('key', 'equalto', 'run_payroll') | list %}
     {% if shortcuts %}
-    <section class="xpanel area-actions" aria-labelledby="actions-heading">
+    <section class="xpanel area-actions area-actions--compact" aria-labelledby="actions-heading">
       <div class="panel-head">
         <div>
           <h2 id="actions-heading">Quick actions</h2>
@@ -204,6 +183,17 @@
       {% else %}
       {{ ui.empty("Nothing to review", "Risk checks run the moment a payroll is submitted.") }}
       {% endif %}
+    </section>
+
+    {# --- Executive KPIs, second row -----------------------------------------
+       Health and risk say where this period stands and whether anything
+       needs a decision; the four tiles answer the follow-up questions about
+       cost and size. Same macro call, same links, trend chips unchanged. #}
+    <section class="area-kpis" aria-labelledby="kpi-heading">
+      <h2 id="kpi-heading" class="sr-only">Executive summary</h2>
+      <div class="kpi-band">
+        {% for kpi in overview.kpis %}{{ ui.kpi_card(kpi, url_for(kpi.endpoint)) }}{% endfor %}
+      </div>
     </section>
 
     {# --- 5. Financial analytics -----------------------------------------

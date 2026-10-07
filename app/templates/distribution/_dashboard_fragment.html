@@ -16,7 +16,7 @@
    the reverse of what this page used to do, which opened with two full-width
    infrastructure panels (SLA, then Worker) before mentioning a payslip:
 
-     1. did the payslips go out, and how well          (the five tiles)
+     1. did the payslips go out, and how well          (the six tiles)
      2. what is moving right now                       (In flight)
      3. what needs a human                             (Needs attention)
      4. what happened, in detail                       (Recent distributions)
@@ -36,10 +36,12 @@
 {% set b = stats.batches %}
 {% set w = stats.worker %}
 
-{# --- The five questions ----------------------------------------------------
-   Five tiles, five genuinely different questions — the same rule the operator
-   dashboard's KPI band holds itself to. The eight tiles this replaces asked
-   four questions between them:
+{# --- The six questions -----------------------------------------------------
+   Six tiles, six genuinely different questions — the same rule the operator
+   dashboard's KPI band holds itself to. (The sixth, Unconfirmed, arrived with
+   SMS: a send the provider may have accepted is neither a success nor a
+   failure, and is the only one that needs a person to look outside Payrolla.)
+   The eight tiles this replaces asked four questions between them:
 
      Delivered / Success rate / Failed / Active retries / Final failures /
      Queue backlog / Batches running / Batches queued
@@ -108,6 +110,20 @@
             if d.final_failures else "Every failure so far has recovered"
          ),
        }, url_for('distribution.history', status='failed')) }}
+
+    {# Not a failure and not a success: the provider may have accepted these
+       (a timeout, or a send that stopped mid-way), so nothing resends them and
+       only a person can settle them. Each history row links to its run. #}
+    {{ ui.kpi_card({
+         "label": "Unconfirmed",
+         "value": d.unknown,
+         "formatter": "count",
+         "delta": none,
+         "caption": (
+            "May have been sent. Check SasuSync before resending"
+            if d.unknown else "No send is in doubt"
+         ),
+       }, url_for('distribution.history', status='unknown')) }}
 
     {{ ui.kpi_card({
          "label": "In the queue",

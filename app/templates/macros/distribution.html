@@ -25,11 +25,14 @@
 
 
 {# --- Totals ---------------------------------------------------------------- #}
-{% macro totals(rows, sent_count, failed_count, net_total=none) %}
+{% macro totals(rows, sent_count, failed_count, net_total=none, unknown_count=0) %}
 <dl class="ds-totals">
   <div class="ds-total"><dt>Payslips</dt><dd>{{ rows|length }}</dd></div>
   <div class="ds-total ds-total--ok"><dt>Sent</dt><dd>{{ sent_count }}</dd></div>
   <div class="ds-total ds-total--bad"><dt>Failed</dt><dd>{{ failed_count }}</dd></div>
+  {% if unknown_count %}
+  <div class="ds-total ds-total--warn"><dt>Unconfirmed</dt><dd>{{ unknown_count }}</dd></div>
+  {% endif %}
   {% if net_total is not none %}
   <div class="ds-total"><dt>Net total</dt><dd>{{ net_total }}</dd></div>
   {% endif %}
@@ -76,6 +79,9 @@
     <div><dt>Channel</dt><dd>{{ batch.channel }}{% if batch.only_failed %} (resend-failed){% endif %}</dd></div>
     {% if batch.status in ("completed", "failed") %}
     <div><dt>Sent / failed</dt><dd>{{ batch.sent_count or 0 }} / {{ batch.failed_count or 0 }} (of {{ batch.total or 0 }})</dd></div>
+    {% if batch.unknown_count %}
+    <div><dt>Unconfirmed</dt><dd>{{ batch.unknown_count }}</dd></div>
+    {% endif %}
     <div><dt>Finished</dt><dd>{{ batch.finished_at.strftime("%Y-%m-%d %H:%M") if batch.finished_at }}</dd></div>
     {% else %}
     <div><dt>Total queued</dt><dd>{{ batch.total or 0 }} payslip(s)</dd></div>
@@ -110,6 +116,12 @@
   {%- endif -%}
 {%- elif delivery and delivery.status == "cancelled" -%}
   <span class="ds-pill ds-pill--muted">cancelled</span>
+{%- elif delivery and delivery.status == "sending" -%}
+  <span class="ds-pill ds-pill--info">sending…</span>
+{%- elif delivery and delivery.status == "unknown" -%}
+  {#- The provider may have accepted it. Words, not the raw error: the tenant
+      sees this badge too, and the reason is the scope's to explain. -#}
+  <span class="ds-pill ds-pill--warn">unconfirmed</span>
 {%- elif delivery and delivery.status == "failed" -%}
   {%- set rs = delivery_retry_state(delivery) -%}
   {%- if rs.final -%}
@@ -131,7 +143,10 @@
 
 {# --- Per-worker delivery table ----------------------------------------------
    scope: "operator" adds the preferred-channel control, the recipient address
-   and net pay; "tenant" gets neither the control nor the address. #}
+   (a phone number masked: shown_recipient) and net pay, plus the settle
+   buttons on an `unconfirmed` row; "tenant" gets none of those, and is told
+   Payrolla is checking an unconfirmed row instead, because the provider portal
+   the operator checks is not the company's to log in to. #}
 {# `live` matters as much as `scope`: while the region is polling it swaps
    itself every three seconds, so a <select> inside it is a control that
    vanishes under the cursor mid-interaction. Routing is frozen during a send
@@ -145,6 +160,8 @@
    them separate matters: gating the columns on `live` too would make the table
    change width the moment a send starts. #}
 {% set can_retarget = operator and not live %}
+{# Same rule for the settle buttons: never inside a region that is polling. #}
+{% set can_settle = operator and not live %}
 <section class="ds-table-wrap">
   <table class="ds-table">
     <caption class="sr-only">Per-worker payslip delivery status</caption>
@@ -186,14 +203,20 @@
           {% endif %}
         </td>
         <td>{% if d %}<span class="ds-pill ds-pill--muted">{{ d.channel }}</span>{% else %}<span class="ds-muted">—</span>{% endif %}</td>
-        {% if operator %}<td class="ds-muted">{{ d.recipient if d else "—" }}</td>{% endif %}
-        <td>{{ delivery_badge(d, in_flight) }}</td>
+        {% if operator %}<td class="ds-muted">{{ d|shown_recipient }}</td>{% endif %}
+        <td>
+          {{ delivery_badge(d, in_flight) }}
+          {% if operator and d and d.status == "unknown" %}
+          <p class="ds-note">May have been sent. Check the SasuSync portal, then mark it.</p>
+          {% if can_settle %}{{ settle_controls(item, d) }}{% endif %}
+          {% endif %}
+        </td>
         <td class="num">{{ d.attempts if d else 0 }}</td>
         <td class="ds-muted num">{{ d.sent_at.strftime('%Y-%m-%d %H:%M') if d and d.sent_at else "—" }}</td>
         {% if operator %}
         <td class="num">{{ item.net_pay|cedis }}</td>
         {% else %}
-        <td class="ds-muted">{{ d.error if d and d.error else "" }}</td>
+        <td class="ds-muted">{% if d and d.status == "unknown" %}Unconfirmed. Payrolla is checking.{% elif d and d.error %}{{ d.error }}{% endif %}</td>
         {% endif %}
       </tr>
       {% endfor %}
@@ -201,4 +224,125 @@
   </table>
 </section>
 {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
+{% endmacro %}
+
+
+{# --- Settle an unconfirmed send (operator only) -----------------------------
+   Two small secondary buttons, each its own form with its own styled
+   data-confirm and its own `outcome`, so neither question nor value depends
+   on which button submitted. Not the screen's primary action, and never
+   rendered while the region polls: the caller gates it on `live`. #}
+{% macro settle_controls(item, d) %}
+{% set action = url_for('distribution.settle_delivery', run_id=item.payroll_run_id, delivery_id=d.id) %}
+<div class="ab ds-settle">
+  <form method="post" action="{{ action }}"
+        data-confirm="Mark {{ item.full_name }}'s payslip as sent? Only do this if the SasuSync portal shows it went out."
+        data-confirm-title="Mark as sent" data-confirm-ok="Mark sent">
+    <input type="hidden" name="outcome" value="sent">
+    <button class="btn" type="submit">Mark sent</button>
+  </form>
+  <form method="post" action="{{ action }}"
+        data-confirm="Mark {{ item.full_name }}'s payslip as not sent? It becomes a failure that Resend failed sends again, with a new link."
+        data-confirm-title="Mark as not sent" data-confirm-ok="Mark not sent">
+    <input type="hidden" name="outcome" value="not_sent">
+    <button class="btn" type="submit">Mark not sent</button>
+  </form>
+</div>
+{% endmacro %}
+
+
+{# --- The confirm step before an SMS or auto send -----------------------------
+   app/distribution/confirm.py builds `c`. Who the send reaches and how, who it
+   cannot reach (paginated), and roughly what it costs, with the one decision
+   this screen is for: the send itself, posted back with confirmed=1 and the
+   same nonce, so a double-click is still one batch. The page showing this
+   offers no other send while it does.
+
+   `c.runs` is set for Bulk Distribute (several runs at once): each selected
+   run's share, or why it is left out, and a Run column on the unreachable
+   workers. A hidden value may be a list (the run ids), one input per value. #}
+{% macro send_confirm(c) %}
+<section class="ds-confirm" aria-labelledby="ds-confirm-title">
+  <h2 id="ds-confirm-title">{{ "Check this SMS send" if c.channel == "sms" else "Check this send" }}</h2>
+  <p class="ds-confirm-lead">
+    {% if c.action == "resend" %}Resending the failed payslips{% elif c.action == "schedule" %}Scheduling the payslips{% else %}Sending the payslips{% endif %}
+    {% if c.runs %}on {{ c.runs|length }} selected run{{ "" if c.runs|length == 1 else "s" }}{% endif %}
+    {% if c.auto %}by each worker's best contact{% else %}by SMS{% endif %}.
+    Nothing has gone out yet.
+  </p>
+  <dl class="ds-totals">
+    <div class="ds-total ds-total--ok"><dt>To a phone</dt><dd>{{ c.to_phone }}</dd></div>
+    <div class="ds-total ds-total--ok"><dt>To a MoMo number</dt><dd>{{ c.to_momo }}</dd></div>
+    {% if c.by_email %}<div class="ds-total ds-total--ok"><dt>By email</dt><dd>{{ c.by_email }}</dd></div>{% endif %}
+    {% if c.by_whatsapp %}<div class="ds-total ds-total--ok"><dt>By WhatsApp</dt><dd>{{ c.by_whatsapp }}</dd></div>{% endif %}
+    <div class="ds-total ds-total--bad"><dt>No contact</dt><dd>{{ c.no_contact }}</dd></div>
+    <div class="ds-total ds-total--bad"><dt>Invalid number</dt><dd>{{ c.invalid }}</dd></div>
+  </dl>
+  {% if c.sms_recipients %}
+  <p class="ds-note">About {{ c.credits }} SMS credit{{ "" if c.credits == 1 else "s" }}: one per message, because each is built to fit one SMS. What SasuSync actually charges is recorded for each message.</p>
+  {% endif %}
+  {% if c.skipped %}
+  <p class="ds-note">{{ c.skipped }} payslip{{ " is" if c.skipped == 1 else "s are" }} left out: {{ "not failed" if c.action == "resend" else "already sent, sending, or unconfirmed" }}.</p>
+  {% endif %}
+
+  {% if c.runs %}
+  <section class="ds-table-wrap">
+    <table class="ds-table">
+      <caption class="sr-only">What this send does on each selected run</caption>
+      <thead><tr><th scope="col">Run</th><th scope="col" class="num">Reaches</th><th scope="col" class="num">Can't reach</th><th scope="col" class="num">Left out</th><th scope="col">Note</th></tr></thead>
+      <tbody>
+        {% for r in c.runs %}
+        <tr>
+          <td>{{ r.label }}</td>
+          {% if r.preview %}
+          <td class="num">{{ r.preview.reachable }}</td>
+          <td class="num">{{ r.preview.no_contact + r.preview.invalid }}</td>
+          <td class="num">{{ r.preview.skipped }}</td>
+          <td class="ds-muted">—</td>
+          {% else %}
+          <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+          <td class="ds-muted">Not sent: {{ r.reason }}</td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  {% if c.problems.total %}
+  <h3 class="ds-confirm-sub">Can't be reached ({{ c.problems.total }})</h3>
+  <p class="ds-note">These will be recorded as failed. Fix their contact details on the roster, then use Resend failed.</p>
+  <section class="ds-table-wrap">
+    <table class="ds-table">
+      <caption class="sr-only">Workers this send cannot reach</caption>
+      <thead><tr>{% if c.runs %}<th scope="col">Run</th>{% endif %}<th scope="col">Staff ID</th><th scope="col">Worker</th><th scope="col">Why</th></tr></thead>
+      <tbody>
+        {% for p in c.problems.items %}
+        <tr>{% if c.runs %}<td>{{ p.run }}</td>{% endif %}<td>{{ p.item.staff_id }}</td><td>{{ p.item.full_name }}</td><td class="ds-muted">{{ p.reason }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% if c.problems.pages > 1 %}{{ ui.pagination(c.problems, c.page_params) }}{% endif %}
+  {% endif %}
+
+  <div class="ab ds-confirm-actions">
+    {% if c.reachable %}
+    <form method="post" action="{{ c.post_url }}">
+      {% for name, value in c.hidden.items() %}{% for v in (value if value is not string and value is iterable else [value]) %}<input type="hidden" name="{{ name }}" value="{{ v }}">{% endfor %}{% endfor %}
+      <button class="btn primary" type="submit">{{ c.button }}</button>
+    </form>
+    {% endif %}
+    <a class="btn" href="{{ c.back_url }}">Back</a>
+  </div>
+  {% if not c.reachable %}
+  <p class="ds-note ds-note--bad">
+    {%- if c.runs and not c.hidden.run_ids -%}None of the selected runs can be sent now. The table says why.
+    {%- elif c.action == "resend" and not c.problems.total -%}Nothing to resend.
+    {%- else -%}No one on {{ "these runs" if c.runs else "this run" }} can be reached this way, so there is nothing to send.
+    {%- endif -%}
+  </p>
+  {% endif %}
+</section>
 {% endmacro %}

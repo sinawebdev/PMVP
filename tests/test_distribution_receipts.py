@@ -2,9 +2,10 @@
 
 The senders capture the provider message id; provider callbacks (webhooks) map to
 the matching delivery: a delivered/read receipt records provider_status +
-delivered_at; a failed receipt flips the delivery back to failed for retry. The
-webhook endpoints verify the provider secret/token and stay disabled until
-configured.
+delivered_at; a failed receipt flips the delivery back to failed, with no
+automatic retry (a report can be wrong, and a resend on the strength of one could
+reach the worker twice; an operator decides). The webhook endpoints verify the
+provider secret/token and stay disabled until configured.
 """
 
 import hashlib
@@ -119,10 +120,10 @@ class ApplyReceiptTestCase(unittest.TestCase):
         self.assertIsNotNone(d.delivered_at)
         self.assertEqual(d.status, DELIVERY_SENT)  # still sent, now confirmed
 
-    def test_failed_receipt_flips_to_failed_for_retry(self):
+    def test_failed_receipt_flips_to_failed_without_an_automatic_retry(self):
         d = apply_receipt("wamid.TRACK", "undelivered", reason="no route")
         self.assertEqual(d.status, "failed")
-        self.assertIsNotNone(d.next_retry_at)  # re-enters the retry system
+        self.assertIsNone(d.next_retry_at)  # "Resend failed" is the operator's call
         self.assertIn("undelivered", d.error)
 
     def test_unknown_status_and_unknown_id_are_ignored(self):

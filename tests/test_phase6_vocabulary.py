@@ -152,10 +152,12 @@ class ContactCompletenessRendersIdenticallyTests(unittest.TestCase):
         self.unreachable.email = "someone@example.test"
         self.assertTrue(self.unreachable.has_contact)
 
-    def test_momo_alone_is_not_contactable(self):
-        """It is a payment destination, not a delivery channel — and the
-        import-time warning has always drawn the line there."""
+    def test_a_valid_momo_number_alone_is_contactable(self):
+        """SMS goes to the MoMo number when there is no phone (Q4, 2026-10-01),
+        so a valid one counts — and only a valid one."""
         self.unreachable.momo_number = "0244000000"
+        self.assertTrue(self.unreachable.has_contact)
+        self.unreachable.momo_number = "0302000000"  # a landline
         self.assertFalse(self.unreachable.has_contact)
 
     def test_both_portals_render_the_same_badge(self):

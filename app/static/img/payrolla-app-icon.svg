@@ -1,36 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Payrolla">
-  <!--
-    PAYROLLA APP ICON — 1024 x 1024 (store / PWA / desktop installer master).
-
-    Same master geometry as payrolla-icon.svg, one uniform transform (scale 4.5),
-    the 116 x 138 artwork's box centred on (512,512). This and favicon.svg carry
-    identical path data at different scales, so the tab icon and the 1024px
-    store icon are the same shape by construction — nothing was re-drawn for
-    either size.
-
-    Corner radius 229 is 22.37% of 1024, the iOS squircle proportion, so the tile
-    matches platform masking instead of being clipped by it. The mark takes the
-    dark-ground palette (as payrolla-logo-dark.svg) for contrast against the
-    deep-teal tile. A full-bleed tile (no transparency) is deliberate: app icons
-    are composited over unknown wallpapers.
-  -->
-  <defs>
-    <linearGradient id="pai-tile" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#0D4D4D"/>
-      <stop offset="1" stop-color="#062E2E"/>
-    </linearGradient>
-    <linearGradient id="pai-front" x1="40.49" y1="133.41" x2="88.63" y2="38.2" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#17C3B2"/>
-      <stop offset=".25" stop-color="#4DCFC0"/>
-      <stop offset=".5" stop-color="#69DBCD"/>
-      <stop offset=".75" stop-color="#7EE6D9"/>
-      <stop offset="1" stop-color="#8FF0E4"/>
-    </linearGradient>
-  </defs>
-
-  <rect width="1024" height="1024" rx="229" fill="url(#pai-tile)"/>
-  <g transform="translate(206 156.5) scale(4.5)">
-    <path fill="#135F5A" d="M10 98H50A40 50 0 0 1 10 148Z"/>
-    <path fill="url(#pai-front)" fill-rule="evenodd" d="M10 10H82A44 44 0 0 1 82 98H10Z M50 50H82A4 4 0 0 1 82 58H50Z"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Payrolla"><defs>
+      <linearGradient id="ribbon" x1="10" y1="142" x2="105" y2="0" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#008F8B"/><stop offset=".6" stop-color="#17C3B2"/><stop offset="1" stop-color="#42CBBB"/>
+      </linearGradient>
+      <linearGradient id="fold" x1="0" y1="168" x2="40" y2="111" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#073B3D"/><stop offset="1" stop-color="#0D4D4D"/>
+      </linearGradient>
+      <linearGradient id="tile" x2="1" y2="1"><stop stop-color="#073B3D"/><stop offset="1" stop-color="#08675F"/></linearGradient>
+      <linearGradient id="word" x2="1" y2=".65"><stop stop-color="#0D4D4D"/><stop offset=".86" stop-color="#0D4D4D"/><stop offset="1" stop-color="#17C3B2"/></linearGradient>
+    </defs><rect width="1024" height="1024" rx="229" fill="url(#tile)"/><g transform="translate(258.92 224.72) scale(3.42)"><path fill="#FFFFFF" d="M0 128C4 117 17 111 30 111H46V126C46 150 26 168 0 168Z"/><path fill="url(#ribbon)" d="M0 40C7 16 24 0 48 0H91C124 0 148 23 148 55.5C148 87 125 111 92 111H46C23 111 6 123 0 140V128C0 96 21 72 48 72H90C99 72 106 65 106 56C106 47 99 40 90 40Z"/></g></svg>

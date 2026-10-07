@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+node_modules/
 
 instance/*
 !instance/.gitkeep
@@ -32,3 +33,6 @@ tests/fixtures/*
 # Design-review screenshots from scripts/capture_ui.py. Regenerated on demand,
 # large, and binary — reviewed in a message or a PR, never committed.
 .screenshots/
+
+# Original licensed fonts are downloaded at build time for our own app.
+app/static/fonts/*.woff2

@@ -2,7 +2,8 @@
 
 Evaluates delivery service levels against configured thresholds and reports
 breaches: batches that took too long to run, a recent-window failure rate over
-budget, and (opt-in) sent messages with no delivery receipt after too long. The
+budget, (opt-in) sent messages with no delivery receipt after too long, and sends
+that may have gone out (`unknown`) but have not been settled. The
 worker re-checks on a throttled cadence and alerts platform admins (once per
 breach type per cooldown) via the existing notification system; the dashboard
 shows the current SLA status. Read-only evaluation reusing existing data.
@@ -17,6 +18,7 @@ from app.models import (
     BATCH_RUNNING,
     DELIVERY_FAILED,
     DELIVERY_SENT,
+    DELIVERY_UNKNOWN,
     DistributionBatch,
     PayslipDelivery,
 )
@@ -45,6 +47,7 @@ def _thresholds():
         "min_volume": int(cfg.get("SLA_MIN_VOLUME", 20) or 0),
         "window_hours": int(cfg.get("SLA_WINDOW_HOURS", 24) or 0),
         "confirm_hours": int(cfg.get("SLA_DELIVERY_CONFIRM_HOURS", 0) or 0),
+        "unknown_minutes": int(cfg.get("SLA_UNKNOWN_MINUTES", 30) or 0),
     }
 
 
@@ -123,6 +126,26 @@ def evaluate_sla():
                 "detail": (
                     f"{len(unconfirmed)} sent message(s) unconfirmed after "
                     f"{th['confirm_hours']}h"
+                ),
+            })
+
+    # 4. Sends that may have gone out, still unsettled. Repeats every cooldown
+    #    until each one is settled, because nothing else will move them.
+    if th["unknown_minutes"]:
+        cutoff_time = now - timedelta(minutes=th["unknown_minutes"])
+        unsettled = [
+            d for d in PayslipDelivery.query.filter(
+                PayslipDelivery.status == DELIVERY_UNKNOWN
+            ).all()
+            if (as_aware(d.claimed_at) or as_aware(d.updated_at) or now) < cutoff_time
+        ]
+        if unsettled:
+            breaches.append({
+                "type": "unknown",
+                "count": len(unsettled),
+                "detail": (
+                    f"{len(unsettled)} payslip(s) may have been sent but are unconfirmed "
+                    f"after {th['unknown_minutes']} min; check SasuSync, then settle them"
                 ),
             })
 

@@ -1,31 +1,57 @@
 """Distribute a payroll run's payslips over a channel, recording every attempt.
 
 Mirrors the standalone distribution system's send_period(): one bad recipient becomes a
-recorded `failed` PayslipDelivery, never an exception that aborts the run. Already-`sent`
-items are skipped so re-running is safe; only_failed re-attempts just the failures.
+recorded `failed` PayslipDelivery, never an exception that aborts the run. Sent, in-flight
+and unconfirmed items are skipped so re-running is safe; only_failed re-attempts just the
+failures.
+
+Every attempt is claimed before the provider is called (:func:`claim_delivery`): a
+conditional UPDATE moves the row to `sending`, and only the caller whose UPDATE changed
+the row goes on to send. That is what stops a batch, a "Resend failed" and the retry
+sweep from sending one payslip twice. The outcome is then written as `sent`, `failed`
+(retried automatically only when the failure is retryable) or `unknown` (the provider
+may have accepted it, so it is never re-sent automatically).
 """
 from datetime import datetime, timedelta, timezone
 
 from flask import current_app
+from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.audit import record_audit
 from app.models import (
     CHANNEL_AUTO,
     CHANNEL_EMAIL,
-    DELIVERY_CHANNELS,
+    CHANNEL_SMS,
+    DELIVERY_CANCELLED,
     DELIVERY_FAILED,
+    DELIVERY_PENDING,
+    DELIVERY_SENDING,
     DELIVERY_SENT,
-    Employee,
+    DELIVERY_UNKNOWN,
     PayrollItem,
     PayrollRun,
     PayslipDelivery,
 )
-from app.raw_import import normalise_emp_id
 
-from .channels import OutboundMessage, get_sender
-from .render import render_payslip_email, render_payslip_text
+from .channels import OutboundMessage, get_sender, sendable_channels
+from .contacts import SOURCE_INVALID, roster_employee, sms_contact
+from .links import short_payslip_url
+from .render import (
+    SMS_TEMPLATE_VERSION,
+    render_payslip_email,
+    render_payslip_sms,
+    render_payslip_text,
+)
 from .tokens import public_payslip_url
+
+# A new send may claim a row that has never gone out (pending, failed, or
+# cancelled before it went). A retry, manual or automatic, claims failures only.
+# `sent`, `sending` and `unknown` are never claimable by anything here.
+CLAIMABLE_FOR_SEND = (DELIVERY_PENDING, DELIVERY_FAILED, DELIVERY_CANCELLED)
+CLAIMABLE_FOR_RETRY = (DELIVERY_FAILED,)
+SKIPPED_BY_SEND = (DELIVERY_SENT, DELIVERY_SENDING, DELIVERY_UNKNOWN)
 
 
 def as_aware(dt):
@@ -49,12 +75,13 @@ def _retry_config():
         return 3, 60
 
 
-def _mark_sent(delivery, provider, message_id=None):
+def _mark_sent(delivery, provider, message_id=None, units=None):
     delivery.status = DELIVERY_SENT
     delivery.provider = provider
     delivery.error = None
     delivery.sent_at = datetime.now(timezone.utc)
     delivery.next_retry_at = None
+    delivery.units = units
     if message_id:
         delivery.provider_message_id = message_id
         # A fresh send supersedes any prior receipt state.
@@ -62,21 +89,34 @@ def _mark_sent(delivery, provider, message_id=None):
         delivery.delivered_at = None
 
 
-def _mark_failed(delivery, error, *, provider=None, max_attempts=None, backoff_base=None):
-    """Record a failed attempt and schedule the next automatic retry — unless the
-    retry limit is reached, in which case next_retry_at is left NULL (final
-    failure). `delivery.attempts` must already be incremented by the caller."""
+def _mark_failed(delivery, error, *, provider=None, max_attempts=None, backoff_base=None,
+                 retry=True):
+    """Record a failed attempt and, when ``retry`` is True, schedule the next
+    automatic retry — unless the retry limit is reached, in which case
+    next_retry_at is left NULL (final failure). `delivery.attempts` must already
+    count this attempt. ``retry=False`` is a permanent failure: retrying the same
+    thing cannot work (no contact, a refusal), or must not happen without a
+    person deciding (a failure reported after the send)."""
     if max_attempts is None or backoff_base is None:
         max_attempts, backoff_base = _retry_config()
     delivery.status = DELIVERY_FAILED
     delivery.error = error
     delivery.provider = provider
     attempts = delivery.attempts or 1
-    if attempts < max_attempts:
+    if retry and attempts < max_attempts:
         delay = backoff_base * (2 ** (attempts - 1))
         delivery.next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=delay)
     else:
         delivery.next_retry_at = None
+
+
+def _mark_unknown(delivery, error, *, provider=None):
+    """The provider may have accepted it. Never retried automatically and never
+    picked up by "Resend failed"; a delivery report or an operator settles it."""
+    delivery.status = DELIVERY_UNKNOWN
+    delivery.error = error
+    delivery.provider = provider
+    delivery.next_retry_at = None
 
 
 def retry_state(delivery):
@@ -96,28 +136,6 @@ def retry_state(delivery):
     }
 
 
-def _roster_employee(item):
-    """The roster Employee behind this payroll item.
-
-    The item's own employee relationship (set at import time) is preferred —
-    and returned regardless of roster status, because a worker deactivated
-    after payday still needs the payslip for work already done. Only items
-    that never got linked fall back to an active-roster lookup by normalised
-    staff_id."""
-    employee = getattr(item, "employee", None)
-    if employee is not None:
-        return employee
-    run = getattr(item, "payroll_run", None)
-    client_id = run.client_company_id if run else None
-    if not client_id or not item.staff_id:
-        return None
-    return Employee.query.filter_by(
-        client_company_id=client_id,
-        staff_id=normalise_emp_id(item.staff_id),
-        status="Active",
-    ).first()
-
-
 def _contact_for(channel, item):
     """The address an item is reachable at on a channel.
 
@@ -126,26 +144,48 @@ def _contact_for(channel, item):
     momo_number directly on the payroll row, and a worker deactivated (or not
     yet registered) on the roster after payday still has to be able to receive
     the payslip for work already done."""
-    employee = _roster_employee(item)
+    employee = roster_employee(item)
     if channel == CHANNEL_EMAIL:
         roster_contact = employee.email if employee else None
         return roster_contact or item.email
-    # sms / whatsapp -> a phone number (roster phone preferred, then momo,
-    # then the momo captured on the payroll row itself)
+    if channel == CHANNEL_SMS:
+        # Only a number normalise_gh_mobile accepts, already normalised.
+        return sms_contact(item, employee)[0]
+    # whatsapp (on hold, unchanged) -> roster phone, then momo, then the momo
+    # captured on the payroll row itself
     roster_contact = (employee.phone or employee.momo_number) if employee else None
     return roster_contact or item.momo_number
 
 
+def _recipient_for(channel, item):
+    """``(recipient, None)``, or ``(None, why there is none)``. Both reasons are
+    permanent: a retry cannot invent a contact, so neither is retried
+    automatically."""
+    if channel == CHANNEL_SMS:
+        number, source = sms_contact(item)
+        if number:
+            return number, None
+        if source == SOURCE_INVALID:
+            return None, "invalid number on roster for sms"
+        return None, "no contact on roster for sms"
+    recipient = _contact_for(channel, item)
+    return (recipient, None) if recipient else (None, f"no contact on roster for {channel}")
+
+
 def resolve_channel(item, default_pref=None):
     """Pick the channel for an item: the roster employee's preference first, then the
-    remaining channels in order, choosing the first with a usable contact."""
-    employee = _roster_employee(item)
+    remaining channels in order, choosing the first with a usable contact. Only
+    channels this deployment may send on are considered (no SMS on desktop)."""
+    employee = roster_employee(item)
+    channels = sendable_channels()
     pref = (employee.preferred_channel if employee else None) or default_pref
-    order = ([pref] if pref else []) + [c for c in DELIVERY_CHANNELS if c != pref]
+    if pref not in channels:
+        pref = None
+    order = ([pref] if pref else []) + [c for c in channels if c != pref]
     for channel in order:
         if _contact_for(channel, item):
             return channel
-    return pref or DELIVERY_CHANNELS[0]
+    return pref or channels[0]
 
 
 def _latest_delivery(item, channel):
@@ -188,7 +228,18 @@ def _payslip_pdf_attachment(item):
         return None
 
 
-def _build_message(channel, item, run, client, recipient):
+def _build_message(channel, item, run, client, recipient, delivery=None):
+    item_id = getattr(item, "id", None)
+    delivery_id = getattr(delivery, "id", None)
+    subject = f"Payslip {run.month} {run.year}".strip()
+    if channel == CHANNEL_SMS:
+        # Link only, one GSM-7 part, carrying a short /s/ code minted for this
+        # attempt. The wording's version is stored; the body never is.
+        text = render_payslip_sms(run, client, short_payslip_url(item, delivery))
+        if delivery is not None:
+            delivery.template_version = SMS_TEMPLATE_VERSION
+        return OutboundMessage(channel, recipient, subject, text,
+                               item_id=item_id, delivery_id=delivery_id)
     # The item, not item.id: the token embeds the item's revocation counter, and
     # passing the loaded row lets tokens.py read it without a second query.
     link = public_payslip_url(item)
@@ -204,53 +255,120 @@ def _build_message(channel, item, run, client, recipient):
             channel, recipient, subject, text, html, attachments=attachments,
             from_name=getattr(client, "email_from_name", None) if client else None,
             reply_to=getattr(client, "email_reply_to", None) if client else None,
-            item_id=getattr(item, "id", None),
+            item_id=item_id, delivery_id=delivery_id,
         )
     text = render_payslip_text(item, run, client, link=link)
-    return OutboundMessage(
-        channel, recipient, f"Payslip {run.month} {run.year}".strip(), text,
-        item_id=getattr(item, "id", None),
+    return OutboundMessage(channel, recipient, subject, text,
+                           item_id=item_id, delivery_id=delivery_id)
+
+
+def claim_delivery(delivery_id, claimable, *, batch_id=None, require_scheduled_retry=False):
+    """Move one delivery to `sending` if it is still in a ``claimable`` status,
+    count the attempt, and commit. True for exactly one caller.
+
+    The UPDATE is conditional on the status the row has *in the database*, not
+    the one this process last read, so two workers that both saw a row as
+    `failed` cannot both change it: the second UPDATE matches nothing. Same on
+    SQLite and PostgreSQL. ``require_scheduled_retry`` is the automatic sweep's
+    extra condition, so it never re-sends a failure that has become permanent
+    since it was selected."""
+    conditions = [PayslipDelivery.id == delivery_id, PayslipDelivery.status.in_(claimable)]
+    if require_scheduled_retry:
+        conditions.append(PayslipDelivery.next_retry_at.isnot(None))
+    values = {
+        "status": DELIVERY_SENDING,
+        "claimed_at": datetime.now(timezone.utc),
+        "attempts": PayslipDelivery.attempts + 1,
+    }
+    if batch_id is not None:
+        values["distribution_batch_id"] = batch_id
+    result = db.session.execute(
+        update(PayslipDelivery).where(*conditions).values(**values)
+        .execution_options(synchronize_session=False)
     )
+    db.session.commit()
+    return result.rowcount == 1
 
 
-def _attempt_send(delivery, item, run, client, ch, sender, max_attempts, backoff_base):
-    """Send one payslip for `delivery` and record the outcome (attempt count,
-    status, error, retry schedule). The single place a delivery attempt is made,
-    reused by both the batch send loop and the automatic-retry path. Returns True
-    on success. Does NOT commit."""
-    recipient = _contact_for(ch, item)
+def _insert_pending(item, run, channel):
+    """A new `pending` row for (item, channel), committed so it can be claimed.
+    If another worker inserted the same row first, the unique (item, channel)
+    constraint refuses this one; theirs is returned and the claim decides who
+    sends."""
+    delivery = PayslipDelivery(
+        payroll_item_id=item.id, payroll_run_id=run.id, channel=channel,
+        status=DELIVERY_PENDING, attempts=0,
+    )
+    db.session.add(delivery)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return _latest_delivery(item, channel)
+    return delivery
+
+
+def _record_outcome(delivery, result, max_attempts, backoff_base):
+    if result.ok:
+        _mark_sent(delivery, result.provider, message_id=result.message_id, units=result.units)
+    elif result.ambiguous:
+        _mark_unknown(delivery, result.error, provider=result.provider)
+    else:
+        # retryable=None is a sender that does not classify its failures yet
+        # (Hubtel, WhatsApp, SMTP): it keeps the old rule of retrying them all.
+        _mark_failed(
+            delivery, result.error, provider=result.provider, retry=result.retryable is not False,
+            max_attempts=max_attempts, backoff_base=backoff_base,
+        )
+
+
+def _attempt_send(delivery, item, run, client, ch, sender, max_attempts, backoff_base, *,
+                  claimable=CLAIMABLE_FOR_SEND, batch_id=None, require_scheduled_retry=False):
+    """Claim `delivery`, send its payslip once, and record the outcome. The single
+    place a delivery attempt is made, reused by the batch send loop, "Resend
+    failed" and the automatic-retry path. Returns the delivery's status
+    afterwards, or None when the claim was lost and nothing was sent. Commits."""
+    if not claim_delivery(delivery.id, claimable, batch_id=batch_id,
+                          require_scheduled_retry=require_scheduled_retry):
+        return None
+    recipient, problem = _recipient_for(ch, item)
     delivery.channel = ch
     delivery.recipient = recipient
-    delivery.attempts = (delivery.attempts or 0) + 1
-
-    if not recipient:
-        _mark_failed(
-            delivery, f"no contact on roster for {ch}",
-            provider=None, max_attempts=max_attempts, backoff_base=backoff_base,
-        )
-        return False
+    if problem:
+        _mark_failed(delivery, problem, retry=False)
+        db.session.commit()
+        return delivery.status
 
     # Pace sends to the channel/provider's configured rate before the real call.
     from .throttle import throttle
 
     throttle(ch)
-    result = sender.send(_build_message(ch, item, run, client, recipient))
-    if result.ok:
-        _mark_sent(delivery, result.provider, message_id=result.message_id)
-        return True
-    _mark_failed(
-        delivery, result.error,
-        provider=result.provider, max_attempts=max_attempts, backoff_base=backoff_base,
-    )
-    return False
+    try:
+        message = _build_message(ch, item, run, client, recipient, delivery)
+        # Commit before sending: the short link minted for an SMS has to exist
+        # before the SMS carrying it does.
+        db.session.commit()
+    except Exception:  # noqa: BLE001 - nothing was sent; record that and carry on
+        db.session.rollback()
+        current_app.logger.exception(
+            "[distribution] could not prepare the %s message for item %s", ch, item.id
+        )
+        delivery.channel, delivery.recipient = ch, recipient
+        _mark_failed(delivery, "could not prepare the message; nothing was sent", retry=False)
+        db.session.commit()
+        return delivery.status
+    result = sender.send(message)
+    _record_outcome(delivery, result, max_attempts, backoff_base)
+    db.session.commit()
+    return delivery.status
 
 
 def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False, batch_id=None):
-    """Render + send every payslip in `run`. Returns a summary dict. Commits each
-    delivery as it is sent (durability — see the loop), then commits the audit row.
+    """Render + send every payslip in `run`. Returns a summary dict. Each delivery's
+    claim and outcome are committed as they happen, then the audit row.
 
     `batch_id` (the DistributionBatch driving this send) is stamped onto every
-    delivery touched, so history can attribute a delivery to the initiating
+    delivery attempted, so history can attribute a delivery to the initiating
     operator and filter by batch."""
     client = run.client_company
     auto = channel == CHANNEL_AUTO
@@ -262,7 +380,8 @@ def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False, batch_id=None):
             senders[ch] = get_sender(ch)
         return senders[ch]
 
-    summary = {"total": 0, "sent": 0, "failed": 0, "skipped": 0, "failed_workers": []}
+    summary = {"total": 0, "sent": 0, "failed": 0, "unknown": 0, "skipped": 0,
+               "failed_workers": [], "unknown_workers": []}
 
     # Materialise the roster up front: we commit inside the loop (expiring the
     # session), so a live iterator over the lazy `run.items` collection would be
@@ -276,33 +395,34 @@ def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False, batch_id=None):
             if existing is None or existing.status != DELIVERY_FAILED:
                 summary["skipped"] += 1
                 continue
-            delivery = existing
+            delivery, claimable = existing, CLAIMABLE_FOR_RETRY
         else:
-            if existing is not None and existing.status == DELIVERY_SENT:
+            if existing is not None and existing.status in SKIPPED_BY_SEND:
                 summary["skipped"] += 1
                 continue
-            delivery = existing or PayslipDelivery(
-                payroll_item_id=item.id, payroll_run_id=run.id, channel=ch
-            )
-            if existing is None:
-                db.session.add(delivery)
+            delivery = existing or _insert_pending(item, run, ch)
+            claimable = CLAIMABLE_FOR_SEND
+        if delivery is None:
+            summary["skipped"] += 1
+            continue
 
-        if batch_id is not None:
-            delivery.distribution_batch_id = batch_id
         staff_ref = item.staff_id or str(item.id)
-        sent = _attempt_send(delivery, item, run, client, ch, sender_for(ch),
-                             max_attempts, backoff_base)
-        # Persist THIS delivery's outcome before moving on. A worker crash later
-        # in the loop must never discard a payslip already sent to a real
-        # recipient — otherwise the skip-if-sent guard above cannot see it and a
-        # re-run (or a stale-batch reclaim) resends it, delivering a duplicate.
-        # Per-item durability is what makes re-processing idempotent. (Residual:
-        # a crash in the brief window between the provider call and this commit
-        # re-sends that one item on retry — inherent to at-least-once delivery
-        # over providers that expose no idempotency key.)
-        db.session.commit()
-        if sent:
+        # Durable per item: the claim and the outcome each commit, so a crash
+        # mid-run leaves every payslip either untouched, `sending` (which the
+        # stale-claim recovery turns `unknown`), or settled. None is re-sent
+        # blind by a re-run or a batch reclaim.
+        status = _attempt_send(delivery, item, run, client, ch, sender_for(ch),
+                               max_attempts, backoff_base, claimable=claimable,
+                               batch_id=batch_id)
+        # Counted by where the delivery ended up: a timeout is neither a
+        # success nor a failure that anyone should resend.
+        if status is None:
+            summary["skipped"] += 1
+        elif status == DELIVERY_SENT:
             summary["sent"] += 1
+        elif status == DELIVERY_UNKNOWN:
+            summary["unknown"] += 1
+            summary["unknown_workers"].append(staff_ref)
         else:
             summary["failed"] += 1
             summary["failed_workers"].append(staff_ref)
@@ -311,24 +431,26 @@ def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False, batch_id=None):
         "Payslips distributed" if not only_failed else "Failed payslips resent",
         run,
         f"channel={channel} sent={summary['sent']} failed={summary['failed']} "
-        f"skipped={summary['skipped']} of {summary['total']}.",
+        f"unknown={summary['unknown']} skipped={summary['skipped']} of {summary['total']}.",
     )
     db.session.commit()
     return summary
 
 
 def retry_delivery(delivery):
-    """Re-attempt a single failed delivery in place (no new row, same channel).
-    Reuses the roster contact fresh, so a fixed roster is picked up. Does NOT
-    commit — the caller (the retry sweep) owns the transaction."""
-    if delivery.status == DELIVERY_SENT:
-        return False  # never resend a success
+    """The automatic sweep's re-attempt of one failed delivery whose retry is due,
+    in place (no new row, same channel). Reuses the roster contact fresh, so a
+    fixed roster is picked up. Returns True if it was sent. Commits."""
+    if delivery.status != DELIVERY_FAILED:
+        return False  # never resend a success, an in-flight or an unconfirmed send
     item = db.session.get(PayrollItem, delivery.payroll_item_id)
     run = db.session.get(PayrollRun, delivery.payroll_run_id)
     if item is None or run is None:
         return False
     max_attempts, backoff_base = _retry_config()
-    return _attempt_send(
+    status = _attempt_send(
         delivery, item, run, run.client_company, delivery.channel,
         get_sender(delivery.channel), max_attempts, backoff_base,
+        claimable=CLAIMABLE_FOR_RETRY, require_scheduled_retry=True,
     )
+    return status == DELIVERY_SENT

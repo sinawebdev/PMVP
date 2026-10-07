@@ -1,4 +1,5 @@
-/* Plays the animated Payrolla mark once, then leaves the finished mark standing.
+/* Plays the approved Payrolla mark once, or seeks its frames with native scroll
+ * when the landing opts into data-mark-scroll. Other callers resolve and hold.
  *
  * The animation is a "stacked alpha" MP4: colour in the top half of each
  * frame, the alpha matte in the bottom half. H.264 has no alpha channel and
@@ -16,14 +17,16 @@
  * failure: no WebGL, a video that will not load or play, one that stalls, a
  * browser that pauses it part-way (iOS low-power mode does). Each ends with
  * `is-still` on the box and the finished mark showing -- never an empty hero
- * and never a half-built P. Whether to try at all (reduced motion, Save-Data)
- * is decided by the inline script before the hero paints, which puts
- * `mark-motion` on <html>; without it this file does nothing.
+ * and never a half-built P. Reduced motion and Save-Data skip the player;
+ * the resolved still stays visible until the first decoded frame is ready.
  */
 (function () {
   'use strict';
 
-  if (!document.documentElement.classList.contains('mark-motion')) return;
+  var preference = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
+  var connection = navigator.connection;
+  if (!preference || preference.matches || (connection && connection.saveData) || !window.WebGLRenderingContext) return;
+  document.documentElement.classList.add('mark-motion');
 
   var WIDE = '(min-width: 921px)';  // landing.html's own breakpoint
   var START_MS = 6000;              // a mark that has not started by then never will
@@ -149,9 +152,146 @@
     else go();
   }
 
+  /* The landing opts into native-scroll seeking. Other callers still get the
+   * original once-and-hold player above. The frames and alpha shader are shared;
+   * the brand is not redrawn, and page scrolling is never intercepted. */
+  function scrollMark(box) {
+    var stage = box.closest('[data-mark-stage]');
+    if (!stage || (navigator.deviceMemory && navigator.deviceMemory <= 2)) return;
+    var canvas = document.createElement('canvas');
+    var video = document.createElement('video');
+    var gl, ready = false, stopped = false, raf = 0, seekTimer = 0;
+    var lastTime = -1, visible = true;
+    var startTimer = setTimeout(finish, START_MS);
+    var observer;
+
+    function finish() {
+      if (stopped) return;
+      stopped = true;
+      clearTimeout(startTimer);
+      clearTimeout(seekTimer);
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', queue);
+      window.removeEventListener('resize', queue);
+      window.removeEventListener('pagehide', finish);
+      document.removeEventListener('visibilitychange', queue);
+      preference.removeEventListener('change', motionChanged);
+      if (observer) observer.disconnect();
+      box.classList.remove('is-scroll-ready');
+      box.classList.add('is-still');
+      box.dataset.markState = 'still';
+      box.style.removeProperty('--scroll-x');
+      box.style.removeProperty('--scroll-y');
+      box.style.removeProperty('--scroll-turn');
+      box.style.removeProperty('--scroll-scale');
+      canvas.remove();
+      video.removeAttribute('src');
+      video.load();
+      video.remove();
+      var lose = gl && gl.getExtension('WEBGL_lose_context');
+      if (lose) lose.loseContext();
+    }
+
+    function motionChanged() { if (preference.matches) finish(); }
+
+    function draw() {
+      if (stopped || !ready || video.readyState < 2) return;
+      try {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, video);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        lastTime = video.currentTime;
+        box.classList.add('is-scroll-ready');
+        box.dataset.markState = 'scroll';
+      } catch (e) { finish(); }
+    }
+
+    function update() {
+      raf = 0;
+      if (stopped || !visible || document.visibilityState === 'hidden') return;
+      var bounds = stage.getBoundingClientRect();
+      // Let the turn unfold through the hero and first workflow section.
+      var range = Math.max(window.innerHeight * 1.5,
+        Math.min(bounds.height - window.innerHeight, window.innerHeight * 2.2));
+      var progress = Math.max(0, Math.min(1, -bounds.top / Math.max(range, 1)));
+      box.dataset.scrollProgress = progress.toFixed(3);
+      var arc = Math.sin(progress * Math.PI);
+      var travel = window.matchMedia(WIDE).matches ? 1 : 0.55;
+      box.style.setProperty('--scroll-x', (-26 * arc * travel).toFixed(2) + 'px');
+      box.style.setProperty('--scroll-y', (-42 * arc * travel).toFixed(2) + 'px');
+      box.style.setProperty('--scroll-turn', (-1.8 * arc).toFixed(2) + 'deg');
+      box.style.setProperty('--scroll-scale', (1 + 0.035 * arc).toFixed(4));
+      if (!ready || video.seeking) return;
+      // Start with a recognisable ribbon, then scrub the approved frames.
+      var end = Math.max(0, video.duration - 1 / 30);
+      var beginning = end * 0.03;
+      var target = Math.min(end, Math.round((beginning + progress * (end - beginning)) * 30) / 30);
+      if (Math.abs(target - lastTime) < 1 / 60) return;
+      clearTimeout(seekTimer);
+      seekTimer = setTimeout(finish, STALL_MS);
+      try { video.currentTime = target; } catch (e) { finish(); }
+    }
+
+    function queue() {
+      if (!stopped && !raf) raf = requestAnimationFrame(update);
+    }
+
+    try {
+      gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false, preserveDrawingBuffer: true });
+      if (!gl) throw new Error('no webgl');
+      setup(gl);
+    } catch (e) { finish(); return; }
+
+    canvas.className = box.getAttribute('data-media-class') || '';
+    canvas.setAttribute('aria-hidden', 'true');
+    canvas.addEventListener('webglcontextlost', finish);
+    video.muted = video.defaultMuted = video.playsInline = true;
+    video.setAttribute('muted', '');
+    video.setAttribute('playsinline', '');
+    video.preload = 'auto';
+    video.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none';
+    video.addEventListener('error', finish);
+    video.addEventListener('loadedmetadata', function () {
+      if (stopped) return;
+      if (!Number.isFinite(video.duration) || !video.videoWidth || !video.videoHeight) { finish(); return; }
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight / 2;
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      box.appendChild(canvas);
+      ready = true;
+      queue();
+    }, { once: true });
+    video.addEventListener('loadeddata', function () { queue(); });
+    video.addEventListener('seeked', function () {
+      if (stopped) return;
+      clearTimeout(startTimer);
+      clearTimeout(seekTimer);
+      draw();
+      queue(); // Coalesce scroll updates received while this seek was pending.
+    });
+
+    window.addEventListener('scroll', queue, { passive: true });
+    window.addEventListener('resize', queue, { passive: true });
+    window.addEventListener('pagehide', finish, { once: true });
+    document.addEventListener('visibilitychange', queue);
+    preference.addEventListener('change', motionChanged);
+    if ('IntersectionObserver' in window) {
+      observer = new IntersectionObserver(function (entries) {
+        visible = entries[0].isIntersecting;
+        if (visible) queue();
+      });
+      observer.observe(stage);
+    }
+    box.appendChild(video);
+    video.src = box.getAttribute(window.matchMedia(WIDE).matches ? 'data-video-lg' : 'data-video-sm');
+    video.load();
+  }
+
   function start() {
     var boxes = document.querySelectorAll('[data-mark-anim]');
-    for (var i = 0; i < boxes.length; i++) play(boxes[i]);
+    for (var i = 0; i < boxes.length; i++) {
+      if (boxes[i].hasAttribute('data-mark-scroll')) scrollMark(boxes[i]);
+      else play(boxes[i]);
+    }
   }
 
   // A tab opened in the background would play to an empty room (and Chrome

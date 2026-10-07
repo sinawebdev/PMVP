@@ -4,8 +4,9 @@ Providers accept a send synchronously (our `sent` status) and then post an async
 callback with the real handset outcome (delivered / read / undelivered / failed).
 This maps those callbacks onto the PayslipDelivery: a success confirmation records
 provider_status + delivered_at (status stays `sent`); a hard failure flips the
-delivery back to `failed` through the normal retry machinery, so an undelivered
-message is re-attempted like any other failure.
+delivery back to `failed`, with no automatic retry. A report can be wrong, and a
+resend on the strength of one could reach the worker twice, so whether to resend
+is left to an operator ("Resend failed").
 
 Payload parsers are best-effort and provider-shaped (Meta WhatsApp, Hubtel),
 returning a normalised list of {message_id, status, reason} so the webhook routes
@@ -53,10 +54,10 @@ def apply_receipt(message_id, raw_status, reason=None):
     if outcome in (RECEIPT_DELIVERED, RECEIPT_READ):
         delivery.delivered_at = datetime.now(timezone.utc)
     elif outcome == RECEIPT_FAILED:
-        # Provider says it never reached the handset — treat as a failed attempt so
-        # the retry system can re-send (bounded by the retry limit).
+        # Provider says it never reached the handset. Recorded as a failure, but
+        # never retried automatically: see the module docstring.
         _mark_failed(delivery, f"provider reported {raw_status}"
-                     + (f": {reason}" if reason else ""))
+                     + (f": {reason}" if reason else ""), retry=False)
     return delivery
 
 

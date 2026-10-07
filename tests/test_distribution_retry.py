@@ -1,14 +1,19 @@
 """Phase 3, Slice 3 — the retry system.
 
-A failed delivery is retried automatically (bounded by DISTRIBUTION_MAX_ATTEMPTS,
+A retryable failure is retried automatically (bounded by DISTRIBUTION_MAX_ATTEMPTS,
 with exponential backoff) until it succeeds or the limit is spent (a "final"
 failure). A manual "resend failed" is the operator override and is NOT bounded by
 the limit. Successful deliveries are never re-sent, and no attempt ever creates a
 duplicate delivery row.
+
+The failures here come from a provider outage, not a missing contact: since the
+SMS work a missing contact is permanent and never retried automatically (a retry
+cannot invent one), so it can no longer stand in for "a failure that retries".
 """
 
 import os
 import unittest
+from unittest import mock
 
 os.environ["SKIP_DOTENV"] = "true"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
@@ -16,6 +21,7 @@ os.environ["SEED_DEMO_DATA"] = "true"
 os.environ["PERSISTENCE_REQUIRED"] = "false"
 
 from app import create_app, db  # noqa: E402
+from app.distribution.channels import ConsoleSmsSender, SendResult  # noqa: E402
 from app.distribution.queue import process_due_retries  # noqa: E402
 from app.distribution.service import distribute_run, retry_state  # noqa: E402
 from app.models import (  # noqa: E402
@@ -25,6 +31,19 @@ from app.models import (  # noqa: E402
     PayrollRun,
     PayslipDelivery,
 )
+
+
+def _provider_down_for(item_id):
+    """The SMS provider failing one payslip the way an outage does: a retryable
+    error. Every other payslip goes through."""
+    real_send = ConsoleSmsSender.send
+
+    def send(sender, message):
+        if message.item_id == item_id:
+            return SendResult(False, sender.provider, "provider unavailable", retryable=True)
+        return real_send(sender, message)
+
+    return mock.patch.object(ConsoleSmsSender, "send", send)
 
 
 class RetrySystemTestCase(unittest.TestCase):
@@ -60,8 +79,8 @@ class RetrySystemTestCase(unittest.TestCase):
     # --- failure schedules a retry -----------------------------------------
 
     def test_failed_delivery_schedules_a_bounded_retry(self):
-        self._strip_contacts(self.item)
-        distribute_run(self.run, channel="sms")
+        with _provider_down_for(self.item.id):
+            distribute_run(self.run, channel="sms")
         d = self._delivery()
         self.assertEqual(d.status, DELIVERY_FAILED)
         self.assertEqual(d.attempts, 1)
@@ -73,15 +92,13 @@ class RetrySystemTestCase(unittest.TestCase):
 
     # --- automatic retry recovers ------------------------------------------
 
-    def test_auto_retry_recovers_once_contact_is_fixed(self):
-        self._strip_contacts(self.item)
-        distribute_run(self.run, channel="sms")
+    def test_auto_retry_recovers_once_the_provider_is_back(self):
+        with _provider_down_for(self.item.id):
+            distribute_run(self.run, channel="sms")
         d = self._delivery()
         self.assertEqual(d.status, DELIVERY_FAILED)
 
-        # Operator fixes the roster; the next sweep re-attempts and succeeds.
-        self.item.momo_number = "0241234567"
-        db.session.commit()
+        # The provider recovers; the next sweep re-attempts and succeeds.
         processed = process_due_retries()
         self.assertIn(d, processed)
         db.session.refresh(d)
@@ -93,7 +110,9 @@ class RetrySystemTestCase(unittest.TestCase):
 
     def test_auto_retry_stops_at_the_limit(self):
         self.app.config["DISTRIBUTION_MAX_ATTEMPTS"] = 2
-        self._strip_contacts(self.item)  # permanent failure
+        outage = _provider_down_for(self.item.id)
+        outage.start()
+        self.addCleanup(outage.stop)
         distribute_run(self.run, channel="sms")
         d = self._delivery()
         self.assertEqual(d.attempts, 1)
@@ -128,13 +147,11 @@ class RetrySystemTestCase(unittest.TestCase):
         self.assertEqual(sent.attempts, attempts_before)
 
     def test_retry_never_creates_a_duplicate_delivery(self):
-        self._strip_contacts(self.item)
-        distribute_run(self.run, channel="sms")
+        with _provider_down_for(self.item.id):
+            distribute_run(self.run, channel="sms")
         count_before = PayslipDelivery.query.filter_by(
             payroll_item_id=self.item.id
         ).count()
-        self.item.momo_number = "0241234567"
-        db.session.commit()
         process_due_retries()
         count_after = PayslipDelivery.query.filter_by(
             payroll_item_id=self.item.id
@@ -144,8 +161,8 @@ class RetrySystemTestCase(unittest.TestCase):
     # --- audit preserved ----------------------------------------------------
 
     def test_auto_retry_writes_a_system_audit_entry(self):
-        self._strip_contacts(self.item)
-        distribute_run(self.run, channel="sms")
+        with _provider_down_for(self.item.id):
+            distribute_run(self.run, channel="sms")
         process_due_retries()
         entry = (
             AuditTrail.query.filter_by(action="Payslip delivery auto-retry")
@@ -199,13 +216,9 @@ class RetryVisibilityTestCase(unittest.TestCase):
 
     def test_status_page_shows_retries_left_then_final(self):
         # Force a failure that still has a retry left.
-        self.item.momo_number = None
-        self.item.email = None
-        if self.item.employee:
-            self.item.employee.phone = None
-            self.item.employee.momo_number = None
-            self.item.employee.email = None
-        db.session.commit()
+        outage = _provider_down_for(self.item.id)
+        outage.start()
+        self.addCleanup(outage.stop)
         distribute_run(self.run, channel="sms")
 
         body = self.http.get(f"/distribution/run/{self.run.id}").get_data(as_text=True)

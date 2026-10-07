@@ -42,6 +42,7 @@ from app.models import (
     User,
 )
 
+from .recovery import recover_stale_claims
 from .service import as_aware, distribute_run, retry_delivery
 
 
@@ -476,6 +477,7 @@ def process_batch(batch):
     batch.status = BATCH_COMPLETED
     batch.sent_count = summary["sent"]
     batch.failed_count = summary["failed"]
+    batch.unknown_count = summary["unknown"]
     batch.skipped_count = summary["skipped"]
     batch.finished_at = datetime.now(timezone.utc)
     _notify_platform_of_client_distribution(batch, run, summary)
@@ -562,6 +564,7 @@ def drain_once(worker_name=None):
     Reclaim runs before the queue pass so a batch requeued this tick is picked up
     in the same drain."""
     activate_due_scheduled()
+    recover_stale_claims()  # stuck `sending` -> `unknown`, before any batch is requeued
     reclaim_stale_batches()
     did = bool(process_all_queued(worker_name))
     did = bool(process_due_retries()) or did

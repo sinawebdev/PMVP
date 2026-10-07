@@ -32,6 +32,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from app import db
+from app.distribution.recovery import unconfirmed_count
 from app.distribution.service import as_aware
 from app.models import (
     BATCH_CANCELLED,
@@ -450,6 +451,7 @@ def collect_dashboard_stats(recent_limit=10, window_days=DEFAULT_WINDOW_DAYS):
             "sent": sent,
             "failed": failed,
             "pending": pending,
+            "unknown": unconfirmed_count(),  # state, unwindowed: see recovery.py
             "attempted": attempted,
             "confirmed": confirmed,
             "active_retries": active_retries,

@@ -11,6 +11,7 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='fonts.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     {# Shared component layer (states, data table, decision header, action bar) —
@@ -20,6 +21,7 @@
        (see app/static/dashboard.css's own header comment for why), so it can
        never regress a page that does not opt in. #}
     {% block head %}{% endblock %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='interface.css') }}">
 </head>
 <body class="brand-shell-bg">
 <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
@@ -34,6 +36,7 @@
    plain `ui` here would silently shadow a page's own `{% raw %}{% import ... as ui %}{% endraw %}`.
    Same lesson, same fix, as client/base.html. #}
 {% import "macros/ui.html" as shell_ui %}
+{% import "macros/brand.html" as brand with context %}
 <a class="skip-link" href="#main-content">Skip to content</a>
 {# Initials for the account button, from the same resolve_display_name string
    the dashboard greeting uses. Sliced rather than indexed so a blank name is ''
@@ -66,12 +69,7 @@
         <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="primary-nav" aria-expanded="false">{{ shell_ui.icon('menu', 22) }}</button>
 
         <a class="portal-logo" href="{{ url_for('main.dashboard') }}">
-          {# No .brand-mark tile here. That tile is a white rounded square built
-             to lift the icon off the deep-teal sidebar; on a white bar it is a
-             white square on white. The icon's own artwork is a deep-teal
-             gradient drawn for a light ground, so it stands alone. #}
-          <img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" />
-          <span class="portal-logo-name">{{ app_brand_name }}</span>
+          {{ brand.logo(compact=true) }}
         </a>
 
         <nav class="portal-nav" id="primary-nav" aria-label="Operator">
@@ -175,15 +173,38 @@
   var toggle = document.querySelector('.nav-toggle');
   var nav = document.getElementById('primary-nav');
   var backdrop = document.querySelector('.nav-backdrop');
-  function setOpen(open) {
+  function setOpen(open, returnFocus) {
     if (!nav) return;
     nav.classList.toggle('open', open);
     if (backdrop) backdrop.classList.toggle('show', open);
     if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (toggle) toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+    if (open) {
+      closeMenus(null);
+      var start = nav.querySelector('a[aria-current="page"]') || nav.querySelector('a');
+      if (start) start.focus();
+    } else if (returnFocus && toggle) toggle.focus();
   }
-  if (toggle) toggle.addEventListener('click', function () { setOpen(!nav.classList.contains('open')); });
-  if (backdrop) backdrop.addEventListener('click', function () { setOpen(false); });
+  if (toggle) toggle.addEventListener('click', function () { setOpen(!nav.classList.contains('open'), true); });
+  if (backdrop) backdrop.addEventListener('click', function () { setOpen(false, true); });
+  window.addEventListener('resize', function () {
+    if (toggle && getComputedStyle(toggle).display === 'none') setOpen(false);
+  });
   if (nav) nav.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { setOpen(false); }); });
+  document.addEventListener('keydown', function (event) {
+    if (!nav || !nav.classList.contains('open')) return;
+    if (event.key === 'Escape') {
+      setOpen(false, true);
+    } else if (event.key === 'Tab') {
+      var links = nav.querySelectorAll('a[href]');
+      var first = links[0], last = links[links.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first.focus();
+      }
+    }
+  });
 
   // Utility menus are <details>, so they open, close and take focus with no JS
   // at all. This only adds the two behaviours the element does not give for
@@ -212,16 +233,26 @@
   // Submit feedback: disable button + spinner on full-page form submits.
   // htmx-driven forms are skipped — htmx has its own hx-indicator, and a
   // cancelled hx-confirm would otherwise leave the button stuck on "Working…".
+  // Bubble phase, not capture. app.js's data-confirm handler holds a submit in
+  // the capture phase and stops it there, so a submit waiting on (or cancelled
+  // in) the styled modal never reaches this; only the confirmed re-submit does.
+  // As a capture listener this ran first (this inline script registers before
+  // the deferred app.js), so a cancelled modal left the button stuck until a
+  // reload. The submitter is what gets marked, so on a form with several
+  // buttons (bulk approve / reject / distribute) the one pressed shows busy.
   document.addEventListener('submit', function (e) {
+    if (e.defaultPrevented) return;
     var form = e.target;
     if (!form || !form.matches('form')) return;
     if (form.matches('[hx-post],[hx-get],[hx-put],[hx-delete],[hx-patch]')) return;
-    var btn = form.querySelector('button[type="submit"], button:not([type])');
+    var btn = e.submitter && e.submitter.tagName === 'BUTTON'
+      ? e.submitter
+      : form.querySelector('button[type="submit"], button:not([type])');
     if (btn && !btn.disabled) {
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Working…';
     }
-  }, true);
+  });
 
   // The client-side table filter (input[data-table-filter] -> #tableId) now lives
   // in app.js as a delegated handler so it survives htmx partial swaps.

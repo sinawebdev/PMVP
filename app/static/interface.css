@@ -1,0 +1,119 @@
+/* Shared presentation for existing operator and company workflows.
+   This is deliberately a small integration layer: data, routes and capabilities
+   remain in their existing components. Page-specific layouts load independently. */
+body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;line-height:1.55}
+::selection{background:var(--brand-soft);color:var(--brand-deep)}
+a{ text-underline-offset:3px }
+:where(a,button,input,select,textarea,summary,[tabindex]):focus-visible{outline:3px solid var(--brand);outline-offset:3px}
+:where(input,select,textarea):focus-visible{outline-offset:2px}
+.skip-link{transition:none}
+.portal-topbar{background:var(--surface);border-bottom:1px solid var(--line);box-shadow:none}
+.portal-topbar-inner{max-width:1440px;min-height:76px;padding-inline:32px;gap:22px}
+.portal-logo{gap:10px}
+.portal-logo-name{font-size:20px;letter-spacing:-.7px;font-weight:900}
+.portal-logo img{height:31px}
+.portal-logo .payrolla-lockup{width:140px;height:auto}
+.portal-logo .payrolla-compact{display:none}
+.portal-nav{gap:3px}
+.portal-nav a{font-size:13px;font-weight:700;gap:7px;padding-inline:12px}
+.portal-nav a[aria-current=page]{color:var(--brand-deep);background:var(--brand-tint);border-bottom-color:var(--brand)}
+.portal-utility{gap:9px}
+.utility-btn{border-radius:9px;min-height:40px;min-width:40px}
+.account-avatar{background:var(--brand-soft);color:var(--brand-deep);font-weight:700}
+.account-name{font-size:13px}
+.portal-search input{background:var(--surface-alt);border:1px solid var(--line-control);border-radius:8px;min-height:40px}
+.utility-pop{border-radius:12px;box-shadow:var(--shadow);padding:8px}
+.utility-pop a{border-radius:7px;min-height:40px}
+.main-content,.portal-main{margin-inline:auto;max-width:1440px;width:100%;padding:36px 32px 64px}
+.portal-pagehead{color:var(--muted);font-size:12px;font-weight:700;margin-bottom:12px;letter-spacing:.025em}
+.main-content .topbar{background:none;color:var(--ink);border-radius:0;box-shadow:none;padding:0 0 24px;margin-bottom:24px;border-bottom:1px solid var(--line);overflow:visible;gap:24px}
+.main-content .topbar::after{display:none}
+.main-content .topbar h1,.page-head h1,.exec-head h1{font-size:clamp(26px,2.7vw,36px);line-height:1.14;letter-spacing:-1px;font-weight:700;color:var(--ink)}
+.topbar-sub,.page-head .sub,.exec-head .sub{color:var(--muted);font-size:14px;line-height:1.65;margin-top:8px;max-width:76ch}
+.main-content .topbar-actions{margin-top:16px;display:flex;gap:8px;flex-wrap:wrap}
+.main-content .topbar-visual{color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;min-width:0;box-shadow:none}
+.main-content .topbar-visual:empty{display:none}
+.main-content .topbar .btn-light{background:var(--brand-deep);border-color:var(--brand-deep);color:white}
+.main-content .topbar .btn-outline-light{background:var(--surface);border-color:var(--line-control);color:var(--ink)}
+.main-content .topbar .dashboard-signal,.main-content .topbar .signal-label,.main-content .topbar .dashboard-signal small{color:var(--muted)}
+.main-content .topbar .dashboard-signal strong{color:var(--brand-deep)}
+.panel,.xpanel,.chart-card,.stat-card,.card,.kpi,.metric-card{border-color:var(--line);border-radius:12px;box-shadow:var(--shadow-sm);background:var(--surface)}
+.panel,.xpanel,.chart-card{padding:24px}
+.panel:hover,.xpanel:hover,.chart-card:hover,.stat-card:hover,.card:hover,.kpi:hover{transform:none;box-shadow:var(--shadow-sm);border-color:var(--line)}
+.panel-head{gap:16px;margin-bottom:20px}
+.panel-head h2,.chart-head h2{font-size:16px;font-weight:700;letter-spacing:-.3px}
+.panel-sub,.chart-head small{color:var(--muted);font-size:13px;line-height:1.6}
+.page-bar{align-items:flex-start;gap:16px;margin-bottom:24px}
+.page-head{margin-bottom:24px}
+.page-bar .page-head{margin-bottom:0}
+.kpi{padding:22px}
+.kpi-label,.stat-label,.metric-label{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.kpi-value,.stat-value,.metric-value{font-variant-numeric:tabular-nums;font-size:clamp(24px,2.3vw,34px);letter-spacing:-1px;line-height:1.2;color:var(--ink)}
+.nums,.num,.money,.right,.text-end,.dt-table td,.table td{font-variant-numeric:tabular-nums}
+.btn{font-family:var(--font-sans);font-weight:700;font-size:13px;min-height:42px;border-radius:8px;gap:7px;padding:10px 16px;box-shadow:none;line-height:1.25}
+.btn.sm,.btn-sm{min-height:34px;font-size:12px;padding:7px 11px}
+.btn.primary,.btn-primary{background:var(--brand-deep);border-color:var(--brand-deep);color:#fff;--bs-btn-bg:var(--brand-deep);--bs-btn-border-color:var(--brand-deep);--bs-btn-hover-bg:var(--brand-dark);--bs-btn-hover-border-color:var(--brand-dark);--bs-btn-active-bg:var(--brand-dark);--bs-btn-active-border-color:var(--brand-dark)}
+.btn-outline-secondary,.btn-outline-primary{border-color:var(--line-control);color:var(--ink)}
+.btn:disabled,.btn[aria-disabled=true]{opacity:.6;cursor:not-allowed;transform:none}
+.btn:not(.danger):not(.btn-danger):not(.btn-outline-danger):active{transform:scale(.98)}
+.form-control,.form-select,.portal-main input:not([type=checkbox]):not([type=radio]),.portal-main select,.portal-main textarea{font-family:var(--font-sans);font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line-control);border-radius:8px;min-height:44px;padding:11px 13px;box-shadow:none}
+.form-control:focus,.form-select:focus,.portal-main input:focus,.portal-main select:focus,.portal-main textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.form-label,.portal-main label{font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:7px}
+.form-text,.help-text,.portal-main .hint{color:var(--muted);font-size:12px;line-height:1.55}
+.form-control::placeholder,.portal-main input::placeholder{color:var(--muted);opacity:.9}
+.form-check-input{border-color:var(--line-control);accent-color:var(--brand)}
+.form-check-input:checked{background-color:var(--brand);border-color:var(--brand)}
+.toolbar,.filterbar,.filters,.action-bar{gap:12px}
+.dt-wrap,.table-responsive{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow-x:auto;overscroll-behavior-x:contain}
+.panel.dt-wrap{padding:0}
+.dt-wrap table,.table-responsive table{margin-bottom:0}
+.dt-table th,.table thead th,.portal-main table th{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.055em;white-space:nowrap;color:var(--muted);background:var(--surface-alt);padding:14px 16px;border-bottom:1px solid var(--line)}
+.dt-table td,.table td,.portal-main table td{padding:15px 16px;font-size:13px;vertical-align:middle;border-bottom-color:var(--line)}
+.dt-table tbody tr,.table tbody tr,.portal-main table tbody tr{transform:none;transition:background-color 150ms var(--ease-out)}
+.dt-table tbody tr:hover,.table tbody tr:hover,.portal-main table tbody tr:hover{background:var(--surface-alt);transform:none}
+.dt-table tbody tr:last-child td,.portal-main table tbody tr:last-child td{border-bottom:0}
+.dt-table a:not(.btn),.table td a:not(.btn){font-weight:700;color:var(--brand-deep)}
+.badge,.status-badge,.status-pill{font-size:11px;letter-spacing:0;font-weight:700;line-height:1.3}
+.state,.empty-state{padding:40px 24px;text-align:center}
+.state h2,.empty-state strong{font-size:17px;letter-spacing:-.3px;color:var(--ink)}
+.state p,.empty-state p{max-width:52ch;margin-inline:auto;color:var(--muted);line-height:1.7}
+.flash,.alert{border-radius:10px;font-size:13px;line-height:1.65}
+.pagination{gap:5px}
+.page-link{border-color:var(--line-control);border-radius:7px;color:var(--brand-deep);min-height:36px}
+.page-item.active .page-link{background:var(--brand-deep);border-color:var(--brand-deep)}
+.qa-grid{gap:12px}
+.qa-tile{background:var(--surface-alt);border-radius:10px;box-shadow:none}
+.ops-reveal{animation:none;opacity:1;transform:none}
+.cn-modal{font-family:var(--font-sans);border-radius:16px;box-shadow:0 20px 70px rgba(6,30,27,.18);padding:28px;max-width:480px}
+.cn-modal-title{font-size:18px;color:var(--ink);letter-spacing:-.35px}
+.cn-modal-text{color:var(--muted);font-size:14px;line-height:1.7}
+.cn-modal-actions{gap:10px;margin-top:24px}
+.toast{font-family:var(--font-sans);border-radius:10px;box-shadow:var(--shadow)}
+.error-card{font-family:var(--font-sans);border-radius:16px;border:1px solid var(--line);background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.error-card h1{font-size:28px;letter-spacing:-.8px;color:var(--ink)}
+.error-card p,.error-card .brand small{color:var(--muted)}
+.error-card .error-code{color:var(--brand-deep)}
+@media(hover:hover) and (pointer:fine){
+ .btn.primary:hover,.btn-primary:hover,.main-content .topbar .btn-light:hover{background:var(--brand-dark);border-color:var(--brand-dark);color:#fff}
+ .btn-outline-secondary:hover,.main-content .topbar .btn-outline-light:hover{background:var(--surface-alt);border-color:var(--brand);color:var(--brand-deep)}
+}
+@media(max-width:1100px){.portal-topbar-inner{padding-inline:24px;gap:12px}.main-content,.portal-main{padding:28px 24px 48px}}
+@media(max-width:1100px){.portal-nav:not(.open){visibility:hidden;pointer-events:none}.portal-nav.open{visibility:visible}}
+@media(max-width:640px){
+ .portal-topbar-inner{padding-inline:16px;min-height:66px;gap:10px}.portal-logo-name{font-size:18px}.portal-logo img{height:27px}
+ .main-content,.portal-main{padding:24px 16px 40px}.main-content .topbar{padding-bottom:20px;gap:16px}.main-content .topbar-visual{display:none}
+ .topbar-actions{width:100%}.topbar-actions .btn{flex-grow:1}.topbar-sub,.page-head .sub,.exec-head .sub{font-size:13px}
+ .panel,.xpanel,.chart-card{padding:18px}.panel.dt-wrap{padding:0}.kpi{padding:17px}.kpi-value{font-size:26px}
+ .page-bar{flex-wrap:wrap}.page-bar>.btn{min-height:44px}.btn.sm,.btn-sm{min-height:40px}.utility-btn{min-height:44px;min-width:44px}
+ .dt-table td,.table td,.portal-main table td{padding:13px 12px}.cn-modal{padding:22px;margin:16px;width:calc(100% - 32px)}
+}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn:active{transform:none}.dt-table tbody tr,.table tbody tr{transition:none}}
+
+@media(max-width:420px){
+ .portal-shell .portal-logo{position:relative;min-width:44px;justify-content:center}
+ /* Retain the brand's accessible name while leaving room for account tools. */
+ .portal-shell .portal-logo-name{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+ .portal-shell .portal-logo .payrolla-lockup{display:none}
+ .portal-shell .portal-logo .payrolla-compact{display:block;width:auto;height:27px}
+}
+@media print{.portal-topbar,.nav-backdrop,.topbar-actions,.utility-pop{display:none}.main-content,.portal-main{padding:0;max-width:none}.panel,.xpanel,.chart-card{box-shadow:none;break-inside:avoid}body{background:white}}

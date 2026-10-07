@@ -118,9 +118,18 @@ class _ContactCompleteness:
 
     @property
     def has_contact(self):
-        """Email or phone. Matches the import-time `no_contact` rule exactly —
-        `momo_number` is a payment destination, not a delivery channel."""
-        return bool(self.email or self.phone)
+        """Email, or a roster phone or MoMo number that ``normalise_gh_mobile``
+        accepts. The MoMo number counts because SMS goes to it when there is no
+        phone (Q4, 2026-10-01), but only a valid one: a number that cannot be
+        sent to is not a contact. The import-time `no_contact` warning reads
+        this property too."""
+        from app.distribution.phones import normalise_gh_mobile
+
+        return bool(
+            self.email
+            or normalise_gh_mobile(self.phone)
+            or normalise_gh_mobile(self.momo_number)
+        )
 
 
 class Employee(_ContactCompleteness, db.Model):
@@ -642,8 +651,14 @@ class Notification(db.Model):
 # ---------------------------------------------------------------------------
 
 DELIVERY_PENDING = "pending"
+# Claimed by one worker, provider call in progress. Only a conditional UPDATE
+# from pending/failed reaches it, which is what stops two workers sending one row.
+DELIVERY_SENDING = "sending"
 DELIVERY_SENT = "sent"
 DELIVERY_FAILED = "failed"
+# The provider may have accepted it (a timeout, or a send that stopped mid-way).
+# Never re-sent automatically; settled by a delivery report or an operator.
+DELIVERY_UNKNOWN = "unknown"
 # An operator cancelled this delivery before it was (re)sent. Terminal: the
 # worker never touches a cancelled delivery again (Phase 3 Slice 5).
 DELIVERY_CANCELLED = "cancelled"
@@ -662,10 +677,13 @@ class PayslipDelivery(db.Model):
     #  * the retry sweep runs every worker poll and filters
     #    (status == failed AND next_retry_at IS NOT NULL) over the whole table;
     #  * _latest_delivery looks a delivery up by (payroll_item_id, channel) once
-    #    per item during a send.
+    #    per item during a send. Unique since the SMS work: one row per payslip
+    #    per channel, so two workers can never each insert their own and send.
     __table_args__ = (
         db.Index("ix_payslip_delivery_status_next_retry", "status", "next_retry_at"),
-        db.Index("ix_payslip_delivery_item_channel", "payroll_item_id", "channel"),
+        db.UniqueConstraint(
+            "payroll_item_id", "channel", name="uq_payslip_delivery_item_channel"
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -698,6 +716,13 @@ class PayslipDelivery(db.Model):
     # due. Cleared on success; left NULL once the retry limit is exhausted, which
     # is how "final failure" is distinguished from "will retry" (Phase 3 Slice 3).
     next_retry_at = db.Column(db.DateTime)
+    # Message parts the provider billed for the last send, when it reports them.
+    units = db.Column(db.Integer)
+    # When the current attempt was claimed; a `sending` row older than the
+    # stale-claim window is turned `unknown` (see distribution/recovery.py).
+    claimed_at = db.Column(db.DateTime)
+    # Which SMS wording went out. The body itself is never stored.
+    template_version = db.Column(db.String(32))
     created_at = db.Column(db.DateTime, default=utc_now)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
@@ -752,6 +777,8 @@ class DistributionBatch(db.Model):
     total = db.Column(db.Integer)
     sent_count = db.Column(db.Integer)
     failed_count = db.Column(db.Integer)
+    # Sends that may have gone out (provider timeout); counted apart from failed.
+    unknown_count = db.Column(db.Integer)
     skipped_count = db.Column(db.Integer)
     error = db.Column(db.String(512))
     # When set, the batch runs at/after this time (UTC); it stays `scheduled`

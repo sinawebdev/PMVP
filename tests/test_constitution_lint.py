@@ -170,7 +170,7 @@ class NoUnboundedCollectionRendersTests(unittest.TestCase):
         "app/templates/search_results.html": "server-side LIMIT 25 clients / 50 items; see main.search",
         "app/templates/payroll_detail.html": "comparison.rows is a fixed metric set; the items grid pages via ui.data_table",
         "app/templates/wage_rates.html": "one row per configured pay code for one client, not per worker",
-        "app/templates/macros/distribution.html": "delivery rows come in as a page (rows_page); `channels` is the three delivery channels",
+        "app/templates/macros/distribution.html": "delivery rows and the SMS confirm step's unreachable workers both come in as pages (rows_page, problems); `channels` is the three delivery channels; the bulk confirm's `runs` is one page of the runs list's selection",
     }
 
     # Only loops that generate ROWS count. A <select> of filter options in a

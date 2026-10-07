@@ -22,7 +22,9 @@
         <input type="text" name="notes" class="form-control form-control-sm" style="max-width: 220px;" placeholder="Rejection note (optional, applies to all)">
         {% endif %}
         {% if can_operate_payroll(role) %}
-        <button type="submit" formaction="{{ url_for('payroll.bulk_distribute') }}" class="btn btn-sm btn-primary" data-bulk-action-btn disabled data-confirm="Distribute payslips for the selected payroll runs? Runs not eligible for distribution are skipped and reported afterwards." data-confirm-title="Distribute selected runs" data-confirm-ok="Distribute"><i class="bi bi-send-check"></i>Bulk Distribute</button>
+        {# No data-confirm: the post stops at the send confirm step, which shows
+           who each selected run reaches. A yes/no modal before it asks nothing. #}
+        <button type="submit" formaction="{{ url_for('payroll.bulk_distribute') }}" class="btn btn-sm btn-primary" data-bulk-action-btn disabled><i class="bi bi-send-check"></i>Bulk Distribute</button>
         {% endif %}
     </div>
     <p class="mini-note mb-2"><i class="bi bi-info-circle"></i> Bulk actions only apply to selected runs currently eligible for that action (matching status); anything else is skipped and reported after.</p>

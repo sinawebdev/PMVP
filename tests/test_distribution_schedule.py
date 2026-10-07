@@ -184,7 +184,7 @@ class ScheduleRouteTestCase(unittest.TestCase):
         when = (datetime.now(timezone.utc) + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
         resp = self.http.post(
             f"/distribution/run/{self.run.id}/schedule",
-            data={"channel": "auto", "scheduled_for": when},
+            data={"channel": "auto", "confirmed": "1", "scheduled_for": when},
             follow_redirects=True,
         )
         self.assertEqual(resp.status_code, 200)
