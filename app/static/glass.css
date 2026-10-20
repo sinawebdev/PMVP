@@ -1,0 +1,271 @@
+/* Approved Payrolla glass preview, adapted to the live-data Flask components.
+   Opaque defaults also serve browsers without backdrop-filter. Keep menus and
+   drawers outside filtered ancestors so their fixed positioning stays intact. */
+:root {
+  --ink: #183b36;
+  --ink-soft: #3c5550;
+  --muted: #506963;
+  --shell: #edf5f1;
+  --surface-alt: #edf4ef;
+  --line: #d9e8e2;
+  --line-strong: #c3d9d3;
+  --line-control: #7a958b;
+  --radius: 22px;
+  --radius-lg: 24px;
+  --radius-sm: 11px;
+  --font-display: Satoshi, sans-serif;
+  --shadow: 0 16px 48px -22px #28624b26, 0 2px 6px #28624b03;
+  --shadow-sm: 0 8px 28px -16px #28624b24;
+  --glass-fill: #f9fefb;
+  --glass-border: #fff;
+}
+
+body.brand-shell-bg {
+  min-height: 100vh;
+  background-color: var(--shell);
+  background-image:
+    radial-gradient(ellipse at 8% 21%, #c2eee4a8, transparent 50%),
+    radial-gradient(ellipse at 91% 41%, #b8e9d795, transparent 48%),
+    radial-gradient(ellipse at 64% 100%, #dcead2b3, transparent 48%),
+    linear-gradient(130deg, #f5f8f4, #edf7f3 52%, #e9f1ed);
+  color: var(--ink);
+}
+
+.portal-topbar {
+  position: sticky;
+  top: 16px;
+  max-width: 1300px;
+  width: calc(100% - 48px);
+  margin: 26px auto 0;
+  border: 1px solid var(--glass-border);
+  border-radius: 22px;
+  background: transparent;
+  box-shadow: var(--shadow);
+  isolation: isolate;
+}
+.portal-topbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--glass-fill);
+  pointer-events: none;
+}
+.portal-topbar-inner { min-height: 78px; padding: 14px 24px; gap: 20px; }
+.portal-logo .payrolla-lockup { width: 125px; }
+.portal-nav { gap: 4px; }
+.portal-nav a {
+  min-height: 44px;
+  padding: 11px 13px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.portal-nav a[aria-current=page] {
+  color: #075b50;
+  background: #d7eee7;
+  border: 0;
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 #fff9;
+}
+.portal-nav a:hover { background: #d6eee875; }
+.portal-search input { border-radius: 11px; background: #ffffffb3; }
+.account-avatar { background: var(--brand-deep); color: #fff; border: 1px solid #fff9; }
+.utility-btn { border-radius: 11px; }
+.utility-pop { background: #f9fefb; border: 1px solid #fff; border-radius: 16px; box-shadow: var(--shadow); }
+.main-content, .portal-main { max-width: 1274px; padding: 32px 32px 56px; }
+.main-content .topbar { border: 0; padding-bottom: 0; margin-bottom: 27px; }
+.main-content .topbar h1, .page-head h1, .exec .exec-head h1 {
+  color: var(--ink);
+  font-size: clamp(28px, 3vw, 39px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -.04em;
+}
+.main-content .topbar-visual, .exec-period {
+  background: #ffffff70;
+  border: 1px solid #ffffffd9;
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+.exec-period { padding: 12px 15px; }
+.topbar-sub, .exec .exec-head .sub { color: var(--muted); font-size: 13px; }
+
+.panel, .xpanel, .chart-card, .stat-card, .card, .kpi, .metric-card,
+.ops .xpanel, .exec .xpanel {
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+.panel, .xpanel, .chart-card, .ops .xpanel, .exec .xpanel { padding: 24px; }
+.panel:hover, .xpanel:hover, .chart-card:hover, .stat-card:hover, .card:hover,
+.ops .xpanel:hover, .exec .xpanel:hover {
+  border-color: var(--glass-border);
+  box-shadow: var(--shadow);
+  transform: none;
+}
+.panel-head h2, .chart-head h2, .exec .panel-head h2 { font-size: 18px; letter-spacing: -.025em; }
+.panel-sub, .exec .panel-sub, .chart-head small { font-size: 12px; color: var(--muted); }
+.exec-grid { gap: 22px; }
+.exec .area-health { border: 1px solid var(--glass-border); }
+.exec .health-period { font-size: 25px; letter-spacing: -.025em; }
+.exec .health-next { border: 1px solid #cee2d7; background: #e7f2e9; border-radius: 14px; }
+.exec .health-next--warn { border-color: #e2c99c; background: var(--warn-soft); }
+.exec .figures { background: #ffffff85; border-color: var(--line); border-radius: 14px; }
+.figure dd, .kpi-value, .stat-value, .metric-value { color: var(--brand-deep); }
+.ops .kpi-band, .exec .kpi-band, .kpi-band, .dist .kpi-band, .rq .kpi-band {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  border: 0;
+}
+.kpi-band .kpi, .ops .kpi-band .kpi, .exec .kpi-band .kpi {
+  flex: 1 1 200px;
+  min-width: 0;
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+.kpi-band .kpi:first-child { padding-inline-start: 22px; }
+.kpi-band .kpi:last-child { border-inline-end: 1px solid var(--glass-border); }
+.ops .kpi-band > .ops-reveal { flex: 1 1 0; min-width: 0; }
+.kpi-band .kpi:hover, .exec .kpi-band .kpi:hover {
+  background: #f4fcf6;
+  border-color: var(--line-control);
+  box-shadow: var(--shadow);
+  transform: none;
+}
+.kpi-label, .stat-label, .metric-label { font-size: 10px; letter-spacing: .08em; }
+.ops .qa-grid, .exec .area-actions--compact .qa-grid { display: flex; flex-flow: row wrap; gap: 10px; }
+.ops .qa, .exec .area-actions--compact .qa {
+  flex: 1 1 200px;
+  border: 1px solid var(--line);
+  background: #ffffff85;
+  border-radius: 13px;
+  padding: 13px 15px;
+}
+.ops .qa:last-child, .exec .qa:last-child { border-inline-end: 1px solid var(--line); }
+.ops .qa:hover, .exec .qa:hover { background: #d6eee875; border-color: var(--line-control); }
+.qa-ico { border-radius: 10px; background: #dceee5; }
+.ops-filters { border-bottom-color: var(--line); }
+
+.btn { min-height: 44px; border-radius: 11px; }
+.btn.primary, .btn-primary, .main-content .topbar .btn-light {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  box-shadow: 0 5px 12px #0c6e621b;
+  --bs-btn-bg: var(--brand);
+  --bs-btn-border-color: var(--brand);
+}
+.btn-outline-secondary, .btn-outline-primary, .main-content .topbar .btn-outline-light {
+  background: #ffffffb3;
+  border-color: var(--line-control);
+  color: var(--brand);
+}
+.btn:disabled, .btn[aria-disabled=true] { box-shadow: none; }
+.form-control, .form-select,
+.portal-main input:not([type=checkbox]):not([type=radio]), .portal-main select, .portal-main textarea {
+  background-color: #fcfefb;
+  border-radius: 11px;
+}
+.dt-wrap, .table-responsive { background: #fcfefb; border: 1px solid #fff; border-radius: 20px; }
+.panel.dt-wrap { padding: 0; }
+.dt-table th, .table thead th, .portal-main table th { background: #edf4ef; font-size: 10px; }
+.dt-table td, .table td, .portal-main table td { background: #fcfefb; border-bottom-color: #e6eee7; }
+.dt-table tbody tr:hover td, .table tbody tr:hover td, .portal-main table tbody tr:hover td { background: #eef7f0; }
+.cn-modal, .modal-content, .error-card, .auth-reset {
+  background: var(--glass-fill);
+  border: 1px solid #fff;
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+}
+.cn-modal-backdrop { background: #183b366b; }
+.toast { border: 1px solid var(--line); border-radius: 14px; }
+.error-page { background: transparent; }
+
+/* Authentication uses the same glass as the workspace, with an opaque form. */
+.auth-page { background: transparent; }
+.auth-story {
+  min-height: calc(100vh - 48px);
+  margin: 24px 0 24px 24px;
+  padding: 40px clamp(28px, 4vw, 64px);
+  background: var(--glass-fill);
+  color: var(--ink);
+  border: 1px solid #fff;
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+}
+.auth-story h2 { color: var(--brand-deep); font-family: Satoshi, sans-serif; font-weight: 700; }
+.auth-story .auth-eyebrow, .auth-principles li>span { color: var(--brand); }
+.auth-story-copy>p:not(.auth-eyebrow), .auth-principles p, .auth-story-foot { color: var(--muted); }
+.auth-principles strong { color: var(--ink); }
+.auth-principles li>span { background: #dceee5; border-color: var(--line-control); border-radius: 11px; }
+.auth-form-card {
+  max-width: 430px;
+  padding: 32px;
+  background: var(--glass-fill);
+  border: 1px solid #fff;
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+}
+.auth-form-card h1, .auth-reset h1 { font-family: Satoshi, sans-serif; font-weight: 700; }
+.auth-page--compact { background: transparent; }
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --glass-fill: rgba(255,255,255,.56); }
+  .portal-topbar::before, .panel, .xpanel, .chart-card, .stat-card, .card, .metric-card,
+  .kpi-band .kpi, .auth-story, .auth-form-card, .auth-reset, .error-card {
+    -webkit-backdrop-filter: blur(22px) saturate(1.12);
+    backdrop-filter: blur(22px) saturate(1.12);
+  }
+}
+@media (max-width: 1100px) {
+  .portal-topbar { top: 10px; width: calc(100% - 32px); margin-top: 16px; }
+  .portal-topbar-inner { padding: 10px 18px; min-height: 70px; gap: 12px; }
+  .portal-nav { background: #f5fcf7; }
+  .main-content, .portal-main { padding: 28px 24px 48px; }
+  .ops .kpi-band > .ops-reveal { flex-basis: 200px; }
+}
+@media (max-width: 640px) {
+  .portal-topbar { width: calc(100% - 24px); margin-top: 12px; border-radius: 18px; }
+  .portal-topbar-inner { min-height: 64px; padding: 8px 12px; gap: 8px; }
+  .portal-logo .payrolla-lockup { width: 112px; }
+  .main-content, .portal-main { padding: 26px 16px 40px; }
+  .panel, .xpanel, .chart-card, .ops .xpanel, .exec .xpanel { padding: 19px; border-radius: 20px; }
+  .panel.dt-wrap { padding: 0; }
+  .kpi-band, .ops .kpi-band, .exec .kpi-band { gap: 12px; }
+  .kpi-band .kpi, .ops .kpi-band .kpi, .exec .kpi-band .kpi { flex-basis: calc(50% - 6px); padding: 18px 14px; }
+  .kpi-band .kpi:first-child { padding-inline-start: 14px; }
+  .kpi-band .kpi:nth-child(even), .kpi-band .kpi:nth-child(n+3) { border: 1px solid var(--glass-border); }
+  .ops .kpi-band > .ops-reveal { flex-basis: calc(50% - 6px); }
+  .ops .kpi-band > .ops-reveal:first-child { flex-basis: 100%; }
+  .ops .qa, .exec .area-actions--compact .qa { flex-basis: 100%; }
+  .auth-form-side { padding: 24px 16px; }
+  .auth-form-card { padding: 25px 22px; }
+  .auth-mobile-brand { margin-bottom: 30px; }
+}
+@media (max-width: 360px) {
+  .kpi-band .kpi, .ops .kpi-band .kpi, .exec .kpi-band .kpi { flex-basis: 100%; }
+  .ops .kpi-band > .ops-reveal { flex-basis: 100%; }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
+  :root { --glass-fill: #f9fefb; --glass-border: var(--line-control); }
+  .portal-topbar::before, .panel, .xpanel, .chart-card, .stat-card, .card, .metric-card,
+  .kpi-band .kpi, .auth-story, .auth-form-card, .auth-reset, .error-card {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@media print {
+  body.brand-shell-bg { background: #fff; }
+  .panel, .xpanel, .card, .kpi-band .kpi, .ops .xpanel, .exec .xpanel {
+    background: #fff; border: 1px solid #ccc; box-shadow: none;
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+}

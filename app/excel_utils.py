@@ -58,6 +58,7 @@ COLUMN_ALIASES = {
     # "Social Security Number" and dumped an ID into the amount field.
     "ssnit": ["ssnit", "ssnit contribution", "ssnit employee", "ssnit emp", "ssnit (employee)", "ssnit deduction"],
     "tier_2_pension": ["tier 2", "tier 2 pension", "tier two pension", "pension"],
+    "pf_fund_employer": ["pf fund employer", "pf fund / employer", "employer provident fund", "provident fund employer"],
     "pf_fund_employee": ["pf fund / employee", "pf fund employee", "pf fund", "pf employee", "provident fund", "provident fund employee"],
     # loan_advance before loan_deduction is deliberate NOT: loan_deduction
     # stays first so a bare "Loan" header keeps its historical meaning
@@ -115,6 +116,7 @@ MONEY_FIELDS = {
     "productivity_bonus",
     "end_of_year_bonus",
     "pf_fund_employee",
+    "pf_fund_employer",
     "overtime_hours",
     "overtime_pay",
     "other_allowances",
@@ -590,6 +592,11 @@ def mapped_rows_from_dataframe(df, mapping):
             value = source_row.get(original_column, "")
             value = scalar_cell_value(value)
             original_presence[field] = str(value or "").strip() not in {"", "nan", "None"}
+            if field == "pf_fund_employer":
+                # Do not let the legacy currency sanitizer turn 'inf' into zero.
+                text_value = str(value).strip().lower()
+                if text_value in {"inf", "+inf", "-inf", "infinity", "+infinity", "-infinity"} or (isinstance(value, str) and text_value == "nan"):
+                    row["_invalid_employer_pf"] = True
             row[field] = to_number(value) if field in MONEY_FIELDS else str(value).strip()
 
         if not mapped_fields:
@@ -1139,6 +1146,16 @@ def export_wages_sheet(payroll_run, export_folder):
         "Tax (PAYE)",
         "Net Pay",
     ]
+    breakdown_fields = (
+        ("Employer Provident Fund", "pf_fund_employer"),
+        ("Tax-Allowable Employee PF", "pf_allowable_employee"),
+        ("GRA Relief Applied", "tax_relief_applied"),
+        ("Ordinary-Taxed Overtime", "overtime_ordinary_pay"),
+        ("Pensionable Salary", "pensionable_salary"),
+        ("SSNIT Remittance", "ssnit_remittance"),
+        ("Tier 2 Remittance", "tier_2_remittance"),
+    ) if any(getattr(item, "deductions_policy_version", 0) for item in payroll_run.items) else ()
+    headers.extend(label for label, _field in breakdown_fields)
     rows = []
     for item in sorted(payroll_run.items, key=lambda i: (i.full_name or "").upper()):
         rows.append([
@@ -1168,6 +1185,7 @@ def export_wages_sheet(payroll_run, export_folder):
             round(item.paye or 0, 2),
             round(item.net_pay or 0, 2),
         ])
+        rows[-1].extend(round(getattr(item, field, 0) or 0, 2) for _label, field in breakdown_fields)
     write_table(sheet, 5, headers, rows)
     total_row = 5 + len(rows) + 1
     total_label = sheet.cell(row=total_row, column=2, value="TOTALS")
@@ -1275,10 +1293,19 @@ def _fill_gra_skeleton_workbook(
         # income; overtime and bonus tax get their own columns Y and M).
         ordinary_paye = m((item.paye or 0) - (item.overtime_tax or 0) - (item.bonus_tax or 0))
         employee = getattr(item, "employee", None)
-        # Total Reliefs (U) = SSF + Third Tier only. Deductible Reliefs (T) is
-        # left blank: the payroll system has no reliable relief data, and GRA
-        # columns without data stay on the sheet but empty (never deleted).
-        total_reliefs = m((item.ssnit or 0) + (item.pf_fund_employee or 0))
+        strict = bool(getattr(item, "deductions_policy_version", 0))
+        # Previous: T=""; J=item.pf_fund_employee; U=SSF+all employee PF;
+        # O=S=item.gross_pay; X=item.overtime_pay, even when ordinary-taxed.
+        # Use persisted applied figures, never today's mutable roster evidence.
+        allowed_pf = m(item.pf_allowable_employee if strict else item.pf_fund_employee)
+        relief_applied = m(item.tax_relief_applied) if strict else ""
+        ordinary_ot = m(item.overtime_ordinary_pay) if strict else 0
+        if strict:
+            cash_allowances = m(cash_allowances + ordinary_ot + (item.pf_employer_taxable or 0))
+        # Template contract: O=F+K+N, S=O+P+Q+R. Separately taxed overtime
+        # and concessionary bonus do not enter this ordinary assessable base.
+        assessable_income = m((item.basic_salary or 0) + cash_allowances + (item.bonus_excess or 0)) if strict else m(item.gross_pay)
+        total_reliefs = m((item.ssnit or 0) + allowed_pf + (relief_applied or 0))
         tin = (getattr(employee, "tin", None) if employee else None) or item.ghana_card_number or ""
 
         cells = {
@@ -1291,19 +1318,19 @@ def _fill_gra_skeleton_workbook(
             "G": "",                                 # Secondary Employment — no data; blank
             "H": "Y" if (item.ssnit or 0) > 0 else "N",   # Paid SSNIT
             "I": m(item.ssnit),                      # Social Security Fund
-            "J": m(item.pf_fund_employee),           # Third Tier
+            "J": allowed_pf,                        # Tax-allowable Third Tier
             "K": cash_allowances,                    # Cash Allowances
             "L": bonus_concession,                   # Bonus up to 15% annual basic
             "M": m(item.bonus_tax),                  # Final Tax on Bonus Income
             "N": m(item.bonus_excess),               # Excess Bonus
-            "O": m(item.gross_pay),                  # Total Cash Emolument
+            "O": assessable_income,                 # Basic + cash allowances + excess bonus
             "P": "", "Q": "", "R": "",               # accommodation/vehicle/non-cash
-            "S": m(item.gross_pay),                  # Total Assessable Income
-            "T": "",                                 # Deductible Reliefs — no data; blank
-            "U": total_reliefs,                      # Total Reliefs (SSF + Third Tier)
+            "S": assessable_income,                 # No benefit-in-kind values recorded
+            "T": relief_applied,                    # Actual GRA relief used in this run
+            "U": total_reliefs,                      # SSF + allowable Third Tier + relief
             "V": m(item.taxable_income),             # Chargeable Income
             "W": ordinary_paye,                      # Tax Deductible
-            "X": m(item.overtime_pay),               # Overtime Income
+            "X": m((item.overtime_pay or 0) - ordinary_ot),  # Separately taxed overtime
             "Y": m(item.overtime_tax),               # Overtime Tax
             "Z": m(item.paye),                       # Total Tax Payable to GRA
             "AA": "",                                # Severance Pay
@@ -1405,6 +1432,9 @@ def _export_gra_summary_layout(
         "Total Tax Payable to GRA",
         "Remark",
     ]
+    include_relief = any(getattr(item, "deductions_policy_version", 0) for item in payroll_run.items)
+    if include_relief:
+        headers.append("GRA Relief Applied")
     rows = []
     for index, item in enumerate(
         sorted(payroll_run.items, key=lambda i: (i.full_name or "").upper()), start=1
@@ -1416,6 +1446,14 @@ def _export_gra_summary_layout(
         ordinary_paye = round(
             (item.paye or 0) - (item.overtime_tax or 0) - (item.bonus_tax or 0), 2
         )
+        strict = bool(getattr(item, "deductions_policy_version", 0))
+        ordinary_ot = (item.overtime_ordinary_pay or 0) if strict else 0
+        allowed_pf = (item.pf_allowable_employee or 0) if strict else (item.pf_fund_employee or 0)
+        assessable = sum((getattr(item, field, 0) or 0) for field in (
+            "basic_salary", "transport_allowance", "housing_allowance",
+            "medical_allowance", "meal_allowance", "other_allowances",
+            "pay_difference", "bonus_excess", "overtime_ordinary_pay", "pf_employer_taxable",
+        )) if strict else (item.gross_pay or 0)
         rows.append([
             index,
             item.full_name,
@@ -1426,15 +1464,15 @@ def _export_gra_summary_layout(
             "",  # Non-Resident — no backing data, hand-fill if applicable
             "",  # Secondary Employment — same
             round(item.basic_salary or 0, 2),
-            round(item.gross_pay or 0, 2),
+            round(assessable, 2),
             round(item.ssnit or 0, 2),
-            round(item.pf_fund_employee or 0, 2),
+            round(allowed_pf, 2),
             "",  # Accommodation Element
             "",  # Vehicle Element
             "",  # Non-Cash Benefit
             round(item.taxable_income or 0, 2),
             ordinary_paye,
-            round(item.overtime_pay or 0, 2),
+            round((item.overtime_pay or 0) - ordinary_ot, 2),
             round(item.overtime_tax or 0, 2),
             bonus_concession,
             round(item.bonus_tax or 0, 2),
@@ -1443,10 +1481,12 @@ def _export_gra_summary_layout(
             round(item.paye or 0, 2),
             "",  # Remark
         ])
+        if include_relief:
+            rows[-1].append(round(item.tax_relief_applied or 0, 2) if strict else 0)
     write_table(sheet, 10, headers, rows)
     total_row = 10 + len(rows) + 1
     sheet.cell(row=total_row, column=2, value="TOTALS").font = Font(bold=True)
-    money_columns = (9, 10, 11, 12, 16, 17, 18, 19, 20, 21, 22, 24)
+    money_columns = (9, 10, 11, 12, 16, 17, 18, 19, 20, 21, 22, 24) + ((26,) if include_relief else ())
     for column in money_columns:
         total = round(sum(row[column - 1] or 0 for row in rows), 2)
         cell = sheet.cell(row=total_row, column=column, value=total)

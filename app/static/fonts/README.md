@@ -11,3 +11,14 @@ Font binaries are build assets, excluded from the public source repository.
 
 See `FONT-LICENSE.txt` for the ITF Free Font License. Source:
 https://www.fontshare.com/fonts/satoshi
+
+## Newsreader display face
+
+Editorial headings pair Satoshi with the self-hosted Newsreader variable font.
+The original font is from the Google Fonts Newsreader project
+(https://github.com/google/fonts/tree/main/ofl/newsreader), under the included
+SIL Open Font License in `Newsreader-OFL.txt`. The TTF and license are kept in
+source so deployment and desktop packaging include the same face.
+
+All fonts use an optional display period and are preloaded by both application
+shells. Operational labels and tabular figures stay in Satoshi.

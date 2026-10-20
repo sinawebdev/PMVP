@@ -1,0 +1,24 @@
+{
+  "checked_date": "2026-10-20",
+  "jurisdiction": "Ghana",
+  "subject": "PAYE deductions, mandatory pensions, provident funds, personal reliefs and overtime",
+  "full_current_legislative_consolidation_reviewed": false,
+  "sources": [
+    {"id":"S1","authority":"NPRA","title":"National Pensions Act, 2008 (Act 766)","url":"https://npra-live.s3.amazonaws.com/public/documents/NPRA_2008_Act_766.pdf","local_file":"npra-national-pensions-act-766.pdf","reviewed_sections":["3","63","112"],"official_index_url":"https://npra.gov.gh/regulations/act/","boundary":"Original Act edition; not a complete current consolidation or amendment audit."},
+    {"id":"S1-index","authority":"NPRA","title":"Act","url":"https://npra.gov.gh/regulations/act/","local_file":"npra-act-index.html","supports":["Official provenance of the S3-hosted Act PDF"]},
+    {"id":"S2","authority":"SSNIT","title":"FAQs","url":"https://www.ssnit.org.gh/faqs/","local_file":"ssnit-faq.html","supports":["employee 5.5%, employer 13%, total 18.5%","13.5% Tier 1 and 5% Tier 2"],"boundary":"Older GH¢25,000 ceiling on this page is superseded; do not use as current limit."},
+    {"id":"S3","authority":"SSNIT","title":"Maximum and Minimum Insurable Earnings for 2026","url":"https://www.ssnit.org.gh/wp-content/uploads/2026/01/Public-Notice-Min-Max-Insurable.pdf","local_file":"ssnit-2026-insurable-earnings-notice.pdf","publication_date":"2026-01-13","effective_from":"2026-01-01","minimum_insurable_earnings_ghs":"587.80","maximum_insurable_earnings_ghs":"69000.00","minimum_contribution_to_ssnit_as_printed_ghs":"79.40","maximum_contribution_to_ssnit_ghs":"9315.00","boundary":"Minimum printed contribution does not equal ordinary two-decimal rounding of 13.5% of printed minimum earnings; Tier 2 and employee/employer ceiling allocation not stated."},
+    {"id":"S4","authority":"NPRA","title":"Basic National Social Security Regulations, 2011","url":"https://npra.gov.gh/assets/documents/Basic_National_Social_Security_Regulations.pdf","local_file":"npra-basic-social-security-regulations-unverified-edition.pdf","reviewed_sections":["11(5)","11(6)"],"enacted_edition_verified":false,"boundary":"Blank L.I. number and making date on PDF page 4; saved as supporting material only."},
+    {"id":"S5","authority":"NPRA","title":"Guidelines for Provident Fund Scheme as Employer Sponsored Scheme","url":"https://npra.gov.gh/assets/documents/GUIDELINES-FOR-PROVIDENT-FUND-SCHEME-AS-EMPLOYER-SPONSORED-SCHEME-16-03-2012.pdf","local_file":"npra-provident-fund-guidelines.pdf","reviewed_sections":["3","13.7.2"],"supports":["scheme registration and approved trustees","16.5% shared contribution deduction cap"]},
+    {"id":"S6","authority":"GRA","title":"Pay As You Earn (PAYE)","url":"https://gra.gov.gh/domestic-tax/tax-types/paye/","local_file":"gra-paye-page.html","supports":["employee pension deduction","basic-salary basis for 16.5% provident fund cap","qualifying overtime conditions and rates"]},
+    {"id":"S7","authority":"GRA","title":"Practice Note on Gains or Profits from Employment, DT/2016/011","url":"https://gra.gov.gh/wp-content/uploads/2020/09/Practice-Note-on-Gains-or-Profits-from-Employment.pdf","local_file":"gra-employment-practice-note-2016.pdf","publication_date":"2016-10-06","reviewed_printed_pages":[10,11,12,14,15,16,26],"supports":["relief eligibility and application","ordinary taxation of unqualified overtime","excess employer retirement contributions as taxable employment benefit"],"boundary":"Contains historical tax bands; do not use for current band amounts."},
+    {"id":"S8","authority":"GRA","title":"Personal Tax Relief","url":"https://gra.gov.gh/domestic-tax/personal-tax-relief/","local_file":"gra-personal-tax-relief.html","supports":["current relief amounts and conditions","application to Commissioner-General"],"boundary":"Exact historical commencement dates of the current relief amounts not established here."},
+    {"id":"S9","authority":"GRA","title":"Tax Relief Application Form","url":"https://gra.gov.gh/wp-content/uploads/2020/09/Tax-Relief-Application-Form.pdf","local_file":"gra-tax-relief-application-form.pdf","supports":["relief award amount","monthly allocation and first deductible month","tax relief card administration"]}
+  ],
+  "unresolved": [
+    "Tier 1 ceiling allocation between employee and employer; extension of cap to Tier 2",
+    "Full-month pension minimum treatment for zero-pay or partial-month employment",
+    "Priority allocation of employee and employer provident contributions when combined cap exceeded",
+    "Exact historical commencement dates of current personal relief amounts"
+  ]
+}

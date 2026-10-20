@@ -9,3 +9,5 @@
 *.pdf binary
 *.zip binary
 *.db binary
+# Preserve downloaded research evidence exactly as recorded in SHA256SUMS.txt.
+docs/research/**/*.html -text

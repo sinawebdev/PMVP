@@ -1,0 +1,27 @@
+/* The worker's SMS-link pages share the approved glass without app chrome. */
+body.brand-shell-bg {
+  background: radial-gradient(ellipse at 10% 20%, #c2eee4a8, transparent 65%),
+    linear-gradient(130deg, #f5f8f4, #edf7f3 52%, #e9f1ed);
+}
+.payslip-card, main.wrap {
+  background: #f9fefb;
+  border: 1px solid #fff;
+  border-radius: 24px;
+  box-shadow: 0 16px 48px -22px #28624b26;
+}
+.net { border-radius: 14px; background: #e7f2e9; }
+.download { border-radius: 11px; }
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .payslip-card, main.wrap {
+    background: #ffffffb3;
+    -webkit-backdrop-filter: blur(22px) saturate(1.12);
+    backdrop-filter: blur(22px) saturate(1.12);
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
+  .payslip-card, main.wrap { background: #f9fefb; border-color: var(--line-control); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media print {
+  body.brand-shell-bg { background: #fff; }
+  .payslip-card, main.wrap { background: #fff; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

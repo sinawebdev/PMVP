@@ -1,0 +1,48 @@
+{
+  "checked_date": "2026-10-20",
+  "authority": "Ghana Revenue Authority",
+  "jurisdiction": "Ghana",
+  "subject": "Resident-individual graduated PAYE bands",
+  "effective_from": "2026-09-01",
+  "amendment_identified_by_gra": "Income Tax (Amendment) Act, 2026 (Act 1178)",
+  "previous_effective_from": "2024-01-01",
+  "previous_amendment_identified_by_gra": "Income Tax (Amendment) (No. 2) Act, 2023 (Act 1111)",
+  "full_gazetted_act_independently_inspected": false,
+  "sources": [
+    {
+      "id": 1,
+      "title": "Amendments – Income Tax Act, 2026 (Act 1178)",
+      "url": "https://gra.gov.gh/news/portfolio/amendments-income-tax-act-2026-act-1178/",
+      "local_file": "gra-2026-announcement.html",
+      "format": "downloaded HTML",
+      "supports": ["2026 monthly bands", "2026 annual bands", "2026-09-01 implementation date", "Act 1178 identification"]
+    },
+    {
+      "id": 2,
+      "title": "Domestic Tax Revenue Division — Amendments – Income Tax Act, 2026 (Act 1178)",
+      "url": "https://gra.gov.gh/wp-content/uploads/2026/09/Amendments-To-The-Income-Tax-2015-Act-896_Updated-1.pdf",
+      "local_file": "gra-2026-implementation-notice.pdf",
+      "format": "downloaded original one-page PDF implementation notice",
+      "relevant_pages": [1],
+      "supports": ["2026 monthly bands", "2026 annual bands", "2026-09-01 implementation date", "Act 1178 identification"],
+      "is_full_gazetted_act": false
+    },
+    {
+      "id": 3,
+      "title": "Pay As You Earn (PAYE)",
+      "url": "https://gra.gov.gh/domestic-tax/tax-types/paye/",
+      "local_file": "gra-paye-page.html",
+      "format": "downloaded HTML",
+      "supports": ["resident-individual monthly and annual bands", "2026-09-01 implementation date", "deductions before PAYE"]
+    },
+    {
+      "id": 4,
+      "title": "Implementation of New Tax Laws and Amendments",
+      "url": "https://gra.gov.gh/implementation-of-new-tax-laws-and-amendments/",
+      "local_file": "gra-2024-implementation-announcement.html",
+      "format": "downloaded HTML",
+      "publication_date_on_page": "2024-01-31",
+      "supports": ["2024-01-01 implementation date", "Act 1111 identification", "earlier resident-individual annual schedule"]
+    }
+  ]
+}

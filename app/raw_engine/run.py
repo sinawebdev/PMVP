@@ -6,7 +6,15 @@ fold in the month's lump adjustments, and produce a full payslip per worker.
 The same ``build_inputs`` seam serves the thin monthly path (Phase 3) — only
 the source of hours and adjustments differs.
 """
+from sqlalchemy.orm import selectinload
+
+from app.models import Employee
+from app.payroll_calculations import bonus_concession_used_ytd_bulk, period_start
+from app.payroll_calculations.deductions import (
+    DeductionContext, DeductionPolicyError, context_for_employee,
+)
 from app.raw_engine.calc import apply_rates
+from app.raw_engine.cleaning import normalise_emp_id
 from app.raw_engine.compute import PayslipInputs, compute_payslip
 
 
@@ -29,6 +37,8 @@ def assemble_inputs(
     other_deductions=0.0,
     welfare=0.0,
     bonus_concession_used_ytd=0.0,
+    pf_fund_employer=0.0,
+    context=None,
 ) -> PayslipInputs:
     """Cost one worker's hours (x rate table) plus the month's lump adjustments
     into :class:`PayslipInputs`. Shared by the seed month (Phase 2) and the thin
@@ -62,12 +72,14 @@ def assemble_inputs(
         donations=donations,
         other_deductions=other_deductions,
         bonus_concession_used_ytd=bonus_concession_used_ytd,
+        pf_fund_employer=pf_fund_employer,
+        context=context,
     )
     inputs.missing_rate_codes = applied.missing_rate_codes
     return inputs
 
 
-def build_inputs(emp, bonus_concession_used_ytd=0.0) -> PayslipInputs:
+def build_inputs(emp, bonus_concession_used_ytd=0.0, *, employee=None, on_date=None) -> PayslipInputs:
     """Cost one :class:`~app.raw_engine.seed.SeedEmployee` (parsed seed month)
     into :class:`PayslipInputs` — rates come from the employee's parsed rate
     table."""
@@ -76,27 +88,59 @@ def build_inputs(emp, bonus_concession_used_ytd=0.0) -> PayslipInputs:
         emp.staff_id,
         emp.raw_hours,
         rate_lookup,
+        employee_id=employee.id if employee is not None else None,
         pay_type="hourly" if emp.is_hourly else "salaried",
         basic_fallback=emp.basic_salary,
         is_icu_member=emp.icu_member,
         bonus=emp.bonus,
         other_allowance=emp.other_allowance,
         pay_difference=emp.pay_difference,
-        tax_relief_monthly=emp.tax_relief_monthly,
+        # The uploaded amount is a request, never proof of GRA approval.
+        tax_relief_monthly=(employee.tax_relief_monthly or 0) if employee is not None else emp.tax_relief_monthly,
         provident_fund=emp.provident_fund,
         loan=emp.loan,
         donations=emp.donations,
         other_deductions=emp.other_deduction,
         welfare=emp.welfare,
         bonus_concession_used_ytd=bonus_concession_used_ytd,
+        pf_fund_employer=getattr(emp, "pf_fund_employer", 0.0),
+        context=(context_for_employee(employee, on_date) if employee is not None
+                 else DeductionContext(period=on_date)),
     )
 
 
-def compute_seed_month(context, statutory_rate):
+def compute_seed_month(context, statutory_rate, payroll_run=None):
     """Compute a payslip for every employee in ``context`` under
     ``statutory_rate``. Returns ``{staff_id: Payslip}``."""
+    # Previous seed calculations had no run date or roster approval context:
+    # for emp in context.employees:
+    #     inputs = build_inputs(emp)
+    #     payslips[emp.staff_id] = compute_payslip(inputs, statutory_rate)
+    if (getattr(statutory_rate, "deductions_policy_version", 0) or 0) >= 1 and payroll_run is None:
+        raise DeductionPolicyError("A payroll run is required to verify dated deduction approvals for this seed calculation.")
+    on_date = period_start(payroll_run.month, payroll_run.year) if payroll_run is not None else None
+    roster = {}
+    used_ytd = {}
+    if payroll_run is not None:
+        roster = {
+            normalise_emp_id(employee.staff_id): employee
+            for employee in Employee.query.filter_by(
+                client_company_id=payroll_run.client_company_id
+            ).options(selectinload(Employee.tax_relief_approvals)).all()
+        }
+        used_ytd = bonus_concession_used_ytd_bulk(
+            [employee.id for employee in roster.values()],
+            payroll_run.year,
+            exclude_run_id=payroll_run.id,
+        )
     payslips = {}
     for emp in context.employees:
-        inputs = build_inputs(emp)
+        employee = roster.get(normalise_emp_id(emp.staff_id))
+        inputs = build_inputs(
+            emp,
+            bonus_concession_used_ytd=used_ytd.get(employee.id, 0.0) if employee is not None else 0.0,
+            employee=employee,
+            on_date=on_date,
+        )
         payslips[emp.staff_id] = compute_payslip(inputs, statutory_rate)
     return payslips

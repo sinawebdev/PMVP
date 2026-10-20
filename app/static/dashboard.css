@@ -285,7 +285,7 @@
 }
 
 .progress-fill {
-    background: linear-gradient(90deg, var(--brand-deep), var(--brand-bright));
+    background: var(--brand);
     border-radius: var(--radius-pill);
     display: block;
     height: 100%;

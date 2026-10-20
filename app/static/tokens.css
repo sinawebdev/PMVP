@@ -15,7 +15,7 @@
     --ink: #183b36;
     --ink-soft: #3c5550;
     --muted: #586963;
-    --line: #dce8e4;          /* teal-tinted hairline — NOT neutral grey */
+    --line: #dedfd7;          /* quiet architectural grey */
     --line-strong: #c3d9d3;
     /* The boundary of an INTERACTIVE element, as distinct from the two above.
        WCAG 1.4.11 requires 3:1 for "visual information required to identify
@@ -29,8 +29,8 @@
        --surface-alt. */
     --line-control: #7a8f8a;
     --surface: #ffffff;
-    --surface-alt: #f8faf8;
-    --shell: #f4f6f2;
+    --surface-alt: #f8f8f4;
+    --shell: #f3f3ee;
 
     /* Brand — Payrolla teal system (brand board: Deep Teal / Bright Teal /
        Soft Teal). --brand carries white text at AA (~5.4:1); --brand-deep is
@@ -51,10 +51,10 @@
     --gold-deep: var(--accent-deep);
 
     /* Primary brand gradient (Deep Teal → Bright Teal) — logo tile, marks. */
-    --brand-gradient: linear-gradient(135deg, #0d4d4d 0%, #17c3b2 100%);
+    --brand-gradient: var(--brand-deep);
 
     /* Status */
-    --green: #16a34a;
+    --green: #237348;
     --green-soft: #e8f5ee;
     --warn: #b45309;
     --warn-soft: #fff4e0;
@@ -72,7 +72,10 @@
     --radius-pill: 999px;
 
     /* Type */
-    --font-sans: Satoshi, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-sans: Satoshi, sans-serif;
+    --font-display: Newsreader, serif;
+    --DESIGN_VARIANCE: 1;
+    --space-editorial: calc(28px + 3px * var(--DESIGN_VARIANCE));
 
     /* Motion — respected by both shells */
     --ease: 180ms ease;
@@ -278,7 +281,7 @@
    unambiguous even where its fill is pale. The fill is untouched, so the brand
    reads exactly as before. */
 .chart-bar-fill {
-    background: linear-gradient(180deg, var(--brand-bright), var(--brand));
+    background: var(--brand);
     border-radius: var(--radius-sm);
     box-shadow: inset 0 0 0 1px var(--brand);
     display: block;
@@ -336,7 +339,7 @@
    company against another with — was its palest point, at 2.12:1 against the
    track behind it. */
 .hbar-fill {
-    background: linear-gradient(90deg, var(--brand-deep), var(--brand-bright));
+    background: var(--brand);
     border-radius: var(--radius-pill);
     box-shadow: inset 0 0 0 1px var(--brand);
     display: block;

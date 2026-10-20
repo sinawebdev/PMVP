@@ -1,9 +1,10 @@
 import json
 import os
+import math
 import tempfile
 from datetime import datetime, timezone
 
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from flask import (
     Blueprint,
@@ -942,6 +943,7 @@ def create_payroll_run_from_payload(payload, client, validation, import_mode):
             ssnit=float(row.get("ssnit") or 0),
             tier_2_pension=float(row.get("tier_2_pension") or 0),
             pf_fund_employee=float(row.get("pf_fund_employee") or 0),
+            pf_fund_employer=float(row.get("pf_fund_employer") or 0),
             loan_deduction=float(row.get("loan_deduction") or 0),
             loan_advance=float(row.get("loan_advance") or 0),
             welfare_deduction=float(row.get("welfare_deduction") or 0),
@@ -1013,11 +1015,8 @@ def auto_calculate_on_confirm(payroll_run):
         # create_payroll_run_from_payload are already flushed in this same
         # (uncommitted) transaction. A rollback would silently discard the
         # entire import, contradicting "uploaded figures were kept" below.
-        # Items processed before the failure keep their recalculated values;
-        # items from the failure point on keep their raw uploaded figures —
-        # an inconsistent but non-destructive partial state, flagged by the
-        # warning and fixable via Calculate Pay once the underlying issue
-        # (see traceback) is resolved.
+        # Per-worker results are staged before writes: a policy error retains
+        # the uploaded figures for the whole run until the evidence is fixed.
         current_app.logger.exception(
             "auto_calculate_on_confirm: calculation failed for run %s", payroll_run.id
         )
@@ -1032,8 +1031,8 @@ def auto_calculate_on_confirm(payroll_run):
         # log (above) and the audit trail carries the type for support to follow up.
         flash(
             "Payroll imported but the statutory calculation failed, so the figures "
-            "are not yet verified. Uploaded figures were kept (some items may be "
-            "partially recalculated). Use Calculate Pay to retry — if it keeps "
+            "are not yet verified. Uploaded figures were kept. "
+            "Use Calculate Pay to retry — if it keeps "
             "failing, the run's activity trail records what went wrong.",
             "danger",
         )
@@ -1071,26 +1070,33 @@ def recalculate_salaried_items(payroll_run, statutory_rate):
     # inside the loop would be one lazy-load query per item, so prefetch the
     # run's employees in one query instead.
     employee_ids = [item.employee_id for item in payroll_run.items if item.employee_id]
-    relief_by_employee = (
+    # Previous: relief_by_employee = {e.id: (e.tax_relief_monthly or 0) ...}
+    roster_by_employee = (
         {
-            e.id: (e.tax_relief_monthly or 0)
-            for e in Employee.query.filter(Employee.id.in_(set(employee_ids))).all()
+            e.id: e
+            for e in Employee.query.options(selectinload(Employee.tax_relief_approvals)).filter(Employee.id.in_(set(employee_ids))).all()
         }
         if employee_ids
         else {}
     )
+    calculated_items = []
     for item in payroll_run.items:
         used_ytd = used_ytd_by_employee.get(item.employee_id, 0.0)
-        tax_relief = relief_by_employee.get(item.employee_id, 0)
+        employee = roster_by_employee.get(item.employee_id)
         try:
-            result = _calculate_item(calculator, item, used_ytd, tax_relief)
+            result = _calculate_item(calculator, item, used_ytd, employee, payroll_run)
         except Exception as exc:
             raise RuntimeError(
                 f"SalariedCalculator.calculate failed for staff_id={item.staff_id!r} "
                 f"(item id={item.id}, employee_id={item.employee_id}): {exc}"
             ) from exc
+        calculated_items.append((item, result))
+    # Previous code wrote each result before calculating the next worker.
+    # A missing approval on a later row must not leave half the run updated.
+    for item, result in calculated_items:
         for field, value in result.as_payroll_item_fields().items():
             setattr(item, field, value)
+        _merge_calculation_warnings(item, getattr(result, "warnings", []))
         apply_overtime_concession_warning(item, statutory_rate)
     verify_statutory_invariants(payroll_run, statutory_rate)
 
@@ -1100,18 +1106,40 @@ def recalculate_salaried_items(payroll_run, statutory_rate):
 _JUNIOR_OT_MARKER = "junior-staff qualifying threshold"
 
 
+def _merge_calculation_warnings(item, warnings):
+    policy_notes = (
+        "Employee provident fund remains", "Provident-fund cash deduction exceeds",
+        "Tax relief not applied:", "Overtime included in ordinary PAYE:",
+        "Overtime is included in ordinary taxable income",
+        "no tax deduction applied because an approved scheme/reference is missing.",
+        "only the allowable amount reduces chargeable income.",
+        "Pension component rounding needs reconciliation:",
+    )
+    notes = [note.strip() for note in (item.warning_notes or "").split(";") if note.strip() and not note.strip().startswith(policy_notes)]
+    notes.extend(note for note in warnings if note and note not in notes)
+    item.warning_notes = "; ".join(notes)
+    if notes:
+        item.validation_status = "Warning"
+
+
 def apply_overtime_concession_warning(item, statutory_rate):
-    """Spec §7.1: the 5%/10% overtime concession legally applies only to a
-    qualifying junior employee (qualifying income <= the monthly threshold on
-    the rate version, GHS 1,500 under GRA 2026 rules). We match the client
-    sheet and apply it to everyone, but flag every overtime earner above the
-    threshold so the exposure is visible and the gate can be tightened later."""
+    """Describe the applied treatment; retain warning-only behavior for old runs."""
     existing = [
         note.strip()
         for note in (item.warning_notes or "").split(";")
         if note.strip() and _JUNIOR_OT_MARKER not in note
     ]
     threshold = float(statutory_rate.overtime_junior_monthly_threshold or 0)
+    if getattr(statutory_rate, "deductions_policy_version", 0):
+        # Previous policy merely warned while applying the concession to everyone.
+        if (item.overtime_ordinary_pay or 0) > 0 and not any(note.startswith("Overtime included in ordinary PAYE:") for note in existing):
+            existing.append("Overtime is included in ordinary taxable income because concession eligibility was not established.")
+        item.warning_notes = "; ".join(dict.fromkeys(existing))
+        if existing:
+            item.validation_status = "Warning"
+        elif item.validation_status == "Warning":
+            item.validation_status = "OK"
+        return
     if (
         threshold > 0
         and float(item.overtime_pay or 0) > 0
@@ -1147,9 +1175,9 @@ def verify_statutory_invariants(payroll_run, statutory_rate):
         # Net can legitimately exceed gross only by the cash advance.
         if net > gross + advance + 0.01:
             problems.append(f"{who}: net {net:.2f} exceeds gross {gross:.2f}")
-        expected_ssnit = money(
-            D(item.basic_salary or 0) * D(statutory_rate.ssf_employee_rate)
-        )
+        # Previous: expected_ssnit = money(D(item.basic_salary or 0) * D(statutory_rate.ssf_employee_rate))
+        pension_base = (item.pensionable_salary or 0) if getattr(statutory_rate, "deductions_policy_version", 0) else (item.basic_salary or 0)
+        expected_ssnit = money(D(pension_base) * D(statutory_rate.ssf_employee_rate))
         if abs(float(item.ssnit or 0) - expected_ssnit) > 0.01:
             problems.append(
                 f"{who}: SSNIT {float(item.ssnit or 0):.2f} != "
@@ -1161,7 +1189,10 @@ def verify_statutory_invariants(payroll_run, statutory_rate):
         raise RuntimeError(f"Statutory invariant violation: {shown}{more}")
 
 
-def _calculate_item(calculator, item, used_ytd, tax_relief_monthly):
+def _calculate_item(calculator, item, used_ytd, employee, payroll_run):
+    from app.payroll_calculations import period_start
+    from app.payroll_calculations.deductions import context_for_employee
+
     return calculator.calculate(
             item.basic_salary,
             transport_allowance=item.transport_allowance,
@@ -1174,7 +1205,10 @@ def _calculate_item(calculator, item, used_ytd, tax_relief_monthly):
             overtime_pay=item.overtime_pay,
             pay_difference=item.pay_difference,
             pf_fund_employee=item.pf_fund_employee,
-            tax_relief_monthly=tax_relief_monthly,
+            pf_fund_employer=item.pf_fund_employer or 0,
+            # Previous: tax_relief_monthly=tax_relief_monthly (undated roster amount).
+            tax_relief_monthly=(employee.tax_relief_monthly or 0) if employee else 0,
+            calculation_context=context_for_employee(employee, period_start(payroll_run.month, payroll_run.year)),
             loan_deduction=item.loan_deduction,
             loan_advance=item.loan_advance,
             welfare_deduction=item.welfare_deduction,
@@ -1410,7 +1444,12 @@ def calculate(run_id):
             )
             return redirect(url_for("payroll.detail", run_id=run_id))
         calculator = HourlyShiftCalculator(payroll_run, statutory_rate)
-        results = calculator.calculate_run()
+        try:
+            results = calculator.calculate_run()
+        except ValueError as exc:
+            db.session.rollback()
+            flash(f"Calculation blocked: {exc}", "danger")
+            return redirect(url_for("payroll.detail", run_id=run_id))
         missing = sorted(
             {code for r in results.values() for code in r.missing_rate_codes}
         )
@@ -1454,6 +1493,7 @@ def calculate(run_id):
                 ),
                 **result.as_payroll_item_fields(),
             )
+            _merge_calculation_warnings(item, getattr(result, "warnings", []))
             apply_overtime_concession_warning(item, statutory_rate)
             db.session.add(item)
         summary = f"Calculated {len(results)} workers from imported hours."
@@ -1495,6 +1535,7 @@ EDITABLE_ITEM_FIELDS = (
     "overtime_pay",
     "pay_difference",
     "pf_fund_employee",
+    "pf_fund_employer",
     "loan_deduction",
     "loan_advance",
     "welfare_deduction",
@@ -1537,7 +1578,7 @@ def edit_items(run_id):
                 except ValueError:
                     rejected += 1
                     continue
-                if new_value < 0:
+                if not math.isfinite(new_value) or new_value < 0:
                     rejected += 1
                     continue
                 old_value = float(entry.hours or 0)
@@ -1562,7 +1603,7 @@ def edit_items(run_id):
                     except ValueError:
                         rejected += 1
                         continue
-                    if new_value < 0:
+                    if not math.isfinite(new_value) or new_value < 0:
                         rejected += 1
                         continue
                     old_value = float(getattr(item, field) or 0)

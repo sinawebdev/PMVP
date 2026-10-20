@@ -192,6 +192,11 @@ def _save_employee(employee, company):
     )
     if dup:
         return f"Staff ID {staff_id} already exists for another of your employees."
+    from app.employees import parse_deduction_metadata, save_deduction_metadata
+
+    deduction_values, deduction_errors = parse_deduction_metadata(request.form, employee)
+    if deduction_errors:
+        return " ".join(dict.fromkeys(deduction_errors.values()))
     if employee is None:
         employee = Employee(client_company_id=company.id, assigned_client=company.name)
         db.session.add(employee)
@@ -209,6 +214,7 @@ def _save_employee(employee, company):
     employee.bank_branch = request.form.get("bank_branch", "").strip() or None
     employee.bank_account_number = request.form.get("bank_account", "").strip() or None
     employee.basic_salary = _parse_money(request.form.get("basic_salary"))
+    save_deduction_metadata(employee, deduction_values)
     employee.status = request.form.get("status", "Active") or "Active"
     # Keep the tenant binding invariant even on edit.
     employee.client_company_id = company.id

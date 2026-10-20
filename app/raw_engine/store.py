@@ -149,7 +149,10 @@ def _upsert_employee(client_company_id, emp, existing, result):
     )
     record.department = emp.department or record.department
     record.job_title = emp.job_title or record.job_title
-    record.tax_relief_monthly = emp.tax_relief_monthly
+    # Previous: record.tax_relief_monthly = emp.tax_relief_monthly
+    # An imported amount cannot replace a documented award or approve relief.
+    if not record.tax_relief_approval_ref and not record.tax_relief_approvals:
+        record.tax_relief_monthly = emp.tax_relief_monthly
     # Explicit classification, seeded from the workbook's structure as a default
     # (editable later without a re-seed). Compute reads this, never re-infers it.
     record.pay_type = "hourly" if emp.is_hourly else "salaried"
@@ -225,7 +228,9 @@ def write_payroll_items(run, payslips, commit=True):
                 bank_account_number=(
                     employee.bank_account_number if employee else None
                 ),
-                validation_status="OK",
+                # Previous: validation_status="OK" discarded policy diagnostics.
+                validation_status="Warning" if getattr(slip, "warnings", []) else "OK",
+                warning_notes="; ".join(getattr(slip, "warnings", [])),
                 **slip.as_payroll_item_fields(),
             )
             db.session.add(item)

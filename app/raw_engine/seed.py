@@ -82,6 +82,7 @@ class SeedEmployee:
     other_allowance: float = 0.0
     pay_difference: float = 0.0
     provident_fund: float = 0.0
+    pf_fund_employer: float = 0.0
     loan: float = 0.0
     donations: float = 0.0
     other_deduction: float = 0.0
@@ -193,6 +194,10 @@ def parse_rich_workbook(source, client_company_id, source_filename=None) -> Seed
             other_allowance=_adj_num(r, "other_allowance", COL_OTHER_ALLOWANCE),
             pay_difference=_adj_num(r, "pay_difference", COL_PAY_DIFFERENCE),
             provident_fund=_adj_num(r, "provident_fund", COL_PROVIDENT),
+            pf_fund_employer=(
+                coerce_rate(ws.cell(r, adj_cols["pf_fund_employer"]).value)
+                if "pf_fund_employer" in adj_cols else 0.0
+            ),
             loan=_adj_num(r, "loan", COL_LOAN),
             donations=_adj_num(r, "donations", COL_DONATIONS),
             # OTHER DEDUCTION stays a fixed position: the DZ workbook carries two
