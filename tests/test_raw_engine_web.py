@@ -316,9 +316,10 @@ class MigrationUpDownTests(unittest.TestCase):
         self.assertEqual(len(ScriptDirectory.from_config(cfg).get_heads()), 1)
 
     def test_pay_type_migration_upgrade_then_downgrade(self):
-        from flask_migrate import downgrade as fm_downgrade
-        from flask_migrate import stamp as fm_stamp
-        from flask_migrate import upgrade as fm_upgrade
+        import importlib.util
+        from pathlib import Path
+        from alembic.migration import MigrationContext
+        from alembic.operations import Operations
 
         tmp = tempfile.mkdtemp()
         dbfile = os.path.join(tmp, "mig.sqlite")
@@ -327,14 +328,26 @@ class MigrationUpDownTests(unittest.TestCase):
         try:
             app = create_app()  # create_all builds every table incl the new ones
             with app.app_context():
-                fm_stamp(revision="head")
-                fm_downgrade(revision="c9e5b2d478a1")
+                # Previous test stamped today's head then crossed every later
+                # migration to test one old revision. Approval-history migrations
+                # deliberately refuse destructive rollback. Exercise only the
+                # pay_type revision this test owns, on this disposable database.
+                path = next((Path(__file__).resolve().parents[1] / "migrations" / "versions").glob("d2a4f6108e35_*.py"))
+                spec = importlib.util.spec_from_file_location("pay_type_migration_test", path)
+                migration = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(migration)
+                db.session.remove()
+                with db.engine.begin() as connection:
+                    with Operations.context(MigrationContext.configure(connection)):
+                        migration.downgrade()
                 insp = sa.inspect(db.engine)
                 self.assertNotIn("raw_upload_archives", insp.get_table_names())
                 self.assertNotIn(
                     "pay_type", {c["name"] for c in insp.get_columns("employee")}
                 )
-                fm_upgrade(revision="head")
+                with db.engine.begin() as connection:
+                    with Operations.context(MigrationContext.configure(connection)):
+                        migration.upgrade()
                 insp = sa.inspect(db.engine)
                 self.assertIn("raw_upload_archives", insp.get_table_names())
                 self.assertIn(

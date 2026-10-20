@@ -159,13 +159,20 @@ def seed_tenant_users():
             db.session.add(user)
 
 
-# Initial statutory rate version from the ACS workbook's live PAYE formula
-# (January 2026), CORRECTED against the GRA 2026 schedule: the sheet started
-# the 35% band at 50,000 but GRA's annual 605,000 / 12 = 50,416.67 — the
-# sheet's cumulative constant 13,728.67 is right, its threshold was low.
-# VERIFY against the current GRA circular / SSNIT gazette before relying on
-# these long-term — PAYE bands are revised regularly.
-INITIAL_PAYE_BANDS = [
+# Previous default table, retained in comments as an implementation record.
+# INITIAL_PAYE_BANDS = [
+#     {"over": 50416.67, "rate": 0.35, "base": 13728.67},
+#     {"over": 19896.67, "rate": 0.30, "base": 4572.67},
+#     {"over": 3896.67, "rate": 0.25, "base": 572.67},
+#     {"over": 730, "rate": 0.175, "base": 18.5},
+#     {"over": 600, "rate": 0.10, "base": 5.5},
+#     {"over": 490, "rate": 0.05, "base": 0},
+# ]
+
+# Preserve the workbook-era defaults for historical payroll reproducibility.
+# These are not the GRA schedule introduced on 1 September 2026; in particular,
+# the old 50,416.67 top threshold must never carry into that new schedule.
+HISTORICAL_PAYE_BANDS = [
     {"over": 50416.67, "rate": 0.35, "base": 13728.67},
     {"over": 19896.67, "rate": 0.30, "base": 4572.67},
     {"over": 3896.67, "rate": 0.25, "base": 572.67},
@@ -174,40 +181,107 @@ INITIAL_PAYE_BANDS = [
     {"over": 490, "rate": 0.05, "base": 0},
 ]
 
+PAYE_2026_EFFECTIVE_FROM = date(2026, 9, 1)
+# GRA, Income Tax (Amendment) Act, 2026 (Act 1178), implementation notice:
+# https://gra.gov.gh/news/portfolio/amendments-income-tax-act-2026-act-1178/
+# Archived references and derivation: docs/research/gra-paye-2026-09-01/.
+# Descending cumulative MONTHLY thresholds; base is tax on the lower bands.
+PAYE_BANDS_2026 = [
+    {"over": 50000, "rate": 0.35, "base": 13621.10},
+    {"over": 19668, "rate": 0.30, "base": 4521.50},
+    {"over": 3668, "rate": 0.25, "base": 521.50},
+    {"over": 768, "rate": 0.175, "base": 14.00},
+    {"over": 668, "rate": 0.10, "base": 4.00},
+    {"over": 588, "rate": 0.05, "base": 0},
+]
+
+
+def ensure_paye_2026_rates():
+    """Add the September PAYE version without rewriting saved rate history.
+
+    Carry other settings from the last version before the effective date.
+    Existing September and later versions remain operator-owned. The caller
+    owns the commit, just as it does for the other seed helpers.
+    """
+    existing = StatutoryRate.query.filter_by(
+        effective_from=PAYE_2026_EFFECTIVE_FROM
+    ).first()
+    if existing is not None:
+        return existing
+    previous = (
+        StatutoryRate.query.filter(
+            StatutoryRate.effective_from < PAYE_2026_EFFECTIVE_FROM
+        )
+        .order_by(StatutoryRate.effective_from.desc())
+        .first()
+    )
+    if previous is None:
+        return None
+
+    carry_fields = (
+        "ssf_employee_rate", "ssf_employer_rate", "overtime_rate_low",
+        "overtime_rate_high", "overtime_basic_threshold", "bonus_rate",
+        "bonus_annual_basic_threshold", "icu_member_rate",
+        "overtime_junior_monthly_threshold",
+        "ssnit_min_insurable", "ssnit_max_insurable", "ssnit_limits_year",
+        "ssnit_min_monthly_remittance",
+        "provident_fund_tax_limit", "overtime_qualifying_annual_limit",
+    )
+    rate = StatutoryRate(
+        effective_from=PAYE_2026_EFFECTIVE_FROM,
+        deductions_policy_version=1,
+        paye_bands_json=json.dumps(PAYE_BANDS_2026),
+        notes=(
+            "GRA Act 1178 PAYE schedule, effective 2026-09-01. "
+            "Source: https://gra.gov.gh/news/portfolio/"
+            "amendments-income-tax-act-2026-act-1178/ . "
+            f"Non-PAYE settings carried from {previous.effective_from.isoformat()}."
+        ),
+        **{name: getattr(previous, name) for name in carry_fields},
+    )
+    db.session.add(rate)
+    db.session.flush()
+    return rate
+
 
 def seed_statutory_rates():
-    if StatutoryRate.query.count():
-        return
-    db.session.add(
-        StatutoryRate(
-            effective_from=date(2026, 1, 1),
-            ssf_employee_rate=0.055,
-            ssf_employer_rate=0.13,
-            paye_bands_json=json.dumps(INITIAL_PAYE_BANDS),
-            # Concessionary flat rates: overtime <=50% of monthly basic at 5%,
-            # excess at 10%; bonus <=15% of annual basic at 5%, excess taxed
-            # at the marginal rate (verified against the ACS live formulas).
-            overtime_rate_low=0.05,
-            overtime_rate_high=0.10,
-            overtime_basic_threshold=0.50,
-            bonus_rate=0.05,
-            bonus_annual_basic_threshold=0.15,
-            # Union (ICU) dues: 3% of basic wage for seeded members (raw-hours
-            # engine), verified against all 137 members in the DZ Jan-2026 sheet.
-            icu_member_rate=0.03,
-            # GRA junior-staff gate for the overtime concession:
-            # GHS 18,000/year qualifying income = 1,500/month. Overtime
-            # earners above this get a visible warning (§7.1).
-            overtime_junior_monthly_threshold=1500.0,
-            notes=(
-                "Seeded from ACS workbook PAYE formula (January 2026) and the "
-                "SSNIT 5.5%/13% split in the client workbooks; 35% band "
-                "threshold corrected to GRA's 50,416.67 (the sheet used "
-                "50,000). Verify against the current GRA circular before "
-                "treating as permanent."
+    # Previous guard skipped all future statutory updates on existing installs:
+    # if StatutoryRate.query.count():
+    #     return
+    if not StatutoryRate.query.count():
+        db.session.add(
+            StatutoryRate(
+                effective_from=date(2026, 1, 1),
+                deductions_policy_version=0,
+                ssf_employee_rate=0.055,
+                ssf_employer_rate=0.13,
+                # Previous source: json.dumps(INITIAL_PAYE_BANDS).
+                paye_bands_json=json.dumps(HISTORICAL_PAYE_BANDS),
+                # Concessionary flat rates: overtime <=50% of monthly basic at 5%,
+                # excess at 10%; bonus <=15% of annual basic at 5%, excess taxed
+                # at the marginal rate (verified against the ACS live formulas).
+                overtime_rate_low=0.05,
+                overtime_rate_high=0.10,
+                overtime_basic_threshold=0.50,
+                bonus_rate=0.05,
+                bonus_annual_basic_threshold=0.15,
+                # Union (ICU) dues: 3% of basic wage for seeded members (raw-hours
+                # engine), verified against all 137 members in the DZ Jan-2026 sheet.
+                icu_member_rate=0.03,
+                # GRA junior-staff gate for the overtime concession:
+                # GHS 18,000/year qualifying income = 1,500/month. Overtime
+                # earners above this get a visible warning (§7.1).
+                overtime_junior_monthly_threshold=1500.0,
+                notes=(
+                    "Historical ACS workbook defaults (January 2026), retained "
+                    "for reproducing payroll before September 2026. "
+                    "Superseded for PAYE by the GRA Act 1178 schedule effective "
+                    "2026-09-01."
+                ),
             ),
         )
-    )
+        db.session.flush()
+    ensure_paye_2026_rates()
 
 
 def seed_employees():

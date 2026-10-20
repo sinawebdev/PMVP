@@ -241,7 +241,8 @@
    --muted, tracking opened slightly so a run of capitals stays countable. */
 .dt-code {
     color: var(--muted);
-    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
     font-size: 12.5px;
     letter-spacing: 0.02em;
 }

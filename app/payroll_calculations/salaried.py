@@ -1,16 +1,17 @@
 """Salaried (upload_type='standard') pay calculation.
 
-Total tax is THREE components summed, never one blended marginal figure —
-overtime and bonus get concessionary flat-rate treatment under Ghana PAYE:
+The effective-dated deduction policy separates cash deductions from allowable
+tax deductions and checks evidence for overtime concessions and tax relief:
 
   * Ordinary PAYE on taxable income (basic net of SSF, plus allowances, plus
-    any bonus excess over the concession cap, minus the pre-tax PF fund).
-  * Overtime concession: up to 50% of basic monthly salary at 5% flat,
-    the excess at 10% flat (rates live on StatutoryRate, not here).
+    any bonus excess, and overtime that does not qualify for a concession,
+    minus allowable PF and approved relief).
+  * Eligible overtime: up to 50% of basic monthly salary at 5% flat,
+    the excess at 10% flat, only when the selected policy verifies eligibility.
   * Bonus concession: up to 15% of ANNUAL basic salary at 5% flat; only the
     excess joins ordinary taxable income.
 
-Verified against two real ACS rows (January 2026):
+Historical policy version 0 reproduces two ACS rows (January 2026):
 
   AC605 (Sampson K. Kluvie) — no overtime (also verified against the
   "WAGE SHT" / "GRA PAYE" tabs for the derived fields):
@@ -24,11 +25,13 @@ Verified against two real ACS rows (January 2026):
     ordinary PAYE 206.96 + overtime tax 270.65 (41.88 @5% + 228.77 @10%)
     = total tax 477.61 -> net pay 4454.63
 
-"PF FUND / EMPLOYEE" (ACS RAW DATA column AA) is deducted before PAYE.
+"PF FUND / EMPLOYEE" is always a cash deduction; its allowable tax deduction
+is stored separately under policy version 1.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.money import money as _r2  # 2dp Decimal ROUND_HALF_UP, stored as float
+from app.payroll_calculations.deductions import deduction_adjustments
 
 
 @dataclass
@@ -57,8 +60,8 @@ class SalariedResult:
     bonus_tax: float            # concessionary flat-rate bonus tax
     bonus_excess: float         # bonus over the annual cap, joins taxable income
     paye: float                 # TOTAL tax = ordinary + overtime + bonus
-    pf_fund_employee: float     # pre-tax provident fund contribution
-    tax_relief_monthly: float   # GRA relief subtracted from ordinary taxable income
+    pf_fund_employee: float     # actual employee provident-fund cash deduction
+    tax_relief_monthly: float   # requested relief; applied amount is separate
     loan_deduction: float
     loan_advance: float         # cash advanced to the worker — adds to net pay
     welfare_deduction: float    # post-tax (ACS column AC)
@@ -66,6 +69,16 @@ class SalariedResult:
     other_deductions: float
     total_deductions: float
     net_pay: float
+    pf_fund_employer: float = 0.0
+    pensionable_salary: float = 0.0
+    ssnit_remittance: float = 0.0
+    tier_2_remittance: float = 0.0
+    pf_allowable_employee: float = 0.0
+    pf_employer_taxable: float = 0.0
+    tax_relief_applied: float = 0.0
+    overtime_ordinary_pay: float = 0.0
+    deductions_policy_version: int = 0
+    warnings: list = field(default_factory=list)
 
     def as_payroll_item_fields(self):
         """Kwargs for the PayrollItem fixed columns."""
@@ -92,6 +105,15 @@ class SalariedResult:
             "bonus_tax": self.bonus_tax,
             "bonus_excess": self.bonus_excess,
             "pf_fund_employee": self.pf_fund_employee,
+            "pf_fund_employer": self.pf_fund_employer,
+            "pensionable_salary": self.pensionable_salary,
+            "ssnit_remittance": self.ssnit_remittance,
+            "tier_2_remittance": self.tier_2_remittance,
+            "pf_allowable_employee": self.pf_allowable_employee,
+            "pf_employer_taxable": self.pf_employer_taxable,
+            "tax_relief_applied": self.tax_relief_applied,
+            "overtime_ordinary_pay": self.overtime_ordinary_pay,
+            "deductions_policy_version": self.deductions_policy_version,
             "loan_deduction": self.loan_deduction,
             "loan_advance": self.loan_advance,
             "welfare_deduction": self.welfare_deduction,
@@ -126,6 +148,7 @@ class SalariedCalculator:
         overtime_pay=0,
         pay_difference=0,
         pf_fund_employee=0,
+        pf_fund_employer=0,
         tax_relief_monthly=0,
         loan_deduction=0,
         loan_advance=0,
@@ -133,11 +156,12 @@ class SalariedCalculator:
         iou_deduction=0,
         other_deductions=0,
         bonus_concession_used_ytd=0,
+        calculation_context=None,
     ):
         """``pf_fund_employee`` ("PF FUND / EMPLOYEE", ACS RAW DATA column AA)
-        is deducted before PAYE is applied — it reduces both taxable income and
-        net pay. ``tax_relief_monthly`` (GRA marriage/dependents/disability/age
-        relief, standing employee data) reduces ordinary taxable income only —
+        is a cash deduction; only the documented allowable portion reduces
+        taxable income under the selected deduction policy. Approved, in-date
+        tax relief reduces ordinary taxable income only —
         it never touches the overtime/bonus concessionary tax and is not a
         cash deduction, so it does not appear in total_deductions.
         ``pay_difference`` (arrears) joins this period's taxable gross and is
@@ -164,6 +188,7 @@ class SalariedCalculator:
         overtime_pay = _r2(overtime_pay)
         pay_difference = _r2(pay_difference)
         pf_fund_employee = _r2(pf_fund_employee)
+        pf_fund_employer = _r2(pf_fund_employer)
         tax_relief_monthly = _r2(tax_relief_monthly)
         loan_deduction = _r2(loan_deduction)
         loan_advance = _r2(loan_advance)
@@ -171,30 +196,48 @@ class SalariedCalculator:
         iou_deduction = _r2(iou_deduction)
         other_deductions = _r2(other_deductions)
 
-        ssf_employee = _r2(basic_salary * self.rate.ssf_employee_rate)
-        ssf_employer = _r2(basic_salary * self.rate.ssf_employer_rate)
+        # Previous unconditional pension calculation, retained for reference:
+        # ssf_employee = _r2(basic_salary * self.rate.ssf_employee_rate)
+        # ssf_employer = _r2(basic_salary * self.rate.ssf_employer_rate)
+        adjustments = deduction_adjustments(
+            self.rate,
+            basic_salary,
+            overtime_pay=overtime_pay,
+            provident_fund=pf_fund_employee,
+            employer_provident_fund=pf_fund_employer,
+            requested_relief=tax_relief_monthly,
+            context=calculation_context,
+        )
+        ssf_employee = adjustments.ssnit
+        ssf_employer = adjustments.ssf_employer
         net_basic = _r2(basic_salary - ssf_employee)
         annual_salary = _r2(basic_salary * 12)
         annual_salary_15pct = _r2(
             annual_salary * self.rate.bonus_annual_basic_threshold
         )
 
-        # Concessionary components stay OUT of the marginal bands: overtime is
-        # taxed flat entirely; only the bonus excess over the annual-basic cap
-        # joins ordinary taxable income. Productivity and end-of-year bonuses
-        # share the single annual cap, applied once per tax year — whatever
+        # Qualified concessionary components stay outside the marginal bands;
+        # ordinary overtime and bonus excess enter ordinary taxable income.
+        # Productivity and end-of-year bonuses share one annual cap — whatever
         # concession earlier runs already used (bonus_concession_used_ytd)
         # narrows what's left for this run.
-        overtime_tax = self.rate.compute_overtime_tax(overtime_pay, basic_salary)
+        # Previous logic applied the overtime concession to every worker:
+        # overtime_tax = self.rate.compute_overtime_tax(overtime_pay, basic_salary)
+        overtime_tax = adjustments.overtime_tax
         bonus_tax, bonus_excess = self.rate.split_bonus(
             _r2(productivity_bonus + end_of_year_bonus),
             basic_salary,
             already_used=bonus_concession_used_ytd,
         )
 
-        taxable_income = _r2(
+        # Previous taxable base deducted the full uploaded PF and relief and
+        # excluded all overtime, without approval or eligibility evidence:
+        # taxable_income = _r2(net_basic - tax_relief_monthly
+        #     + transport_allowance + housing_allowance + medical_allowance
+        #     + meal_allowance + other_allowances + pay_difference + bonus_excess
+        #     - pf_fund_employee)
+        taxable_before_relief = _r2(
             net_basic
-            - tax_relief_monthly
             + transport_allowance
             + housing_allowance
             + medical_allowance
@@ -202,8 +245,17 @@ class SalariedCalculator:
             + other_allowances
             + pay_difference
             + bonus_excess
-            - pf_fund_employee
+            + adjustments.overtime_ordinary_pay
+            + adjustments.pf_employer_taxable
+            - adjustments.pf_allowable_employee
         )
+        policy_version = getattr(self.rate, "deductions_policy_version", 0) or 0
+        relief_applied = adjustments.tax_relief_applied
+        if policy_version >= 1:
+            relief_applied = min(relief_applied, max(0.0, taxable_before_relief))
+            taxable_income = _r2(max(0.0, taxable_before_relief - relief_applied))
+        else:
+            taxable_income = _r2(taxable_before_relief - relief_applied)
         ordinary_paye = self.rate.compute_paye(taxable_income)
         paye = _r2(ordinary_paye + overtime_tax + bonus_tax)
 
@@ -262,6 +314,16 @@ class SalariedCalculator:
             other_deductions=other_deductions,
             total_deductions=total_deductions,
             net_pay=net_pay,
+            pf_fund_employer=pf_fund_employer,
+            pensionable_salary=adjustments.pensionable_salary,
+            ssnit_remittance=adjustments.ssnit_remittance,
+            tier_2_remittance=adjustments.tier_2_remittance,
+            pf_allowable_employee=adjustments.pf_allowable_employee,
+            pf_employer_taxable=adjustments.pf_employer_taxable,
+            tax_relief_applied=relief_applied,
+            overtime_ordinary_pay=adjustments.overtime_ordinary_pay,
+            deductions_policy_version=policy_version,
+            warnings=list(adjustments.warnings),
         )
 
     def calculate_for_employee(self, employee, **period_inputs):

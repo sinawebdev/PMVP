@@ -5,6 +5,7 @@ are effective-dated: adding a new version never edits or deletes an old one,
 which is what keeps historical payroll runs reproducible.
 """
 import json
+import math
 from datetime import date, datetime
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
@@ -67,6 +68,28 @@ def new():
                 request.form.get("overtime_junior_monthly_threshold") or 1500
             )
             icu_member_rate = float(request.form.get("icu_member_rate") or 0.03)
+            # New versions carry explicit, sourced deduction limits. The old
+            # basic-pay warning remains only on historical policy versions.
+            deduction_config = {
+                name: float(request.form.get(name) or getattr(latest, name, default) or default)
+                for name, default in (
+                    ("ssnit_min_insurable", 587.80), ("ssnit_max_insurable", 69000),
+                    ("ssnit_min_monthly_remittance", 79.40),
+                    ("provident_fund_tax_limit", 0.165),
+                    ("overtime_qualifying_annual_limit", 18000),
+                )
+            }
+            deduction_config["ssnit_limits_year"] = int(
+                request.form.get("ssnit_limits_year") or getattr(latest, "ssnit_limits_year", None) or 2026
+            )
+            if any(not math.isfinite(value) or value <= 0 for value in deduction_config.values()):
+                raise ValueError("Deduction limits must be finite positive values.")
+            if deduction_config["ssnit_min_insurable"] > deduction_config["ssnit_max_insurable"]:
+                raise ValueError("The minimum pensionable earnings cannot exceed the maximum.")
+            if deduction_config["provident_fund_tax_limit"] > 1:
+                raise ValueError("Provident-fund tax limit must be a fraction no greater than 1.")
+            if not 2000 <= deduction_config["ssnit_limits_year"] <= 2100:
+                raise ValueError("Enter the year covered by the verified SSNIT notice.")
         except (KeyError, ValueError) as exc:
             flash(f"Invalid rate version: {exc}", "danger")
             return redirect(url_for("statutory.new"))
@@ -90,6 +113,8 @@ def new():
             bonus_annual_basic_threshold=bonus_annual_basic_threshold,
             overtime_junior_monthly_threshold=overtime_junior_monthly_threshold,
             icu_member_rate=icu_member_rate,
+            deductions_policy_version=1 if effective_from >= date(2026, 9, 1) else 0,
+            **deduction_config,
             notes=request.form.get("notes") or None,
             created_by=current_user.id,
         )
@@ -120,4 +145,10 @@ def new():
         ),
         "icu_member_rate": latest.icu_member_rate if latest else 0.03,
     }
+    for name, default in (
+        ("ssnit_min_insurable", 587.80), ("ssnit_max_insurable", 69000),
+        ("ssnit_min_monthly_remittance", 79.40), ("ssnit_limits_year", 2026),
+        ("provident_fund_tax_limit", 0.165), ("overtime_qualifying_annual_limit", 18000),
+    ):
+        prefill[name] = getattr(latest, name, default) if latest else default
     return render_template("statutory_rate_form.html", prefill=prefill)

@@ -9,6 +9,10 @@
   <meta name="csrf-token" content="{{ csrf_token() }}" />
   <title>{% block title %}{{ company.name }}{% endblock %} — Company Portal</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}" />
+    <link rel="preload" href="{{ url_for('static', filename='fonts/satoshi-400.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ url_for('static', filename='fonts/satoshi-700.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ url_for('static', filename='fonts/satoshi-500.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ url_for('static', filename='fonts/satoshi-900.woff2') }}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ url_for('static', filename='fonts.css') }}" />
   {# Shared tokens first, then the portal layer. No Bootstrap here on purpose —
      see the note at the top of portal.css. #}
@@ -27,6 +31,7 @@
      portal composes. #}
   <link rel="stylesheet" href="{{ url_for('static', filename='interface.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='client-interface.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='glass.css', v='20261019') }}" />
 </head>
 <body class="brand-shell-bg">
 {# The shared icon set (macros/ui.html) — inline SVG, no icon font, so the

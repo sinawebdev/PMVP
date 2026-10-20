@@ -17,9 +17,11 @@ adjustment columns — Prod/Bonus Allowance, Loan, Welfare, Other Deduction and
 from dataclasses import dataclass, field
 
 import openpyxl
+from sqlalchemy.orm import selectinload
 
 from app.models import Employee, WageRateProfile
-from app.payroll_calculations import bonus_concession_used_ytd_bulk
+from app.payroll_calculations import bonus_concession_used_ytd_bulk, period_start
+from app.payroll_calculations.deductions import context_for_employee
 from app.raw_engine.calc import apply_rates  # noqa: F401  (kept for parity/readability)
 from app.raw_engine.cleaning import coerce_hours, coerce_rate, normalise_element, normalise_emp_id
 from app.raw_engine.compute import compute_payslip
@@ -37,6 +39,9 @@ ADJUSTMENT_HEADERS = {
     "welfare": {"WELFARE", "WELFARE SUPPLIES"},
     "other_deduction": {"OTHER DEDUCTION", "OTHER DEDUCTIONS"},
     "pay_difference": {"PAY DIFFERENCE", "PAY DIFF", "PAY DIFFERECE"},  # sic tolerated
+    "provident_fund": {"PF EMPLOYEE", "PF FUND EMPLOYEE", "PROVIDENT FUND EMPLOYEE", "EMPLOYEE PROVIDENT FUND"},
+    "pf_fund_employer": {"PF EMPLOYER", "PF FUND EMPLOYER", "PROVIDENT FUND EMPLOYER", "EMPLOYER PROVIDENT FUND"},
+    "other_allowance": {"OTHER ALLOWANCE", "OTHER ALLOWANCES"},
 }
 # element display label / pay_code -> canonical pay_code
 _ELEMENT_BY_LABEL = {}
@@ -52,6 +57,9 @@ _ADJUSTMENT_COLUMNS = [
     ("welfare", "Welfare"),
     ("other_deduction", "Other Deduction"),
     ("pay_difference", "Pay Difference"),
+    ("provident_fund", "Employee Provident Fund"),
+    ("pf_fund_employer", "Employer Provident Fund"),
+    ("other_allowance", "Other Allowance"),
 ]
 
 
@@ -83,7 +91,9 @@ def write_thin_workbook(path, records, element_codes=None):
     for rec in records:
         row = [rec.staff_id, getattr(rec, "name", "")]
         row += [rec.hours.get(code, 0) for code in codes]
-        row += [getattr(rec, role) for role, _label in _ADJUSTMENT_COLUMNS]
+        # Previous writer required every adjustment attribute on old records:
+        # row += [getattr(rec, role) for role, _label in _ADJUSTMENT_COLUMNS]
+        row += [getattr(rec, role, 0) for role, _label in _ADJUSTMENT_COLUMNS]
         ws.append(row)
     wb.save(path)
     return path
@@ -99,6 +109,9 @@ class ThinEmployeeInput:
     welfare: float = 0.0
     other_deduction: float = 0.0
     pay_difference: float = 0.0
+    provident_fund: float = 0.0
+    pf_fund_employer: float = 0.0
+    other_allowance: float = 0.0
 
 
 @dataclass
@@ -209,9 +222,10 @@ def join_and_compute(thin_inputs, run, statutory_rate):
         normalise_emp_id(e.staff_id): e
         for e in Employee.query.filter_by(
             client_company_id=run.client_company_id
-        ).all()
+        ).options(selectinload(Employee.tax_relief_approvals)).all()
     }
     profiles_by_emp, client_defaults = _load_profiles(run.client_company_id)
+    on_date = period_start(run.month, run.year)
 
     used_ytd = bonus_concession_used_ytd_bulk(
         [e.id for e in roster.values()], run.year, exclude_run_id=run.id
@@ -258,6 +272,10 @@ def join_and_compute(thin_inputs, run, statutory_rate):
             welfare=rec.welfare,
             other_deductions=rec.other_deduction,
             bonus_concession_used_ytd=used_ytd.get(emp.id, 0.0),
+            provident_fund=getattr(rec, "provident_fund", 0.0),
+            pf_fund_employer=getattr(rec, "pf_fund_employer", 0.0),
+            other_allowance=getattr(rec, "other_allowance", 0.0),
+            context=context_for_employee(emp, on_date),
         )
         if inputs.missing_rate_codes:
             result.missing_rate_codes[rec.staff_id] = list(inputs.missing_rate_codes)

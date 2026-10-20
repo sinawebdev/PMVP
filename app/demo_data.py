@@ -405,8 +405,12 @@ def build_payroll_history(company, employees, periods, operator, approver, statu
         db.session.flush()
 
         for employee in employees:
+            from app.payroll_calculations.deductions import context_for_employee
+
             result = calculator.calculate_for_employee(
-                employee, **_period_inputs(employee, index)
+                employee,
+                calculation_context=context_for_employee(employee, date(year, list(month_name).index(month), 1)),
+                **_period_inputs(employee, index)
             )
             item = PayrollItem(
                 payroll_run_id=run.id,

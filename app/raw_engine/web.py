@@ -38,6 +38,7 @@ from app.models import (
     RawUploadArchive,
 )
 from app.payroll_calculations import statutory_rate_for_run
+from app.payroll_calculations.deductions import DeductionPolicyError
 from app.raw_engine.cleaning import normalise_emp_id
 from app.raw_engine.detection import (
     STANDARD_PAYROLL,
@@ -295,7 +296,9 @@ def confirm():
             context = parse_rich_workbook(bin_path, client_id, source_filename=meta.get("filename"))
             persist_seed(run=run, context=context, source_bytes=content,
                          source_filename=meta.get("filename"), commit=False)
-            payslips = compute_seed_month(context, rate)
+            # Previous call lacked the period and stored approval metadata:
+            # payslips = compute_seed_month(context, rate)
+            payslips = compute_seed_month(context, rate, payroll_run=run)
             write_payroll_items(run, payslips, commit=False)
             summary = {"seeded_employees": len(context.employees),
                        "computed_workers": len(payslips)}
@@ -309,6 +312,9 @@ def confirm():
 
         db.session.commit()
         run_id = run.id
+    except DeductionPolicyError as exc:
+        db.session.rollback()
+        return jsonify({"error": f"Deduction review required: {exc}. Nothing was written."}), 400
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Raw engine confirm failed (token %s)", token)

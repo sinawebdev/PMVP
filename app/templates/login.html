@@ -5,7 +5,7 @@
 {% from 'macros/brand.html' import logo with context %}
 <main class="auth-page">
   <aside class="auth-story" aria-label="About {{ app_brand_name }}">
-    <a class="auth-brand" href="{{ url_for('main.index') }}">{{ logo(dark=true) }}</a>
+    <a class="auth-brand" href="{{ url_for('main.index') }}">{{ logo() }}</a>
     <div class="auth-story-copy">
       <p class="auth-eyebrow">A little more clarity. Every payday.</p>
       <h2>Good payroll.<br>A clear head.</h2>

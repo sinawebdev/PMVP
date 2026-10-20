@@ -234,3 +234,15 @@
     .exec .area-actions--compact .qa,
     .exec .figures { border-color: var(--ink-soft); }
 }
+
+/* Ruled sections keep the dashboard's existing reading order and data groups. */
+.exec .xpanel{background:transparent;border:0;border-top:1px solid var(--line-strong);border-radius:0;padding:24px 0;box-shadow:none}
+.exec .area-health{border-top:2px solid var(--brand);box-shadow:none}
+.exec .kpi-band .kpi{border-radius:0;box-shadow:none;background:transparent}
+.exec .kpi-band .kpi:hover{box-shadow:none;transform:none}
+.exec .area-actions--compact .qa-grid{display:flex;flex-direction:row;flex-wrap:wrap;gap:0}
+.exec .qa{flex:1 1 180px;background:transparent;border:0;border-inline-end:1px solid var(--line);border-radius:0;padding:12px 15px;box-shadow:none}
+.exec .qa:last-child{border-inline-end:0}
+.exec .qa:hover{background:var(--surface-alt);box-shadow:none;transform:none}
+.exec .qa:focus-visible{outline-offset:-3px}
+@media(max-width:640px){.exec .qa{flex-basis:100%;border-inline-end:0;border-bottom:1px solid var(--line);padding:14px 0}.exec .qa:last-child{border-bottom:0}}

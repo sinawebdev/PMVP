@@ -66,7 +66,9 @@ def generate_monthly_template(client_company_id, export_folder, month, year):
     for emp in employees:
         row = [emp.staff_id, emp.full_name]
         row += [0] * len(codes)                 # hours, zero-filled
-        row += [0, 0, 0, 0, 0]                  # adjustments, zero-filled
+        # Previous template assumed exactly five adjustment columns:
+        # row += [0, 0, 0, 0, 0]
+        row += [0] * (len(thin_header(codes)) - 2 - len(codes))
         row += ["Member" if emp.icu_member else ""]  # scoped to members only
         row += [                                 # reference (read-only) fields
             emp.bank_name or "",

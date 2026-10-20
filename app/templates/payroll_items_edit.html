@@ -55,8 +55,8 @@
             <thead>
                 <tr>
                     <th>Staff ID</th><th>Name</th><th>Bank Branch</th>
-                    <th>Basic</th><th>Transport</th><th>Medical</th><th>Bonus</th><th>Overtime</th>
-                    <th>PF Fund</th><th>Loan</th><th>Other Ded.</th>
+                    {% set field_labels = {'basic_salary':'Basic', 'transport_allowance':'Transport', 'medical_allowance':'Medical', 'meal_allowance':'Meals', 'productivity_bonus':'Bonus', 'end_of_year_bonus':'Year-end bonus', 'overtime_pay':'Overtime', 'pay_difference':'Pay difference', 'pf_fund_employee':'Employee PF', 'pf_fund_employer':'Employer PF (company contribution)', 'loan_deduction':'Loan deduction', 'loan_advance':'Loan advance', 'welfare_deduction':'Welfare', 'iou_deduction':'IOU', 'other_deductions':'Other deductions'} %}
+                    {% for field in editable_fields %}<th>{{ field_labels.get(field, field|replace('_',' ')|title) }}</th>{% endfor %}
                     <th class="text-muted">Gross*</th><th class="text-muted">PAYE*</th>
                     <th class="text-muted">SSNIT*</th><th class="text-muted">Net*</th>
                 </tr>

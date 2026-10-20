@@ -29,7 +29,7 @@
   document.documentElement.classList.add('mark-motion');
 
   var WIDE = '(min-width: 921px)';  // landing.html's own breakpoint
-  var START_MS = 6000;              // a mark that has not started by then never will
+  var START_MS = 15000;             // allow cold software-GPU startup; the still stays visible
   var STALL_MS = 3000;              // nor one stuck mid-build for this long
 
   var VERT = 'attribute vec2 p; varying vec2 uv;' +

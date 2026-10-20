@@ -255,7 +255,11 @@ _ADJUSTMENT_HEADER_MATCHERS = {
     "bonus": lambda h: h.startswith("PROD"),          # PRODUCTIVITY ALLOWANCE / PROD'TY ALLOW
     "other_allowance": lambda h: h == "OTHERALLOWANCE",
     "pay_difference": lambda h: h == "PAYDIFFERENCE",
-    "provident_fund": lambda h: h.startswith("PROVIDENT"),
+    # Previous startswith("PROVIDENT") could mistake an employer column for EE cash.
+    "provident_fund": lambda h: h.startswith("PROVIDENT") and "EMPLOYER" not in h,
+    "pf_fund_employer": lambda h: h in {
+        "PROVIDENTFUNDEMPLOYER", "EMPLOYERPROVIDENTFUND", "PFFUNDEMPLOYER",
+    },
     "loan": lambda h: h.startswith("LOAN"),           # LOAN ADVANCE / LOAN ADV
     "donations": lambda h: h.startswith("DONATION"),
     "welfare": lambda h: h == "WELFARE",

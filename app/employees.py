@@ -15,6 +15,8 @@ import io
 import json
 import os
 import uuid
+from datetime import date
+from math import isfinite
 
 import pandas as pd
 from flask import (
@@ -35,7 +37,7 @@ from app.audit import record_audit
 from app.auth import role_required
 from app.htmx_utils import wants_htmx, with_toast
 from app.paging import paginate
-from app.models import ClientCompany, Employee, PayrollItem, WageRateProfile
+from app.models import ClientCompany, Employee, EmployeeTaxReliefApproval, PayrollItem, WageRateProfile
 from app.raw_import import normalise_emp_id
 from app.payroll import save_temporary_upload
 from app.spreadsheet_uploads import (
@@ -124,6 +126,112 @@ def _parse_tax_relief(raw, fallback=0):
     return value if value >= 0 else (fallback or 0)
 
 
+def parse_deduction_metadata(form, employee=None):
+    """Validate evidence supplied by the employer; an amount never grants approval."""
+    errors = {}
+    values = {}
+
+    def raw(name, default=None):
+        return form.get(name) if name in form else getattr(employee, name, default)
+
+    junior = raw("overtime_is_junior")
+    if junior in (None, "", "unknown"):
+        values["overtime_is_junior"] = None
+    elif junior in (True, "true", "yes", "1"):
+        values["overtime_is_junior"] = True
+    elif junior in (False, "false", "no", "0"):
+        values["overtime_is_junior"] = False
+    else:
+        errors["overtime_is_junior"] = "Choose unknown, junior staff, or not junior staff."
+
+    def amount(name, value, default=0):
+        if value in (None, ""):
+            return default
+        try:
+            number = float(value)
+            if not isfinite(number) or number < 0:
+                raise ValueError
+            return number
+        except (TypeError, ValueError):
+            errors[name] = "Enter a finite amount of zero or more."
+            return default
+
+    values["overtime_qualifying_annual_income"] = amount(
+        "overtime_qualifying_annual_income", raw("overtime_qualifying_annual_income"), None
+    )
+    year = raw("overtime_income_year")
+    try:
+        values["overtime_income_year"] = int(year) if year not in (None, "") else None
+        if values["overtime_income_year"] is not None and not 1900 <= values["overtime_income_year"] <= 9999:
+            raise ValueError
+    except (TypeError, ValueError):
+        errors["overtime_income_year"] = "Enter a valid four-digit assessment year."
+    if (values.get("overtime_income_year") is None) != (values["overtime_qualifying_annual_income"] is None):
+        errors["overtime_income_year"] = "Supply both qualifying annual income and its assessment year."
+
+    approved = raw("pf_scheme_approved", False)
+    if approved not in (True, False, None, "", "true", "false", "yes", "no", "1", "0"):
+        errors["pf_scheme_approved"] = "Choose whether the provident fund scheme is approved."
+    values["pf_scheme_approved"] = approved in (True, "true", "yes", "1")
+    values["pf_scheme_reference"] = str(raw("pf_scheme_reference") or "").strip() or None
+    if values["pf_scheme_reference"] and len(values["pf_scheme_reference"]) > 160:
+        errors["pf_scheme_reference"] = "Keep the scheme reference within 160 characters."
+    if values["pf_scheme_approved"] and not values["pf_scheme_reference"]:
+        errors["pf_scheme_reference"] = "Enter the approved scheme's reference."
+
+    # Previous code accepted an unverified number alone:
+    # employee.tax_relief_monthly = _parse_tax_relief(form.get("tax_relief"))
+    relief = form.get("tax_relief") if "tax_relief" in form else raw("tax_relief_monthly", 0)
+    values["tax_relief_monthly"] = amount("tax_relief", relief)
+    for name in ("tax_relief_approval_ref", "tax_relief_category"):
+        values[name] = str(raw(name) or "").strip() or None
+        limit = 160 if name == "tax_relief_approval_ref" else 80
+        if values[name] and len(values[name]) > limit:
+            errors[name] = f"Keep this value within {limit} characters."
+    for name in ("tax_relief_valid_from", "tax_relief_valid_to"):
+        value = raw(name)
+        try:
+            values[name] = value if isinstance(value, date) else (date.fromisoformat(str(value)) if value else None)
+        except (TypeError, ValueError):
+            values[name] = None
+            errors[name] = "Enter a valid date."
+    if values["tax_relief_valid_from"] and values["tax_relief_valid_to"] and values["tax_relief_valid_to"] < values["tax_relief_valid_from"]:
+        errors["tax_relief_valid_to"] = "The end date must be on or after the start date."
+    relief_evidence_fields = (
+        "tax_relief_approval_ref", "tax_relief_category",
+        "tax_relief_valid_from", "tax_relief_valid_to",
+    )
+    # A migrated amount alone was never an approved award. Clearing that
+    # request must not require inventing a GRA withdrawal document.
+    existing_award = bool(employee and (
+        employee.tax_relief_approvals
+        or all(getattr(employee, name, None) for name in relief_evidence_fields)
+    ))
+    revoking = bool(existing_award and employee.tax_relief_monthly and "tax_relief" in form and values["tax_relief_monthly"] == 0)
+    if values["tax_relief_monthly"] > 0 or revoking:
+        for name in relief_evidence_fields:
+            if not values[name]:
+                errors[name] = "A relief approval or withdrawal needs its GRA reference, category and validity dates."
+    return values, errors
+
+
+def save_deduction_metadata(employee, values):
+    """Keep each changed relief approval so past payroll periods remain reproducible."""
+    for name, value in values.items():
+        setattr(employee, name, value)
+    approval = dict(
+        monthly_amount=values["tax_relief_monthly"],
+        reference=values["tax_relief_approval_ref"],
+        category=values["tax_relief_category"],
+        valid_from=values["tax_relief_valid_from"],
+        valid_to=values["tax_relief_valid_to"],
+    )
+    if approval["reference"] and approval["category"] and approval["valid_from"] and approval["valid_to"]:
+        latest = employee.tax_relief_approvals[-1] if employee.tax_relief_approvals else None
+        if latest is None or any(getattr(latest, name) != value for name, value in approval.items()):
+            employee.tax_relief_approvals.append(EmployeeTaxReliefApproval(**approval))
+
+
 @employees_bp.route("/clients/<int:client_id>/add", methods=["GET", "POST"])
 @role_required(*REP_ROLES)
 def add(client_id):
@@ -136,6 +244,8 @@ def add(client_id):
         staff_id = normalise_emp_id(request.form.get("staff_id", ""))
         full_name = request.form.get("full_name", "").strip()
         errors = {}
+        deduction_values, deduction_errors = parse_deduction_metadata(request.form)
+        errors.update(deduction_errors)
         if not staff_id:
             errors["staff_id"] = "Employee ID is required."
         if not full_name:
@@ -175,10 +285,11 @@ def add(client_id):
             bank_name=request.form.get("bank_name", "").strip() or None,
             bank_branch=request.form.get("bank_branch", "").strip() or None,
             bank_account_number=request.form.get("bank_account", "").strip() or None,
-            tax_relief_monthly=_parse_tax_relief(request.form.get("tax_relief")),
+            # Previous amount-only assignment is retained in parse_deduction_metadata.
             status=ACTIVE,
         )
         db.session.add(emp)
+        save_deduction_metadata(emp, deduction_values)
         db.session.commit()
         flash(f"{emp.full_name} added successfully.", "success")
         return redirect(url_for("employees.roster", client_id=client_id))
@@ -245,6 +356,14 @@ def edit(client_id, emp_id):
     emp = Employee.query.filter_by(id=emp_id, client_company_id=client_id).first_or_404()
 
     if request.method == "POST":
+        deduction_values, deduction_errors = parse_deduction_metadata(request.form, emp)
+        if deduction_errors:
+            for error in dict.fromkeys(deduction_errors.values()):
+                flash(error, "warning")
+            return render_template(
+                "employees/edit.html", client=client, emp=emp,
+                submitted=request.form, pay_type_guard=None,
+            )
         # Guard the raw-engine pay_type change FIRST, before touching the DB. A
         # salaried→hourly flip for a worker with no hourly basic rate silently
         # zeroes their basic on the next compute (George: 1800 → 0). Require an
@@ -274,9 +393,8 @@ def edit(client_id, emp_id):
         emp.bank_name = request.form.get("bank_name", "").strip() or None
         emp.bank_branch = request.form.get("bank_branch", "").strip() or None
         emp.bank_account_number = request.form.get("bank_account", "").strip() or None
-        emp.tax_relief_monthly = _parse_tax_relief(
-            request.form.get("tax_relief"), emp.tax_relief_monthly
-        )
+        # Previous: emp.tax_relief_monthly = _parse_tax_relief(request.form.get("tax_relief"), emp.tax_relief_monthly)
+        save_deduction_metadata(emp, deduction_values)
         # status comes through as "Active"/"Inactive"; reject anything else.
         new_status = request.form.get("status", emp.status)
         emp.status = new_status if new_status in (ACTIVE, INACTIVE) else emp.status

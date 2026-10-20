@@ -54,13 +54,24 @@
         <div class="col-md-4">
             <label class="form-label" for="overtime_junior_monthly_threshold">OT Junior-Staff Threshold (GHS/month)</label>
             <input class="form-control" type="number" step="0.01" min="0" id="overtime_junior_monthly_threshold" name="overtime_junior_monthly_threshold" value="{{ prefill.overtime_junior_monthly_threshold }}">
-            <div class="form-text">GRA gate for the OT concession (18,000/yr &divide; 12 = 1,500). Overtime earners with basic above this get a compliance warning.</div>
+            <div class="form-text">Historical warning threshold. Current calculations require confirmed junior status and qualifying annual income for the payroll year.</div>
         </div>
         <div class="col-md-4">
             <label class="form-label" for="icu_member_rate">ICU Union Dues (of basic)</label>
             <input class="form-control" type="number" step="0.001" min="0" max="1" id="icu_member_rate" name="icu_member_rate" value="{{ prefill.icu_member_rate }}">
             <div class="form-text">e.g. 0.03 = 3% of basic wage, deducted post-tax for seeded raw-hours union members only.</div>
         </div>
+        <div class="col-12"><h3>Verified deduction limits</h3><p class="form-text">Use the amounts and year from the official notice. Pension cases outside the verified range need a confirmed contribution allocation.</p></div>
+        {% for name, label, step in [
+            ('ssnit_limits_year', 'SSNIT notice year', '1'),
+            ('ssnit_min_insurable', 'Minimum monthly insurable earnings (GHS)', '0.01'),
+            ('ssnit_max_insurable', 'Maximum monthly insurable earnings (GHS)', '0.01'),
+            ('ssnit_min_monthly_remittance', 'Minimum monthly payment to SSNIT (GHS)', '0.01'),
+            ('provident_fund_tax_limit', 'Combined provident-fund tax limit (fraction of basic)', '0.001'),
+            ('overtime_qualifying_annual_limit', 'Overtime qualifying annual-income limit (GHS)', '0.01')
+        ] %}
+        <div class="col-md-4"><label class="form-label" for="{{ name }}">{{ label }}</label><input class="form-control" type="number" min="0" step="{{ step }}" id="{{ name }}" name="{{ name }}" value="{{ prefill[name] }}" required></div>
+        {% endfor %}
         <div class="col-12">
             <label class="form-label" for="paye_bands_json">PAYE Bands (JSON)</label>
             <textarea class="form-control font-monospace" rows="12" id="paye_bands_json" name="paye_bands_json" required>{{ prefill.paye_bands_json }}</textarea>

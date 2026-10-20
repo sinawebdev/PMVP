@@ -167,7 +167,7 @@
    operator app draws. State is spelled out for screen readers rather than
    implied by the fill. #}
 {% macro stepper(steps) %}
-<ol class="steps" aria-label="Payroll lifecycle">
+<ol class="steps" aria-label="Payroll lifecycle" tabindex="0">
   {% for step in steps %}{% if step.state != 'skipped' %}
   <li class="step step--{{ step.state }}">
     <span class="step-dot" aria-hidden="true"></span>

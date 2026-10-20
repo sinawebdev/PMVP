@@ -63,6 +63,7 @@
             .download { display: none; }
         }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='worker-glass.css', v='20261019') }}">
 </head>
 <body class="brand-shell-bg">
 <main class="payslip-wrap">
@@ -95,7 +96,11 @@
                 ("PAYE (income tax)", item.paye),
                 ("SSNIT", item.ssnit),
                 ("Tier 2 pension", item.tier_2_pension),
+                ("Provident fund (employee)", item.pf_fund_employee),
+                ("Union dues", item.icu_dues),
                 ("Loan", item.loan_deduction),
+                ("Welfare", item.welfare_deduction),
+                ("I.O.U", item.iou_deduction),
                 ("Other deductions", item.other_deductions),
             ] %}
                 {% if amount %}<div class="line sub"><span>{{ label }}</span><span>-{{ amount|cedis }}</span></div>{% endif %}

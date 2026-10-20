@@ -179,6 +179,17 @@ class Employee(_ContactCompleteness, db.Model):
     # category is legally set — enter it from the current GRA circular; the
     # code deliberately hardcodes no category figures.
     tax_relief_monthly = db.Column(db.Float, default=0)
+    # Eligibility is explicit: missing data never proves entitlement to the
+    # junior-staff overtime concession or to provident-fund tax relief.
+    overtime_is_junior = db.Column(db.Boolean, nullable=True)
+    overtime_qualifying_annual_income = db.Column(db.Float, nullable=True)
+    overtime_income_year = db.Column(db.Integer, nullable=True)
+    pf_scheme_approved = db.Column(db.Boolean, nullable=False, default=False)
+    pf_scheme_reference = db.Column(db.String(160))
+    tax_relief_approval_ref = db.Column(db.String(160))
+    tax_relief_category = db.Column(db.String(80))
+    tax_relief_valid_from = db.Column(db.Date)
+    tax_relief_valid_to = db.Column(db.Date)
     created_at = db.Column(db.DateTime, default=utc_now)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
@@ -194,11 +205,32 @@ class Employee(_ContactCompleteness, db.Model):
             self.staff_id = re.sub(r"\s+", "", str(self.staff_id).strip().upper())
 
     client_company = db.relationship("ClientCompany", back_populates="employees")
+    tax_relief_approvals = db.relationship(
+        "EmployeeTaxReliefApproval", back_populates="employee",
+        cascade="all, delete-orphan", order_by="EmployeeTaxReliefApproval.id",
+    )
     deployments = db.relationship(
         "EmployeeDeployment",
         back_populates="employee",
         cascade="all, delete-orphan",
     )
+
+
+class EmployeeTaxReliefApproval(db.Model):
+    """Dated GRA awards; preserve earlier approvals when roster data changes."""
+
+    __tablename__ = "employee_tax_relief_approval"
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(
+        db.Integer, db.ForeignKey("employee.id"), nullable=False, index=True
+    )
+    monthly_amount = db.Column(db.Float, nullable=False)
+    reference = db.Column(db.String(160), nullable=False)
+    category = db.Column(db.String(80), nullable=False)
+    valid_from = db.Column(db.Date, nullable=False)
+    valid_to = db.Column(db.Date, nullable=False)
+    recorded_at = db.Column(db.DateTime, default=utc_now)
+    employee = db.relationship("Employee", back_populates="tax_relief_approvals")
 
 
 class EmployeeDeployment(db.Model):
@@ -383,6 +415,18 @@ class PayrollItem(db.Model):
     # "PF FUND / EMPLOYEE" (ACS RAW DATA column AA): a pre-tax deduction —
     # it reduces taxable income before PAYE as well as net pay.
     pf_fund_employee = db.Column(db.Float, default=0)
+    # Actual employer PF is a company cost. Tax-allowable employee PF and
+    # approved relief are separate calculation snapshots, never inferred later
+    # from a mutable employee record when exporting a completed payroll.
+    pf_fund_employer = db.Column(db.Float, default=0)
+    pf_allowable_employee = db.Column(db.Float, default=0)
+    pf_employer_taxable = db.Column(db.Float, default=0)
+    tax_relief_applied = db.Column(db.Float, default=0)
+    overtime_ordinary_pay = db.Column(db.Float, default=0)
+    pensionable_salary = db.Column(db.Float, default=0)
+    ssnit_remittance = db.Column(db.Float, default=0)
+    tier_2_remittance = db.Column(db.Float, default=0)
+    deductions_policy_version = db.Column(db.Integer, nullable=False, default=0)
     loan_deduction = db.Column(db.Float, default=0)
     # Cash advanced to the worker with this payroll — opposite cash direction
     # to loan_deduction (adds to net pay, not taxable income).
@@ -850,6 +894,16 @@ class StatutoryRate(db.Model):
     ssf_employee_rate = db.Column(db.Float, nullable=False)  # e.g. 0.055
     ssf_employer_rate = db.Column(db.Float, nullable=False)  # e.g. 0.13
     paye_bands_json = db.Column(db.Text, nullable=False)
+    # Version 0 reproduces the workbook-era deductions. Version 1 applies
+    # documented eligibility checks; seeding/migration activates it alongside
+    # the September PAYE version, without editing completed payroll amounts.
+    deductions_policy_version = db.Column(db.Integer, nullable=False, default=1, server_default="0")
+    ssnit_min_insurable = db.Column(db.Float, nullable=False, default=587.80, server_default="587.80")
+    ssnit_max_insurable = db.Column(db.Float, nullable=False, default=69000.0, server_default="69000")
+    ssnit_limits_year = db.Column(db.Integer, nullable=False, default=2026, server_default="2026")
+    ssnit_min_monthly_remittance = db.Column(db.Float, nullable=False, default=79.40, server_default="79.40")
+    provident_fund_tax_limit = db.Column(db.Float, nullable=False, default=0.165, server_default="0.165")
+    overtime_qualifying_annual_limit = db.Column(db.Float, nullable=False, default=18000.0, server_default="18000")
     # Concessionary flat-rate treatment under Ghana PAYE — overtime and bonus
     # are taxed separately from the marginal bands, not blended into them.
     overtime_rate_low = db.Column(db.Float, nullable=False, default=0.05)

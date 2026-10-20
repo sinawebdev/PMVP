@@ -32,6 +32,7 @@ from app.client import _company, client_bp
 from app.events import platform_admins, record_event
 from app.models import Employee, PayrollRun
 from app.payroll_calculations import statutory_rate_for_run
+from app.payroll_calculations.deductions import DeductionPolicyError
 from app.payroll_status import AUTO_ACCEPTED, HELD, SUBMITTED
 from app.raw_engine.cleaning import normalise_emp_id
 from app.raw_engine.detection import (
@@ -287,7 +288,8 @@ def raw_confirm():
             )
             persist_seed(run=run, context=context, source_bytes=content,
                          source_filename=meta.get("filename"), commit=False)
-            payslips = compute_seed_month(context, rate)
+            # Previous: compute_seed_month(context, rate) lacked period/roster evidence.
+            payslips = compute_seed_month(context, rate, payroll_run=run)
             write_payroll_items(run, payslips, commit=False)
             summary = {"seeded_employees": len(context.employees),
                        "computed_workers": len(payslips)}
@@ -323,6 +325,9 @@ def raw_confirm():
         db.session.commit()
         run_id = run.id
         held = verdict.held
+    except DeductionPolicyError as exc:
+        db.session.rollback()
+        return jsonify({"error": f"Deduction review required: {exc}. Nothing was written."}), 400
     except Exception:  # noqa: BLE001 - any failure must write nothing
         db.session.rollback()
         current_app.logger.exception("Client raw confirm failed (token %s)", token)

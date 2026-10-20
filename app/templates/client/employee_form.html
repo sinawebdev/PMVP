@@ -36,6 +36,65 @@
         </select>
       </div>
     </div>
+    <div class="formgrid">
+      <div><label for="tax_relief">GRA tax relief (monthly, GH¢)</label><input type="number" min="0" step="0.01" id="tax_relief" name="tax_relief" value="{{ form.get('tax_relief', e.tax_relief_monthly if e else 0) }}"></div>
+
+        {% set policy_employee = emp if emp is defined else (employee if employee is defined else none) %}
+        {% set policy_form = submitted if submitted is defined and submitted else (form if form is defined else {}) %}
+        {% macro policy_value(name) -%}
+        {%- set value = policy_form.get(name, policy_employee[name] if policy_employee else '') -%}
+        {{- value if value is not none else '' -}}
+        {%- endmacro %}
+        <div class="col-12"><hr><strong>Tax approvals and overtime eligibility</strong>
+            <p class="form-text">Use the employee's approval documents. An entered contribution or relief amount does not establish eligibility.</p>
+        </div>
+        {% set junior = policy_form.get('overtime_is_junior') if 'overtime_is_junior' in policy_form else (policy_employee.overtime_is_junior if policy_employee else none) %}
+        <div class="col-md-4">
+            <label class="form-label" for="overtime_is_junior">Junior staff for overtime tax</label>
+            <select class="form-select" id="overtime_is_junior" name="overtime_is_junior">
+                <option value="" {% if junior is none or junior == '' %}selected{% endif %}>Not confirmed</option>
+                <option value="true" {% if junior is sameas true or junior == 'true' %}selected{% endif %}>Confirmed junior staff</option>
+                <option value="false" {% if junior is sameas false or junior == 'false' %}selected{% endif %}>Not junior staff</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="overtime_qualifying_annual_income">Qualifying annual employment income (GH¢)</label>
+            <input class="form-control" type="number" min="0" step="0.01" id="overtime_qualifying_annual_income" name="overtime_qualifying_annual_income" value="{{ policy_value('overtime_qualifying_annual_income') }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="overtime_income_year">Income assessment year</label>
+            <input class="form-control" type="number" min="1900" max="9999" step="1" id="overtime_income_year" name="overtime_income_year" value="{{ policy_value('overtime_income_year') }}">
+        </div>
+        {% set pf_approved = policy_form.get('pf_scheme_approved') if 'pf_scheme_approved' in policy_form else (policy_employee.pf_scheme_approved if policy_employee else false) %}
+        <div class="col-md-4">
+            <label class="form-label" for="pf_scheme_approved">Approved provident fund scheme</label>
+            <select class="form-select" id="pf_scheme_approved" name="pf_scheme_approved">
+                <option value="false" {% if not pf_approved or pf_approved == 'false' %}selected{% endif %}>Not confirmed</option>
+                <option value="true" {% if pf_approved is sameas true or pf_approved == 'true' %}selected{% endif %}>Approval confirmed</option>
+            </select>
+        </div>
+        <div class="col-md-8">
+            <label class="form-label" for="pf_scheme_reference">Provident fund approval reference</label>
+            <input class="form-control" maxlength="160" id="pf_scheme_reference" name="pf_scheme_reference" value="{{ policy_value('pf_scheme_reference') }}">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="tax_relief_approval_ref">GRA relief approval reference</label>
+            <input class="form-control" maxlength="160" id="tax_relief_approval_ref" name="tax_relief_approval_ref" value="{{ policy_value('tax_relief_approval_ref') }}">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="tax_relief_category">Approved relief category</label>
+            <input class="form-control" maxlength="80" id="tax_relief_category" name="tax_relief_category" value="{{ policy_value('tax_relief_category') }}">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="tax_relief_valid_from">Relief valid from</label>
+            <input class="form-control" type="date" id="tax_relief_valid_from" name="tax_relief_valid_from" value="{{ policy_value('tax_relief_valid_from') }}">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="tax_relief_valid_to">Relief valid until</label>
+            <input class="form-control" type="date" id="tax_relief_valid_to" name="tax_relief_valid_to" value="{{ policy_value('tax_relief_valid_to') }}">
+            <p class="form-text">To record a withdrawal, enter zero relief and the reference, category and dates covered by that withdrawal. Earlier approvals are retained.</p>
+        </div>
+    </div>
     <div class="actions form-foot">
       <button class="btn primary" type="submit">{{ 'Save changes' if employee else 'Add employee' }}</button>
       <a class="btn" href="{{ url_for('client.employees') }}">Cancel</a>

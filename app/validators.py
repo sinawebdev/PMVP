@@ -1,3 +1,5 @@
+import math
+
 from sqlalchemy import or_
 
 from app.excel_utils import looks_like_header_label, normalize_label, normalize_worker
@@ -29,6 +31,15 @@ def collect_blocking_errors(mapped_rows, detected_company_name=""):
     upload (the wrong header row / data-shifted columns of production run 9),
     not a data-quality nit."""
     errors = []
+    for row in mapped_rows:
+        try:
+            employer_pf = float(row.get("pf_fund_employer") or 0)
+            valid_pf = math.isfinite(employer_pf) and employer_pf >= 0
+        except (TypeError, ValueError):
+            valid_pf = False
+        if row.get("_invalid_employer_pf") or not valid_pf:
+            who = row.get("staff_id") or row.get("full_name") or "Unknown employee"
+            errors.append(f"{who}: employer provident fund must be a finite amount of zero or more.")
 
     # A header-label company name ALONE is not proof of a shifted import —
     # detect_company_name can grab a header cell off a perfectly aligned
@@ -266,7 +277,7 @@ def validate_single_row(row, employees_by_staff_id=None):
         warnings.append("Net pay not provided; Payrolla will calculate it on confirm.")
     if float(row.get("net_pay") or 0) < 0:
         warnings.append("Negative net pay.")
-    for field in ("basic_salary", "gross_pay", "paye", "ssnit", "tier_2_pension", "pf_fund_employee", "loan_deduction", "welfare_deduction", "iou_deduction", "other_deductions", "total_deductions", "net_pay"):
+    for field in ("basic_salary", "gross_pay", "paye", "ssnit", "tier_2_pension", "pf_fund_employee", "pf_fund_employer", "loan_deduction", "welfare_deduction", "iou_deduction", "other_deductions", "total_deductions", "net_pay"):
         if float(row.get(field) or 0) < 0:
             warnings.append("Negative salary or deduction value.")
             break

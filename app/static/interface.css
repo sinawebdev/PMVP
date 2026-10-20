@@ -117,3 +117,34 @@ a{ text-underline-offset:3px }
  .portal-shell .portal-logo .payrolla-compact{display:block;width:auto;height:27px}
 }
 @media print{.portal-topbar,.nav-backdrop,.topbar-actions,.utility-pop{display:none}.main-content,.portal-main{padding:0;max-width:none}.panel,.xpanel,.chart-card{box-shadow:none;break-inside:avoid}body{background:white}}
+
+/* Editorial hierarchy for prose; operational figures retain tabular Satoshi. */
+.marketing-hero h1,.marketing h2:not(.hero-proof h2),.auth-story h2,.auth-form-card h1,.auth-reset h1{font-family:var(--font-display);font-weight:500;letter-spacing:-.03em}
+.marketing-hero h1{line-height:1.04}
+.marketing-hero h1 em{font-style:italic}
+.auth-story::after,.stat-card::after{display:none}
+.error-page{background:var(--brand-deep)}
+.error-card,.upload-overlay{backdrop-filter:none}
+.upload-overlay{background:var(--surface)}
+.upload-progress-bar,.dashboard-progress-fill{background:var(--brand)}
+/* One ruled metrics band makes relationships clearer than separate boxes. */
+.kpi-band,.ops .kpi-band,.exec .kpi-band,.dist .kpi-band,.rq .kpi-band{display:flex;flex-wrap:wrap;gap:0;border-block:1px solid var(--line-strong)}
+.kpi-band .kpi{flex:1 1 165px;min-width:0;border:0;border-inline-end:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none;padding:24px 21px}
+.kpi-band .kpi:first-child{flex-grow:1.15;padding-inline-start:0}
+.kpi-band .kpi:last-child{border-inline-end:0}
+.kpi-band .kpi:hover{background:var(--surface);border-color:var(--line);box-shadow:none;transform:none}
+.kpi-band .kpi:focus-visible{outline-offset:-3px}
+.qa-grid{display:flex;flex-direction:column;gap:0}
+@media(min-width:1101px){.ops-support{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:var(--space-editorial)}}
+@media(max-width:640px){.kpi-band .kpi{flex-basis:calc(50% - 1px);padding:19px 13px}.kpi-band .kpi:first-child{flex-grow:1;padding-inline-start:13px}.kpi-band .kpi:nth-child(even){border-inline-end:0}.kpi-band .kpi:nth-child(n+3){border-top:1px solid var(--line)}}
+@media(max-width:360px){.kpi-band .kpi{flex-basis:100%;border-inline-end:0}.kpi-band .kpi+.kpi{border-top:1px solid var(--line)}}
+
+.ops .xpanel{background:transparent;border:0;border-top:1px solid var(--line-strong);border-radius:0;padding:24px 0;box-shadow:none}
+.ops .kpi-band .kpi{border-radius:0}
+.ops .qa-grid{display:flex;flex-direction:row;flex-wrap:wrap;gap:0}
+.ops .qa{flex:1 1 180px;background:transparent;border:0;border-inline-end:1px solid var(--line);border-radius:0;padding:12px 15px;box-shadow:none}
+.ops .qa:last-child{border-inline-end:0}
+.ops .qa:hover{background:var(--surface-alt);box-shadow:none;transform:none}
+@media(max-width:640px){.ops .qa{flex-basis:100%;border-inline-end:0;border-bottom:1px solid var(--line);padding:14px 0}}
+
+.marketing-button>span,.marketing-login>span,.scroll-cue>span{display:inline-block;min-width:1em;line-height:1;text-align:center}
