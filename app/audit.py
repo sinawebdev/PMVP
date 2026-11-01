@@ -32,39 +32,114 @@ def record_audit(action, related_record=None, notes=""):
     )
 
 
+# Filters the audit page understands. "kind" separates recorded actions from
+# expenses; module values are what module_label() produces.
+AUDIT_KINDS = ("all", "actions", "expenses")
+AUDIT_MODULES = ("Payroll Runs", "Clients", "Employees", "Payslip", "Audit", "System")
+# The page merges two tables in Python, so each side is fetched to this depth
+# before paging. Filters narrow it in SQL first.
+AUDIT_FETCH_LIMIT = 1000
+
+
+def _audit_filters(args):
+    kind = args.get("kind") if args.get("kind") in AUDIT_KINDS else "all"
+    module = args.get("module") if args.get("module") in AUDIT_MODULES else ""
+    return {
+        "q": (args.get("q") or "").strip()[:100],
+        "kind": kind,
+        "module": module,
+        "date_from": parse_date(args.get("from")),
+        "date_to": parse_date(args.get("to")),
+    }
+
+
 @audit_bp.route("")
 @role_required(*AUDIT_ROLES)
 def audit_trail():
-    entries = AuditTrail.query.order_by(AuditTrail.created_at.desc()).limit(250).all()
-    expenses = Expense.query.order_by(Expense.created_at.desc()).limit(250).all()
+    from app.paging import paginate_list
+
+    f = _audit_filters(request.args)
+    entries, expenses = [], []
+    if f["kind"] in ("all", "actions"):
+        query = AuditTrail.query
+        if f["q"]:
+            like = f"%{f['q']}%"
+            query = query.filter(db.or_(AuditTrail.action.ilike(like), AuditTrail.notes.ilike(like)))
+        if f["date_from"]:
+            query = query.filter(AuditTrail.created_at >= datetime.combine(f["date_from"], time.min))
+        if f["date_to"]:
+            query = query.filter(AuditTrail.created_at <= datetime.combine(f["date_to"], time.max))
+        entries = query.order_by(AuditTrail.created_at.desc()).limit(AUDIT_FETCH_LIMIT).all()
+    if f["kind"] in ("all", "expenses"):
+        query = Expense.query
+        if f["q"]:
+            like = f"%{f['q']}%"
+            query = query.filter(db.or_(Expense.title.ilike(like), Expense.description.ilike(like),
+                                        Expense.category.ilike(like)))
+        if f["date_from"]:
+            query = query.filter(Expense.expense_date >= f["date_from"])
+        if f["date_to"]:
+            query = query.filter(Expense.expense_date <= f["date_to"])
+        expenses = query.order_by(Expense.created_at.desc()).limit(AUDIT_FETCH_LIMIT).all()
+    rows = build_audit_rows(entries, expenses)
+    if f["module"]:
+        rows = [row for row in rows if row["module"] == f["module"]]
+    page = paginate_list(rows, per_page=50)
     clients = ClientCompany.query.order_by(ClientCompany.name).all()
     payroll_runs = PayrollRun.query.order_by(PayrollRun.created_at.desc()).limit(100).all()
-    rows = build_audit_rows(entries, expenses)
+    params = {k: v for k, v in {
+        "q": f["q"], "kind": f["kind"] if f["kind"] != "all" else "", "module": f["module"],
+        "from": request.args.get("from") if f["date_from"] else "",
+        "to": request.args.get("to") if f["date_to"] else "",
+    }.items() if v}
     return render_template(
         "audit.html",
-        rows=rows,
+        page=page,
+        filters=f,
+        params=params,
+        kinds=AUDIT_KINDS,
+        modules=AUDIT_MODULES,
         clients=clients,
         payroll_runs=payroll_runs,
         today=date.today().isoformat(),
     )
 
 
+def _parse_amount(raw):
+    try:
+        amount = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if amount != amount or amount in (float("inf"), float("-inf")) or amount <= 0:
+        return None
+    return round(amount, 2)
+
+
 @audit_bp.route("/expenses", methods=["POST"])
 @role_required(*AUDIT_ROLES)
 def add_expense():
     expense_date = parse_date(request.form.get("expense_date")) or date.today()
-    title = (request.form.get("title") or "").strip()
-    description = (request.form.get("description") or "").strip()
+    title = (request.form.get("title") or "").strip()[:180]
+    description = (request.form.get("description") or "").strip()[:255]
     client_id = request.form.get("client_company_id") or None
     payroll_run_id = request.form.get("payroll_run_id") or None
+    amount = _parse_amount(request.form.get("amount"))
+    # Validated here, at the boundary: float("abc") used to raise a 500, and a
+    # zero or negative expense is a typo, not spend.
+    if amount is None:
+        flash("Enter the amount as a number greater than zero. Nothing was saved.", "danger")
+        return redirect(url_for("audit.audit_trail", _anchor="add-expense"))
+    if not (title or description):
+        flash("Give the expense a title or description. Nothing was saved.", "danger")
+        return redirect(url_for("audit.audit_trail", _anchor="add-expense"))
     expense = Expense(
         title=title or description[:180],
         expense_date=expense_date,
-        category=request.form.get("category") or "General",
-        description=description or title or "Expense",
-        amount=float(request.form.get("amount") or 0),
-        client_company_id=int(client_id) if client_id else None,
-        payroll_run_id=int(payroll_run_id) if payroll_run_id else None,
+        category=(request.form.get("category") or "General").strip()[:80],
+        description=description or title,
+        amount=amount,
+        client_company_id=int(client_id) if client_id and client_id.isdigit() else None,
+        payroll_run_id=int(payroll_run_id) if payroll_run_id and payroll_run_id.isdigit() else None,
         status="Recorded",
         recorded_by=current_user.id,
     )
@@ -95,8 +170,10 @@ def build_audit_rows(entries, expenses):
             {
                 "sort_at": created_at,
                 "date": created_at.strftime("%Y-%m-%d"),
+                "date_label": created_at.strftime("%d %b %Y"),
                 "time": created_at.strftime("%H:%M"),
                 "day": created_at.strftime("%A"),
+                "kind": "action",
                 "action": entry.action,
                 "description": entry.notes or entry.action,
                 "user": entry.user.name if entry.user else "System",
@@ -119,8 +196,10 @@ def build_audit_rows(entries, expenses):
             {
                 "sort_at": datetime.combine(display_date, created_at.time()),
                 "date": display_date.strftime("%Y-%m-%d"),
+                "date_label": display_date.strftime("%d %b %Y"),
                 "time": created_at.strftime("%H:%M"),
                 "day": display_date.strftime("%A"),
+                "kind": "expense",
                 "action": "Expense recorded",
                 "description": expense.title or expense.description,
                 "user": expense.recorder.name if expense.recorder else "System",

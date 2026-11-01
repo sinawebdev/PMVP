@@ -188,7 +188,7 @@ _REVIEW_SCREENS = (
     ("operator-onboarding", "/clients/1/onboarding", OPERATOR_EMAIL),
     ("operator-audit", "/audit", OPERATOR_EMAIL),
     ("operator-statutory-new", "/statutory-rates/new", OPERATOR_EMAIL),
-    ("operator-edit-figures", "/runs/1/items/edit", OPERATOR_EMAIL),
+    ("operator-edit-figures", "/payroll/runs/1/items/edit", OPERATOR_EMAIL),
 )
 CAPTURES += tuple(
     Capture(

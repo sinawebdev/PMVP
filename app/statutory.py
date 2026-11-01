@@ -29,20 +29,73 @@ def index():
 
 
 def _parse_bands(raw):
-    bands = json.loads(raw)
+    """PAYE bands from the legacy JSON field. Kept so a scripted client posting
+    paye_bands_json still works; the form itself now posts band rows."""
+    try:
+        bands = json.loads(raw)
+    except ValueError:
+        raise ValueError("The PAYE bands are not valid JSON.")
     if not isinstance(bands, list) or not bands:
         raise ValueError("Bands must be a non-empty JSON list.")
+    try:
+        rows = [(float(band["over"]), float(band["rate"]) * 100) for band in bands]
+    except (KeyError, TypeError, ValueError):
+        raise ValueError('Each band needs numeric "over" and "rate" values.')
+    return bands_from_rows(rows)
+
+
+def bands_from_rows(rows):
+    """PAYE bands from (threshold, rate in percent) pairs, in any order.
+
+    ``base`` (the tax on all income below a band's threshold) is worked out
+    here rather than typed: each band's base is the previous base plus the
+    previous band's width taxed at the previous rate. Asking people to type it
+    is how the stored bands and the tax tables would drift apart. Returns the
+    bands highest threshold first, the order compute_paye walks."""
+    if not rows:
+        raise ValueError("Add at least one PAYE band.")
     cleaned = []
-    for band in bands:
-        cleaned.append(
-            {
-                "over": float(band["over"]),
-                "rate": float(band["rate"]),
-                "base": float(band["base"]),
-            }
-        )
-    # Highest threshold must come first — compute_paye walks top-down.
-    return sorted(cleaned, key=lambda b: b["over"], reverse=True)
+    for over, rate in rows:
+        if not (math.isfinite(over) and math.isfinite(rate)):
+            raise ValueError("Every band needs a number in both columns.")
+        if over < 0:
+            raise ValueError("A band cannot start below GH₵ 0.")
+        if not 0 <= rate <= 100:
+            raise ValueError("A band's rate must be between 0% and 100%.")
+        cleaned.append((over, rate / 100))
+    cleaned.sort()
+    thresholds = [over for over, _ in cleaned]
+    if len(set(thresholds)) != len(thresholds):
+        raise ValueError("Two bands start at the same income. Each band needs its own starting amount.")
+    bands, base = [], 0.0
+    for index, (over, rate) in enumerate(cleaned):
+        if index:
+            prev_over, prev_rate = cleaned[index - 1]
+            base += (over - prev_over) * prev_rate
+        bands.append({"over": over, "rate": round(rate, 6), "base": round(base, 2)})
+    return sorted(bands, key=lambda b: b["over"], reverse=True)
+
+
+def _rows_from_form(form):
+    """(threshold, percent) pairs from the band editor, skipping fully blank rows."""
+    rows = []
+    for over, rate in zip(form.getlist("band_over"), form.getlist("band_rate")):
+        over, rate = (over or "").strip(), (rate or "").strip()
+        if not over and not rate:
+            continue
+        try:
+            rows.append((float(over), float(rate)))
+        except ValueError:
+            raise ValueError("Every band needs a number in both columns.")
+    return rows
+
+
+def _band_rows_for_display(bands):
+    """Bands lowest first, rate as a percent, for the editor."""
+    return [
+        {"over": b["over"], "rate": round(b["rate"] * 100, 4), "base": b["base"]}
+        for b in sorted(bands, key=lambda b: b["over"])
+    ]
 
 
 @statutory_bp.route("/new", methods=["GET", "POST"])
@@ -56,7 +109,10 @@ def new():
             ).date()
             ssf_employee = float(request.form["ssf_employee_rate"])
             ssf_employer = float(request.form["ssf_employer_rate"])
-            bands = _parse_bands(request.form["paye_bands_json"])
+            if request.form.getlist("band_over"):
+                bands = bands_from_rows(_rows_from_form(request.form))
+            else:
+                bands = _parse_bands(request.form["paye_bands_json"])
             overtime_rate_low = float(request.form["overtime_rate_low"])
             overtime_rate_high = float(request.form["overtime_rate_high"])
             overtime_basic_threshold = float(request.form["overtime_basic_threshold"])
@@ -90,16 +146,15 @@ def new():
                 raise ValueError("Provident-fund tax limit must be a fraction no greater than 1.")
             if not 2000 <= deduction_config["ssnit_limits_year"] <= 2100:
                 raise ValueError("Enter the year covered by the verified SSNIT notice.")
-        except (KeyError, ValueError) as exc:
-            flash(f"Invalid rate version: {exc}", "danger")
-            return redirect(url_for("statutory.new"))
+        except KeyError as exc:
+            return _rerender(f"{exc.args[0].replace('_', ' ')} is missing.")
+        except ValueError as exc:
+            return _rerender(str(exc))
 
         if StatutoryRate.query.filter_by(effective_from=effective_from).first():
-            flash("A rate version with that effective date already exists.", "warning")
-            return redirect(url_for("statutory.new"))
+            return _rerender("A rate version with that effective date already exists.")
         if not (0 < ssf_employee < 1 and 0 < ssf_employer < 1):
-            flash("SSF rates must be fractions, e.g. 0.055 for 5.5%.", "warning")
-            return redirect(url_for("statutory.new"))
+            return _rerender("SSF rates must be fractions, e.g. 0.055 for 5.5%.")
 
         rate = StatutoryRate(
             effective_from=effective_from,
@@ -130,9 +185,10 @@ def new():
         return redirect(url_for("statutory.index"))
 
     prefill = {
+        "effective_from": "",
+        "notes": "",
         "ssf_employee_rate": latest.ssf_employee_rate if latest else 0.055,
         "ssf_employer_rate": latest.ssf_employer_rate if latest else 0.13,
-        "paye_bands_json": json.dumps(latest.paye_bands, indent=2) if latest else "[]",
         "overtime_rate_low": latest.overtime_rate_low if latest else 0.05,
         "overtime_rate_high": latest.overtime_rate_high if latest else 0.10,
         "overtime_basic_threshold": latest.overtime_basic_threshold if latest else 0.50,
@@ -151,4 +207,20 @@ def new():
         ("provident_fund_tax_limit", 0.165), ("overtime_qualifying_annual_limit", 18000),
     ):
         prefill[name] = getattr(latest, name, default) if latest else default
-    return render_template("statutory_rate_form.html", prefill=prefill)
+    band_rows = _band_rows_for_display(latest.paye_bands) if latest else [{"over": "", "rate": "", "base": 0}]
+    return render_template("statutory_rate_form.html", prefill=prefill, band_rows=band_rows)
+
+
+def _rerender(error):
+    """Show the form again with everything the operator typed, and the reason.
+
+    It used to flash and redirect, which threw away a dozen fields and the
+    bands because one of them was wrong."""
+    prefill = {key: request.form.get(key, "") for key in request.form.keys()
+               if key not in ("band_over", "band_rate", "csrf_token")}
+    band_rows = [
+        {"over": over, "rate": rate, "base": ""}
+        for over, rate in zip(request.form.getlist("band_over"), request.form.getlist("band_rate"))
+    ] or [{"over": "", "rate": "", "base": ""}]
+    return render_template("statutory_rate_form.html", prefill=prefill, band_rows=band_rows,
+                           form_error=error), 400

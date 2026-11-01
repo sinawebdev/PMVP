@@ -10,11 +10,14 @@
 ]) }}
 {% endblock %}
 {% block content %}
+{% if form_error %}
+<div class="alert alert-danger" role="alert"><i class="bi bi-exclamation-triangle"></i> Nothing was saved. {{ form_error }}</div>
+{% endif %}
 <section class="panel form-panel">
     <form method="post" class="row g-3">
         <div class="col-md-4">
             <label class="form-label" for="effective_from">Effective From</label>
-            <input class="form-control" type="date" id="effective_from" name="effective_from" required>
+            <input class="form-control" type="date" id="effective_from" name="effective_from" value="{{ prefill.effective_from or '' }}" required>
         </div>
         <div class="col-md-4">
             <label class="form-label" for="ssf_employee_rate">SSF Employee Rate (fraction)</label>
@@ -72,17 +75,32 @@
         ] %}
         <div class="col-md-4"><label class="form-label" for="{{ name }}">{{ label }}</label><input class="form-control" type="number" min="0" step="{{ step }}" id="{{ name }}" name="{{ name }}" value="{{ prefill[name] }}" required></div>
         {% endfor %}
+        {# PAYE bands as rows, not JSON. Two numbers per band; the tax on income
+           below each band is calculated (app.statutory.bands_from_rows) and
+           shown here for checking against the GRA table. #}
         <div class="col-12">
-            <label class="form-label" for="paye_bands_json">PAYE Bands (JSON)</label>
-            <textarea class="form-control font-monospace" rows="12" id="paye_bands_json" name="paye_bands_json" required>{{ prefill.paye_bands_json }}</textarea>
-            <div class="form-text">
-                Ordered list of {"over": threshold, "rate": marginal rate, "base": cumulative tax at threshold}.
-                If monthly taxable income &ge; <code>over</code>, tax = (income − over) × rate + base. Income below the lowest threshold is untaxed.
+            <h3 id="bands-heading">PAYE bands (monthly)</h3>
+            <p class="form-text">One row per band in the GRA table: the monthly taxable income where the band starts, and its rate. Income below the first band is not taxed. The last column fills itself in, so you can check it against the published table.</p>
+            <div class="band-editor" data-band-editor>
+                <table class="band-table" aria-labelledby="bands-heading">
+                    <thead><tr><th scope="col">Band starts at (GH₵ per month)</th><th scope="col">Rate (%)</th><th scope="col">Tax on income below this band (GH₵)</th><th scope="col"><span class="visually-hidden">Remove</span></th></tr></thead>
+                    <tbody data-band-rows>
+                        {% for row in band_rows %}
+                        <tr data-band-row>
+                            <td><input class="form-control" type="number" min="0" step="0.01" name="band_over" value="{{ row.over }}" aria-label="Band starts at, GH₵ per month" required></td>
+                            <td><input class="form-control" type="number" min="0" max="100" step="0.01" name="band_rate" value="{{ row.rate }}" aria-label="Rate in percent" required></td>
+                            <td class="band-base nums" data-band-base>{{ "%.2f"|format(row.base) if row.base is number else "—" }}</td>
+                            <td><button class="btn btn-outline-secondary btn-sm" type="button" data-band-remove aria-label="Remove this band"><i class="bi bi-x-lg"></i></button></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-band-add><i class="bi bi-plus-lg"></i>Add band</button>
             </div>
         </div>
         <div class="col-12">
             <label class="form-label" for="notes">Notes / Source</label>
-            <input class="form-control" type="text" id="notes" name="notes" placeholder="e.g. GRA circular ref, gazette date">
+            <input class="form-control" type="text" id="notes" name="notes" value="{{ prefill.notes or '' }}" placeholder="e.g. GRA circular ref, gazette date">
         </div>
         <div class="col-12 d-flex gap-2">
             <p class="mini-note"><i class="bi bi-shield-check"></i> Versions are never edited in place. Runs dated before this version's effective date keep using the old rates.</p>
@@ -91,4 +109,47 @@
         </div>
     </form>
 </section>
+<script>
+/* Band editor: add/remove rows and recompute "tax on income below this band"
+   as the operator types. The server recomputes it on save; this is only so the
+   figures can be checked against the GRA table before saving. */
+(function () {
+  var editor = document.querySelector('[data-band-editor]');
+  if (!editor) return;
+  var body = editor.querySelector('[data-band-rows]');
+  function recompute() {
+    var rows = Array.prototype.slice.call(body.querySelectorAll('[data-band-row]'));
+    var parsed = rows.map(function (row) {
+      var inputs = row.querySelectorAll('input');
+      return { row: row, over: parseFloat(inputs[0].value), rate: parseFloat(inputs[1].value) };
+    });
+    var valid = parsed.filter(function (p) { return isFinite(p.over) && isFinite(p.rate); })
+                      .sort(function (a, b) { return a.over - b.over; });
+    var base = 0, bases = new Map();
+    valid.forEach(function (p, i) {
+      if (i) base += (p.over - valid[i - 1].over) * valid[i - 1].rate / 100;
+      bases.set(p.row, base);
+    });
+    parsed.forEach(function (p) {
+      var cell = p.row.querySelector('[data-band-base]');
+      cell.textContent = bases.has(p.row) ? bases.get(p.row).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+    });
+    body.querySelectorAll('[data-band-remove]').forEach(function (b) { b.disabled = rows.length < 2; });
+  }
+  editor.addEventListener('input', recompute);
+  editor.addEventListener('click', function (event) {
+    var remove = event.target.closest('[data-band-remove]');
+    if (remove) { remove.closest('[data-band-row]').remove(); recompute(); return; }
+    if (event.target.closest('[data-band-add]')) {
+      var last = body.querySelector('[data-band-row]:last-child');
+      var row = last.cloneNode(true);
+      row.querySelectorAll('input').forEach(function (input) { input.value = ''; });
+      body.appendChild(row);
+      row.querySelector('input').focus();
+      recompute();
+    }
+  });
+  recompute();
+})();
+</script>
 {% endblock %}
