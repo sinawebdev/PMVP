@@ -1,27 +1,30 @@
 {% extends "client/base.html" %}
+{% import "macros/ui.html" as ui %}
 {% block title %}Audit trail{% endblock %}
 {% block body %}
   <div class="page-head">
     <h1>Audit trail</h1>
     <p class="sub">Recent activity by your company's users.</p>
   </div>
-  {% if entries %}
+  {% if page.items %}
+  {# User and role share a cell, and Details wraps, so a long note grows the row
+     downwards instead of pushing the table past its card. #}
   <div class="panel dt-wrap">
-    <table>
-      <thead><tr><th>When</th><th>User</th><th>Role</th><th>Action</th><th>Details</th></tr></thead>
+    <table class="audit-table">
+      <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Details</th></tr></thead>
       <tbody>
-        {% for e in entries %}
+        {% for e in page.items %}
         <tr>
-          <td class="muted nums">{{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
-          <td>{{ e.user.name if e.user else '—' }}</td>
-          <td class="muted">{{ e.user_role | role_label if e.user_role else '—' }}</td>
-          <td>{{ e.action }}</td>
-          <td class="muted">{{ e.notes or '' }}</td>
+          <td class="muted nums audit-when">{{ e.created_at.strftime('%d %b %Y, %H:%M') if e.created_at else '—' }}</td>
+          <td><span class="cell-main">{{ e.user.name if e.user else '—' }}</span>{% if e.user_role %}<span class="cell-sub">{{ e.user_role | role_label }}</span>{% endif %}</td>
+          <td class="audit-action">{{ e.action }}</td>
+          <td class="muted audit-notes">{{ e.notes or '' }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
   {% else %}
   <div class="empty-state">No activity recorded for your company yet.</div>
   {% endif %}

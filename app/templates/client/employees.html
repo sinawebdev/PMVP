@@ -11,31 +11,33 @@
   </div>
 
   {% if employees %}
+  {# Six columns, not eight: Staff ID sits under the name and Bank under the
+     job title, so the roster fits its card at laptop widths instead of
+     scrolling sideways. Text cells may wrap; figures and actions may not. #}
   <div class="panel dt-wrap">
-    <table>
-      <thead><tr><th>Staff ID</th><th>Name</th><th>Job title</th><th>Contact</th><th>Bank</th><th class="right">Basic</th><th>Status</th><th></th></tr></thead>
+    <table class="emp-table">
+      <thead><tr><th>Employee</th><th>Role · Bank</th><th>Contact</th><th class="right">Basic</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>
         {% for e in page.items %}
         <tr>
-          <td>{{ e.staff_id }}</td>
-          <td>{{ e.full_name }}</td>
-          <td class="muted">{{ e.job_title or '—' }}</td>
-          {# Same fact, same badge as the operator roster. This column did not
-             exist, so the people who can actually add a missing email could not
-             see which of their workers was missing one. #}
-          <td>{{ e.email or e.phone or '' }}{{ ui.contact_badge(e) }}</td>
-          <td class="muted">{{ e.bank_name or '—' }}</td>
+          <td><span class="cell-main">{{ e.full_name }}</span><span class="cell-sub">{{ e.staff_id }}</span></td>
+          <td><span class="cell-main">{{ e.job_title or '—' }}</span><span class="cell-sub">{{ e.bank_name or 'No bank recorded' }}</span></td>
+          {# Same fact, same badge as the operator roster, so the people who can
+             add a missing email can see which worker is missing one. #}
+          <td class="cell-contact">{{ e.email or e.phone or '' }}{{ ui.contact_badge(e) }}</td>
           <td class="right nums">{{ e.basic_salary | cedis }}</td>
           <td>
             {% if e.status == 'Active' %}<span class="badge ok">Active</span>{% else %}<span class="badge warn">{{ e.status }}</span>{% endif %}
           </td>
-          <td class="actions end">
-            <a class="btn sm" href="{{ url_for('client.employee_edit', emp_id=e.id) }}">Edit</a>
-            {% if e.status == 'Active' %}
-            <form class="inline" method="post" action="{{ url_for('client.employee_deactivate', emp_id=e.id) }}"><button class="btn sm danger" type="submit">Deactivate</button></form>
-            {% else %}
-            <form class="inline" method="post" action="{{ url_for('client.employee_reactivate', emp_id=e.id) }}"><button class="btn sm" type="submit">Reactivate</button></form>
-            {% endif %}
+          <td class="end">
+            <div class="row-actions">
+              <a class="btn sm" href="{{ url_for('client.employee_edit', emp_id=e.id) }}">Edit</a>
+              {% if e.status == 'Active' %}
+              <form class="inline" method="post" action="{{ url_for('client.employee_deactivate', emp_id=e.id) }}"><button class="btn sm danger" type="submit">Deactivate</button></form>
+              {% else %}
+              <form class="inline" method="post" action="{{ url_for('client.employee_reactivate', emp_id=e.id) }}"><button class="btn sm" type="submit">Reactivate</button></form>
+              {% endif %}
+            </div>
           </td>
         </tr>
         {% endfor %}

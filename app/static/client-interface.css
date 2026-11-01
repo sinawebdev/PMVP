@@ -48,20 +48,21 @@
 }
 
 /* --- Dashboard: reading order -----------------------------------------------
-   Quick actions lead, followed by health, risk, KPIs, charts, compliance and
-   activity. Every width follows the template's reading order, so keyboard
+   Quick actions lead, then the KPI band (payroll cost to compliance), then
+   health and risk as the detail behind those figures, then charts, compliance
+   and activity. Every width follows the template's reading order, so keyboard
    focus moves with the layout. These rules outrank dashboard.css's grid at
    each breakpoint. */
 .exec .exec-grid {
-    grid-template-areas: "actions" "health" "risk" "kpis" "charts" "compliance" "activity";
+    grid-template-areas: "actions" "kpis" "health" "risk" "charts" "compliance" "activity";
 }
 
 @media (min-width: 860px) {
     .exec .exec-grid {
         grid-template-areas:
             "actions    actions"
-            "health     risk"
             "kpis       kpis"
+            "health     risk"
             "charts     charts"
             "compliance activity";
     }
@@ -71,8 +72,8 @@
     .exec .exec-grid {
         grid-template-areas:
             "actions actions actions actions actions actions actions actions actions actions actions actions"
-            "health health health health health health health health risk risk risk risk"
             "kpis kpis kpis kpis kpis kpis kpis kpis kpis kpis kpis kpis"
+            "health health health health health health health health risk risk risk risk"
             "charts charts charts charts charts charts charts charts charts charts charts charts"
             "compliance compliance compliance compliance compliance activity activity activity activity activity activity activity";
     }
@@ -246,3 +247,74 @@
 .exec .qa:hover{background:var(--surface-alt);box-shadow:none;transform:none}
 .exec .qa:focus-visible{outline-offset:-3px}
 @media(max-width:640px){.exec .qa{flex-basis:100%;border-inline-end:0;border-bottom:1px solid var(--line);padding:14px 0}.exec .qa:last-child{border-bottom:0}}
+
+/* --- Employees roster (client/employees.html) -------------------------------
+   Fits its card: two-line cells carry the secondary facts, text may wrap, and
+   only the figure and the action buttons hold to one line. */
+.emp-table { width: 100%; }
+.emp-table th, .emp-table td { white-space: normal; vertical-align: middle; }
+.emp-table .cell-main { display: block; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.emp-table .cell-sub { display: block; margin-top: 2px; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.emp-table .cell-contact { overflow-wrap: anywhere; min-width: 14ch; }
+.emp-table td.right { white-space: nowrap; }
+.emp-table .row-actions { display: flex; justify-content: flex-end; gap: 6px; flex-wrap: nowrap; }
+@media (max-width: 760px) {
+  /* Below tablet width the rows become cards: one employee per block. */
+  .emp-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .emp-table, .emp-table tbody, .emp-table tr, .emp-table td { display: block; width: 100%; }
+  .emp-table tr { padding: 14px 16px; border-top: 1px solid var(--line); }
+  .emp-table tr:first-child { border-top: 0; }
+  .emp-table td { padding: 3px 0 !important; border: 0 !important; text-align: left; }
+  .emp-table td.right { font-weight: 700; }
+  .emp-table .row-actions { justify-content: flex-start; margin-top: 8px; }
+}
+
+/* --- Centred form pages (employee form, payroll upload) ---------------------
+   glass.css lets .portal-main run full width, so a 820px form card sat against
+   the left edge. The heading and the form now share one centred column. */
+.form-page { max-width: 860px; margin-inline: auto; }
+.form-page .card.form { max-width: none; margin-inline: auto; }
+/* The tax-approval block was written with Bootstrap grid classes, which this
+   shell does not load. Inside .formgrid they become grid spans instead. */
+.card.form .formgrid > .col-12 { grid-column: 1 / -1; }
+.card.form .formgrid > .col-md-8 { grid-column: span 2; }
+.card.form .formgrid > .col-12 hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0 14px; }
+.card.form .formgrid > .col-12 .form-text { color: var(--muted); font-size: 13px; margin: 4px 0 10px; }
+.card.form .form-label { display: block; }
+@media (max-width: 560px) { .card.form .formgrid > .col-md-8 { grid-column: auto; } }
+
+/* Upload page (client/run_upload.html) */
+.upload-layout { max-width: 1120px; margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; align-items: start; }
+.upload-layout .card.form.narrow { max-width: none; }
+.upload-aside { display: none; }
+@media (min-width: 1100px) {
+  .upload-layout { grid-template-columns: minmax(0, 680px) minmax(240px, 1fr); }
+  .upload-aside { display: flex; justify-content: center; align-items: center; position: sticky; top: 120px; min-height: 420px; }
+}
+
+/* --- Audit trail (client/audit.html) ---------------------------------------- */
+.audit-table { width: 100%; }
+.audit-table th, .audit-table td { white-space: normal; vertical-align: top; }
+.audit-table .audit-when { white-space: nowrap; }
+.audit-table .audit-action { font-weight: 600; min-width: 14ch; }
+.audit-table .audit-notes { min-width: 28ch; overflow-wrap: anywhere; line-height: 1.5; }
+.audit-table .cell-main { display: block; font-weight: 600; }
+.audit-table .cell-sub { display: block; font-size: 12.5px; color: var(--muted); }
+@media (max-width: 760px) {
+  .audit-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .audit-table, .audit-table tbody, .audit-table tr, .audit-table td { display: block; width: 100%; }
+  .audit-table tr { padding: 14px 16px; border-top: 1px solid var(--line); }
+  .audit-table tr:first-child { border-top: 0; }
+  .audit-table td { padding: 2px 0 !important; border: 0 !important; min-width: 0 !important; }
+}
+/* The shell's company line above the heading follows the centred column. */
+.portal-main:has(.form-page) .portal-pagehead { max-width: 860px; margin-inline: auto; }
+.portal-main:has(.upload-layout) .portal-pagehead { max-width: 1120px; margin-inline: auto; }
+.audit-table td:nth-child(2) { min-width: 16ch; }
+/* The animated frames are drawn for a dark ground, so the upload page's mark
+   sits on the deep brand teal. */
+.upload-aside-card {
+  display: grid; place-items: center; width: 100%; min-height: 360px; border-radius: 24px;
+  background: radial-gradient(circle at 30% 20%, #127a6d, #0d4d4d 70%);
+  box-shadow: var(--shadow);
+}

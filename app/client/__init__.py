@@ -574,16 +574,15 @@ def audit():
     # AuditTrail has no client_company_id, so scope by the acting user's tenant
     # (§4): entries recorded by users belonging to this company. Never leaks
     # another tenant's activity.
+    # Paged rather than capped at 200: the trail is the record, so older
+    # entries stay reachable instead of falling off the end.
     user_ids = [u.id for u in User.query.filter_by(client_company_id=active_tenant_id()).all()]
-    entries = (
-        AuditTrail.query.filter(AuditTrail.user_id.in_(user_ids))
-        .order_by(AuditTrail.created_at.desc())
-        .limit(200)
-        .all()
-        if user_ids
-        else []
+    page = paginate(
+        AuditTrail.query.filter(AuditTrail.user_id.in_(user_ids or [-1]))
+        .order_by(AuditTrail.created_at.desc()),
+        per_page=50,
     )
-    return render_template("client/audit.html", company=_company(), entries=entries)
+    return render_template("client/audit.html", company=_company(), page=page)
 
 
 # --- Payslip distribution ---------------------------------------------------

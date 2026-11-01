@@ -1,6 +1,12 @@
 {% extends "client/base.html" %}
 {% block title %}Upload payroll{% endblock %}
 {% block body %}
+  {% from 'macros/brand.html' import mark_watermark with context %}
+  {# A centred two-column page: the upload on the left, the animated P on the
+     right (wide screens only), so the form is not stranded on the left of a
+     full-width page. #}
+  <div class="upload-layout">
+  <div class="upload-main">
   <div class="page-bar">
     <div class="page-head">
       <h1>Upload payroll</h1>
@@ -85,6 +91,9 @@
       <div id="raw_result" aria-live="polite"></div>
     </div>
   </section>
+  </div>
+  <aside class="upload-aside" aria-hidden="true"><div class="upload-aside-card">{{ mark_watermark("mark-watermark--inline") }}</div></aside>
+  </div>
 
   {# Progressive enhancement: real upload progress via XHR for the STANDARD form,
      with a graceful fall-back to a normal form POST when unsupported or on a
