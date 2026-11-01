@@ -13,11 +13,14 @@
   --radius: 22px;
   --radius-lg: 24px;
   --radius-sm: 11px;
-  --font-display: Satoshi, sans-serif;
+  /* Page titles are set in the serif so a page has one clear top level;
+     panel titles, labels and figures stay in Satoshi. */
+  --font-display: Newsreader, Georgia, serif;
   --shadow: 0 16px 48px -22px #28624b26, 0 2px 6px #28624b03;
   --shadow-sm: 0 8px 28px -16px #28624b24;
   --glass-fill: #f9fefb;
   --glass-border: #fff;
+  --workspace-gutter: clamp(24px, 2.5vw, 48px);
 }
 
 body.brand-shell-bg {
@@ -34,8 +37,8 @@ body.brand-shell-bg {
 .portal-topbar {
   position: sticky;
   top: 16px;
-  max-width: 1300px;
-  width: calc(100% - 48px);
+  max-width: none;
+  width: calc(100% - 2 * var(--workspace-gutter));
   margin: 26px auto 0;
   border: 1px solid var(--glass-border);
   border-radius: 22px;
@@ -52,7 +55,7 @@ body.brand-shell-bg {
   background: var(--glass-fill);
   pointer-events: none;
 }
-.portal-topbar-inner { min-height: 78px; padding: 14px 24px; gap: 20px; }
+.portal-topbar-inner { max-width: none; min-height: 78px; padding: 14px 24px; gap: 20px; }
 .portal-logo .payrolla-lockup { width: 125px; }
 .portal-nav { gap: 4px; }
 .portal-nav a {
@@ -75,14 +78,17 @@ body.brand-shell-bg {
 .account-avatar { background: var(--brand-deep); color: #fff; border: 1px solid #fff9; }
 .utility-btn { border-radius: 11px; }
 .utility-pop { background: #f9fefb; border: 1px solid #fff; border-radius: 16px; box-shadow: var(--shadow); }
-.main-content, .portal-main { max-width: 1274px; padding: 32px 32px 56px; }
+/* Workspace surfaces follow the viewport; only individual forms and prose
+   keep their reading-width limits. Both shells share the header gutters. */
+.main-content, .portal-main { max-width: none; min-width: 0; padding: 32px var(--workspace-gutter) 56px; }
 .main-content .topbar { border: 0; padding-bottom: 0; margin-bottom: 27px; }
 .main-content .topbar h1, .page-head h1, .exec .exec-head h1 {
   color: var(--ink);
-  font-size: clamp(28px, 3vw, 39px);
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -.04em;
+  font-family: var(--font-display);
+  font-size: clamp(30px, 3.2vw, 42px);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -.02em;
 }
 .main-content .topbar-visual, .exec-period {
   background: #ffffff70;
@@ -141,7 +147,9 @@ body.brand-shell-bg {
   transform: none;
 }
 .kpi-label, .stat-label, .metric-label { font-size: 10px; letter-spacing: .08em; }
-.ops .qa-grid, .exec .area-actions--compact .qa-grid { display: flex; flex-flow: row wrap; gap: 10px; }
+.ops .qa-grid, .exec .area-actions--compact .qa-grid { display: grid; gap: 10px; }
+.ops .qa-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.exec .area-actions--compact .qa-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .ops .qa, .exec .area-actions--compact .qa {
   flex: 1 1 200px;
   border: 1px solid var(--line);
@@ -201,7 +209,7 @@ body.brand-shell-bg {
   border-radius: 28px;
   box-shadow: var(--shadow);
 }
-.auth-story h2 { color: var(--brand-deep); font-family: Satoshi, sans-serif; font-weight: 700; }
+.auth-story h2 { color: var(--brand-deep); font-family: var(--font-display); font-weight: 500; letter-spacing: -.02em; }
 .auth-story .auth-eyebrow, .auth-principles li>span { color: var(--brand); }
 .auth-story-copy>p:not(.auth-eyebrow), .auth-principles p, .auth-story-foot { color: var(--muted); }
 .auth-principles strong { color: var(--ink); }
@@ -214,7 +222,7 @@ body.brand-shell-bg {
   border-radius: 24px;
   box-shadow: var(--shadow);
 }
-.auth-form-card h1, .auth-reset h1 { font-family: Satoshi, sans-serif; font-weight: 700; }
+.auth-form-card h1, .auth-reset h1 { font-family: var(--font-display); font-weight: 500; letter-spacing: -.02em; }
 .auth-page--compact { background: transparent; }
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -225,7 +233,11 @@ body.brand-shell-bg {
     backdrop-filter: blur(22px) saturate(1.12);
   }
 }
+@media (min-width: 1600px) {
+  .exec .area-actions--compact .qa-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
 @media (max-width: 1100px) {
+  .ops .qa-grid, .exec .area-actions--compact .qa-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .portal-topbar { top: 10px; width: calc(100% - 32px); margin-top: 16px; }
   .portal-topbar-inner { padding: 10px 18px; min-height: 70px; gap: 12px; }
   .portal-nav { background: #f5fcf7; }
@@ -233,6 +245,7 @@ body.brand-shell-bg {
   .ops .kpi-band > .ops-reveal { flex-basis: 200px; }
 }
 @media (max-width: 640px) {
+  .ops .qa-grid, .exec .area-actions--compact .qa-grid { grid-template-columns: minmax(0, 1fr); }
   .portal-topbar { width: calc(100% - 24px); margin-top: 12px; border-radius: 18px; }
   .portal-topbar-inner { min-height: 64px; padding: 8px 12px; gap: 8px; }
   .portal-logo .payrolla-lockup { width: 112px; }
@@ -264,6 +277,7 @@ body.brand-shell-bg {
 }
 @media print {
   body.brand-shell-bg { background: #fff; }
+  .main-content, .portal-main { padding: 0; }
   .panel, .xpanel, .card, .kpi-band .kpi, .ops .xpanel, .exec .xpanel {
     background: #fff; border: 1px solid #ccc; box-shadow: none;
     -webkit-backdrop-filter: none; backdrop-filter: none;

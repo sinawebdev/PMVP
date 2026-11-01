@@ -50,7 +50,9 @@ a{ text-underline-offset:3px }
 .kpi-label,.stat-label,.metric-label{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
 .kpi-value,.stat-value,.metric-value{font-variant-numeric:tabular-nums;font-size:clamp(24px,2.3vw,34px);letter-spacing:-1px;line-height:1.2;color:var(--ink)}
 .nums,.num,.money,.right,.text-end,.dt-table td,.table td{font-variant-numeric:tabular-nums}
-.btn{font-family:var(--font-sans);font-weight:700;font-size:13px;min-height:42px;border-radius:8px;gap:7px;padding:10px 16px;box-shadow:none;line-height:1.25}
+.btn{font-family:var(--font-sans);font-weight:700;font-size:13px;min-height:42px;border-radius:8px;gap:7px;display:inline-flex;align-items:center;justify-content:center;text-align:center;vertical-align:middle;padding:10px 16px;box-shadow:none;line-height:1.25}
+/* inline-flex centres the label in the min-height box (inline-block left it top-heavy) and lets gap space the icon, so the old per-icon margin would double it. */
+.btn>i,.btn>svg,.btn>.bi{margin:0;flex:none}
 .btn.sm,.btn-sm{min-height:34px;font-size:12px;padding:7px 11px}
 .btn.primary,.btn-primary{background:var(--brand-deep);border-color:var(--brand-deep);color:#fff;--bs-btn-bg:var(--brand-deep);--bs-btn-border-color:var(--brand-deep);--bs-btn-hover-bg:var(--brand-dark);--bs-btn-hover-border-color:var(--brand-dark);--bs-btn-active-bg:var(--brand-dark);--bs-btn-active-border-color:var(--brand-dark)}
 .btn-outline-secondary,.btn-outline-primary{border-color:var(--line-control);color:var(--ink)}

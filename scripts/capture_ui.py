@@ -59,7 +59,8 @@ class Capture:
     actions: tuple[tuple[str, str], ...] = field(default=())
     full_page: bool = False
     # Who signs in first. Most captures are the client portal; the operator
-    # console's own screens sign in as OPERATOR_EMAIL.
+    # console's own screens sign in as OPERATOR_EMAIL. An empty string skips
+    # sign-in, for the public pages.
     email: str = DEMO_EMAIL
 
 
@@ -168,6 +169,37 @@ CAPTURES: tuple[Capture, ...] = (
         full_page=True,
         email=OPERATOR_EMAIL,
     ),
+)
+
+
+# The site-revamp review set: every screen the November 2026 observations name,
+# at the three widths the fixes are judged at. Generated rather than listed so a
+# new screen is one row, not three near-identical Captures.
+_REVIEW_SCREENS = (
+    ("landing", "/", ""),
+    ("login", "/login", ""),
+    ("tenant-dashboard", "/company", DEMO_EMAIL),
+    ("tenant-employees", "/company/employees", DEMO_EMAIL),
+    ("tenant-employee-add", "/company/employees/add", DEMO_EMAIL),
+    ("tenant-upload", "/company/runs/upload", DEMO_EMAIL),
+    ("tenant-audit", "/company/audit", DEMO_EMAIL),
+    ("operator-dashboard", "/dashboard", OPERATOR_EMAIL),
+    ("operator-clients", "/clients", OPERATOR_EMAIL),
+    ("operator-onboarding", "/clients/1/onboarding", OPERATOR_EMAIL),
+    ("operator-audit", "/audit", OPERATOR_EMAIL),
+    ("operator-statutory-new", "/statutory-rates/new", OPERATOR_EMAIL),
+    ("operator-edit-figures", "/runs/1/items/edit", OPERATOR_EMAIL),
+)
+CAPTURES += tuple(
+    Capture(
+        name=f"review-{screen}-{width}",
+        route=route,
+        viewport=(width, 900),
+        full_page=True,
+        email=email,
+    )
+    for screen, route, email in _REVIEW_SCREENS
+    for width in (1440, 1280, 390)
 )
 
 
@@ -287,7 +319,8 @@ def capture_all(selected: list[str] | None = None) -> int:
                 )
                 page = context.new_page()
                 try:
-                    _login(page, base_url, cap.email)
+                    if cap.email:
+                        _login(page, base_url, cap.email)
                     page.goto(f"{base_url}{cap.route}", wait_until="networkidle")
                     for verb, argument in cap.actions:
                         _run_action(page, verb, argument)

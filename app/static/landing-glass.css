@@ -9,7 +9,8 @@
   --line:#cbded3;
   --border:#7d9d8c;
   --shadow:0 20px 55px -25px #28624b32,0 2px 7px #28624b04;
-  --radius:25px
+  --radius:25px;
+  --page-gutter:clamp(32px,3.5vw,72px)
 }
 
 .glass-landing * {
@@ -131,8 +132,8 @@ html:has(.glass-landing) {
 }
 
 .glass-landing .container {
-  width:calc(100% - 100px);
-  max-width:1190px;
+  width:calc(100% - 2 * var(--page-gutter));
+  max-width:none;
   margin-inline:auto
 }
 
@@ -168,8 +169,8 @@ html:has(.glass-landing) {
 }
 
 .glass-landing .site-header {
-  max-width:1300px;
-  width:calc(100% - 64px);
+  max-width:none;
+  width:calc(100% - 2 * var(--page-gutter));
   margin:27px auto 0;
   min-height:80px;
   display:flex;
@@ -1404,7 +1405,7 @@ html:has(.glass-landing) {
 .glass-landing .hero {
   padding-top:76px;
   padding-bottom:69px;
-  min-height:660px
+  min-height:min(800px,calc(100svh - 120px))
 }
 }
 
