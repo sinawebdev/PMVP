@@ -37,16 +37,6 @@
 <a class="btn btn-outline-light btn-sm" href="{{ url_for('payroll.runs', status='needs_approval') }}"><i class="bi bi-check2-square"></i>Review approvals{% if pending_approvals %} ({{ pending_approvals }}){% endif %}</a>
 <a class="btn btn-outline-light btn-sm" href="{{ url_for('oversight.risk_queue') }}"><i class="bi bi-shield-exclamation"></i>Risk queue{% if held_count %} ({{ held_count }}){% endif %}</a>
 {% endblock %}
-{% block header_visual %}
-{# Period only. The figures that used to sit here have their own tile in the
-   band below, and a number shown twice is a number two people can quote
-   differently. #}
-<div class="dashboard-signal" aria-label="Reporting period">
-    <span class="signal-label">Reporting on</span>
-    <strong>{{ selected_month }}</strong>
-    <small>{{ selected_year }}</small>
-</div>
-{% endblock %}
 
 {% block content %}
 <div class="ops">
@@ -103,41 +93,40 @@
   </section>
   {% endif %}
 
-  {# --- Period controls ----------------------------------------------------
-     A filter, not a panel: one row, sitting on the shell rather than on a card,
-     so it reads as a setting for the page below it. The duplicate Approval
-     Queue button that used to live here is gone — it is a header action, and
-     this control changes what you are looking at, not what you are doing. #}
-  <form class="ops-filters" method="get" action="{{ url_for('main.dashboard') }}"
-        aria-label="Choose reporting period">
-    <div class="ops-field">
-      <label for="month">Month</label>
-      <select id="month" name="month">
-        {% for month in month_options %}
-          <option value="{{ month }}" {% if month == selected_month %}selected{% endif %}>{{ month }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="ops-field">
-      <label for="year">Year</label>
-      <select id="year" name="year">
-        {% for year in year_options %}
-          <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <button class="ops-apply" type="submit">Apply</button>
-    <p class="ops-filters-note">Showing {{ period_label }}</p>
-  </form>
+  {# --- Period + KPI band — five tiles, five questions -----------------------
+     The period filter is the band's own heading row: it says which month the
+     five figures describe, and changes it. It used to float on its own between
+     Quick actions and the band, with a second "Reporting on" card in the
+     header saying the same thing.
 
-  {# --- KPI band — five tiles, five questions ------------------------------
-     Shaped by app/platform_dashboard.py::platform_kpis, which holds the rule:
-     one tile per genuinely different question, and a repeat does not get a
-     second tile. Held payrolls, pending approvals, warnings and the PAYE/SSNIT
-     figures are deliberately NOT here — a count that implies an action belongs
-     next to that action, which is the right rail. #}
+     Tiles shaped by app/platform_dashboard.py::platform_kpis: one tile per
+     genuinely different question. Held payrolls, pending approvals, warnings
+     and PAYE/SSNIT are deliberately NOT here — a count that implies an action
+     belongs next to that action, in Risk & action. #}
   <section class="ops-kpis" aria-labelledby="kpi-heading">
-    <h2 id="kpi-heading" class="sr-only">Platform summary for {{ period_label }}</h2>
+    <div class="ops-kpis-head">
+      <h2 id="kpi-heading">{{ period_label }} <span>across the book</span></h2>
+    <form class="ops-filters" method="get" action="{{ url_for('main.dashboard') }}"
+          aria-label="Choose reporting period">
+      <div class="ops-field">
+        <label for="month">Month</label>
+        <select id="month" name="month">
+          {% for month in month_options %}
+            <option value="{{ month }}" {% if month == selected_month %}selected{% endif %}>{{ month }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ops-field">
+        <label for="year">Year</label>
+        <select id="year" name="year">
+          {% for year in year_options %}
+            <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="ops-apply" type="submit">Apply</button>
+    </form>
+    </div>
     <div class="kpi-band">
       {% for kpi in kpis %}
       <div class="ops-reveal" style="--i: {{ loop.index0 }}">{{ ui.kpi_card(kpi, url_for(kpi.endpoint)) }}</div>
@@ -220,10 +209,9 @@
       {% if analytics.has_data %}
         {# height is the chart's viewBox height, not a pixel height: the SVG
            scales to the panel's width, so this number sets the ASPECT RATIO.
-           104 against the macro's 320-wide box gives roughly 3:1 — wide enough
-           to be the dominant panel without becoming a wall of empty plot area
-           at desktop width. #}
-        {{ ch.line_chart(analytics.revenue_trend, label="Payroll cost trend", height=104) }}
+           64 against the macro's 320-wide box gives 5:1 — 104 (3:1) made a
+           full-width panel nearly 400px tall, most of it empty plot area. #}
+        {{ ch.line_chart(analytics.revenue_trend, label="Payroll cost trend", height=64) }}
       {% else %}
         {{ ui.empty(
              "No payroll processed yet",

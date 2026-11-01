@@ -270,11 +270,14 @@ def dashboard():
     # Same three counts already driving the KPI band and the header's Risk Queue
     # badge — reshaped, not recomputed, so the panel and those numbers can never
     # disagree.
+    from app.access_requests import open_request_count
+
     risk_signals = platform_risk_signals(
         held_count,
         pending_approvals,
         warning_count,
         awaiting_credentials=len(ClientCompany.ids_awaiting_credentials()),
+        new_applications=open_request_count(),
     )
     # Combined employee (5.5%) + employer (13%) SSF — the figure actually
     # remitted to SSNIT, not just the worker-side deduction.
