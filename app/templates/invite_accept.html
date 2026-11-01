@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Choose your password · {{ app_name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">{% endblock %}
+{# Rendered for signed-in and signed-out visitors alike (an operator may open a
+   link to check it), so the page lives in both blocks. #}
+{% macro invite_body() %}
+{% from 'macros/brand.html' import logo, mark_watermark with context %}
+<main class="auth-page auth-page--compact">{{ mark_watermark() }}<section class="auth-reset" aria-labelledby="invite-heading">
+  <a class="auth-brand" href="{{ url_for('main.index') }}">{{ logo() }}</a>
+  {% if invalid %}
+  <p class="auth-eyebrow">Invite link</p><h1 id="invite-heading">This link no longer works.</h1>
+  <p class="auth-intro">Invite links work once and expire after 72 hours. If you have already chosen a password, sign in. Otherwise ask whoever invited you to send a new link.</p>
+  <a class="btn btn-primary auth-submit" href="{{ url_for('auth.login') }}">Go to sign in <span aria-hidden="true">→</span></a>
+  {% else %}
+  <p class="auth-eyebrow">{{ invitee.client_company.name if invitee.client_company else app_brand_name }}</p>
+  <h1 id="invite-heading">Choose your password.</h1>
+  <p class="auth-intro">You'll sign in as <strong>{{ invitee.email }}</strong>.</p>
+  {% if error %}<div class="alert alert-danger" role="alert" id="invite-error">{{ error }}</div>{% endif %}
+  <form method="post" class="auth-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="email" name="email" value="{{ invitee.email }}" autocomplete="username" hidden>
+    <label for="password">New password</label>
+    <input class="form-control" type="password" id="password" name="password" minlength="{{ min_length }}" autocomplete="new-password" required autofocus {% if error %}aria-describedby="invite-error" aria-invalid="true"{% endif %}>
+    <p class="auth-hint">At least {{ min_length }} characters.</p>
+    <label for="confirm">Type it again</label>
+    <input class="form-control" type="password" id="confirm" name="confirm" minlength="{{ min_length }}" autocomplete="new-password" required>
+    <button class="btn btn-primary auth-submit" type="submit">Set password and sign in <span aria-hidden="true">→</span></button>
+  </form>
+  {% endif %}
+  <p class="auth-legal">© 2026 {{ app_brand_name }}. By {{ company_name }}.</p>
+</section></main>
+{% endmacro %}
+{% block public_content %}{{ invite_body() }}{% endblock %}
+{% block content %}{{ invite_body() }}{% endblock %}

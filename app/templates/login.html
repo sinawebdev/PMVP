@@ -2,18 +2,18 @@
 {% block title %}Log in · {{ app_name }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">{% endblock %}
 {% block public_content %}
-{% from 'macros/brand.html' import logo with context %}
-<main class="auth-page">
+{% from 'macros/brand.html' import logo, mark_watermark with context %}
+<main class="auth-page">{{ mark_watermark() }}
   <aside class="auth-story" aria-label="About {{ app_brand_name }}">
     <a class="auth-brand" href="{{ url_for('main.index') }}">{{ logo() }}</a>
     <div class="auth-story-copy">
-      <p class="auth-eyebrow">A little more clarity. Every payday.</p>
-      <h2>Good payroll.<br>A clear head.</h2>
-      <p>A considered workspace for the people behind every payday.</p>
+      <p class="auth-eyebrow">Payroll software for Ghana</p>
+      <h2>From spreadsheet<br>to payslip.</h2>
+      <p>Pay, PAYE and SSNIT worked out from your workbook, approved, and sent to every employee.</p>
       <ol class="auth-principles">
-        <li><span aria-hidden="true">01</span><div><strong>Calculate with confidence</strong><p>Payroll, PAYE and SSNIT in one flow.</p></div></li>
-        <li><span aria-hidden="true">02</span><div><strong>Keep everyone informed</strong><p>Deliver payslips and follow their status.</p></div></li>
-        <li><span aria-hidden="true">03</span><div><strong>Know where things stand</strong><p>Clear approvals, records and next steps.</p></div></li>
+        <li><span aria-hidden="true">01</span><div><strong>Upload and calculate</strong><p>At the GRA rates in force for the month.</p></div></li>
+        <li><span aria-hidden="true">02</span><div><strong>Review and approve</strong><p>Flagged rows first, then the decision on record.</p></div></li>
+        <li><span aria-hidden="true">03</span><div><strong>Send payslips</strong><p>By email, WhatsApp or SMS, with delivery status.</p></div></li>
       </ol>
     </div>
     <p class="auth-story-foot">{{ app_short_name }} · By {{ company_name }}</p>
@@ -21,8 +21,8 @@
   <section class="auth-form-side" aria-labelledby="sign-in-heading">
     <a class="auth-mobile-brand" href="{{ url_for('main.index') }}">{{ logo() }}</a>
     <div class="auth-form-card">
-      <p class="auth-eyebrow">Welcome back</p><h1 id="sign-in-heading">Your workspace<br>is ready.</h1>
-      <p class="auth-intro">Sign in to pick up where you left off.</p>
+      <p class="auth-eyebrow">Welcome back</p><h1 id="sign-in-heading">Sign in</h1>
+      <p class="auth-intro">Use your work email and password.</p>
       {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="alert alert-{{ category }}" role="status">{{ message }}</div>{% endfor %}{% endwith %}
       {% if login_error %}<div class="alert alert-danger" role="alert" id="login-error">{{ login_error }}</div>{% endif %}
       <form method="post" class="auth-form">

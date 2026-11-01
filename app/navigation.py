@@ -61,7 +61,7 @@ NAV = (
     NavItem("dashboard", "Dashboard", "grid", "main.dashboard",
             frozenset({"main"}), None, "primary"),
     NavItem("clients", "Clients", "building", "main.clients",
-            frozenset({"employees"}), None, "primary"),
+            frozenset({"employees", "access"}), None, "primary"),
     NavItem("payroll", "Payroll", "wallet", "payroll.runs",
             frozenset({"payroll", "oversight"}), can_operate_payroll, "primary"),
     NavItem("payslips", "Payslips", "file-text", "payslip.index",

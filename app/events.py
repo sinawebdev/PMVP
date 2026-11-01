@@ -131,6 +131,7 @@ _EVENT_LABELS = {
     "distribution.scheduled_started": "Scheduled distribution started",
     "distribution.worker_stopped": "Distribution worker stopped",
     "distribution.sla_breach": "Distribution SLA breach",
+    "access.requested": "New access request",
 }
 
 

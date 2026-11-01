@@ -17,8 +17,17 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(40), nullable=False, default="viewer")
     client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"))
+    # Set when an invited user first chooses a password (app.invites). NULL on an
+    # invited-but-not-yet-accepted login; seeded and pre-invite users are
+    # treated as active because they have a usable password already.
+    invited_at = db.Column(db.DateTime)
+    activated_at = db.Column(db.DateTime)
 
     client_company = db.relationship("ClientCompany")
+
+    @property
+    def invite_pending(self):
+        return self.invited_at is not None and self.activated_at is None
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -62,15 +71,14 @@ class ClientCompany(db.Model):
     proposals = db.relationship("Proposal", back_populates="client_company")
 
     # --- Awaiting credentials (Phase 4, Task 4.5) ---------------------------
-    # Onboarding creates the company record and nothing else: Payrolla never
-    # mints an auth identity itself (see the note above main.add_client), so a
-    # company can sit fully onboarded and completely unable to sign in, with
-    # nothing on any screen saying so.
+    # Onboarding creates the company record and nothing else; the client admin's
+    # login is a separate step (an emailed invite, see app.invites). Until then a
+    # company can sit fully onboarded and completely unable to sign in, so the
+    # screens say so.
     #
     # DERIVED, deliberately. A stored "awaiting credentials" column would be a
     # second answer to a question the User table already answers, and it would
-    # go stale the moment an identity is created or revoked outside this app —
-    # which is exactly how credentials are provisioned here.
+    # go stale the moment an identity is created or revoked.
 
     @property
     def awaiting_credentials(self):
@@ -1130,3 +1138,45 @@ class RawUploadArchive(db.Model):
     created_at = db.Column(db.DateTime, default=utc_now)
 
     payroll_run = db.relationship("PayrollRun")
+
+
+# ---------------------------------------------------------------------------
+# Access requests: a company applying through the public landing page. The
+# operator reviews it on the Clients page; approving it creates the
+# ClientCompany (linked here) and then invites the contact as client admin.
+# ---------------------------------------------------------------------------
+
+ACCESS_NEW = "new"
+ACCESS_CONTACTED = "contacted"
+ACCESS_APPROVED = "approved"
+ACCESS_DECLINED = "declined"
+ACCESS_STATUSES = (ACCESS_NEW, ACCESS_CONTACTED, ACCESS_APPROVED, ACCESS_DECLINED)
+# Requests still waiting on an operator decision.
+ACCESS_OPEN_STATUSES = (ACCESS_NEW, ACCESS_CONTACTED)
+
+
+class AccessRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    company_name = db.Column(db.String(160), nullable=False)
+    contact_name = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(160), nullable=False)
+    phone = db.Column(db.String(40))
+    location = db.Column(db.String(120))
+    # A band, not a count: applicants estimate, and the band is what pricing uses.
+    employee_band = db.Column(db.String(20))
+    interest = db.Column(db.String(20), nullable=False, default="web")  # web|desktop|both
+    message = db.Column(db.Text)
+    status = db.Column(db.String(20), nullable=False, default=ACCESS_NEW, index=True)
+    decline_reason = db.Column(db.String(255))
+    client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"))
+    reviewed_by_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    reviewed_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=utc_now, index=True)
+
+    client_company = db.relationship("ClientCompany")
+    reviewed_by = db.relationship("User")
+
+    @property
+    def is_open(self):
+        return self.status in ACCESS_OPEN_STATUSES
+

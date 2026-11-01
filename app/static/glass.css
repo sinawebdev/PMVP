@@ -283,3 +283,79 @@ body.brand-shell-bg {
     -webkit-backdrop-filter: none; backdrop-filter: none;
   }
 }
+
+/* ---- Animated Payrolla mark (macros/brand.html, logo-player.js) ----------
+   The video frame is larger than the P; these fractions crop the frame to the
+   P's own box, the same numbers the landing's scroll mark uses. */
+.brand-mark-anim, .mark-watermark {
+  --mark-left: .2084;
+  --mark-top: .4815;
+  --mark-width: .5288;
+  --mark-height: .4802;
+  position: relative;
+  display: inline-block;
+  flex: none;
+  overflow: visible;
+}
+.brand-mark-anim .mark-anim-media, .mark-watermark .mark-anim-media {
+  position: absolute;
+  display: block;
+  left: calc(-100% * var(--mark-left) / var(--mark-width));
+  top: calc(-100% * var(--mark-top) / var(--mark-height));
+  width: calc(100% / var(--mark-width));
+  height: calc(100% / var(--mark-height));
+  max-width: none;
+}
+.brand-mark-anim .mark-anim-still, .mark-watermark .mark-anim-still,
+.portal-logo .brand-mark-anim .mark-anim-still { display: block; width: 100%; height: 100%; max-width: none; }
+.is-playing > .mark-anim-media .mark-anim-still { visibility: hidden; }
+
+.anim-lockup { display: inline-flex; align-items: center; gap: 5px; }
+.anim-lockup .brand-mark-anim { height: 29px; width: calc(29px * 148 / 168); }
+.portal-logo .anim-lockup .anim-wordmark { height: 27px; width: auto; margin-top: 1px; }
+@media (max-width: 420px) {
+  .portal-shell .portal-logo .anim-wordmark {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
+  }
+}
+
+/* Watermark: big, faint, behind the page's own content, never interactive. */
+.mark-watermark {
+  position: fixed;
+  right: max(-6vw, -80px);
+  bottom: -8vh;
+  height: clamp(320px, 70vh, 760px);
+  width: calc(clamp(320px, 70vh, 760px) * 148 / 168);
+  opacity: .1;
+  pointer-events: none;
+  z-index: 0;
+}
+.mark-watermark--inline { position: relative; right: auto; bottom: auto; opacity: .9; height: clamp(220px, 36vh, 380px); width: calc(clamp(220px, 36vh, 380px) * 148 / 168); }
+@media (prefers-contrast: more), (forced-colors: active), print { .mark-watermark { display: none; } }
+.error-brand { display: inline-block; margin: 0 auto 18px; }
+.error-brand img { height: 34px; width: auto; }
+.error-card { position: relative; z-index: 1; text-align: center; }
+.auth-page > .auth-story, .auth-page > .auth-form-side, .auth-page > .auth-reset { position: relative; z-index: 1; }
+
+/* ---- Onboarding invite, access requests (operator shell) ---------------- */
+.invite-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 10px; max-width: 760px; }
+.invite-form .btn { margin-top: 6px; }
+.invite-list, .request-list { list-style: none; margin: 0; padding: 0; }
+.invite-list li, .request-list li {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  padding: 14px 0; border-top: 1px solid var(--line);
+}
+.invite-list li:first-child, .request-list li:first-child { border-top: 0; }
+.invite-list li > div:first-child, .request-main { display: flex; flex-direction: column; min-width: 0; flex: 1 1 260px; }
+.invite-list li span:not(.badge), .request-main span { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.request-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.request-actions { display: flex; gap: 8px; margin-left: auto; }
+.request-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px 24px; margin: 0; }
+.request-facts dt { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.request-facts dd { margin: 2px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.request-subhead { font-size: 14px; font-weight: 700; margin: 22px 0 6px; }
+.request-message { white-space: pre-line; max-width: 72ch; color: var(--ink-soft); }
+.decline-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; max-width: 760px; }
+.decline-form label { flex: 1 0 100%; margin: 0; }
+.decline-form input { flex: 1 1 280px; }
+.access-requests { margin-bottom: 20px; }

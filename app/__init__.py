@@ -786,12 +786,14 @@ def create_app():
         can_manage_branding=can_manage_branding,
     )
 
+    from app.access_requests import access_bp
     from app.audit import audit_bp
     from app.auth import auth_bp
     from app.client import client_bp
     from app.distribution import distribution_bp, payslip_link_bp
     from app.distribution.webhooks import distribution_webhooks_bp
     from app.employees import employees_bp
+    from app.invites import invites_bp
     from app.notifications import notifications_bp
     from app.oversight import oversight_bp
     from app.payroll import payroll_bp
@@ -800,6 +802,8 @@ def create_app():
     from app.routes import main_bp
     from app.statutory import statutory_bp
 
+    app.register_blueprint(access_bp)
+    app.register_blueprint(invites_bp)
     app.register_blueprint(audit_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(client_bp)

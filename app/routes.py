@@ -40,15 +40,14 @@ main_bp = Blueprint("main", __name__)
 def index():
     # Signed-in users go to their plane's landing (tenant -> Company Dashboard,
     # platform operator -> oversight console); everyone else sees the public
-    # marketing landing that positions push-distribution vs portal-only competitors.
+    # public landing, which also carries the access-request form.
     if current_user.is_authenticated:
         from app.tenancy import landing_endpoint
 
         return redirect(url_for(landing_endpoint()))
-    return render_template(
-        "landing.html",
-        desktop_download_url=current_app.config.get("DESKTOP_DOWNLOAD_URL"),
-    )
+    from app.access_requests import render_landing
+
+    return render_landing(sent=request.args.get("sent") == "1")
 
 
 @main_bp.route("/health")
@@ -393,11 +392,17 @@ def clients():
         )
     page = paginate(query.order_by(ClientCompany.name))
     clients = page.items
+    from app.access_requests import INTERESTS, open_requests
+
     return render_template(
         "clients.html",
         page=page,
         search=search,
         clients=clients,
+        # Landing-page applications waiting on a decision; oldest first, because
+        # whoever applied first has waited longest.
+        access_requests=open_requests(),
+        interests=INTERESTS,
         # One query for the whole page — the per-company property would be an
         # N+1 here. See ClientCompany.ids_awaiting_credentials.
         awaiting_credentials=ClientCompany.ids_awaiting_credentials(
@@ -407,11 +412,14 @@ def clients():
 
 
 # --- Client onboarding ------------------------------------------------------
-# Onboarding a company is deliberately independent of authentication: this
-# workflow only ever creates the ClientCompany record. Supabase Auth users are
-# provisioned by hand afterwards (see the onboarding summary page), so a company
-# can exist, be edited, and be deleted without any credential ever being minted
-# by the app — and a credential outage never blocks onboarding.
+# Creating a company only ever creates the ClientCompany record. Its first login
+# is a separate, explicit step on the onboarding page: the operator invites the
+# client admin (app.invites), so a company can exist and be edited before anyone
+# signs in, and an email outage never blocks onboarding.
+#
+# A company can also start life as an access request from the landing page
+# (app.access_requests). /clients/add?request=<id> prefills the form from it, and
+# saving links the request to the new company.
 
 COMPANY_STATUSES = ("Active", "Inactive")
 
@@ -501,7 +509,21 @@ def edit_client(client_id):
     return client_form(client)
 
 
+def _source_request(client):
+    """The open access request a new company is being created from, if any."""
+    if client is not None:
+        return None
+    from app.models import AccessRequest
+
+    raw = request.values.get("request")
+    if not raw or not str(raw).isdigit():
+        return None
+    found = db.session.get(AccessRequest, int(raw))
+    return found if found is not None and found.is_open else None
+
+
 def client_form(client=None):
+    source = _source_request(client)
     if request.method == "POST":
         values, errors = validate_client_form(request.form, client)
         if errors:
@@ -509,7 +531,8 @@ def client_form(client=None):
             # to their fields (the login/employee-form pattern), rather than
             # bouncing to an empty form.
             return render_template(
-                "client_form.html", client=client, values=values, errors=errors
+                "client_form.html", client=client, values=values, errors=errors,
+                source_request=source,
             )
         creating = client is None
         if creating:
@@ -526,6 +549,10 @@ def client_form(client=None):
         client.status = values["status"]
         client.notes = values["notes"] or None
         db.session.flush()  # assign client.id before the audit entry references it
+        if creating and source is not None:
+            from app.access_requests import mark_approved
+
+            mark_approved(source, client)
         record_audit(
             "Client company onboarded" if creating else "Client company updated",
             client,
@@ -534,8 +561,8 @@ def client_form(client=None):
         )
         db.session.commit()
         if creating:
-            # A new company lands on its onboarding summary, which is where the
-            # manual Supabase credential step is spelled out.
+            # A new company lands on its onboarding summary, where the client
+            # admin is invited.
             return redirect(url_for("main.client_onboarding", client_id=client.id))
         flash(f"{client.name} updated.", "success")
         return redirect(url_for("main.clients"))
@@ -552,22 +579,58 @@ def client_form(client=None):
         "status": client.status if client else "Active",
         "notes": client.notes if client else "",
     }
-    return render_template("client_form.html", client=client, values=values, errors={})
+    if source is not None:
+        values.update(
+            name=source.company_name,
+            contact_person=source.contact_name,
+            email=source.email,
+            phone=source.phone or "",
+            location=source.location or "",
+            service_type={"web": "Web workspace", "desktop": "Desktop app",
+                          "both": "Web workspace and desktop app"}.get(source.interest, ""),
+            notes=source.message or "",
+        )
+    return render_template("client_form.html", client=client, values=values, errors={},
+                           source_request=source)
 
 
 @main_bp.route("/clients/<int:client_id>/onboarding")
 @platform_required
 def client_onboarding(client_id):
-    """The post-creation onboarding summary.
+    """The post-creation onboarding summary: what was saved, and the invite.
 
-    Confirms what was saved and states the one manual step left: an
-    administrator provisions the company's login credentials in Supabase
-    Authentication. Deliberately NOT automated — company records and auth
-    identities stay independent (see the module note above), so this page is
-    informational and creates nothing.
+    Until someone at the company can sign in, the page's job is the invite form
+    (app.invites posts to it); after that it shows who was invited and whether
+    they have accepted.
     """
     client = db.get_or_404(ClientCompany, client_id)
-    return render_template("client_onboarding.html", client=client)
+    return render_onboarding(client)
+
+
+def render_onboarding(client, invite_errors=None, invite_form=None):
+    from app.models import AccessRequest
+
+    logins = (
+        User.query.filter_by(client_company_id=client.id).order_by(User.id).all()
+    )
+    source = (
+        AccessRequest.query.filter_by(client_company_id=client.id)
+        .order_by(AccessRequest.id.desc())
+        .first()
+    )
+    if invite_form is None:
+        invite_form = {
+            "name": (source.contact_name if source else client.contact_person) or "",
+            "email": (source.email if source else client.email) or "",
+        }
+    return render_template(
+        "client_onboarding.html",
+        client=client,
+        logins=logins,
+        source_request=source,
+        invite_form=invite_form,
+        invite_errors=invite_errors or {},
+    )
 
 
 @main_bp.route("/clients/<int:client_id>")
