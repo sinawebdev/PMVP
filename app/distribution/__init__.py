@@ -419,13 +419,12 @@ def _no_store(response):
 def _short_link_limited():
     """A 429 response if this client has opened too many short links in the
     last minute, else None."""
-    from app.auth import _request_fingerprint
+    from app.client_ip import client_ip, rate_limit_key
 
     from .request_limit import allow
 
-    ip, _agent = _request_fingerprint()
     per_minute = int(current_app.config.get("PAYSLIP_LINK_RATE_PER_MIN", 30))
-    if allow("payslip-link", ip, per_minute):
+    if allow("payslip-link", rate_limit_key(client_ip()), per_minute):
         return None
     response = make_response("Too many requests. Wait a minute, then open the link again.", 429)
     response.mimetype = "text/plain"

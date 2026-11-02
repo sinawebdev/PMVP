@@ -324,6 +324,11 @@ def create_app():
     app.config["SERVICE_SLUG"] = os.getenv("SERVICE_SLUG", "payrolla")
     # Public desktop installer hosted outside this app. Per-firm builds carry
     # their customer's license and must not be used for a general download.
+    # Which request header carries the real client address (app.client_ip).
+    # Cloudflare sets CF-Connecting-IP on every request to a Render service;
+    # set this empty to use the socket address instead.
+    app.config["CLIENT_IP_HEADER"] = os.getenv("CLIENT_IP_HEADER", "CF-Connecting-IP")
+    app.config["ON_RENDER"] = bool(os.getenv("RENDER"))
     _download = os.getenv("DESKTOP_DOWNLOAD_URL", "")
     app.config["DESKTOP_DOWNLOAD_URL"] = https_url_or_none(_download)
     if _download.strip() and not app.config["DESKTOP_DOWNLOAD_URL"]:

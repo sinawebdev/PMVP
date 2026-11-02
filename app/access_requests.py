@@ -21,7 +21,7 @@ from flask_login import current_user
 
 from app import db
 from app.audit import record_audit
-from app.client_ip import client_ip
+from app.client_ip import client_ip, rate_limit_key
 from app.auth import role_required
 from app.distribution.channels import is_valid_email
 from app.models import (
@@ -151,7 +151,7 @@ def submit():
     if errors:
         return render_landing(values, errors, status=400)
 
-    if not _allow(client_ip()):
+    if not _allow(rate_limit_key(client_ip())):
         return render_landing(values, {"form": "We've had several requests from this connection in the "
                                        "last hour. Please try again later, or email us."}, status=429)
 

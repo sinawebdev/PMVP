@@ -92,11 +92,12 @@ class AccessRequestTestCase(unittest.TestCase):
         self.assertEqual(codes, [302, 302, 429])
         self.assertEqual(AccessRequest.query.count(), 2)
 
-    def test_cap_keys_on_the_proxy_appended_hop_not_the_spoofable_first_one(self):
+    def test_cap_ignores_a_rotated_x_forwarded_for(self):
         self.app.config["ACCESS_REQUEST_MAX_PER_HOUR"] = 2
         codes = [
             self.client.post("/request-access", data=_request_form(company_name=f"Spoof {i}"),
-                             headers={"X-Forwarded-For": f"10.0.0.{i}, 203.0.113.9"}).status_code
+                             headers={"CF-Connecting-IP": "203.0.113.9",
+                                      "X-Forwarded-For": f"10.0.0.{i}"}).status_code
             for i in range(3)
         ]
         self.assertEqual(codes, [302, 302, 429])

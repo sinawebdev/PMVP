@@ -373,7 +373,7 @@ class _LoginTestCase(unittest.TestCase):
     def post(self, email, password="wrong", ip="10.0.0.1"):
         return self.client.post(
             "/login", data={"email": email, "password": password},
-            headers={"X-Forwarded-For": ip},
+            headers={"CF-Connecting-IP": ip},
         )
 
 
@@ -403,12 +403,36 @@ class F4LoginRateLimitTests(_LoginTestCase):
         ]
         self.assertEqual(codes[5], 429)
 
-    def test_a_forged_first_forwarded_hop_does_not_dodge_the_ip_lock(self):
-        # Render appends the real client address last; anything before it is
-        # whatever the client sent. A new forged first hop on every attempt
-        # must still count against the one real address.
+    def test_a_forged_x_forwarded_for_does_not_dodge_the_ip_lock(self):
+        # X-Forwarded-For is client-written (Render appends, never clears), so
+        # rotating it must not create new addresses: the lock follows
+        # Cloudflare's CF-Connecting-IP.
         codes = [
-            self.post(f"user{index}@example.com", ip=f"198.51.100.{index}, 10.0.0.9").status_code
+            self.client.post(
+                "/login", data={"email": f"user{index}@example.com", "password": "wrong"},
+                headers={"CF-Connecting-IP": "10.0.0.9", "X-Forwarded-For": f"198.51.100.{index}"},
+            ).status_code
+            for index in range(6)
+        ]
+        self.assertEqual(codes[5], 429)
+
+    def test_the_shared_proxy_end_of_x_forwarded_for_is_not_a_key(self):
+        # Many real users arrive with the same proxy hops at the end of
+        # X-Forwarded-For. Distinct real addresses must never share a lock.
+        for index in range(6):
+            self.client.post(
+                "/login", data={"email": f"spray{index}@example.com", "password": "wrong"},
+                headers={"CF-Connecting-IP": "10.0.0.9", "X-Forwarded-For": "10.0.0.9, 172.71.0.1, 10.1.1.1"},
+            )
+        bystander = self.client.post(
+            "/login", data={"email": "real@example.com", "password": "correct-horse-battery-staple"},
+            headers={"CF-Connecting-IP": "203.0.113.77", "X-Forwarded-For": "203.0.113.77, 172.71.0.1, 10.1.1.1"},
+        )
+        self.assertEqual(bystander.status_code, 302)
+
+    def test_ipv6_addresses_in_one_slash_64_share_a_limit(self):
+        codes = [
+            self.post(f"v6user{index}@example.com", ip=f"2001:db8:1:2::{index + 1:x}").status_code
             for index in range(6)
         ]
         self.assertEqual(codes[5], 429)
@@ -542,7 +566,7 @@ class F9AuthAuditTests(_LoginTestCase):
     def test_a_failed_login_is_recorded_with_ip_and_user_agent(self):
         self.client.post(
             "/login", data={"email": "real@example.com", "password": "wrong"},
-            headers={"X-Forwarded-For": "203.0.113.9", "User-Agent": "probe/1.0"},
+            headers={"CF-Connecting-IP": "203.0.113.9", "User-Agent": "probe/1.0"},
         )
         rows = self._rows("login.failure")
         self.assertEqual(len(rows), 1)
