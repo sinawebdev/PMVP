@@ -401,3 +401,4 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
   .glass-landing .site-header { position: static; }
   .glass-landing .pipe.is-armed * { opacity: 1 !important; transform: none !important; }
 }
+.glass-landing main:focus { outline: none; }

@@ -15,6 +15,7 @@
 {% endif %}
 <section class="panel form-panel">
     <form method="post" class="row g-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="col-md-4">
             <label class="form-label" for="effective_from">Effective From</label>
             <input class="form-control" type="date" id="effective_from" name="effective_from" value="{{ prefill.effective_from or '' }}" required>

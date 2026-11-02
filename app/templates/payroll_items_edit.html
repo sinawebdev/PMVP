@@ -26,6 +26,7 @@
    (earnings, deductions, calculated), and a changed cell is marked so you can
    see what you are about to save. #}
 <form method="post" class="figures-form" data-figures-form>
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <section class="panel figures-panel">
     {% if is_raw %}
     <div class="panel-header"><h2><i class="bi bi-pencil-square"></i>Imported hours</h2><span>{{ raw_entries|length }} lines</span></div>

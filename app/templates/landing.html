@@ -51,7 +51,7 @@
   </div>
 </header>
 
-<main id="main">
+<main id="main" tabindex="-1">
 <div class="landing-mark-stage" data-mark-stage>
 <div class="scroll-mark-layer" aria-hidden="true">
  <div class="scroll-mark-window">
@@ -222,24 +222,25 @@
         {{ field("location", "Town or city", autocomplete="address-level2") }}
         <div class="field {{ 'has-error' if errors.employee_band }}">
           <label for="ra-employee_band">Number of employees <span class="optional">(optional)</span></label>
-          <select id="ra-employee_band" name="employee_band" {% if errors.employee_band %}aria-invalid="true"{% endif %}>
+          <select id="ra-employee_band" name="employee_band" {% if errors.employee_band %}aria-invalid="true" aria-describedby="ra-employee_band-error"{% endif %}>
             <option value="">Choose</option>
             {% for band in employee_bands %}<option value="{{ band }}" {{ 'selected' if form.employee_band == band }}>{{ band }}</option>{% endfor %}
           </select>
-          {% if errors.employee_band %}<p class="field-error">{{ errors.employee_band }}</p>{% endif %}
+          {% if errors.employee_band %}<p class="field-error" id="ra-employee_band-error">{{ errors.employee_band }}</p>{% endif %}
         </div>
-        <fieldset class="field field--wide interest">
+        <fieldset class="field field--wide interest {{ 'has-error' if errors.interest }}" {% if errors.interest %}aria-describedby="ra-interest-error"{% endif %}>
           <legend>What are you interested in?</legend>
           <div class="interest-options">
             {% for value, label in interests.items() %}
             <label class="interest-option"><input type="radio" name="interest" value="{{ value }}" {{ 'checked' if form.interest == value }}><span>{{ label }}</span></label>
             {% endfor %}
           </div>
+          {% if errors.interest %}<p class="field-error" id="ra-interest-error">{{ errors.interest }}</p>{% endif %}
         </fieldset>
         <div class="field field--wide {{ 'has-error' if errors.message }}">
           <label for="ra-message">Anything we should know? <span class="optional">(optional)</span></label>
-          <textarea id="ra-message" name="message" rows="3" maxlength="2000" placeholder="e.g. we pay weekly, or we currently use a spreadsheet">{{ form.message }}</textarea>
-          {% if errors.message %}<p class="field-error">{{ errors.message }}</p>{% endif %}
+          <textarea id="ra-message" name="message" rows="3" maxlength="2000" placeholder="e.g. we pay weekly, or we currently use a spreadsheet" {% if errors.message %}aria-invalid="true" aria-describedby="ra-message-error"{% endif %}>{{ form.message }}</textarea>
+          {% if errors.message %}<p class="field-error" id="ra-message-error">{{ errors.message }}</p>{% endif %}
         </div>
         <div class="hp" aria-hidden="true"><label for="ra-website">Leave this empty</label><input id="ra-website" name="website" tabindex="-1" autocomplete="off"></div>
       </div>
@@ -265,13 +266,12 @@
   </div>
 </footer>
 
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
-{"@type":"Question","name":"How much does {{ app_brand_name }} cost?","acceptedAnswer":{"@type":"Answer","text":"It depends on how many employees you pay and whether you want the web workspace, the desktop app or both. Send a request with your team size and we'll reply with a quote."}},
-{"@type":"Question","name":"Does approving a run pay my staff?","acceptedAnswer":{"@type":"Answer","text":"No. Approval records that the run was checked and agreed. You pay staff through your bank as usual."}},
-{"@type":"Question","name":"What happens when GRA changes the PAYE bands?","acceptedAnswer":{"@type":"Answer","text":"New rates are added as a dated version. Runs after the change use them; earlier months keep the rates they were calculated with."}}
-]}
-</script>
+{% set faq_ld = {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+  {"@type": "Question", "name": "How much does " ~ app_brand_name ~ " cost?", "acceptedAnswer": {"@type": "Answer", "text": "It depends on how many employees you pay and whether you want the web workspace, the desktop app or both. Send a request with your team size and we'll reply with a quote."}},
+  {"@type": "Question", "name": "Does approving a run pay my staff?", "acceptedAnswer": {"@type": "Answer", "text": "No. Approval records that the run was checked and agreed. You pay staff through your bank as usual."}},
+  {"@type": "Question", "name": "What happens when GRA changes the PAYE bands?", "acceptedAnswer": {"@type": "Answer", "text": "New rates are added as a dated version. Runs after the change use them; earlier months keep the rates they were calculated with."}}
+]} %}
+<script type="application/ld+json">{{ faq_ld | tojson }}</script>
 </div>
 <script src="{{ url_for('static', filename='landing.js', v='20261101') }}" defer></script>
 {% endblock %}
