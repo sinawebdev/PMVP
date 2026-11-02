@@ -265,6 +265,11 @@ class PayrollRun(db.Model):
     reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"))
     approved_by = db.Column(db.Integer, db.ForeignKey("user.id"))
     client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"))
+    # The StatutoryRate version this run was last calculated with (set by
+    # payroll_calculations.statutory_rate_for_run while the run is still open).
+    # NULL on runs calculated before November 2026.
+    statutory_rate_id = db.Column(db.Integer, db.ForeignKey("statutory_rates.id"))
+    statutory_rate = db.relationship("StatutoryRate")
     total_workers = db.Column(db.Integer, default=0)
     total_rows_imported = db.Column(db.Integer, default=0)
     total_unique_workers = db.Column(db.Integer, default=0)

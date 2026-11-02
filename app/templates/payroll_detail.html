@@ -207,6 +207,9 @@
          workbook, and what actually landed as payroll rows. #}
       <div class="col-md-3"><strong>Rows read from file</strong><p class="mb-0 text-muted">{{ payroll_run.total_rows_imported }} → {{ payroll_run.item_count }} imported</p></div>
       <div class="col-md-3"><strong>PAYE total</strong><p class="mb-0 text-muted">{{ payroll_run.total_paye|cedis }}</p></div>
+      {# Which GRA rate version produced these figures (statutory_rate_for_run
+         records it at calculation). #}
+      <div class="col-md-3"><strong>Tax rates used</strong><p class="mb-0 text-muted">{% if payroll_run.statutory_rate %}Version effective {{ payroll_run.statutory_rate.effective_from.strftime('%d %b %Y') }}{% else %}Not recorded (calculated before Nov 2026){% endif %}</p></div>
       <div class="col-md-3"><strong>SSNIT total</strong><p class="mb-0 text-muted">{{ payroll_run.total_ssnit|cedis }}</p></div>
       <div class="col-md-3"><strong>Duplicate workers found</strong><p class="mb-0 text-muted">{{ payroll_run.duplicate_workers_found }}</p></div>
       <div class="col-md-3"><strong>Active / inactive</strong><p class="mb-0 text-muted">{{ payroll_run.active_workers or 0 }} / {{ (payroll_run.inactive_workers or 0) + (payroll_run.terminated_workers or 0) }}</p></div>
