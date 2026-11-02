@@ -63,7 +63,7 @@ services:
       # PUBLIC_BASE_URL; sasusync also needs the key, base URL and sender ID.
       # Keep SMS_BACKEND=console until the sandbox check has passed.
       - key: PUBLIC_BASE_URL
-        value: https://pmvp-v1.onrender.com
+        value: https://payrollagh.com
       - key: SMS_BACKEND
         value: console
       - key: SMS_SENDER_ID

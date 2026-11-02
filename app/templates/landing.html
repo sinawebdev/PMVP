@@ -1,15 +1,56 @@
 {% extends "base.html" %}
-{% block title %}{{ app_name }} — {{ app_tagline }}{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='landing-glass.css') }}">{% endblock %}
+{% block title %}{{ app_name }} — Payroll software for Ghana{% endblock %}
+{% block head %}
+<meta name="description" content="{{ app_brand_name }} works out pay, PAYE and SSNIT from your Excel workbook, takes each run through approval, and sends payslips by email, WhatsApp or SMS.">
+<link rel="stylesheet" href="{{ url_for('static', filename='landing-glass.css', v='20261101') }}">
+{% endblock %}
 {% block public_content %}
 {% from 'macros/brand.html' import logo with context %}
+{% set form = request_form %}
+{% set errors = request_errors %}
 <div class="glass-landing" id="top">
-
 <a class="skip" href="#main">Skip to content</a>
-<svg width="0" height="0" aria-hidden="true" style="position:absolute;overflow:hidden"><defs>
-<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol><symbol id="i-up-right" viewBox="0 0 24 24"><path d="M6 18 18 6M6 6h12v12"/></symbol><symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v15m-6-6 6 6 6-6M4 21h16"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol><symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol><symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol><symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 4-4 7-8 9-4-2-8-5-8-9V6Z"/><path d="m8 12 3 3 5-6"/></symbol><symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 10 5-10 5L2 8Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></symbol><symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m1-17a3 3 0 0 1 0 6m3 10v-2a6 6 0 0 0-3-5"/></symbol><symbol id="i-file" viewBox="0 0 24 24"><path d="M5 3h9l5 5v13H5Zm9 0v5h5M8 12h8M8 16h6"/></symbol><symbol id="i-calc" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="3"/><path d="M7 6h10M8 11h1m6 0h1m-8 4h1m6 0h1m-8 4h1m6 0h1"/></symbol><symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 7 9 6 9-6"/></symbol><symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V4h6l3 3h9v13H3Z"/><path d="M3 11h18"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-windows" viewBox="0 0 24 24"><path d="m3 5 8-1v7H3Zm10-1 8-1v8h-8ZM3 13h8v7l-8-1Zm10 0h8v8l-8-1Z"/></symbol><symbol id="i-up" viewBox="0 0 24 24"><path d="M12 20V5m-6 6 6-6 6 6"/></symbol>
-</defs></svg>
-<header class="site-header glass"><a class="logo" href="{{ url_for('main.index') }}" aria-label="{{ app_brand_name }} home">{{ logo() }}</a><nav class="site-nav" id="site-nav" aria-label="Site navigation"><a href="#how-it-works">How it works</a><a href="#made-for-your-team">Your workspace</a>{% if desktop_download_url %}<a href="#desktop">Desktop app</a>{% endif %}</nav><a class="login-btn" href="{{ url_for('auth.login') }}">Log in<svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a><button type="button" class="menu-btn" id="nav-toggle" aria-controls="site-nav" aria-expanded="false" aria-label="Open navigation"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button></header>
+
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></symbol>
+  <symbol id="i-calc" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3 10 14M21 3l-7 18-4-7-7-4z"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12z"/></symbol>
+  <symbol id="i-sms" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></symbol>
+  <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 6"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1M10 21v-3h4v3"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-windows" viewBox="0 0 24 24"><path d="M3 5.5 10 4.5v7H3zM12 4.2 21 3v8.5h-9zM3 12.5h7v7l-7-1zM12 12.5h9V21l-9-1.2z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></symbol>
+</svg>
+
+<header class="site-header" data-header>
+  <div class="site-header-inner">
+    <a class="logo" href="{{ url_for('main.index') }}" aria-label="{{ app_brand_name }} home">{{ logo() }}</a>
+    <nav class="site-nav" id="site-nav" aria-label="Main">
+      <a href="#how-it-works">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#desktop">Desktop app</a>
+      <a href="#faq">FAQ</a>
+      <a class="nav-login nav-login--menu" href="{{ url_for('auth.login') }}">Log in</a>
+      <a class="lp-btn lp-btn--primary nav-request--menu" href="#request-access">Request access</a>
+    </nav>
+    <div class="header-actions">
+      <a class="nav-login" href="{{ url_for('auth.login') }}">Log in</a>
+      <a class="lp-btn lp-btn--primary lp-btn--sm" href="#request-access">Request access</a>
+    </div>
+    <button class="menu-btn" id="nav-toggle" type="button" aria-controls="site-nav" aria-expanded="false" aria-label="Open navigation"><svg class="icon"><use href="#i-menu"/></svg></button>
+  </div>
+</header>
+
 <main id="main" tabindex="-1">
 <div class="landing-mark-stage" data-mark-stage>
 <div class="scroll-mark-layer" aria-hidden="true">
@@ -19,7 +60,21 @@
   </div>
  </div>
 </div>
-<section class="hero container" aria-labelledby="hero-title"><div class="hero-copy"><p class="eyebrow"><span class="brand-dot" aria-hidden="true"></span>Payroll &amp; HR, built for Ghana</p><h1 id="hero-title">From payroll<br>to payslip.<br><em>All in hand.</em></h1><p class="hero-description">Import the workbook you already keep. Work out pay, PAYE and SSNIT, review the run, and keep every approval and payslip on record.</p><div class="actions"><a class="btn btn-primary" href="{{ url_for('auth.login') }}">Log in to {{ app_brand_name }}<svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a>{% if desktop_download_url %}<a class="btn btn-secondary" href="{{ desktop_download_url }}">Download for Windows<svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></a>{% endif %}</div>{% if desktop_download_url %}<p class="hero-note"><svg class="icon" aria-hidden="true"><use href="#i-windows"/></svg>Windows app · activates with your company license.</p>{% endif %}</div><div class="hero-visual hero-carousel" id="hero-carousel" role="region" aria-roledescription="carousel" aria-label="Payrolla hero illustrations" tabindex="0" data-slide="1" data-rotating="false">
+
+<section class="hero lp-wrap" aria-labelledby="hero-title">
+  <div class="hero-copy">
+    <p class="eyebrow">Payroll software for Ghanaian businesses</p>
+    <h1 id="hero-title">Payroll for Ghana, from spreadsheet to payslip.</h1>
+    <p class="hero-lede">{{ app_brand_name }} works out pay, PAYE and SSNIT from the Excel workbook you already keep, takes each run through approval, and sends every employee their payslip by email, WhatsApp or SMS.</p>
+    <div class="hero-actions">
+      <a class="lp-btn lp-btn--primary" href="#request-access">Request access <svg class="icon"><use href="#i-arrow"/></svg></a>
+      <a class="lp-btn lp-btn--ghost" href="{{ url_for('auth.login') }}">Log in</a>
+    </div>
+    <p class="hero-note">Use it in the browser, or as a Windows app that works offline.</p>
+  </div>
+  {# The hero slideshow, carried over unchanged from the previous landing page
+     (markup, controls and landing-hero-carousel.js behaviour). #}
+<div class="hero-visual hero-carousel" id="hero-carousel" role="region" aria-roledescription="carousel" aria-label="Payrolla hero illustrations" tabindex="0" data-slide="1" data-rotating="false">
  <div class="carousel-viewport" aria-live="off">
   <figure class="hero-slide is-active" id="hero-slide-1" role="group" aria-roledescription="slide" aria-label="1 of 3: The glass payslip" data-title="The glass payslip" aria-hidden="false"><img src="{{ url_for('static', filename='img/hero-glass-payslip.png') }}" alt="A frosted glass sample payslip with layered sheets and an approval record." width="1360" height="1156" decoding="async" fetchpriority="high"></figure>
   <figure class="hero-slide" id="hero-slide-2" role="group" aria-roledescription="slide" aria-label="2 of 3: The clear workspace" data-title="The clear workspace" aria-hidden="true"><img src="{{ url_for('static', filename='img/hero-clear-workspace.png') }}" alt="Payrolla’s glass workspace with sample employee rows, net pay and a payslip." width="1360" height="1156" decoding="async"></figure>
@@ -29,19 +84,203 @@
  <p class="sr-only" id="carousel-status" role="status" aria-live="polite" aria-atomic="true"></p>
 </div>
 </section>
-<div class="proof-strip container"><div class="proof"><span class="proof-icon" aria-hidden="true"><svg class="icon"><use href="#i-calc"/></svg></span><div><h2>PAYE &amp; SSNIT, per person.</h2><p>Calculated from the payroll details you bring in.</p></div></div><div class="proof"><span class="proof-icon" aria-hidden="true"><svg class="icon"><use href="#i-folder"/></svg></span><div><h2>On record, per company.</h2><p>Approvals, payslips and the decisions behind them.</p></div></div><a class="text-link" href="#how-it-works">Follow the flow<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
-<section class="flow-section container" id="how-it-works" aria-labelledby="flow-title"><div class="section-heading"><div><p class="eyebrow">A clear path to payday</p><h2 id="flow-title">One pipeline.<br>Everything in its place.</h2></div><p>From your first import to the final payslip, each step stays connected to the people behind the numbers.</p></div><ol class="flow-grid"><li class="flow-card glass"><div class="flow-number"><span>01 / IMPORT</span><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg></div><h3>Bring your workbook.</h3><p>Import your workbook and match the details to your employee roster.</p><div class="flow-detail"><span class="file-icon" aria-hidden="true"><svg class="icon"><use href="#i-file"/></svg></span><div><strong>Payroll workbook</strong><small>Hours · Rates · Employee details</small></div></div></li><li class="flow-card glass"><div class="flow-number"><span>02 / CALCULATE</span><svg class="icon" aria-hidden="true"><use href="#i-calc"/></svg></div><h3>Make the numbers work.</h3><p>Calculate pay, PAYE, SSNIT and applicable deductions. Review what needs attention.</p><div class="flow-detail flow-equation"><span>Gross</span><b>−</b><span>Deductions</span><b>=</b><strong>Net pay</strong></div></li><li class="flow-card glass"><div class="flow-number"><span>03 / APPROVE</span><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></div><h3>Put approval on record.</h3><p>Review and approve the run. Keep the decision and its audit trail together.</p><div class="flow-detail"><span class="detail-check" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span><div><strong>Decision recorded</strong><small>Review · Approve · Audit trail</small></div></div></li><li class="flow-card glass"><div class="flow-number"><span>04 / DELIVER</span><svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg></div><h3>A payslip. A paper trail.</h3><p>Prepare and send payslips. Follow the delivery result for every recipient.</p><div class="flow-detail delivery" aria-label="Possible delivery outcomes"><span class="delivery-label">✓ Sent</span><span class="delivery-label failed">! Failed</span><span class="delivery-label pending">— Unconfirmed</span></div></li></ol><p class="section-note"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>Illustrative workflow states. Approval records a decision; it does not move money.</p></section>
-</div>
-<section class="workspace-section container" id="made-for-your-team" aria-labelledby="workspace-title"><div class="workspace-copy"><p class="eyebrow">Inside your workspace</p><h2 id="workspace-title">The details stay<br>with the work.</h2><p>Give each company its own space for people, payroll and records. See where the run stands, what needs attention, and what comes next.</p><ul class="workspace-features"><li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>A clear overview of every run</li><li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Checks that belong to a person</li><li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Approvals and delivery, kept separate</li></ul><a class="text-link" href="{{ url_for('auth.login') }}">Open your workspace<svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a></div><div><div class="workspace-shell"><div class="workspace-bar"><img src="{{ url_for('static', filename='img/payrolla-logo.svg') }}" width="86" height="22" alt="Payrolla"><span><svg class="icon" aria-hidden="true"><use href="#i-people"/></svg>Adom Studio · Sample</span></div><div class="workspace-body"><div class="workspace-topline"><h3>October payroll</h3><span>ILLUSTRATIVE WORKSPACE</span></div><div class="workspace-tabs" role="group" aria-label="Explore the sample workspace"><button type="button" data-workspace-tab="review" aria-pressed="true">01 &nbsp; Review</button><button type="button" data-workspace-tab="approval" aria-pressed="false">02 &nbsp; Approval</button><button type="button" data-workspace-tab="payslips" aria-pressed="false">03 &nbsp; Payslips</button></div><div id="workspace-preview" aria-live="polite" aria-atomic="true"><div class="workspace-preview-panel" data-workspace-panel="review"><div class="mini-summary"><span><svg class="icon" aria-hidden="true"><use href="#i-people"/></svg>Net pay · 12 sample people</span><strong><small>GH₵</small>68,297.00</strong><p>Three checks to review before approval.</p></div><div class="mini-rows"><div class="mini-row"><span class="mini-person"><span class="mini-avatar" aria-hidden="true">AO</span><b>Ama Owusu</b></span><span class="mini-status">Confirm bonus</span></div><div class="mini-row"><span class="mini-person"><span class="mini-avatar" aria-hidden="true">KM</span><b>Kwesi Mensah</b></span><span class="mini-status">Missing email</span></div><div class="mini-row"><span class="mini-person"><span class="mini-avatar" aria-hidden="true">AB</span><b>Akosua Boateng</b></span><span class="mini-status">Add department</span></div></div></div>
-<div class="workspace-preview-panel" data-workspace-panel="approval" hidden><div class="mini-summary"><span><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>Illustrative approval state</span><strong>Approval on record.</strong><p>A review decision is recorded. Delivery is a separate step.</p></div><div class="mini-rows"><div class="mini-row"><span class="mini-person"><span class="mini-avatar" aria-hidden="true">AO</span><b>Ama Owusu</b></span><span class="mini-status ok">Bonus reviewed</span></div><div class="mini-row"><span class="mini-person"><span class="mini-avatar" aria-hidden="true">KM</span><b>Kwesi Mensah</b></span><span class="mini-status ok">Email checked</span></div><div class="mini-row"><span class="mini-person"><span class="mini-avatar" aria-hidden="true">AB</span><b>Akosua Boateng</b></span><span class="mini-status ok">Department set</span></div></div></div>
-<div class="workspace-preview-panel" data-workspace-panel="payslips" hidden><div class="mini-summary"><span><svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg>Illustrative delivery state</span><strong>Ready for payslips.</strong><p>Prepare and send payslips after approval. This is an illustration.</p></div><div class="mini-rows"><div class="mini-row"><span class="mini-person"><span class="mini-avatar" aria-hidden="true">AO</span><b>Ama Owusu</b></span><span class="mini-status">Not sent</span></div><div class="mini-row"><span class="mini-person"><span class="mini-avatar" aria-hidden="true">KM</span><b>Kwesi Mensah</b></span><span class="mini-status">Not sent</span></div><div class="mini-row"><span class="mini-person"><span class="mini-avatar" aria-hidden="true">AB</span><b>Akosua Boateng</b></span><span class="mini-status">Not sent</span></div></div></div></div><div class="mini-bottom"><span>Illustrative workspace · Sample data</span><a href="{{ url_for('auth.login') }}">Log in to workspace<svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a></div></div></div><p class="workspace-caption"><svg class="icon" aria-hidden="true"><use href="#i-layers"/></svg>Choose a stage above to explore the sample workspace.</p></div></section>
-<section class="records-section container" aria-labelledby="records-title"><div class="records-copy"><p class="eyebrow">A record worth keeping</p><h2 id="records-title">A payday ends.<br>The record stays.</h2><p>The context behind each run stays close, so the next question starts with the facts.</p></div><div class="record-list"><article class="record-item"><svg class="icon" aria-hidden="true"><use href="#i-people"/></svg><div><h3>Company workspaces</h3><p>Each company sees its own staff, payroll runs and records, with access suited to each person’s role.</p></div></article><article class="record-item"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg><div><h3>Delivery history</h3><p>Keep sent, failed and unconfirmed results visible, so the next follow-up starts with the facts.</p></div></article><article class="record-item"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><div><h3>Reports &amp; audit trails</h3><p>Payroll exports, statutory reports and the decisions behind each run stay close to the work.</p></div></article></div></section>
-<section class="desktop-section container" id="desktop" aria-labelledby="desktop-title"><div class="desktop-card glass"><div class="desktop-title"><div class="desktop-mark" aria-hidden="true"><img src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" width="36" height="43" alt=""></div><div><p class="eyebrow">Your next payday</p><h2 id="desktop-title">All in hand.</h2><p>Your payroll workspace, ready when you are.</p></div></div><div class="desktop-access"><div class="actions"><a class="btn btn-primary" href="{{ url_for('auth.login') }}">Log in to {{ app_brand_name }}<svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a>{% if desktop_download_url %}<a class="btn btn-secondary" href="{{ desktop_download_url }}">Download for Windows<svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></a>{% endif %}</div>{% if desktop_download_url %}<p>Windows app · activates with your company license.</p>{% else %}<p>Log in to access your company workspace.</p>{% endif %}</div></div></section>
-<section class="faq-section container" aria-labelledby="faq-title"><div class="faq-intro"><p class="eyebrow">Before you get started</p><h2 id="faq-title">A couple of useful details.</h2></div><div class="faq-list"><details><summary>Does approval make a payment?</summary><p>Approval records a review decision and its audit trail. It does not move money. Preparing and sending payslips is a separate step.</p></details>{% if desktop_download_url %}<details><summary>How does the Windows app activate?</summary><p>The Windows app activates with your company license. Download the installer above, then use the license supplied for your company.</p></details>{% endif %}</div></section>
-</main>
-<footer class="site-footer container"><a class="logo" href="{{ url_for('main.index') }}" aria-label="{{ app_brand_name }} home">{{ logo() }}</a><p class="footer-copyright">© 2026 {{ app_brand_name }}. By {{ company_name }}.</p><a class="footer-top" href="#top">Back to top<svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></a></footer>
 
+<section class="audience lp-wrap" aria-labelledby="audience-title">
+  <h2 id="audience-title" class="section-title">Who uses it</h2>
+  <div class="audience-grid">
+    <article class="audience-card">
+      <svg class="icon"><use href="#i-building"/></svg>
+      <h3>Businesses running their own payroll</h3>
+      <p>Five staff or five hundred. Upload the month's hours and pay, check the figures, approve, and send the payslips.</p>
+    </article>
+    <article class="audience-card">
+      <svg class="icon"><use href="#i-layers"/></svg>
+      <h3>Payroll bureaus and accountants</h3>
+      <p>Run payroll for many client companies from one account. Each client gets its own portal and sees only its own people.</p>
+    </article>
+    <article class="audience-card">
+      <svg class="icon"><use href="#i-people"/></svg>
+      <h3>Groups with several companies</h3>
+      <p>Separate books for each company, and one place to see payroll cost and what still needs approving.</p>
+    </article>
+  </div>
+</section>
+
+<section class="pipeline-section lp-wrap" id="how-it-works" aria-labelledby="flow-title">
+  <p class="eyebrow">How it works</p>
+  <h2 id="flow-title" class="section-title">Four steps, every payday.</h2>
+  <div class="pipe" data-pipe>
+    <div class="pipe-row">
+    <div class="pipe-track" aria-hidden="true"><span class="pipe-fill"></span><span class="pipe-pulse"></span></div>
+    <ol class="pipe-nodes">
+      <li class="pipe-node">
+        <span class="pipe-ring" aria-hidden="true"><svg class="icon"><use href="#i-file"/></svg><span class="pipe-num">1</span></span>
+        <div class="pipe-text"><h3>Upload</h3><p>Upload your Excel workbook. Each row is matched to an employee, and anything that doesn't fit is flagged.</p></div>
+      </li>
+      <li class="pipe-node">
+        <span class="pipe-ring" aria-hidden="true"><svg class="icon"><use href="#i-calc"/></svg><span class="pipe-num">2</span></span>
+        <div class="pipe-text"><h3>Calculate</h3><p>Gross pay, PAYE, SSNIT and deductions, at the GRA rates in force for that month.</p></div>
+      </li>
+      <li class="pipe-node">
+        <span class="pipe-ring" aria-hidden="true"><svg class="icon"><use href="#i-shield"/></svg><span class="pipe-num">3</span></span>
+        <div class="pipe-text"><h3>Approve</h3><p>Check the totals and flagged rows, then approve. Who approved it, and when, goes on the record.</p></div>
+      </li>
+      <li class="pipe-node">
+        <span class="pipe-ring" aria-hidden="true"><svg class="icon"><use href="#i-send"/></svg><span class="pipe-num">4</span></span>
+        <div class="pipe-text"><h3>Deliver</h3><p>Payslips go out to each employee, and you can see which ones arrived.</p></div>
+      </li>
+    </ol>
+    </div>
+    <ul class="pipe-channels" aria-label="Delivery channels">
+      <li><svg class="icon"><use href="#i-mail"/></svg><span>Email<small>The full payslip</small></span></li>
+      <li><svg class="icon"><use href="#i-chat"/></svg><span>WhatsApp<small>The full payslip</small></span></li>
+      <li><svg class="icon"><use href="#i-sms"/></svg><span>SMS<small>A secure link to it</small></span></li>
+    </ul>
+  </div>
+  <p class="section-note">Approving a run records the decision. {{ app_brand_name }} doesn't move money; you pay staff through your bank as usual.</p>
+</section>
 </div>
-<script src="{{ url_for('static', filename='logo-player.js') }}" defer></script>
-<script src="{{ url_for('static', filename='landing-hero-carousel.js') }}" defer></script>
+
+<section class="features lp-wrap" id="features" aria-labelledby="features-title">
+  <p class="eyebrow">Features</p>
+  <h2 id="features-title" class="section-title">What's included</h2>
+  <div class="feature-grid">
+    <article><svg class="icon"><use href="#i-calc"/></svg><h3>PAYE and SSNIT</h3><p>Current GRA PAYE bands and SSNIT rates, kept as dated versions, so an earlier month always recalculates the same way.</p></article>
+    <article><svg class="icon"><use href="#i-alert"/></svg><h3>Checks before approval</h3><p>Each run is compared with the last one. Large pay changes, headcount changes and duplicate rows are held for review.</p></article>
+    <article><svg class="icon"><use href="#i-mail"/></svg><h3>Payslip delivery</h3><p>Email, WhatsApp and SMS, with a delivery status for every employee and one-click resend for any that failed.</p></article>
+    <article><svg class="icon"><use href="#i-chart"/></svg><h3>Reports</h3><p>A bank listing and the GRA PAYE schedule for every approved run, ready to download.</p></article>
+    <article><svg class="icon"><use href="#i-people"/></svg><h3>Employee records</h3><p>Staff details, bank or MoMo accounts, SSNIT and TIN numbers, and documents, kept in one roster.</p></article>
+    <article><svg class="icon"><use href="#i-list"/></svg><h3>Audit trail</h3><p>Every upload, edit, approval and send is logged with who did it and when.</p></article>
+  </div>
+</section>
+
+<section class="desktop lp-wrap" id="desktop" aria-labelledby="desktop-title">
+  <div class="desktop-card">
+    <div class="desktop-copy">
+      <p class="eyebrow">Desktop app</p>
+      <h2 id="desktop-title" class="section-title">Prefer to keep payroll on your own computer?</h2>
+      <p>The Windows app runs the same payroll as the web workspace, works without an internet connection, and keeps your data on your machine. The download is free. The app unlocks when you activate it with your company's licence.</p>
+      <div class="desktop-actions">
+        {% if desktop_download_url %}
+        <a class="lp-btn lp-btn--primary" href="{{ desktop_download_url }}" rel="nofollow"><svg class="icon"><use href="#i-windows"/></svg>Download for Windows</a>
+        <a class="lp-btn lp-btn--ghost" href="?interest=desktop#request-access" data-interest="desktop">Get a licence</a>
+        {% else %}
+        <a class="lp-btn lp-btn--primary" href="?interest=desktop#request-access" data-interest="desktop">Ask about the desktop app</a>
+        {% endif %}
+      </div>
+      {% if desktop_download_url %}<p class="desktop-note">Windows 10 or later. No licence yet? Install it anyway; it opens on the activation screen.</p>{% endif %}
+    </div>
+    <ol class="desktop-steps">
+      <li><span>1</span><div><strong>Download and install</strong><p>Free, no account needed.</p></div></li>
+      <li><span>2</span><div><strong>Get your licence file</strong><p>We send it once your company is set up.</p></div></li>
+      <li><span>3</span><div><strong>Activate and start</strong><p>Choose the file, create your administrator login, and you're in.</p></div></li>
+    </ol>
+  </div>
+</section>
+
+<section class="faq lp-wrap" id="faq" aria-labelledby="faq-title">
+  <h2 id="faq-title" class="section-title">Common questions</h2>
+  <div class="faq-list">
+    <details><summary>How much does {{ app_brand_name }} cost?</summary><p>It depends on how many employees you pay and whether you want the web workspace, the desktop app or both. Send a request with your team size and we'll reply with a quote.</p></details>
+    <details><summary>How do we get started?</summary><p>Fill in the request form below. We'll get in touch, set up your company, and email your administrator a link to choose a password. From there you can add employees or upload a workbook.</p></details>
+    <details><summary>Do we have to change how we keep our payroll records?</summary><p>No. You can upload the Excel workbook you use now, or start from our employee roster template.</p></details>
+    <details><summary>What happens when GRA changes the PAYE bands?</summary><p>We add the new rates as a dated version. Runs for months after the change use the new rates. Earlier months keep the rates they were calculated with.</p></details>
+    <details><summary>Does approving a run pay my staff?</summary><p>No. Approval records that the run was checked and agreed. You pay staff through your bank as usual, using the bank listing {{ app_brand_name }} produces.</p></details>
+    <details><summary>How do employees receive their payslips?</summary><p>By email, WhatsApp or SMS, depending on the contact details you hold for them. Every payslip's delivery status shows on the run, and failed ones can be resent.</p></details>
+    <details><summary>What's the difference between the web workspace and the desktop app?</summary><p>The web workspace runs in your browser, and your data is held on our servers. The desktop app runs on one Windows computer, works offline, and keeps the data on that computer.</p></details>
+    {% if desktop_download_url %}<details><summary>How does the Windows app activate?</summary><p>On first launch it asks for the licence file we send your company. It checks the file without going online. You then create the administrator login, and the app opens.</p></details>{% endif %}
+  </div>
+</section>
+
+<section class="request lp-wrap" id="request-access" aria-labelledby="request-title">
+  <div class="request-intro">
+    <p class="eyebrow">Request access</p>
+    <h2 id="request-title" class="section-title">Tell us about your company.</h2>
+    <p>We'll reply by email to talk through setup and pricing. Nothing is charged until you agree to it.</p>
+    <ul class="request-points">
+      <li><svg class="icon"><use href="#i-check"/></svg>Your company set up for you</li>
+      <li><svg class="icon"><use href="#i-check"/></svg>Your administrator invited by email</li>
+      <li><svg class="icon"><use href="#i-check"/></svg>Help importing your first workbook</li>
+    </ul>
+  </div>
+  <div class="request-card">
+    {% if request_sent %}
+    <div class="request-done" role="status" tabindex="-1" data-request-done>
+      <svg class="icon"><use href="#i-check"/></svg>
+      <h3>Request received.</h3>
+      <p>Thank you. We'll email you shortly to arrange the next step.</p>
+    </div>
+    {% else %}
+    <form method="post" action="{{ url_for('access.submit') }}#request-access" class="request-form" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if errors.form %}<p class="form-error" role="alert">{{ errors.form }}</p>{% elif errors %}<p class="form-error" role="alert">Check the highlighted fields.</p>{% endif %}
+      {% macro field(name, label, type="text", required=false, autocomplete="", wide=false) %}
+      <div class="field {{ 'field--wide' if wide }} {{ 'has-error' if errors[name] }}">
+        <label for="ra-{{ name }}">{{ label }}{% if not required %} <span class="optional">(optional)</span>{% endif %}</label>
+        <input id="ra-{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ form[name] }}" {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %} {% if required %}required{% endif %}
+               {% if errors[name] %}aria-invalid="true" aria-describedby="ra-{{ name }}-error"{% endif %}>
+        {% if errors[name] %}<p class="field-error" id="ra-{{ name }}-error">{{ errors[name] }}</p>{% endif %}
+      </div>
+      {% endmacro %}
+      <div class="field-grid">
+        {{ field("company_name", "Company name", required=true, autocomplete="organization") }}
+        {{ field("contact_name", "Your name", required=true, autocomplete="name") }}
+        {{ field("email", "Work email", type="email", required=true, autocomplete="email") }}
+        {{ field("phone", "Phone", type="tel", autocomplete="tel") }}
+        {{ field("location", "Town or city", autocomplete="address-level2") }}
+        <div class="field {{ 'has-error' if errors.employee_band }}">
+          <label for="ra-employee_band">Number of employees <span class="optional">(optional)</span></label>
+          <select id="ra-employee_band" name="employee_band" {% if errors.employee_band %}aria-invalid="true" aria-describedby="ra-employee_band-error"{% endif %}>
+            <option value="">Choose</option>
+            {% for band in employee_bands %}<option value="{{ band }}" {{ 'selected' if form.employee_band == band }}>{{ band }}</option>{% endfor %}
+          </select>
+          {% if errors.employee_band %}<p class="field-error" id="ra-employee_band-error">{{ errors.employee_band }}</p>{% endif %}
+        </div>
+        <fieldset class="field field--wide interest {{ 'has-error' if errors.interest }}" {% if errors.interest %}aria-describedby="ra-interest-error"{% endif %}>
+          <legend>What are you interested in?</legend>
+          <div class="interest-options">
+            {% for value, label in interests.items() %}
+            <label class="interest-option"><input type="radio" name="interest" value="{{ value }}" {{ 'checked' if form.interest == value }}><span>{{ label }}</span></label>
+            {% endfor %}
+          </div>
+          {% if errors.interest %}<p class="field-error" id="ra-interest-error">{{ errors.interest }}</p>{% endif %}
+        </fieldset>
+        <div class="field field--wide {{ 'has-error' if errors.message }}">
+          <label for="ra-message">Anything we should know? <span class="optional">(optional)</span></label>
+          <textarea id="ra-message" name="message" rows="3" maxlength="2000" placeholder="e.g. we pay weekly, or we currently use a spreadsheet" {% if errors.message %}aria-invalid="true" aria-describedby="ra-message-error"{% endif %}>{{ form.message }}</textarea>
+          {% if errors.message %}<p class="field-error" id="ra-message-error">{{ errors.message }}</p>{% endif %}
+        </div>
+        <div class="hp" aria-hidden="true"><label for="ra-website">Leave this empty</label><input id="ra-website" name="website" tabindex="-1" autocomplete="off"></div>
+      </div>
+      <button class="lp-btn lp-btn--primary lp-btn--block" type="submit">Send request <svg class="icon"><use href="#i-arrow"/></svg></button>
+      <p class="request-privacy">We use these details only to reply to you.</p>
+    </form>
+    {% endif %}
+  </div>
+</section>
+</main>
+
+<footer class="site-footer">
+  <div class="lp-wrap footer-inner">
+    <a class="logo" href="#top" aria-label="Back to top">{{ logo() }}</a>
+    <nav aria-label="Footer">
+      <a href="#how-it-works">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#desktop">Desktop app</a>
+      <a href="#faq">FAQ</a>
+      <a href="{{ url_for('auth.login') }}">Log in</a>
+    </nav>
+    <p>© 2026 {{ app_brand_name }}. By {{ company_name }}.</p>
+  </div>
+</footer>
+
+{% set faq_ld = {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+  {"@type": "Question", "name": "How much does " ~ app_brand_name ~ " cost?", "acceptedAnswer": {"@type": "Answer", "text": "It depends on how many employees you pay and whether you want the web workspace, the desktop app or both. Send a request with your team size and we'll reply with a quote."}},
+  {"@type": "Question", "name": "Does approving a run pay my staff?", "acceptedAnswer": {"@type": "Answer", "text": "No. Approval records that the run was checked and agreed. You pay staff through your bank as usual."}},
+  {"@type": "Question", "name": "What happens when GRA changes the PAYE bands?", "acceptedAnswer": {"@type": "Answer", "text": "New rates are added as a dated version. Runs after the change use them; earlier months keep the rates they were calculated with."}}
+]} %}
+<script type="application/ld+json">{{ faq_ld | tojson }}</script>
+</div>
+<script src="{{ url_for('static', filename='landing.js', v='20261101') }}" defer></script>
+<script src="{{ url_for('static', filename='landing-hero-carousel.js', v='20261102') }}" defer></script>
 {% endblock %}

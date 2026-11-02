@@ -11,6 +11,36 @@
 <a class="btn btn-light btn-sm" href="{{ url_for('main.add_client') }}"><i class="bi bi-building-add"></i>Add Client Company</a>
 {% endblock %}
 {% block content %}
+{# Applications from the landing page's request form (app.access_requests).
+   Shown only while some are waiting, and above the book, because each one is a
+   decision someone is waiting on. #}
+{% if access_requests %}
+<section class="panel action-required access-requests" aria-labelledby="requests-heading">
+    <div class="panel-header">
+        <h2 id="requests-heading"><i class="bi bi-inbox"></i>Applications</h2>
+        <span class="badge text-bg-warning">{{ access_requests | length }} waiting</span>
+    </div>
+    <ul class="request-list">
+        {% for entry in access_requests %}
+        <li>
+            <div class="request-main">
+                <a href="{{ url_for('access.detail', request_id=entry.id) }}"><strong>{{ entry.company_name }}</strong></a>
+                <span>{{ entry.contact_name }} · {{ entry.email }}{% if entry.employee_band %} · {{ entry.employee_band }} staff{% endif %}</span>
+            </div>
+            <div class="request-meta">
+                <span class="badge text-bg-light">{{ interests.get(entry.interest, entry.interest) }}</span>
+                {% if entry.status == 'contacted' %}<span class="badge text-bg-info">Contacted</span>{% endif %}
+                <span class="mini-note">{{ entry.created_at.strftime('%d %b') }}</span>
+            </div>
+            <div class="request-actions">
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('access.detail', request_id=entry.id) }}">Review</a>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.add_client', request=entry.id) }}"><i class="bi bi-check2"></i>Approve</a>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
 <section class="panel">
     <form class="toolbar" method="get" action="{{ url_for('main.clients') }}" role="search">
         <label class="visually-hidden" for="clients-filter">Filter client companies</label>

@@ -2,7 +2,7 @@
 
 Covers the operator workflow: Add Company -> fill details -> save -> the company
 appears immediately in Client Companies, and the operator lands on an onboarding
-summary that spells out the MANUAL Supabase credential step. The load-bearing
+summary that ends in the client admin invite. The load-bearing
 invariant here is that onboarding is independent of authentication — saving a
 company must never create a User row.
 """
@@ -101,11 +101,10 @@ class ClientOnboardingTestCase(unittest.TestCase):
         body = page.get_data(as_text=True)
         for expected in ("Harbour Freight Ltd", "HFL", "accounts@harbourfreight.com", "Active"):
             self.assertIn(expected, body)
-        self.assertIn(
-            "Provision authentication credentials in Supabase Auth before the "
-            "client can sign in.",
-            body,
-        )
+        # The page ends in the invite form, not instructions for another system.
+        self.assertIn("Nobody at Harbour Freight Ltd can sign in yet.", body)
+        self.assertIn("Send invite", body)
+        self.assertNotIn("Supabase", body)
 
     def test_onboarding_records_an_audit_entry(self):
         self._login_admin()

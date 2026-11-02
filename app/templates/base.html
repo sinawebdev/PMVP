@@ -26,7 +26,7 @@
        never regress a page that does not opt in. #}
     {% block head %}{% endblock %}
     <link rel="stylesheet" href="{{ url_for('static', filename='interface.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='glass.css', v='20261019') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='glass.css', v='20261028') }}">
 </head>
 <body class="brand-shell-bg">
 <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
@@ -74,7 +74,7 @@
         <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="primary-nav" aria-expanded="false">{{ shell_ui.icon('menu', 22) }}</button>
 
         <a class="portal-logo" href="{{ url_for('main.dashboard') }}">
-          {{ brand.logo(compact=true) }}
+          {{ brand.animated_logo(compact=true) }}
         </a>
 
         <nav class="portal-nav" id="primary-nav" aria-label="Operator">
@@ -172,6 +172,10 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{{ url_for('static', filename='vendor/htmx.min.js') }}" defer></script>
 <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+{# Animates every [data-mark-anim] on the page: the shell logo (once per visit),
+   watermarks, and the landing's scroll mark. Does nothing on a page without one.
+   Loaded here only, so no page can start a box twice. #}
+<script src="{{ url_for('static', filename='logo-player.js') }}" defer></script>
 <script>
 (function () {
   // Mobile navigation drawer

@@ -16,11 +16,18 @@
 {% if errors %}
 <div class="alert alert-danger" role="alert">
     <i class="bi bi-exclamation-triangle"></i>
-    Nothing was saved — check the highlighted fields below.
+    Nothing was saved — {{ errors._request if errors._request else "check the highlighted fields below." }}
+</div>
+{% endif %}
+{% if source_request %}
+<div class="alert alert-info" role="status">
+    <i class="bi bi-inbox"></i>
+    Filled in from the access request {{ source_request.contact_name }} sent on {{ source_request.created_at.strftime('%d %b %Y') }}. Choose a company code, check the rest, then save.
 </div>
 {% endif %}
 <section class="panel form-panel">
     <form method="post" class="row g-3" novalidate>
+        {% if source_request %}<input type="hidden" name="request" value="{{ source_request.id }}">{% endif %}
         <div class="col-md-8">
             <label class="form-label" for="name">Company Name <span class="text-danger">*</span></label>
             <input class="form-control {{ 'is-invalid' if errors.get('name') }}" id="name" name="name"
@@ -87,9 +94,9 @@
 <section class="panel mt-3">
     <div class="panel-header"><h2><i class="bi bi-shield-lock"></i>What happens next</h2></div>
     <p class="text-muted mb-0">
-        Saving creates the company record only. You will land on an onboarding summary
-        with the details to provision the client's login credentials in Supabase
-        Authentication — the company can sign in as soon as you have done that.
+        Saving creates the company record only. You will land on its onboarding page,
+        where you invite the client admin by email. They can sign in once they have
+        chosen a password from that email.
     </p>
 </section>
 {% endif %}

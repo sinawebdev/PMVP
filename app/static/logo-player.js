@@ -286,10 +286,26 @@
     video.load();
   }
 
+  // data-mark-session: animate on the first page of a visit only. Storage can
+  // be blocked (private mode, site data off); then it plays every time, which
+  // is the safe side of wrong.
+  function firstOfSession() {
+    try {
+      if (sessionStorage.getItem('payrolla-mark-played')) return false;
+      sessionStorage.setItem('payrolla-mark-played', '1');
+    } catch (e) { /* no storage: play */ }
+    return true;
+  }
+
   function start() {
     var boxes = document.querySelectorAll('[data-mark-anim]');
+    var session = null;
     for (var i = 0; i < boxes.length; i++) {
       if (boxes[i].hasAttribute('data-mark-scroll')) scrollMark(boxes[i]);
+      else if (boxes[i].hasAttribute('data-mark-session')) {
+        if (session === null) session = firstOfSession();
+        if (session) play(boxes[i]);
+      }
       else play(boxes[i]);
     }
   }

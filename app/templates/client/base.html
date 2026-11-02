@@ -31,7 +31,7 @@
      portal composes. #}
   <link rel="stylesheet" href="{{ url_for('static', filename='interface.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='client-interface.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='glass.css', v='20261019') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='glass.css', v='20261028') }}" />
 </head>
 <body class="brand-shell-bg">
 {# The shared icon set (macros/ui.html) — inline SVG, no icon font, so the
@@ -66,8 +66,8 @@
     <header class="portal-topbar">
       <div class="portal-topbar-inner">
         <a class="portal-logo" href="{{ url_for('main.company_dashboard') }}">
-          {% from 'macros/brand.html' import logo with context %}
-          {{ logo(compact=true) }}
+          {% from 'macros/brand.html' import animated_logo with context %}
+          {{ animated_logo(compact=true) }}
         </a>
 
         <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="primary-nav" aria-expanded="false">{{ shell_ui.icon('menu', 22) }}</button>
@@ -232,5 +232,6 @@
     });
   })();
   </script>
+  <script src="{{ url_for('static', filename='logo-player.js') }}" defer></script>
 </body>
 </html>

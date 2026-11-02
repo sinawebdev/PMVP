@@ -20,12 +20,11 @@
 
 {# Anonymous: a self-contained branded card (no sidebar/auth dependencies). #}
 {% block public_content %}
+{% from 'macros/brand.html' import logo, mark_watermark with context %}
 <main class="error-page">
+    {{ mark_watermark() }}
     <section class="error-card">
-        <div class="brand justify-content-center mb-3">
-            <span class="brand-mark">{{ app_brand_mark }}</span>
-            <div><strong>{{ app_brand_name }}</strong><small>{{ app_short_name }}</small></div>
-        </div>
+        <a class="error-brand" href="{{ url_for('main.index') }}">{{ logo() }}</a>
         <div class="error-code">404</div>
         <h1>Page not found</h1>
         <p>That link led somewhere that doesn't exist. Nothing was changed.</p>

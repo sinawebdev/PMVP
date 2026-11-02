@@ -27,7 +27,14 @@ def period_start(month, year):
 
 
 def statutory_rate_for_run(payroll_run):
-    """The StatutoryRate version in force for the run's period, or raise."""
+    """The StatutoryRate version in force for the run's period, or raise.
+
+    Every calculation path asks here for its rates, so this is also where the
+    run records which version it used. Only an open run (Draft or Pending
+    Approval) is stamped: a finalised run keeps the version it was approved
+    with, even if a later, backdated version would now be selected."""
+    from app.payroll_status import PENDING_STATUSES
+
     on_date = period_start(payroll_run.month, payroll_run.year)
     rate = StatutoryRate.active_for(on_date)
     if rate is None:
@@ -35,6 +42,9 @@ def statutory_rate_for_run(payroll_run):
             f"No statutory rate version is effective on {on_date.isoformat()}. "
             "Add one under Statutory Rates before calculating this run."
         )
+    status = getattr(payroll_run, "status", None)
+    if status is None or status in PENDING_STATUSES:
+        payroll_run.statutory_rate_id = rate.id
     return rate
 
 

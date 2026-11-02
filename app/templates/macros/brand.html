@@ -7,3 +7,39 @@
     <span class="portal-logo-name">{{ app_brand_name }}</span>
   {% endif %}
 {%- endmacro %}
+
+{# The animated P (app/static/logo-player.js, play-once mode). The box holds the
+   finished still, so with no JS, reduced motion, Save-Data or a failed video
+   the mark is simply there. `session` asks the player to animate only on the
+   first page of a visit; later pages show the still. #}
+{#- The rendered frames carry a light ribbon fold, made for dark grounds. On a
+    light ground pass still="icon": the resting mark is then the light-ground
+    SVG icon, and the video only shows while it plays. -#}
+{% macro animated_mark(cls="brand-mark-anim", session=false, still="frame") -%}
+  <span class="{{ cls }}" aria-hidden="true" data-mark-anim {% if session %}data-mark-session{% endif %}
+        data-media-class="mark-anim-media"
+        data-video-lg="{{ url_for('static', filename='img/payrolla-mark-dark-lg.mp4') }}"
+        data-video-sm="{{ url_for('static', filename='img/payrolla-mark-dark-sm.mp4') }}">
+    {% if still == "icon" %}
+    <img class="mark-anim-icon" src="{{ url_for('static', filename='img/payrolla-icon.svg') }}" alt="" width="28" height="31">
+    {% else %}
+    <picture class="mark-anim-media"><img class="mark-anim-still" src="{{ url_for('static', filename='img/payrolla-mark-dark-sm.webp') }}" alt="" width="230" height="308"></picture>
+    {% endif %}
+  </span>
+{%- endmacro %}
+
+{# Shell lockup: the animated P beside the wordmark. Falls back to the static
+   lockup for a white-labelled tenant brand. #}
+{% macro animated_logo(compact=false) -%}
+  {% if app_brand_name == 'Payrolla' %}
+    <span class="anim-lockup">{{ animated_mark(session=true, still="icon") }}<img class="anim-wordmark" src="{{ url_for('static', filename='img/payrolla-wordmark.svg') }}" alt="Payrolla" width="126" height="34"></span>
+  {% else %}
+    {{ logo(compact=compact) }}
+  {% endif %}
+{%- endmacro %}
+
+{# A large, faint P that builds once behind a sparse page (auth, errors,
+   onboarding, upload). Decorative only. #}
+{% macro mark_watermark(extra="") -%}
+  {{ animated_mark(cls="mark-watermark " ~ extra) }}
+{%- endmacro %}

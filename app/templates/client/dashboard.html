@@ -70,6 +70,17 @@
     </section>
     {% endif %}
 
+    {# --- Executive KPIs, directly under Quick actions ----------------------
+       The four headline figures (payroll cost to compliance) come first, and
+       Payroll health and Risk & compliance watch sit beneath them as the
+       detail behind those figures. Same macro call, same links. #}
+    <section class="area-kpis" aria-labelledby="kpi-heading">
+      <h2 id="kpi-heading" class="sr-only">Executive summary</h2>
+      <div class="kpi-band">
+        {% for kpi in overview.kpis %}{{ ui.kpi_card(kpi, url_for(kpi.endpoint)) }}{% endfor %}
+      </div>
+    </section>
+
     {# --- 3. Payroll Health Center --------------------------------------- #}
     <section class="xpanel area-health" aria-labelledby="health-heading">
       <div class="panel-head">
@@ -183,17 +194,6 @@
       {% else %}
       {{ ui.empty("Nothing to review", "Risk checks run the moment a payroll is submitted.") }}
       {% endif %}
-    </section>
-
-    {# --- Executive KPIs, second row -----------------------------------------
-       Health and risk say where this period stands and whether anything
-       needs a decision; the four tiles answer the follow-up questions about
-       cost and size. Same macro call, same links, trend chips unchanged. #}
-    <section class="area-kpis" aria-labelledby="kpi-heading">
-      <h2 id="kpi-heading" class="sr-only">Executive summary</h2>
-      <div class="kpi-band">
-        {% for kpi in overview.kpis %}{{ ui.kpi_card(kpi, url_for(kpi.endpoint)) }}{% endfor %}
-      </div>
     </section>
 
     {# --- 5. Financial analytics -----------------------------------------

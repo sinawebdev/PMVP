@@ -58,17 +58,18 @@ def _record_audit(*args, **kwargs):
 
 
 def _request_fingerprint():
-    """(ip, user_agent) for the current request, for the audit trail.
+    """(ip, user_agent) for the current request: the audit trail AND the login
+    throttle's per-IP key.
 
-    Prefers the left-most X-Forwarded-For hop because the app runs behind
-    Render's proxy, where ``remote_addr`` is the proxy rather than the client.
-    Both values are attacker-controlled headers and are recorded as claims, not
-    facts — they are evidence for an investigator, never an access decision.
+    The IP comes from app.client_ip (Cloudflare's CF-Connecting-IP), never from
+    X-Forwarded-For: its left-most entry is written by the client, so a script
+    could send a new address with every attempt and the per-IP limit never
+    tripped. The user agent is still a claim and is recorded as one.
     """
-    forwarded = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
-    ip = forwarded or request.remote_addr or "unknown"
+    from app.client_ip import client_ip
+
     agent = (request.headers.get("User-Agent") or "")[:200]
-    return ip, agent
+    return client_ip(), agent
 
 # Superuser access is NOT a special case here (Phase 1, Task 1.1). ``md`` and
 # ``payrolla_admin`` used to short-circuit every check below, which meant a route
@@ -170,7 +171,9 @@ def login():
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
         ip, agent = _request_fingerprint()
-        keys = [login_throttle.ip_key(ip), login_throttle.account_key(email)]
+        from app.client_ip import rate_limit_key
+
+        keys = [login_throttle.ip_key(rate_limit_key(ip)), login_throttle.account_key(email)]
 
         def _render(error):
             # Re-render with the submitted email preserved (never the password) and
@@ -203,7 +206,10 @@ def login():
         if _verify_credentials(user, password):
             session.clear()
             login_user(user)
-            login_throttle.clear(keys)
+            # Only the account's own count. Clearing the address's count too let
+            # an attacker holding one valid login wipe their spraying failures
+            # by signing in between batches.
+            login_throttle.clear([login_throttle.account_key(email)])
             # After login_user so record_audit attributes the row to the new user.
             _record_audit("login.success", related_record=user,
                          notes=f"email={email} ip={ip} agent={agent}")

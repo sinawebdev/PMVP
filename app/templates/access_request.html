@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
+{% block title %}{{ entry.company_name }} · Access request · {{ app_name }}{% endblock %}
+{% block page_title %}{{ entry.company_name }}{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Client Companies", url_for('main.clients')),
+    ("Access request", None),
+]) }}
+{% endblock %}
+{% block content %}
+<section class="panel {{ 'action-required' if entry.is_open }}">
+    <div class="panel-header">
+        <h2><i class="bi bi-inbox"></i>Access request</h2>
+        {% if entry.status == 'new' %}<span class="badge text-bg-warning">New</span>
+        {% elif entry.status == 'contacted' %}<span class="badge text-bg-info">Contacted</span>
+        {% elif entry.status == 'approved' %}<span class="badge text-bg-success">Approved</span>
+        {% else %}<span class="badge text-bg-secondary">Declined</span>{% endif %}
+    </div>
+    <dl class="request-facts">
+        <div><dt>Contact</dt><dd>{{ entry.contact_name }}</dd></div>
+        <div><dt>Email</dt><dd><a href="mailto:{{ entry.email }}">{{ entry.email }}</a></dd></div>
+        <div><dt>Phone</dt><dd>{{ entry.phone or "—" }}</dd></div>
+        <div><dt>Location</dt><dd>{{ entry.location or "—" }}</dd></div>
+        <div><dt>Team size</dt><dd>{{ entry.employee_band ~ " staff" if entry.employee_band else "—" }}</dd></div>
+        <div><dt>Wants</dt><dd>{{ interests.get(entry.interest, entry.interest) }}</dd></div>
+        <div><dt>Received</dt><dd>{{ entry.created_at.strftime('%d %b %Y, %H:%M') }}</dd></div>
+        {% if entry.reviewed_at %}<div><dt>Decided</dt><dd>{{ entry.reviewed_at.strftime('%d %b %Y') }}{% if entry.reviewed_by %} by {{ entry.reviewed_by.name }}{% endif %}</dd></div>{% endif %}
+    </dl>
+    {% if entry.message %}
+    <h3 class="request-subhead">Their message</h3>
+    <p class="request-message">{{ entry.message }}</p>
+    {% endif %}
+    {% if entry.decline_reason %}
+    <h3 class="request-subhead">Reason for declining</h3>
+    <p class="request-message">{{ entry.decline_reason }}</p>
+    {% endif %}
+</section>
+
+<div class="toolbar mt-3">
+    {% if entry.is_open %}
+    <a class="btn btn-primary" href="{{ url_for('main.add_client', request=entry.id) }}"><i class="bi bi-building-add"></i>Approve and create company</a>
+    {% if entry.status == 'new' %}
+    <form method="post" action="{{ url_for('access.contacted', request_id=entry.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-telephone"></i>Mark as contacted</button>
+    </form>
+    {% endif %}
+    {% elif entry.client_company %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.client_onboarding', client_id=entry.client_company.id) }}"><i class="bi bi-building"></i>Open {{ entry.client_company.name }}</a>
+    {% endif %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.clients') }}">Back to clients</a>
+</div>
+
+{% if entry.is_open %}
+<section class="panel mt-3">
+    <div class="panel-header"><h2><i class="bi bi-x-circle"></i>Decline</h2></div>
+    <form method="post" action="{{ url_for('access.decline', request_id=entry.id) }}" class="decline-form"
+          data-confirm="Decline the request from {{ entry.company_name }}? It leaves the Applications list." data-confirm-title="Decline request" data-confirm-ok="Decline" data-confirm-danger="1">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label" for="reason">Reason (kept on the record, not sent to them)</label>
+        <input class="form-control" id="reason" name="reason" maxlength="255" placeholder="e.g. Outside Ghana, duplicate request">
+        <button class="btn btn-outline-danger" type="submit">Decline request</button>
+    </form>
+</section>
+{% endif %}
+{% endblock %}

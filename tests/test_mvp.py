@@ -1346,8 +1346,10 @@ class MvpTestCase(unittest.TestCase):
         # Page is now "Expenses & Audit" and leads with the read-only audit trail.
         self.assertIn(b"Expenses &amp; Audit", response.data)
         self.assertIn(b"Audit Trail", response.data)
-        self.assertIn(b"excel-grid", response.data)
-        self.assertIn(b"Day", response.data)
+        # Six columns with filters; the weekday rides under the date.
+        self.assertIn(b"audit-grid", response.data)
+        self.assertIn(b'name="kind"', response.data)
+        self.assertRegex(response.get_data(as_text=True), r"(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day, [0-9]{2}:[0-9]{2}")
 
 
 if __name__ == "__main__":

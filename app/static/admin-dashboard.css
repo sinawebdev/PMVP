@@ -497,3 +497,23 @@
     .ops .xpanel, .ops .kpi, .ops-field select { border-color: var(--ink-soft); }
     .ops-field label, .ops-filters-note { color: var(--ink-soft); }
 }
+
+/* --- Period heading row on the KPI band (dashboard.html) -----------------
+   The band's title on the left, the period filter on the right; it replaces
+   the free-floating filter row and the header's "Reporting on" card. */
+.ops .ops-kpis-head {
+    align-items: flex-end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+.ops .ops-kpis-head h2 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+.ops .ops-kpis-head h2 span { color: var(--muted); font-weight: 500; }
+.ops .ops-kpis-head .ops-filters { border: 0; margin: 0; padding: 0; }
+.ops .ops-kpis { margin-bottom: var(--space-section); }
+/* In the heading row the selects explain themselves (a month, a year); the
+   labels stay for assistive tech but no longer push the row taller. */
+.ops .ops-kpis-head .ops-field label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.ops .ops-kpis-head .ops-filters { align-items: center; }

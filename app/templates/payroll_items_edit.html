@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% import "macros/breadcrumbs.html" as bc %}
 {% block title %}Edit Figures · Payroll Run · {{ app_name }}{% endblock %}
-{% block page_title %}Edit Figures — {{ payroll_run.client_company.name if payroll_run.client_company else "Run" }} {{ payroll_run.month }} {{ payroll_run.year }}{% endblock %}
+{% block page_title %}Edit figures{% endblock %}
+{% block page_subtitle %}{{ payroll_run.client_company.name if payroll_run.client_company else "Run" }} · {{ payroll_run.month }} {{ payroll_run.year }} · {{ payroll_run.status }}{% endblock %}
 {% block breadcrumbs %}
 {{ bc.trail([
     ("Dashboard", url_for('main.dashboard')),
@@ -9,37 +10,38 @@
 ] + ([(payroll_run.client_company.name, url_for('main.client_detail', client_id=payroll_run.client_company_id))] if payroll_run.client_company else [])
     + [(payroll_run.month ~ " " ~ payroll_run.year, url_for('payroll.detail', run_id=payroll_run.id)), ("Edit Figures", None)]) }}
 {% endblock %}
+{% block page_actions %}
+<a class="btn btn-outline-light btn-sm" href="{{ url_for('payroll.detail', run_id=payroll_run.id) }}"><i class="bi bi-arrow-left"></i>Back to run</a>
+{% endblock %}
 {% block content %}
 {% if not editable %}
 <div class="alert alert-warning">
     <i class="bi bi-lock"></i>
-    This run is <strong>{{ payroll_run.status }}</strong> — figures are read-only. Only Draft runs can be edited.
-</div>
-{% else %}
-<div class="alert alert-info">
-    <i class="bi bi-exclamation-triangle"></i>
-    Computed columns show the <strong>last Calculate Pay result</strong> and are stale once you save edits —
-    run <strong>Calculate Pay</strong> from the run page afterwards to recompute PAYE, SSNIT and net pay.
+    This run is <strong>{{ payroll_run.status }}</strong>, so its figures are read-only. Only Draft runs can be edited.
 </div>
 {% endif %}
-<div class="toolbar">
-    <a class="btn btn-outline-secondary" href="{{ url_for('payroll.detail', run_id=payroll_run.id) }}"><i class="bi bi-arrow-left"></i>Back to Run</a>
-</div>
-<form method="post">
-<section class="panel">
+{# A spreadsheet-style editor that fits the page: the grid takes the full panel
+   width and most of the viewport height, the employee columns and the header
+   stay put while you scroll, the columns are grouped the way a payslip is
+   (earnings, deductions, calculated), and a changed cell is marked so you can
+   see what you are about to save. #}
+<form method="post" class="figures-form" data-figures-form>
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<section class="panel figures-panel">
     {% if is_raw %}
-    <div class="panel-header"><h2><i class="bi bi-pencil-square"></i>Imported Hours</h2><span>{{ raw_entries|length }} lines</span></div>
-    <div class="excel-grid-wrap">
-        <table class="table table-sm align-middle excel-grid">
-            <thead><tr><th>Employee ID</th><th>Pay Code</th><th>Hours</th></tr></thead>
+    <div class="panel-header"><h2><i class="bi bi-pencil-square"></i>Imported hours</h2><span>{{ raw_entries|length }} lines</span></div>
+    <div class="figures-wrap">
+        <table class="figures-grid figures-grid--raw">
+            <thead><tr><th class="fg-sticky fg-id">Employee ID</th><th>Pay code</th><th class="fg-num">Hours</th></tr></thead>
             <tbody>
             {% for entry in raw_entries %}
                 <tr>
-                    <td>{{ entry.employee_id_str }}</td>
+                    <td class="fg-sticky fg-id">{{ entry.employee_id_str }}</td>
                     <td><code>{{ entry.pay_code }}</code></td>
-                    <td style="max-width: 8rem">
-                        <input class="form-control form-control-sm" type="number" step="0.01" min="0"
+                    <td class="fg-num">
+                        <input class="fg-input" type="number" step="0.01" min="0" inputmode="decimal"
                                name="entry-{{ entry.id }}-hours" value="{{ entry.hours }}"
+                               aria-label="Hours for {{ entry.employee_id_str }}, {{ entry.pay_code }}"
                                {% if not editable %}disabled{% endif %}>
                     </td>
                 </tr>
@@ -48,53 +50,95 @@
         </table>
     </div>
     {% else %}
-    <div class="panel-header"><h2><i class="bi bi-pencil-square"></i>Employee Figures</h2><span>{{ payroll_run.items|length }} rows</span></div>
-    <p class="mini-note"><i class="bi bi-info-circle"></i> Raw input figures only. Gross, PAYE, SSNIT and net are always produced by Calculate Pay and cannot be typed in here.</p>
-    <div class="excel-grid-wrap">
-        <table class="table table-sm align-middle excel-grid">
+    {% set field_labels = {'basic_salary':'Basic', 'transport_allowance':'Transport', 'medical_allowance':'Medical', 'meal_allowance':'Meals', 'productivity_bonus':'Bonus', 'end_of_year_bonus':'Year-end bonus', 'overtime_pay':'Overtime', 'pay_difference':'Pay difference', 'pf_fund_employee':'Employee PF', 'pf_fund_employer':'Employer PF (company contribution)', 'loan_deduction':'Loan deduction', 'loan_advance':'Loan advance', 'welfare_deduction':'Welfare', 'iou_deduction':'IOU', 'other_deductions':'Other deductions'} %}
+    {% set deduction_fields = ['pf_fund_employee', 'pf_fund_employer', 'loan_deduction', 'loan_advance', 'welfare_deduction', 'iou_deduction', 'other_deductions'] %}
+    {% set earnings = editable_fields | reject('in', deduction_fields) | list %}
+    {% set deductions = editable_fields | select('in', deduction_fields) | list %}
+    <div class="panel-header">
+        <h2><i class="bi bi-pencil-square"></i>Employee figures</h2>
+        <span>{{ payroll_run.items|length }} employees</span>
+    </div>
+    <p class="mini-note"><i class="bi bi-info-circle"></i> Type the inputs only. Gross, PAYE, SSNIT and net come from Calculate Pay: they show the last calculation and update when you recalculate the run after saving.</p>
+    <div class="figures-wrap">
+        <table class="figures-grid">
             <thead>
+                <tr class="fg-groups">
+                    <th class="fg-sticky fg-id" colspan="2" scope="colgroup">Employee</th>
+                    <th scope="colgroup">Bank</th>
+                    {% if earnings %}<th colspan="{{ earnings|length }}" scope="colgroup" class="fg-group-earn">Earnings (GH₵)</th>{% endif %}
+                    {% if deductions %}<th colspan="{{ deductions|length }}" scope="colgroup" class="fg-group-ded">Deductions &amp; contributions (GH₵)</th>{% endif %}
+                    <th colspan="4" scope="colgroup" class="fg-group-calc">Calculated</th>
+                </tr>
                 <tr>
-                    <th>Staff ID</th><th>Name</th><th>Bank Branch</th>
-                    {% set field_labels = {'basic_salary':'Basic', 'transport_allowance':'Transport', 'medical_allowance':'Medical', 'meal_allowance':'Meals', 'productivity_bonus':'Bonus', 'end_of_year_bonus':'Year-end bonus', 'overtime_pay':'Overtime', 'pay_difference':'Pay difference', 'pf_fund_employee':'Employee PF', 'pf_fund_employer':'Employer PF (company contribution)', 'loan_deduction':'Loan deduction', 'loan_advance':'Loan advance', 'welfare_deduction':'Welfare', 'iou_deduction':'IOU', 'other_deductions':'Other deductions'} %}
-                    {% for field in editable_fields %}<th>{{ field_labels.get(field, field|replace('_',' ')|title) }}</th>{% endfor %}
-                    <th class="text-muted">Gross*</th><th class="text-muted">PAYE*</th>
-                    <th class="text-muted">SSNIT*</th><th class="text-muted">Net*</th>
+                    <th class="fg-sticky fg-id" scope="col">Staff ID</th>
+                    <th class="fg-sticky fg-name" scope="col">Name</th>
+                    <th scope="col">Branch</th>
+                    {% for field in earnings + deductions %}<th class="fg-num" scope="col">{{ field_labels.get(field, field|replace('_',' ')|title) }}</th>{% endfor %}
+                    <th class="fg-num fg-calc" scope="col">Gross</th><th class="fg-num fg-calc" scope="col">PAYE</th>
+                    <th class="fg-num fg-calc" scope="col">SSNIT</th><th class="fg-num fg-calc" scope="col">Net</th>
                 </tr>
             </thead>
             <tbody>
             {% for item in payroll_run.items %}
                 <tr>
-                    <td>{{ item.staff_id }}</td>
-                    <td>{{ item.full_name }}</td>
-                    <td style="min-width: 8rem">
-                        <input class="form-control form-control-sm" type="text"
+                    <td class="fg-sticky fg-id">{{ item.staff_id }}</td>
+                    <th class="fg-sticky fg-name" scope="row">{{ item.full_name }}</th>
+                    <td>
+                        <input class="fg-input fg-input--text" type="text"
                                name="item-{{ item.id }}-bank_branch" value="{{ item.bank_branch or '' }}"
+                               aria-label="Bank branch for {{ item.full_name }}"
                                {% if not editable %}disabled{% endif %}>
                     </td>
-                    {% for field in editable_fields %}
-                    <td style="min-width: 6.5rem">
-                        <input class="form-control form-control-sm" type="number" step="0.01" min="0"
+                    {% for field in earnings + deductions %}
+                    <td class="fg-num">
+                        <input class="fg-input" type="number" step="0.01" min="0" inputmode="decimal"
                                name="item-{{ item.id }}-{{ field }}" value="{{ '%.2f'|format(item[field] or 0) }}"
+                               aria-label="{{ field_labels.get(field, field) }} for {{ item.full_name }}"
                                {% if not editable %}disabled{% endif %}>
                     </td>
                     {% endfor %}
-                    <td class="money-cell text-muted">{{ item.gross_pay|cedis }}</td>
-                    <td class="money-cell text-muted">{{ item.paye|cedis }}</td>
-                    <td class="money-cell text-muted">{{ item.ssnit|cedis }}</td>
-                    <td class="money-cell text-muted">{{ item.net_pay|cedis }}</td>
+                    <td class="fg-num fg-calc nums">{{ item.gross_pay|cedis }}</td>
+                    <td class="fg-num fg-calc nums">{{ item.paye|cedis }}</td>
+                    <td class="fg-num fg-calc nums">{{ item.ssnit|cedis }}</td>
+                    <td class="fg-num fg-calc nums">{{ item.net_pay|cedis }}</td>
                 </tr>
             {% endfor %}
             </tbody>
         </table>
     </div>
-    <p class="mini-note mt-2"><i class="bi bi-calculator"></i> * Computed by Calculate Pay — read-only, stale until the run is recalculated.</p>
-    {% endif %}
-    {% if editable %}
-    <div class="d-flex gap-2 mt-3">
-        <button class="btn btn-primary" type="submit"><i class="bi bi-save"></i>Save Changes</button>
-        <a class="btn btn-outline-secondary" href="{{ url_for('payroll.detail', run_id=payroll_run.id) }}">Cancel</a>
-    </div>
     {% endif %}
 </section>
+{% if editable %}
+<div class="figures-bar" role="region" aria-label="Save changes">
+    <p class="figures-bar-status" data-figures-status aria-live="polite">No changes yet.</p>
+    <a class="btn btn-outline-secondary" href="{{ url_for('payroll.detail', run_id=payroll_run.id) }}">Cancel</a>
+    <button class="btn btn-primary" type="submit" data-figures-save><i class="bi bi-save"></i>Save changes</button>
+</div>
+{% endif %}
 </form>
+{% if editable %}
+<script>
+/* Marks changed cells and counts them in the save bar, and warns before
+   leaving with unsaved edits. Saving itself is the plain form POST. */
+(function () {
+  var form = document.querySelector('[data-figures-form]');
+  if (!form) return;
+  var status = form.querySelector('[data-figures-status]');
+  var inputs = Array.prototype.slice.call(form.querySelectorAll('.fg-input'));
+  var submitting = false;
+  function changed() { return inputs.filter(function (i) { return i.value !== i.defaultValue; }); }
+  form.addEventListener('input', function (event) {
+    var input = event.target.closest('.fg-input');
+    if (input) input.closest('td').classList.toggle('is-changed', input.value !== input.defaultValue);
+    var n = changed().length;
+    status.textContent = n ? n + (n === 1 ? ' unsaved change' : ' unsaved changes') : 'No changes yet.';
+    status.classList.toggle('has-changes', n > 0);
+  });
+  form.addEventListener('submit', function () { submitting = true; });
+  window.addEventListener('beforeunload', function (event) {
+    if (!submitting && changed().length) { event.preventDefault(); event.returnValue = ''; }
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -174,7 +174,7 @@ MAX_SIGNALS = 4
 
 
 def platform_risk_signals(held_count, pending_approvals, warning_count,
-                          awaiting_credentials=0, limit=MAX_SIGNALS):
+                          awaiting_credentials=0, new_applications=0, limit=MAX_SIGNALS):
     """Book-wide action items, worst first: ``[{tone, title, detail, action,
     endpoint}]``, the contract ``macros/dashboard.html::signal`` renders.
 
@@ -225,8 +225,19 @@ def platform_risk_signals(held_count, pending_approvals, warning_count,
         signals.append({
             "tone": "info",
             "title": f"{awaiting_credentials} compan{'y' if awaiting_credentials == 1 else 'ies'} awaiting credentials",
-            "detail": "Onboarded, with no login identity provisioned yet — nobody there can sign in.",
+            "detail": "Onboarded, but nobody there has been invited yet, so nobody can sign in.",
             "action": "Open companies",
+            "endpoint": "main.clients",
+        })
+
+    # Landing-page applications waiting on a decision (app.access_requests).
+    # Last: a prospect waiting is real, but a held payroll is someone's pay.
+    if new_applications:
+        signals.append({
+            "tone": "info",
+            "title": f"{new_applications} new access request{'' if new_applications == 1 else 's'}",
+            "detail": "Companies that applied on the website and are waiting for a reply.",
+            "action": "Review requests",
             "endpoint": "main.clients",
         })
 

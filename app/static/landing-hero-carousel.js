@@ -1,41 +1,5 @@
-/* Approved landing interactions. Illustrative stages never perform payroll actions. */
-(() => {
-  'use strict';
-  const landing = document.querySelector('.glass-landing');
-  if (!landing) return;
-  const nav = landing.querySelector('#site-nav');
-  const toggle = landing.querySelector('#nav-toggle');
-  function closeMenu(returnFocus = false) {
-    nav.classList.remove('is-open');
-    toggle.setAttribute('aria-expanded', 'false');
-    toggle.setAttribute('aria-label', 'Open navigation');
-    if (returnFocus) toggle.focus();
-  }
-  toggle.addEventListener('click', () => {
-    const open = toggle.getAttribute('aria-expanded') !== 'true';
-    nav.classList.toggle('is-open', open);
-    toggle.setAttribute('aria-expanded', String(open));
-    toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
-  });
-  nav.addEventListener('click', event => { if (event.target.closest('a')) closeMenu(); });
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') closeMenu(true);
-  });
-  window.matchMedia('(min-width: 701px)').addEventListener('change', event => {
-    if (event.matches) closeMenu();
-  });
-  landing.querySelectorAll('[data-workspace-tab]').forEach(tab => {
-    tab.addEventListener('click', () => {
-      landing.querySelectorAll('[data-workspace-tab]').forEach(button => {
-        button.setAttribute('aria-pressed', String(button === tab));
-      });
-      landing.querySelectorAll('[data-workspace-panel]').forEach(panel => {
-        panel.hidden = panel.dataset.workspacePanel !== tab.dataset.workspaceTab;
-      });
-    });
-  });
-})();
-
+/* Hero slideshow, unchanged from the previous landing page. The page's other
+   behaviour (menu, pipeline, request form) lives in landing.js. */
 (() => {
   'use strict';
   const carousel = document.getElementById('hero-carousel');

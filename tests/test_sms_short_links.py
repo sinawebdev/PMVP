@@ -154,7 +154,7 @@ class RouteTests(_LinkCase):
         limited = self.http.get(f"/s/{'B' * 12}")
         self.assertEqual(limited.status_code, 429)  # guesses count too
         self.assertEqual(limited.headers["Retry-After"], "60")
-        other = self.http.get(f"/s/{code}", headers={"X-Forwarded-For": "198.51.100.7"})
+        other = self.http.get(f"/s/{code}", headers={"CF-Connecting-IP": "198.51.100.7"})
         self.assertEqual(other.status_code, 200)
 
     def test_the_signed_link_still_works_and_points_at_its_own_pdf(self):
