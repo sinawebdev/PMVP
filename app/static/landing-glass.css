@@ -14,6 +14,7 @@
   --soft: #dff3ee;
   --line: #d3e4dc;
   --line-control: #7a958b;
+  --border: var(--line-control);
   --card: #fbfefcde;
   --shadow: 0 18px 48px -26px #1f5a4a40, 0 2px 6px #1f5a4a08;
   --radius: 22px;
@@ -51,6 +52,9 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 .glass-landing h1, .glass-landing h2, .glass-landing h3, .glass-landing p { margin: 0; }
 .glass-landing a { color: inherit; }
 .glass-landing img { max-width: 100%; height: auto; display: block; }
+/* Bare buttons (the slideshow's dots and pause) start unstyled, as they did on
+   the previous landing page; styled buttons set their own look by class. */
+.glass-landing button { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .glass-landing .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 .glass-landing .icon {
   width: 1.15em; height: 1.15em; flex: none;
@@ -163,8 +167,6 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 .glass-landing .hero-lede { font-size: clamp(17px, 1.35vw, 19px); line-height: 1.6; color: var(--ink-soft); max-width: 560px; }
 .glass-landing .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
 .glass-landing .hero-note { margin-top: 16px; font-size: 14px; color: var(--muted); }
-.glass-landing .hero-visual { margin: 0; }
-.glass-landing .hero-visual img { width: 100%; filter: drop-shadow(0 30px 40px #1f5a4a26); }
 
 /* ---- Shared card look ------------------------------------------------------ */
 .glass-landing .audience-card, .glass-landing .feature-grid article, .glass-landing .desktop-card,
@@ -372,7 +374,6 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
   .glass-landing .site-nav .nav-login--menu { display: block; }
   .glass-landing .site-nav .nav-request--menu { display: inline-flex; margin-top: 8px; color: #fff; }
   .glass-landing .hero { grid-template-columns: 1fr; }
-  .glass-landing .hero-visual { max-width: 640px; }
   .glass-landing .audience-grid { grid-template-columns: 1fr; }
   .glass-landing .desktop-card, .glass-landing .request { grid-template-columns: 1fr; }
   .glass-landing .hero-mark { --mark-size: clamp(420px, 70svh, 650px); left: 62%; opacity: .1; }
@@ -402,3 +403,260 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
   .glass-landing .pipe.is-armed * { opacity: 1 !important; transform: none !important; }
 }
 .glass-landing main:focus { outline: none; }
+
+/* ---- Hero slideshow ------------------------------------------------------
+   Carried over verbatim from the previous landing stylesheet so the
+   carousel looks and behaves exactly as before. */
+.glass-landing .hero-visual {
+  position:relative;
+  height:495px;
+  min-width:0
+}
+.glass-landing .hero-visual:before {
+  content:"";
+  position:absolute;
+  inset:25px 14px 30px 30px;
+  border-radius:50%;
+  border:1px solid #ffffffb3;
+  background:radial-gradient(ellipse,#d6f1e74f 30%,#ffffff2b);
+  box-shadow:0 0 0 28px #ffffff17,0 0 0 57px #ffffff0d;
+  z-index:-1
+}
+@media(max-width:1180px) {
+.glass-landing .hero-visual {
+  height:450px
+}
+}
+@media(max-width:960px) {
+.glass-landing .hero-visual {
+  height:440px
+}
+.glass-landing .hero-visual:before {
+  inset:70px 0 40px 0
+}
+}
+@media(max-width:700px) {
+.glass-landing .hero-visual {
+  height:440px;
+  margin-top:21px;
+  max-width:510px;
+  width:100%;
+  justify-self:center
+}
+.glass-landing .hero-visual:before {
+  inset:50px 18px 25px
+}
+}
+@media(max-width:420px) {
+.glass-landing .hero-visual {
+  height:365px;
+  margin-top:25px
+}
+}
+@media(max-width:350px) {
+.glass-landing .hero-visual {
+  height:325px;
+  margin-top:23px
+}
+}
+@media(forced-colors:active) {
+.glass-landing:before,
+.glass-landing .hero-visual:before {
+  display:none
+}
+}
+.glass-landing .hero-carousel:before {
+  inset:25px 5px 62px 12px
+}
+.glass-landing .hero-carousel .carousel-viewport {
+  position:absolute;
+  inset:0 0 50px;
+  isolation:isolate
+}
+.glass-landing .hero-carousel .hero-slide {
+  position:absolute;
+  inset:0;
+  margin:0;
+  opacity:0;
+  visibility:hidden;
+  transition:opacity 450ms ease,visibility 0s linear 450ms;
+  pointer-events:none
+}
+.glass-landing .hero-carousel .hero-slide.is-active {
+  opacity:1;
+  visibility:visible;
+  transition:opacity 450ms ease,visibility 0s
+}
+.glass-landing .hero-carousel .hero-slide img {
+  width:100%;
+  height:100%;
+  max-width:none;
+  object-fit:contain;
+  display:block
+}
+.glass-landing .hero-carousel .carousel-toolbar {
+  position:absolute;
+  inset:auto 8px 0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  min-height:42px
+}
+.glass-landing .carousel-caption {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  min-width:0;
+  color:var(--muted);
+  font-size:10px
+}
+.glass-landing .carousel-counter {
+  font-variant-numeric:tabular-nums;
+  font-size:9px;
+  white-space:nowrap;
+  color:#4a6d5b
+}
+.glass-landing .carousel-slide-title {
+  font-weight:500;
+  white-space:nowrap
+}
+.glass-landing .carousel-controls {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex:none
+}
+.glass-landing .carousel-dots {
+  display:flex;
+  gap:1px;
+  align-items:center
+}
+.glass-landing .carousel-dot {
+  height:38px;
+  width:26px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border-radius:8px
+}
+.glass-landing .carousel-dot:before {
+  content:"";
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:#91b5a2;
+  transition:width 150ms ease,background 150ms ease
+}
+.glass-landing .carousel-dot[aria-pressed="true"]:before {
+  width:18px;
+  border-radius:4px;
+  background:var(--brand)
+}
+.glass-landing .carousel-dot:hover {
+  background:#ffffff88
+}
+.glass-landing .carousel-toggle {
+  min-width:61px;
+  min-height:36px;
+  padding:8px 12px;
+  border:1px solid var(--border);
+  border-radius:9px;
+  background:#ffffff85;
+  font-size:10px;
+  font-weight:500;
+  color:var(--deep);
+  line-height:1.3
+}
+.glass-landing .carousel-toggle:hover {
+  background:#fff
+}
+.glass-landing .hero-carousel:focus-visible {
+  outline:3px solid var(--brand);
+  outline-offset:7px;
+  border-radius:20px
+}
+@media(max-width:960px) and (min-width:701px) {
+.glass-landing .carousel-slide-title {
+  display:none
+}
+.glass-landing .hero-carousel .carousel-toolbar {
+  inset-inline:3px
+}
+}
+@media(max-width:700px) {
+.glass-landing .hero-carousel .carousel-toolbar {
+  inset-inline:8px
+}
+.glass-landing .hero-carousel .carousel-viewport {
+  bottom:47px
+}
+.glass-landing .carousel-caption {
+  font-size:10px
+}
+.glass-landing .hero-carousel:before {
+  inset:35px 12px 65px
+}
+}
+@media(max-width:420px) {
+.glass-landing .hero-carousel .carousel-toolbar {
+  inset-inline:3px
+}
+.glass-landing .carousel-slide-title {
+  font-size:9px
+}
+.glass-landing .carousel-caption {
+  gap:6px
+}
+.glass-landing .carousel-counter {
+  font-size:8px
+}
+.glass-landing .carousel-controls {
+  gap:6px
+}
+.glass-landing .carousel-dot {
+  width:24px
+}
+.glass-landing .carousel-toggle {
+  min-width:56px;
+  padding:8px 10px
+}
+}
+@media(max-width:350px) {
+.glass-landing .carousel-slide-title {
+  display:none
+}
+.glass-landing .hero-carousel .carousel-toolbar {
+  inset-inline:5px
+}
+.glass-landing .carousel-counter {
+  font-size:9px
+}
+.glass-landing .carousel-controls {
+  gap:8px
+}
+}
+@media(prefers-reduced-motion:reduce) {
+.glass-landing .hero-carousel .hero-slide,
+.glass-landing .carousel-dot:before {
+  transition:none!important
+}
+}
+@media print {
+.glass-landing .hero-carousel .carousel-toolbar {
+  display:none!important
+}
+.glass-landing .hero-carousel .carousel-viewport {
+  bottom:0
+}
+.glass-landing .hero-carousel .hero-slide {
+  display:none!important
+}
+.glass-landing .hero-carousel .hero-slide:first-child {
+  display:block!important;
+  visibility:visible!important;
+  opacity:1!important
+}
+}
+.glass-landing .carousel-caption { position: static; inset: auto; padding: 0; text-align: left; }
+.glass-landing .hero-carousel .carousel-toggle { cursor: pointer; }

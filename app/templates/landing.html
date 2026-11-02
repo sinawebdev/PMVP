@@ -72,9 +72,17 @@
     </div>
     <p class="hero-note">Use it in the browser, or as a Windows app that works offline.</p>
   </div>
-  <figure class="hero-visual">
-    <img src="{{ url_for('static', filename='img/hero-clear-workspace.png') }}" alt="A {{ app_brand_name }} payroll run for October showing net pay, three employees and their review status, beside one employee's payslip" width="1360" height="1156" fetchpriority="high">
-  </figure>
+  {# The hero slideshow, carried over unchanged from the previous landing page
+     (markup, controls and landing-hero-carousel.js behaviour). #}
+<div class="hero-visual hero-carousel" id="hero-carousel" role="region" aria-roledescription="carousel" aria-label="Payrolla hero illustrations" tabindex="0" data-slide="1" data-rotating="false">
+ <div class="carousel-viewport" aria-live="off">
+  <figure class="hero-slide is-active" id="hero-slide-1" role="group" aria-roledescription="slide" aria-label="1 of 3: The glass payslip" data-title="The glass payslip" aria-hidden="false"><img src="{{ url_for('static', filename='img/hero-glass-payslip.png') }}" alt="A frosted glass sample payslip with layered sheets and an approval record." width="1360" height="1156" decoding="async" fetchpriority="high"></figure>
+  <figure class="hero-slide" id="hero-slide-2" role="group" aria-roledescription="slide" aria-label="2 of 3: The clear workspace" data-title="The clear workspace" aria-hidden="true"><img src="{{ url_for('static', filename='img/hero-clear-workspace.png') }}" alt="Payrolla’s glass workspace with sample employee rows, net pay and a payslip." width="1360" height="1156" decoding="async"></figure>
+  <figure class="hero-slide" id="hero-slide-3" role="group" aria-roledescription="slide" aria-label="3 of 3: From workbook to payslip" data-title="Workbook to payslip" aria-hidden="true"><img src="{{ url_for('static', filename='img/hero-payday-flow.png') }}" alt="Three frosted documents show the path from a workbook through payroll review to a payslip." width="1360" height="1156" decoding="async"></figure>
+ </div>
+ <div class="carousel-toolbar"><p class="carousel-caption"><span class="carousel-counter" id="carousel-counter">1 / 3</span><span class="carousel-slide-title" id="carousel-slide-title">The glass payslip</span></p><div class="carousel-controls"><div class="carousel-dots" role="group" aria-label="Choose a hero illustration"><button type="button" class="carousel-dot" data-carousel-slide="0" aria-label="Show the glass payslip" aria-controls="hero-slide-1" aria-pressed="true"></button><button type="button" class="carousel-dot" data-carousel-slide="1" aria-label="Show the clear workspace" aria-controls="hero-slide-2" aria-pressed="false"></button><button type="button" class="carousel-dot" data-carousel-slide="2" aria-label="Show workbook to payslip" aria-controls="hero-slide-3" aria-pressed="false"></button></div><button type="button" class="carousel-toggle" id="carousel-toggle" aria-label="Pause automatic slide rotation">Pause</button></div></div>
+ <p class="sr-only" id="carousel-status" role="status" aria-live="polite" aria-atomic="true"></p>
+</div>
 </section>
 
 <section class="audience lp-wrap" aria-labelledby="audience-title">
@@ -274,4 +282,5 @@
 <script type="application/ld+json">{{ faq_ld | tojson }}</script>
 </div>
 <script src="{{ url_for('static', filename='landing.js', v='20261101') }}" defer></script>
+<script src="{{ url_for('static', filename='landing-hero-carousel.js', v='20261102') }}" defer></script>
 {% endblock %}
