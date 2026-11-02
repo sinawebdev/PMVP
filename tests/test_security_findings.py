@@ -403,6 +403,16 @@ class F4LoginRateLimitTests(_LoginTestCase):
         ]
         self.assertEqual(codes[5], 429)
 
+    def test_a_forged_first_forwarded_hop_does_not_dodge_the_ip_lock(self):
+        # Render appends the real client address last; anything before it is
+        # whatever the client sent. A new forged first hop on every attempt
+        # must still count against the one real address.
+        codes = [
+            self.post(f"user{index}@example.com", ip=f"198.51.100.{index}, 10.0.0.9").status_code
+            for index in range(6)
+        ]
+        self.assertEqual(codes[5], 429)
+
     def test_a_successful_login_clears_the_failure_count(self):
         for _ in range(3):
             self.post("real@example.com", ip="10.0.0.8")

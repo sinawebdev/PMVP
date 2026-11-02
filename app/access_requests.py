@@ -21,6 +21,7 @@ from flask_login import current_user
 
 from app import db
 from app.audit import record_audit
+from app.client_ip import client_ip
 from app.auth import role_required
 from app.distribution.channels import is_valid_email
 from app.models import (
@@ -51,17 +52,6 @@ _MAX_TRACKED = 5000
 
 def _limit():
     return int(current_app.config.get("ACCESS_REQUEST_MAX_PER_HOUR", 5))
-
-
-def client_ip():
-    """The submitting client's address as Render's proxy recorded it.
-
-    The proxy APPENDS the address it saw to X-Forwarded-For, so the last hop is
-    the one a client cannot forge; anything to its left is whatever the client
-    sent. Keying the cap on the first hop would let a bot pick a new "IP" per
-    request."""
-    hops = [h.strip() for h in (request.headers.get("X-Forwarded-For") or "").split(",") if h.strip()]
-    return hops[-1] if hops else (request.remote_addr or "unknown")
 
 
 def _allow(ip, now=None):

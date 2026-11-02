@@ -58,17 +58,19 @@ def _record_audit(*args, **kwargs):
 
 
 def _request_fingerprint():
-    """(ip, user_agent) for the current request, for the audit trail.
+    """(ip, user_agent) for the current request: the audit trail AND the login
+    throttle's per-IP key.
 
-    Prefers the left-most X-Forwarded-For hop because the app runs behind
-    Render's proxy, where ``remote_addr`` is the proxy rather than the client.
-    Both values are attacker-controlled headers and are recorded as claims, not
-    facts — they are evidence for an investigator, never an access decision.
+    The IP is the hop Render's proxy appended (app.client_ip), not the
+    left-most X-Forwarded-For entry. This used to take the left-most one, which
+    the client writes itself, so a script could send a new address with every
+    attempt and the per-IP limit never tripped. The user agent is still a claim
+    and is recorded as one.
     """
-    forwarded = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
-    ip = forwarded or request.remote_addr or "unknown"
+    from app.client_ip import client_ip
+
     agent = (request.headers.get("User-Agent") or "")[:200]
-    return ip, agent
+    return client_ip(), agent
 
 # Superuser access is NOT a special case here (Phase 1, Task 1.1). ``md`` and
 # ``payrolla_admin`` used to short-circuit every check below, which meant a route
