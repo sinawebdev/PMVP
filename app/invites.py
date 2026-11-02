@@ -20,6 +20,8 @@ from html import escape
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_user
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from sqlalchemy import update as sa_update
+from werkzeug.security import generate_password_hash
 
 from app import db
 from app.audit import record_audit
@@ -171,8 +173,20 @@ def accept(token):
         elif password != confirm:
             error = "The two passwords don't match."
         else:
-            user.set_password(password)
-            user.activated_at = datetime.now(timezone.utc)
+            # Consume the token atomically: the UPDATE only matches while the
+            # password hash is still the one the token was issued against, so
+            # of two simultaneous submissions exactly one wins.
+            old_hash = user.password_hash
+            new_hash = generate_password_hash(password)
+            claimed = db.session.execute(
+                sa_update(User)
+                .where(User.id == user.id, User.password_hash == old_hash)
+                .values(password_hash=new_hash, activated_at=datetime.now(timezone.utc))
+            ).rowcount
+            if claimed != 1:
+                db.session.rollback()
+                return render_template("invite_accept.html", invalid=True), 410
+            db.session.refresh(user)
             record_audit("Client admin invite accepted", user.client_company, f"{user.email} set a password.")
             db.session.commit()
             if current_user.is_authenticated:

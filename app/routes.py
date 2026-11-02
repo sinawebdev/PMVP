@@ -529,6 +529,11 @@ def client_form(client=None):
     source = _source_request(client)
     if request.method == "POST":
         values, errors = validate_client_form(request.form, client)
+        # The form came from an access request that someone else has since
+        # approved or declined: refuse rather than create an unlinked company.
+        if client is None and request.form.get("request") and source is None:
+            errors["_request"] = ("That access request was decided while you were filling this in. "
+                                  "Check the Applications list before creating the company.")
         if errors:
             # Re-render at 200 with the submission intact and the messages bound
             # to their fields (the login/employee-form pattern), rather than

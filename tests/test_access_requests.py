@@ -92,6 +92,32 @@ class AccessRequestTestCase(unittest.TestCase):
         self.assertEqual(codes, [302, 302, 429])
         self.assertEqual(AccessRequest.query.count(), 2)
 
+    def test_cap_keys_on_the_proxy_appended_hop_not_the_spoofable_first_one(self):
+        self.app.config["ACCESS_REQUEST_MAX_PER_HOUR"] = 2
+        codes = [
+            self.client.post("/request-access", data=_request_form(company_name=f"Spoof {i}"),
+                             headers={"X-Forwarded-For": f"10.0.0.{i}, 203.0.113.9"}).status_code
+            for i in range(3)
+        ]
+        self.assertEqual(codes, [302, 302, 429])
+
+    def test_line_breaks_in_names_are_refused(self):
+        resp = self.client.post("/request-access", data=_request_form(company_name="Evil\r\nBcc: x@y.z"))
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(AccessRequest.query.count(), 0)
+
+    def test_a_request_decided_mid_form_is_not_silently_dropped(self):
+        self.client.post("/request-access", data=_request_form())
+        entry = AccessRequest.query.one()
+        self._login_operator()
+        self.client.post(f"/clients/requests/{entry.id}/decline", data={"reason": "dup"})
+        resp = self.client.post("/clients/add", data={
+            "request": entry.id, "name": "Volta Logistics", "company_code": "VOLTA", "status": "Active",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("decided while you were filling this in", resp.get_data(as_text=True))
+        self.assertIsNone(ClientCompany.query.filter_by(company_code="VOLTA").first())
+
     # --- operator review -----------------------------------------------------
     def test_open_request_shows_on_clients_and_approval_links_company(self):
         self.client.post("/request-access", data=_request_form())
@@ -223,6 +249,45 @@ class InviteTestCase(unittest.TestCase):
         self.client.get("/logout")
         with mock.patch("app.invites.INVITE_MAX_AGE", -1):
             self.assertEqual(self.client.get(link).status_code, 410)
+
+
+class AuditPagingTestCase(unittest.TestCase):
+    """The audit trail pages exactly past the first thousand rows."""
+
+    def setUp(self):
+        self.app = create_app()
+        self.app.config["TESTING"] = True
+        self.client = self.app.test_client()
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+        admin = User.query.filter(User.role == "admin", User.client_company_id.is_(None)).first()
+        self.client.post("/login", data={"email": admin.email, "password": "password123"})
+
+    def tearDown(self):
+        self.ctx.pop()
+
+    def test_last_page_is_reachable_and_module_filter_counts_exactly(self):
+        from app.models import AuditTrail
+        db.session.add_all([AuditTrail(action="Payroll figures edited", related_record_type="PayrollRun",
+                                       related_record_id=1, notes=f"row {i}") for i in range(1100)])
+        db.session.commit()
+        total = AuditTrail.query.count()
+        html = self.client.get("/audit?kind=actions&page=99").get_data(as_text=True)
+        self.assertIn(f"{total} records", html)
+        last = (total + 49) // 50
+        html = self.client.get(f"/audit?kind=actions&page={last}").get_data(as_text=True)
+        self.assertIn("audit-grid", html)
+        payroll = self.client.get("/audit?kind=actions&module=Payroll+Runs").get_data(as_text=True)
+        self.assertRegex(payroll, r"(1[01][0-9]{2}) records")
+
+    def test_expense_with_bad_date_or_unknown_run_is_refused(self):
+        from app.models import Expense
+        before = Expense.query.count()
+        self.client.post("/audit/expenses", data={"title": "x", "description": "x", "amount": "5",
+                                                  "expense_date": "31/31/2026"})
+        self.client.post("/audit/expenses", data={"title": "x", "description": "x", "amount": "5",
+                                                  "payroll_run_id": "999999"})
+        self.assertEqual(Expense.query.count(), before)
 
 
 if __name__ == "__main__":

@@ -53,6 +53,17 @@ def _limit():
     return int(current_app.config.get("ACCESS_REQUEST_MAX_PER_HOUR", 5))
 
 
+def client_ip():
+    """The submitting client's address as Render's proxy recorded it.
+
+    The proxy APPENDS the address it saw to X-Forwarded-For, so the last hop is
+    the one a client cannot forge; anything to its left is whatever the client
+    sent. Keying the cap on the first hop would let a bot pick a new "IP" per
+    request."""
+    hops = [h.strip() for h in (request.headers.get("X-Forwarded-For") or "").split(",") if h.strip()]
+    return hops[-1] if hops else (request.remote_addr or "unknown")
+
+
 def _allow(ip, now=None):
     """Record a submission from ``ip``; False once it has used its hourly cap."""
     now = _time.monotonic() if now is None else now
@@ -62,7 +73,12 @@ def _allow(ip, now=None):
             _hits[ip] = recent
             return False
         if len(_hits) >= _MAX_TRACKED and ip not in _hits:
-            _hits.clear()
+            # Drop only addresses with nothing inside the window. Clearing the
+            # whole dict here would let a flood of new addresses reset everyone.
+            for key in [k for k, ts in _hits.items() if not any(now - t < 3600 for t in ts)]:
+                del _hits[key]
+            if len(_hits) >= _MAX_TRACKED:
+                return False
         recent.append(now)
         _hits[ip] = recent
         return True
@@ -76,6 +92,9 @@ def reset():
 
 # --- Validation ---------------------------------------------------------------
 _PHONE_RE = re.compile(r"^[0-9+()\-\s]{7,20}$")
+# Control characters (CR/LF included) have no business in a name and would
+# travel on into email subjects and exports once the company is created.
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 def blank_form(interest="web"):
@@ -91,6 +110,11 @@ def validate(form):
     values = {key: (form.get(key) or "").strip() for key in blank_form()}
     values["email"] = values["email"].lower()
     errors = {}
+    for key in ("company_name", "contact_name", "email", "phone", "location"):
+        if _CONTROL_RE.search(values[key]):
+            errors[key] = "Remove line breaks and special characters."
+    if errors:
+        return values, errors
     if not values["company_name"]:
         errors["company_name"] = "Enter your company's name."
     elif len(values["company_name"]) > 160:
@@ -137,8 +161,7 @@ def submit():
     if errors:
         return render_landing(values, errors, status=400)
 
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
-    if not _allow(ip or "unknown"):
+    if not _allow(client_ip()):
         return render_landing(values, {"form": "We've had several requests from this connection in the "
                                        "last hour. Please try again later, or email us."}, status=429)
 

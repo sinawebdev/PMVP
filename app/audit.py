@@ -36,9 +36,29 @@ def record_audit(action, related_record=None, notes=""):
 # expenses; module values are what module_label() produces.
 AUDIT_KINDS = ("all", "actions", "expenses")
 AUDIT_MODULES = ("Payroll Runs", "Clients", "Employees", "Payslip", "Audit", "System")
-# The page merges two tables in Python, so each side is fetched to this depth
-# before paging. Filters narrow it in SQL first.
-AUDIT_FETCH_LIMIT = 1000
+AUDIT_PER_PAGE = 50
+# module_label() precedence, as SQL: a row belongs to the first keyword its
+# record type + action contains. Keeping the filter in SQL keeps the counts and
+# the paging exact.
+_MODULE_KEYWORDS = (
+    ("Payroll Runs", "%payroll%"),
+    ("Audit", "%expense%"),
+    ("Clients", "%client%"),
+    ("Employees", "%employee%"),
+    ("Payslip", "%payslip%"),
+)
+
+
+def _module_clause(module):
+    text = db.func.lower(
+        db.func.coalesce(AuditTrail.related_record_type, "") + " " + db.func.coalesce(AuditTrail.action, "")
+    )
+    earlier = []
+    for name, pattern in _MODULE_KEYWORDS:
+        if name == module:
+            return db.and_(*earlier, text.like(pattern))
+        earlier.append(~text.like(pattern))
+    return db.and_(*earlier, AuditTrail.related_record_type.is_(None))  # "System"
 
 
 def _audit_filters(args):
@@ -56,10 +76,18 @@ def _audit_filters(args):
 @audit_bp.route("")
 @role_required(*AUDIT_ROLES)
 def audit_trail():
-    from app.paging import paginate_list
+    """Recorded actions and expenses merged newest first, paged exactly.
+
+    The two tables are merged in Python, so page N needs at most N x per_page
+    rows from each side; both are fetched to that depth, merged, and sliced.
+    Totals come from COUNT queries, so the last page is reachable however long
+    the trail grows (the first version capped each side at 1,000 rows)."""
+    from app.paging import _ListPage, page_arg
 
     f = _audit_filters(request.args)
-    entries, expenses = [], []
+    page_num = page_arg("page")
+    depth = page_num * AUDIT_PER_PAGE
+    entries, expenses, total = [], [], 0
     if f["kind"] in ("all", "actions"):
         query = AuditTrail.query
         if f["q"]:
@@ -69,8 +97,12 @@ def audit_trail():
             query = query.filter(AuditTrail.created_at >= datetime.combine(f["date_from"], time.min))
         if f["date_to"]:
             query = query.filter(AuditTrail.created_at <= datetime.combine(f["date_to"], time.max))
-        entries = query.order_by(AuditTrail.created_at.desc()).limit(AUDIT_FETCH_LIMIT).all()
-    if f["kind"] in ("all", "expenses"):
+        if f["module"]:
+            query = query.filter(_module_clause(f["module"]))
+        total += query.count()
+        entries = query.order_by(AuditTrail.created_at.desc()).limit(depth).all()
+    # Expenses all carry module "Audit", so another module filter excludes them.
+    if f["kind"] in ("all", "expenses") and f["module"] in ("", "Audit"):
         query = Expense.query
         if f["q"]:
             like = f"%{f['q']}%"
@@ -80,11 +112,12 @@ def audit_trail():
             query = query.filter(Expense.expense_date >= f["date_from"])
         if f["date_to"]:
             query = query.filter(Expense.expense_date <= f["date_to"])
-        expenses = query.order_by(Expense.created_at.desc()).limit(AUDIT_FETCH_LIMIT).all()
+        total += query.count()
+        expenses = (query.order_by(Expense.expense_date.desc(), Expense.created_at.desc())
+                    .limit(depth).all())
     rows = build_audit_rows(entries, expenses)
-    if f["module"]:
-        rows = [row for row in rows if row["module"] == f["module"]]
-    page = paginate_list(rows, per_page=50)
+    start = (page_num - 1) * AUDIT_PER_PAGE
+    page = _ListPage(rows[start:start + AUDIT_PER_PAGE], page_num, AUDIT_PER_PAGE, total)
     clients = ClientCompany.query.order_by(ClientCompany.name).all()
     payroll_runs = PayrollRun.query.order_by(PayrollRun.created_at.desc()).limit(100).all()
     params = {k: v for k, v in {
@@ -118,7 +151,11 @@ def _parse_amount(raw):
 @audit_bp.route("/expenses", methods=["POST"])
 @role_required(*AUDIT_ROLES)
 def add_expense():
-    expense_date = parse_date(request.form.get("expense_date")) or date.today()
+    raw_date = (request.form.get("expense_date") or "").strip()
+    expense_date = parse_date(raw_date) if raw_date else date.today()
+    if expense_date is None:
+        flash("Enter the date as a calendar date. Nothing was saved.", "danger")
+        return redirect(url_for("audit.audit_trail", _anchor="add-expense"))
     title = (request.form.get("title") or "").strip()[:180]
     description = (request.form.get("description") or "").strip()[:255]
     client_id = request.form.get("client_company_id") or None
@@ -132,14 +169,23 @@ def add_expense():
     if not (title or description):
         flash("Give the expense a title or description. Nothing was saved.", "danger")
         return redirect(url_for("audit.audit_trail", _anchor="add-expense"))
+    client_id = int(client_id) if client_id and client_id.isdigit() else None
+    payroll_run_id = int(payroll_run_id) if payroll_run_id and payroll_run_id.isdigit() else None
+    run = db.session.get(PayrollRun, payroll_run_id) if payroll_run_id else None
+    if (client_id and db.session.get(ClientCompany, client_id) is None) or (payroll_run_id and run is None):
+        flash("That client or payroll run no longer exists. Nothing was saved.", "danger")
+        return redirect(url_for("audit.audit_trail", _anchor="add-expense"))
+    if run is not None and client_id and run.client_company_id != client_id:
+        flash("The payroll run belongs to a different client. Nothing was saved.", "danger")
+        return redirect(url_for("audit.audit_trail", _anchor="add-expense"))
     expense = Expense(
         title=title or description[:180],
         expense_date=expense_date,
         category=(request.form.get("category") or "General").strip()[:80],
         description=description or title,
         amount=amount,
-        client_company_id=int(client_id) if client_id and client_id.isdigit() else None,
-        payroll_run_id=int(payroll_run_id) if payroll_run_id and payroll_run_id.isdigit() else None,
+        client_company_id=client_id,
+        payroll_run_id=payroll_run_id,
         status="Recorded",
         recorded_by=current_user.id,
     )

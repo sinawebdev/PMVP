@@ -16,7 +16,7 @@
 {% if errors %}
 <div class="alert alert-danger" role="alert">
     <i class="bi bi-exclamation-triangle"></i>
-    Nothing was saved — check the highlighted fields below.
+    Nothing was saved — {{ errors._request if errors._request else "check the highlighted fields below." }}
 </div>
 {% endif %}
 {% if source_request %}
