@@ -49,7 +49,7 @@
         </table>
     </div>
     {% else %}
-    {% set field_labels = {'basic_salary':'Basic', 'transport_allowance':'Transport', 'medical_allowance':'Medical', 'meal_allowance':'Meals', 'productivity_bonus':'Bonus', 'end_of_year_bonus':'Year-end bonus', 'overtime_pay':'Overtime', 'pay_difference':'Pay difference', 'pf_fund_employee':'Employee PF', 'pf_fund_employer':'Employer PF', 'loan_deduction':'Loan deduction', 'loan_advance':'Loan advance', 'welfare_deduction':'Welfare', 'iou_deduction':'IOU', 'other_deductions':'Other deductions'} %}
+    {% set field_labels = {'basic_salary':'Basic', 'transport_allowance':'Transport', 'medical_allowance':'Medical', 'meal_allowance':'Meals', 'productivity_bonus':'Bonus', 'end_of_year_bonus':'Year-end bonus', 'overtime_pay':'Overtime', 'pay_difference':'Pay difference', 'pf_fund_employee':'Employee PF', 'pf_fund_employer':'Employer PF (company contribution)', 'loan_deduction':'Loan deduction', 'loan_advance':'Loan advance', 'welfare_deduction':'Welfare', 'iou_deduction':'IOU', 'other_deductions':'Other deductions'} %}
     {% set deduction_fields = ['pf_fund_employee', 'pf_fund_employer', 'loan_deduction', 'loan_advance', 'welfare_deduction', 'iou_deduction', 'other_deductions'] %}
     {% set earnings = editable_fields | reject('in', deduction_fields) | list %}
     {% set deductions = editable_fields | select('in', deduction_fields) | list %}
