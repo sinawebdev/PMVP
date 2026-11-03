@@ -253,7 +253,7 @@
         <div class="hp" aria-hidden="true"><label for="ra-website">Leave this empty</label><input id="ra-website" name="website" tabindex="-1" autocomplete="off"></div>
       </div>
       <button class="lp-btn lp-btn--primary lp-btn--block" type="submit">Send request <svg class="icon"><use href="#i-arrow"/></svg></button>
-      <p class="request-privacy">We use these details only to reply to you.</p>
+      <p class="request-privacy">We use these details only to reply to you. See our <a href="{{ url_for('legal.privacy') }}">privacy policy</a>.</p>
     </form>
     {% endif %}
   </div>
@@ -269,6 +269,9 @@
       <a href="#desktop">Desktop app</a>
       <a href="#faq">FAQ</a>
       <a href="{{ url_for('auth.login') }}">Log in</a>
+      <a href="{{ url_for('legal.privacy') }}">Privacy</a>
+      <a href="{{ url_for('legal.terms') }}">Terms</a>
+      <a href="{{ url_for('legal.data_protection') }}">Data protection</a>
     </nav>
     <p>© 2026 {{ app_brand_name }}. By {{ company_name }}.</p>
   </div>

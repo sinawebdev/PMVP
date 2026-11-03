@@ -321,6 +321,9 @@ def create_app():
         "APP_TAGLINE", "Modern payroll, compliance & workforce management"
     )
     app.config["COMPANY_NAME"] = os.getenv("COMPANY_NAME", "Sinaforte Technologies")
+    # The address the privacy policy and terms give for questions and data
+    # requests, so it must be a mailbox someone reads.
+    app.config["SUPPORT_EMAIL"] = os.getenv("SUPPORT_EMAIL", "support@payrollagh.com")
     app.config["SERVICE_SLUG"] = os.getenv("SERVICE_SLUG", "payrolla")
     # Public desktop installer hosted outside this app. Per-firm builds carry
     # their customer's license and must not be used for a general download.
@@ -799,6 +802,7 @@ def create_app():
     from app.distribution.webhooks import distribution_webhooks_bp
     from app.employees import employees_bp
     from app.invites import invites_bp
+    from app.legal import legal_bp
     from app.notifications import notifications_bp
     from app.oversight import oversight_bp
     from app.payroll import payroll_bp
@@ -809,6 +813,7 @@ def create_app():
 
     app.register_blueprint(access_bp)
     app.register_blueprint(invites_bp)
+    app.register_blueprint(legal_bp)
     app.register_blueprint(audit_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(client_bp)
@@ -838,6 +843,7 @@ def create_app():
             "app_brand_mark": app.config["APP_BRAND_MARK"],
             "app_tagline": app.config["APP_TAGLINE"],
             "company_name": app.config["COMPANY_NAME"],
+            "support_email": app.config["SUPPORT_EMAIL"],
         }
 
     @app.context_processor

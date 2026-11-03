@@ -1,0 +1,58 @@
+/* Privacy, terms and data protection pages. They load landing-glass.css for
+   the tokens, header and footer, and add long-form reading type here. Scoped
+   under .legal-page so none of it reaches the landing page. */
+
+.legal-page .legal-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+
+.legal-page .legal-wrap { max-width: 860px; padding-block: 40px 72px; }
+
+.legal-page .legal-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 36px; }
+.legal-page .legal-tabs a {
+  padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: #ffffffb3;
+  font-size: 14.5px; font-weight: 500; color: var(--ink-soft); text-decoration: none;
+}
+.legal-page .legal-tabs a:hover { border-color: var(--brand); color: var(--deep); }
+.legal-page .legal-tabs a[aria-current="page"] { background: var(--deep); border-color: var(--deep); color: #fff; }
+
+.legal-page .legal-doc h1 { font-size: clamp(36px, 4.4vw, 52px); }
+.legal-page .legal-updated { margin-top: 12px; font-size: 14.5px; color: var(--muted); }
+.legal-page .legal-summary {
+  margin-top: 28px; padding: 20px 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--card);
+}
+.legal-page .legal-doc h2 {
+  margin: 44px 0 12px; font-family: var(--serif); font-weight: 500; font-size: clamp(24px, 2.4vw, 30px);
+  letter-spacing: -.015em; line-height: 1.2; color: var(--ink);
+  scroll-margin-top: calc(var(--header-h) + 16px);
+}
+.legal-page .legal-doc h3 { margin: 26px 0 8px; font-size: 17px; }
+.legal-page .legal-doc p, .legal-page .legal-doc li { color: var(--ink-soft); }
+.legal-page .legal-doc p + p, .legal-page .legal-doc ul + p, .legal-page .legal-doc p + ul { margin-top: 12px; }
+.legal-page .legal-doc ul { margin-bottom: 0; padding-left: 22px; }
+.legal-page .legal-doc li + li { margin-top: 6px; }
+.legal-page .legal-doc a { color: var(--brand); }
+.legal-page .legal-doc strong { color: var(--ink); }
+
+/* Tables scroll inside their own box, so a phone never scrolls the page sideways. */
+.legal-page .table-scroll {
+  margin-top: 16px; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--card);
+}
+.legal-page .table-scroll table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 15px; }
+.legal-page .table-scroll th, .legal-page .table-scroll td {
+  padding: 12px 16px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top;
+}
+.legal-page .table-scroll th { background: #ffffff80; font-weight: 700; color: var(--ink); }
+.legal-page .table-scroll td { color: var(--ink-soft); }
+.legal-page .table-scroll tr:last-child td { border-bottom: 0; }
+.legal-page .table-scroll + p { margin-top: 16px; }
+
+@media (max-width: 600px) {
+  .legal-page .legal-wrap { padding-block: 28px 56px; }
+  .legal-page .legal-summary { padding: 16px 18px; }
+  /* Let the columns wrap rather than hide behind a sideways scroll. */
+  .legal-page .table-scroll table { min-width: 0; font-size: 14px; }
+  .legal-page .table-scroll th, .legal-page .table-scroll td { padding: 10px 12px; }
+}
+@media print {
+  .legal-page .site-header, .legal-page .legal-tabs, .legal-page .site-footer { display: none; }
+  .legal-page .table-scroll { overflow: visible; }
+}
