@@ -17,7 +17,10 @@
 --     where rolname = current_user;  -- expect postgres / t
 --
 -- Idempotent: safe to re-run. Run once against a freshly bootstrapped Payrolla DB
--- (already applied to project ejpqjfmnnlgvsqszalmm on first setup).
+-- (already applied to project ejpqjfmnnlgvsqszalmm on first setup; re-run there
+-- 2026-11-04 for three tables added since). Since then `flask db upgrade` does
+-- the same for tables that later migrations add (app/rls_guard.py), so this
+-- script is only needed for a database built some other way.
 
 DO $$
 DECLARE t text;

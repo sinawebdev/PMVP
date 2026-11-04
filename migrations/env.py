@@ -5,6 +5,8 @@ from flask import current_app
 
 from alembic import context
 
+from app.rls_guard import enable_rls_on_unprotected_tables
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -104,17 +106,35 @@ def run_migrations_online():
     if conf_args.get("process_revision_directives") is None:
         conf_args["process_revision_directives"] = process_revision_directives
 
+    # Note whether any migration step actually ran, so read-only commands such
+    # as `flask db current` never change the database. A copy, not conf_args
+    # itself: that dict lives on the Migrate extension for the whole process.
+    steps_applied = []
+
+    def note_step(*, step, **_):
+        if not step.is_stamp:
+            steps_applied.append(step)
+
+    existing = conf_args.get("on_version_apply") or ()
+    if callable(existing):
+        existing = (existing,)
+    run_args = {**conf_args, "on_version_apply": (*existing, note_step)}
+
     connectable = get_engine()
 
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
             target_metadata=get_metadata(),
-            **conf_args
+            **run_args
         )
 
         with context.begin_transaction():
             context.run_migrations()
+            if steps_applied:
+                # Lock any new table out of Supabase's public API in the same
+                # transaction that created it. See app/rls_guard.py.
+                enable_rls_on_unprotected_tables(connection, logger)
 
 
 if context.is_offline_mode():
