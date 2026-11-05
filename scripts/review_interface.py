@@ -86,8 +86,8 @@ def main() -> int:
                             "forms => forms.filter(f => !f.querySelector('input[name=csrf_token]')?.value).length")
                         check(missing_csrf == 0, f"{name}-{width}: POST forms have CSRF tokens")
                         if name == "landing":
-                            check(page.locator('.marketing-close a[href$="Payrolla-Desktop-Setup.exe"]').count() == 1,
-                                  f"landing-{width}: installer beside login")
+                            check(page.locator('#desktop .desktop-actions a[href$="Payrolla-Desktop-Setup.exe"]').count() == 1,
+                                  f"landing-{width}: installer in the Windows app section")
                         page.screenshot(path=str(output / f"review-{name}-{width}.png"), full_page=True)
                         report["pages"].append({"name": name, "width": width, "status": response.status})
                         print(f"Reviewed {name}-{width}: {response.status}", flush=True)
