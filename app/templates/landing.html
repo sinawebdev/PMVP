@@ -38,7 +38,7 @@
 ]} %}
 <script type="application/ld+json">{{ site_ld | tojson }}</script>
 <link rel="preload" href="{{ url_for('static', filename='fonts/montserrat-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="{{ url_for('static', filename='landing-glass.css', v='20261105') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='landing-glass.css', v='2026110504') }}">
 {% endblock %}
 {% block public_content %}
 {% from 'macros/brand.html' import logo with context %}
@@ -99,11 +99,11 @@
 
 <section class="hero lp-wrap" aria-labelledby="hero-title">
   <div class="hero-copy">
-    {# The pill is the page's h1, so search engines read "payroll" and "Ghana"
-       as the heading; the big slogan below is styled text, not a heading. #}
-    <h1 class="hero-badge" id="hero-title"><span class="hero-badge-dot" aria-hidden="true"></span>Payroll software for Ghana</h1>
+    {# The slogan is display text. The h1 opens the intro as a bold run-in, so
+       search engines still read "payroll software for Ghana" as the page's
+       heading, without a pill or eyebrow label sitting above the slogan. #}
     <p class="hero-display">Payday, sorted. <span class="hero-accent">Every cedi, every payslip.</span></p>
-    <p class="hero-lede">Upload the Excel sheet you already keep. {{ app_brand_name }} works out PAYE and SSNIT, sends the run for sign-off, and delivers every payslip by email, WhatsApp or SMS.</p>
+    <div class="hero-intro"><h1 id="hero-title">Payroll software for Ghana.</h1> <p class="hero-lede">Upload the Excel sheet you already keep. {{ app_brand_name }} works out PAYE and SSNIT, sends the run for sign-off, and delivers every payslip by email, WhatsApp or SMS.</p></div>
     <ul class="hero-facts">
       <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Current GRA PAYE bands and SSNIT rates</li>
       <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Nothing goes out until it's approved</li>
@@ -115,15 +115,16 @@
     </div>
     <p class="hero-note">Use it in the browser, or as a Windows app that works offline.</p>
   </div>
-  {# The hero slideshow, carried over unchanged from the previous landing page
-     (markup, controls and landing-hero-carousel.js behaviour). #}
-<div class="hero-visual hero-carousel" id="hero-carousel" role="region" aria-roledescription="carousel" aria-label="Payrolla hero illustrations" tabindex="0" data-slide="1" data-rotating="false">
+  {# The hero slideshow (markup, controls and landing-hero-carousel.js behaviour
+     unchanged). The slides are real product screens in laptop and phone frames,
+     captured from the seeded demo tenant renamed to "Demo Company Ltd". #}
+<div class="hero-visual hero-carousel" id="hero-carousel" role="region" aria-roledescription="carousel" aria-label="Payrolla product screens" tabindex="0" data-slide="1" data-rotating="false">
  <div class="carousel-viewport" aria-live="off">
-  <figure class="hero-slide is-active" id="hero-slide-1" role="group" aria-roledescription="slide" aria-label="1 of 3: The glass payslip" data-title="The glass payslip" aria-hidden="false"><img src="{{ url_for('static', filename='img/hero-glass-payslip.webp') }}" alt="A frosted glass sample payslip with layered sheets and an approval record." width="1360" height="1156" decoding="async" fetchpriority="high"></figure>
-  <figure class="hero-slide" id="hero-slide-2" role="group" aria-roledescription="slide" aria-label="2 of 3: The clear workspace" data-title="The clear workspace" aria-hidden="true"><img src="{{ url_for('static', filename='img/hero-clear-workspace.webp') }}" alt="Payrolla’s glass workspace with sample employee rows, net pay and a payslip." width="1360" height="1156" decoding="async"></figure>
-  <figure class="hero-slide" id="hero-slide-3" role="group" aria-roledescription="slide" aria-label="3 of 3: From workbook to payslip" data-title="Workbook to payslip" aria-hidden="true"><img src="{{ url_for('static', filename='img/hero-payday-flow.webp') }}" alt="Three frosted documents show the path from a workbook through payroll review to a payslip." width="1360" height="1156" decoding="async"></figure>
+  <figure class="hero-slide is-active" id="hero-slide-1" role="group" aria-roledescription="slide" aria-label="1 of 3: Payroll and payslips" data-title="Payroll and payslips" aria-hidden="false"><img src="{{ url_for('static', filename='img/hero-real-payslip.webp') }}" alt="A laptop showing a September payroll run in Payrolla, and a phone showing one employee’s payslip from that run." width="1360" height="1156" decoding="async" fetchpriority="high"></figure>
+  <figure class="hero-slide" id="hero-slide-2" role="group" aria-roledescription="slide" aria-label="2 of 3: On a phone" data-title="On a phone" aria-hidden="true"><img src="{{ url_for('static', filename='img/hero-real-phones.webp') }}" alt="Three phones showing Payrolla: a payroll run, the employee list and an employee’s payslip." width="1360" height="1156" decoding="async"></figure>
+  <figure class="hero-slide" id="hero-slide-3" role="group" aria-roledescription="slide" aria-label="3 of 3: Dashboard and reports" data-title="Dashboard and reports" aria-hidden="true"><img src="{{ url_for('static', filename='img/hero-real-dashboard.webp') }}" alt="The Payrolla company dashboard on a laptop, and the reports and exports page on a phone." width="1360" height="1156" decoding="async"></figure>
  </div>
- <div class="carousel-toolbar"><p class="carousel-caption"><span class="carousel-counter" id="carousel-counter">1 / 3</span><span class="carousel-slide-title" id="carousel-slide-title">The glass payslip</span></p><div class="carousel-controls"><div class="carousel-dots" role="group" aria-label="Choose a hero illustration"><button type="button" class="carousel-dot" data-carousel-slide="0" aria-label="Show the glass payslip" aria-controls="hero-slide-1" aria-pressed="true"></button><button type="button" class="carousel-dot" data-carousel-slide="1" aria-label="Show the clear workspace" aria-controls="hero-slide-2" aria-pressed="false"></button><button type="button" class="carousel-dot" data-carousel-slide="2" aria-label="Show workbook to payslip" aria-controls="hero-slide-3" aria-pressed="false"></button></div><button type="button" class="carousel-toggle" id="carousel-toggle" aria-label="Pause automatic slide rotation">Pause</button></div></div>
+ <div class="carousel-toolbar"><p class="carousel-caption"><span class="carousel-counter" id="carousel-counter">1 / 3</span><span class="carousel-slide-title" id="carousel-slide-title">Payroll and payslips</span></p><div class="carousel-controls"><div class="carousel-dots" role="group" aria-label="Choose a product screen"><button type="button" class="carousel-dot" data-carousel-slide="0" aria-label="Show payroll and payslips" aria-controls="hero-slide-1" aria-pressed="true"></button><button type="button" class="carousel-dot" data-carousel-slide="1" aria-label="Show Payrolla on a phone" aria-controls="hero-slide-2" aria-pressed="false"></button><button type="button" class="carousel-dot" data-carousel-slide="2" aria-label="Show the dashboard and reports" aria-controls="hero-slide-3" aria-pressed="false"></button></div><button type="button" class="carousel-toggle" id="carousel-toggle" aria-label="Pause automatic slide rotation">Pause</button></div></div>
  <p class="sr-only" id="carousel-status" role="status" aria-live="polite" aria-atomic="true"></p>
 </div>
 </section>
@@ -131,26 +132,22 @@
 <section class="audience lp-wrap" aria-labelledby="audience-title">
   <h2 id="audience-title" class="section-title">Who uses it</h2>
   <div class="audience-grid">
-    <article class="audience-card">
-      <svg class="icon"><use href="#i-building"/></svg>
+    <div class="audience-item">
       <h3>Businesses running their own payroll</h3>
       <p>Five staff or five hundred. Upload the month's hours and pay, check the figures, approve, and send the payslips.</p>
-    </article>
-    <article class="audience-card">
-      <svg class="icon"><use href="#i-layers"/></svg>
+    </div>
+    <div class="audience-item">
       <h3>Payroll bureaus and accountants</h3>
       <p>Run payroll for many client companies from one account. Each client gets its own portal and sees only its own people.</p>
-    </article>
-    <article class="audience-card">
-      <svg class="icon"><use href="#i-people"/></svg>
+    </div>
+    <div class="audience-item">
       <h3>Groups with several companies</h3>
       <p>Separate books for each company, and one place to see payroll cost and what still needs approving.</p>
-    </article>
+    </div>
   </div>
 </section>
 
 <section class="pipeline-section lp-wrap" id="how-it-works" aria-labelledby="flow-title">
-  <p class="eyebrow">How it works</p>
   <h2 id="flow-title" class="section-title">Four steps, every payday.</h2>
   <div class="pipe" data-pipe>
     <div class="pipe-row">
@@ -186,16 +183,14 @@
 
 <section class="features lp-wrap" id="features" aria-labelledby="features-title">
   <div class="features-head">
-    <p class="eyebrow">Features</p>
     <h2 id="features-title" class="section-title">Everything payday needs, in one place.</h2>
     <p class="features-intro">From the first upload to the last payslip, every step is checked, recorded and ready for GRA.</p>
   </div>
   {# Each card's h3 and p carry its meaning; the small illustrations under them
      are decorative (aria-hidden) and use made-up staff. #}
-  <div class="bento" data-reveal>
-    <article class="bento-card bento-card--paye" style="--i:0">
+  <div class="bento">
+    <article class="bento-card bento-card--paye">
       <div class="bento-copy">
-        <span class="bento-icon" aria-hidden="true"><svg class="icon"><use href="#i-calc"/></svg></span>
         <h3>PAYE and SSNIT, worked out for you</h3>
         <p>Current GRA PAYE bands and SSNIT rates, kept as dated versions, so an earlier month always recalculates the same way.</p>
       </div>
@@ -215,8 +210,7 @@
       </div>
     </article>
 
-    <article class="bento-card" style="--i:1">
-      <span class="bento-icon bento-icon--gold" aria-hidden="true"><svg class="icon"><use href="#i-alert"/></svg></span>
+    <article class="bento-card">
       <h3>Checks before approval</h3>
       <p>Each run is compared with the last one. Large pay changes, headcount changes and duplicate rows are held for review.</p>
       <ul class="mini-flags" aria-hidden="true">
@@ -225,8 +219,7 @@
       </ul>
     </article>
 
-    <article class="bento-card" style="--i:2">
-      <span class="bento-icon" aria-hidden="true"><svg class="icon"><use href="#i-send"/></svg></span>
+    <article class="bento-card">
       <h3>Payslip delivery</h3>
       <p>Email, WhatsApp and SMS, with a delivery status for every employee and one-click resend for any that failed.</p>
       <ul class="mini-channels" aria-hidden="true">
@@ -236,8 +229,7 @@
       </ul>
     </article>
 
-    <article class="bento-card bento-card--dark" style="--i:3">
-      <span class="bento-icon" aria-hidden="true"><svg class="icon"><use href="#i-chart"/></svg></span>
+    <article class="bento-card bento-card--dark">
       <h3>GRA-ready reports</h3>
       <p>A bank listing and the GRA PAYE schedule for every approved run, ready to download.</p>
       <ul class="mini-files" aria-hidden="true">
@@ -246,8 +238,7 @@
       </ul>
     </article>
 
-    <article class="bento-card" style="--i:4">
-      <span class="bento-icon" aria-hidden="true"><svg class="icon"><use href="#i-people"/></svg></span>
+    <article class="bento-card">
       <h3>Employee records</h3>
       <p>Staff details, bank or MoMo accounts, SSNIT and TIN numbers, and documents, kept in one roster.</p>
       <dl class="mini-fields" aria-hidden="true">
@@ -257,9 +248,8 @@
       </dl>
     </article>
 
-    <article class="bento-card bento-card--audit" style="--i:5">
+    <article class="bento-card bento-card--audit">
       <div class="bento-copy">
-        <span class="bento-icon" aria-hidden="true"><svg class="icon"><use href="#i-list"/></svg></span>
         <h3>Audit trail</h3>
         <p>Every upload, edit, approval and send is logged with who did it and when.</p>
       </div>
@@ -276,7 +266,6 @@
 <section class="desktop lp-wrap" id="desktop" aria-labelledby="desktop-title">
   <div class="desktop-card">
     <div class="desktop-copy">
-      <p class="eyebrow">Desktop app</p>
       <h2 id="desktop-title" class="section-title">Prefer to keep payroll on your own computer?</h2>
       <p>The Windows app runs the same payroll as the web workspace, works without an internet connection, and keeps your data on your machine. The download is free. The app unlocks when you activate it with your company's licence.</p>
       <div class="desktop-actions">
@@ -313,7 +302,6 @@
 
 <section class="request lp-wrap" id="request-access" aria-labelledby="request-title">
   <div class="request-intro">
-    <p class="eyebrow">Request access</p>
     <h2 id="request-title" class="section-title">Tell us about your company.</h2>
     <p>We'll reply by email to talk through setup and pricing. Nothing is charged until you agree to it.</p>
     <ul class="request-points">
@@ -400,6 +388,6 @@
 ]} %}
 <script type="application/ld+json">{{ faq_ld | tojson }}</script>
 </div>
-<script src="{{ url_for('static', filename='landing.js', v='20261104') }}" defer></script>
+<script src="{{ url_for('static', filename='landing.js', v='2026110502') }}" defer></script>
 <script src="{{ url_for('static', filename='landing-hero-carousel.js', v='20261102') }}" defer></script>
 {% endblock %}
