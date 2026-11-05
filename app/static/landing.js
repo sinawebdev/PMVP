@@ -51,6 +51,25 @@
     }
   }
 
+  // --- Features: cards rise in, staggered, the first time they show -------
+  // The classes come off once the last card lands, so the animation's fill
+  // no longer pins the cards and the hover lift works.
+  const reveal = landing.querySelector('[data-reveal]');
+  const motionOk = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reveal && motionOk && 'IntersectionObserver' in window) {
+    reveal.classList.add('is-armed');
+    const settle = () => reveal.classList.remove('is-armed', 'is-in');
+    const observer = new IntersectionObserver(entries => {
+      if (!entries[0].isIntersecting) return;
+      observer.disconnect();
+      reveal.classList.add('is-in');
+      const last = reveal.lastElementChild;
+      if (last) last.addEventListener('animationend', settle, { once: true });
+      window.setTimeout(settle, 2500);  // in case animationend never fires
+    }, { threshold: 0.15 });
+    observer.observe(reveal);
+  }
+
   // --- Request form: "Get a licence" links preselect the desktop option ----
   function preset(value) {
     const radio = landing.querySelector('.request-form input[name="interest"][value="' + value + '"]');
