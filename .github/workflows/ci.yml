@@ -52,7 +52,10 @@ jobs:
 
   interface:
     name: Desktop and mobile interface
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04 in November 2026, and Playwright
+    # 1.56 refuses to install Chromium there. Move up together with a
+    # Playwright release that supports the newer image.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
