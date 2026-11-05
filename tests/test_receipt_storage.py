@@ -322,24 +322,30 @@ class ReceiptMigrationTestCase(unittest.TestCase):
     application. The unique index on expense_id is checked explicitly: "one
     receipt per expense" is a schema guarantee, not just a convention in the
     routes, and a downgrade/upgrade cycle must bring it back.
+
+    The chain builds the database from empty up to this migration. It cannot
+    start from head: 9d2026c1020 deliberately refuses to downgrade, so nothing
+    at head can ever walk back this far.
     """
 
     BEFORE_RECEIPTS = "a4e7c2b81d95"
+    RECEIPTS = "b2f6a9c04e71"
 
     def test_expense_receipt_table_round_trips(self):
         import sqlalchemy as sa
         from flask_migrate import downgrade as fm_downgrade
-        from flask_migrate import stamp as fm_stamp
         from flask_migrate import upgrade as fm_upgrade
 
         tmp = tempfile.mkdtemp()
         dbfile = os.path.join(tmp, "receipt_mig.sqlite")
         previous = os.environ.get("DATABASE_URL")
+        previous_init = os.environ.get("AUTO_INIT_DB")
         os.environ["DATABASE_URL"] = f"sqlite:///{dbfile}"
+        os.environ["AUTO_INIT_DB"] = "false"  # an empty database: the chain builds it
         try:
-            app = create_app()  # create_all builds the current schema
+            app = create_app()
             with app.app_context():
-                fm_stamp(revision="head")
+                fm_upgrade(revision=self.RECEIPTS)
                 self.assertIn("expense_receipt", sa.inspect(db.engine).get_table_names())
 
                 fm_downgrade(revision=self.BEFORE_RECEIPTS)
@@ -364,6 +370,10 @@ class ReceiptMigrationTestCase(unittest.TestCase):
                 self.assertIn("ix_expense_receipt_client_company_id", indexes)
         finally:
             os.environ["DATABASE_URL"] = previous or "sqlite:///:memory:"
+            if previous_init is None:
+                os.environ.pop("AUTO_INIT_DB", None)
+            else:
+                os.environ["AUTO_INIT_DB"] = previous_init
 
     def test_single_head(self):
         from alembic.config import Config

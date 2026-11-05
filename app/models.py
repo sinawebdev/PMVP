@@ -267,8 +267,12 @@ class PayrollRun(db.Model):
     client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"))
     # The StatutoryRate version this run was last calculated with (set by
     # payroll_calculations.statutory_rate_for_run while the run is still open).
-    # NULL on runs calculated before November 2026.
-    statutory_rate_id = db.Column(db.Integer, db.ForeignKey("statutory_rates.id"))
+    # NULL on runs calculated before November 2026. The constraint is named to
+    # match migration b3d2026b1102, whose downgrade drops it by that name.
+    statutory_rate_id = db.Column(
+        db.Integer,
+        db.ForeignKey("statutory_rates.id", name="fk_payroll_run_statutory_rate"),
+    )
     statutory_rate = db.relationship("StatutoryRate")
     total_workers = db.Column(db.Integer, default=0)
     total_rows_imported = db.Column(db.Integer, default=0)

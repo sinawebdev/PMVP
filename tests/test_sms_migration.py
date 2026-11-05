@@ -6,6 +6,9 @@ revision: its downgrade really reverses it, existing delivery rows survive both
 directions (SQLite rebuilds the table to make these changes), and the unique
 (item, channel) constraint is enforced on a chain-built database.
 
+The round trip runs between BEFORE and this revision, then goes on to head. It
+cannot come back down from head: 9d2026c1020 deliberately refuses to downgrade.
+
 SQLite only, like CI. PostgreSQL is checked by hand before deploying.
 """
 import os
@@ -22,6 +25,7 @@ from sqlalchemy.exc import IntegrityError  # noqa: E402
 from app import create_app, db  # noqa: E402
 
 BEFORE = "a1c5e9b73f40"
+SMS = "3f2984c70c03"
 NEW_DELIVERY_COLUMNS = {"units", "claimed_at", "template_version"}
 
 
@@ -94,7 +98,7 @@ class SmsMigrationTests(unittest.TestCase):
             db.session.commit()
             before = self._delivery_rows()
 
-            upgrade()
+            upgrade(revision=SMS)
             self._assert_upgraded()
             self.assertEqual(self._delivery_rows(), before)
 
