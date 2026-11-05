@@ -2,7 +2,8 @@
 {% block title %}{{ app_name }} — Payroll software for Ghana{% endblock %}
 {% block head %}
 <meta name="description" content="{{ app_brand_name }} works out pay, PAYE and SSNIT from your Excel workbook, takes each run through approval, and sends payslips by email, WhatsApp or SMS.">
-<link rel="stylesheet" href="{{ url_for('static', filename='landing-glass.css', v='20261101') }}">
+<link rel="preload" href="{{ url_for('static', filename='fonts/montserrat-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{{ url_for('static', filename='landing-glass.css', v='20261104') }}">
 {% endblock %}
 {% block public_content %}
 {% from 'macros/brand.html' import logo with context %}
@@ -63,9 +64,14 @@
 
 <section class="hero lp-wrap" aria-labelledby="hero-title">
   <div class="hero-copy">
-    <p class="eyebrow">Payroll software for Ghanaian businesses</p>
-    <h1 id="hero-title">Payroll for Ghana, from spreadsheet to payslip.</h1>
-    <p class="hero-lede">{{ app_brand_name }} works out pay, PAYE and SSNIT from the Excel workbook you already keep, takes each run through approval, and sends every employee their payslip by email, WhatsApp or SMS.</p>
+    <p class="hero-badge"><span class="hero-badge-dot" aria-hidden="true"></span>GRA PAYE &amp; SSNIT ready</p>
+    <h1 id="hero-title">Payday, sorted. <span class="hero-h1-accent">Every cedi, every payslip.</span></h1>
+    <p class="hero-lede">Upload the Excel sheet you already keep. {{ app_brand_name }} works out PAYE and SSNIT, sends the run for sign-off, and delivers every payslip by email, WhatsApp or SMS.</p>
+    <ul class="hero-facts">
+      <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Current GRA PAYE bands and SSNIT rates</li>
+      <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Nothing goes out until it's approved</li>
+      <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Payslips on email, WhatsApp and SMS</li>
+    </ul>
     <div class="hero-actions">
       <a class="lp-btn lp-btn--primary" href="#request-access">Request access <svg class="icon"><use href="#i-arrow"/></svg></a>
       <a class="lp-btn lp-btn--ghost" href="{{ url_for('auth.login') }}">Log in</a>
@@ -142,15 +148,91 @@
 </div>
 
 <section class="features lp-wrap" id="features" aria-labelledby="features-title">
-  <p class="eyebrow">Features</p>
-  <h2 id="features-title" class="section-title">What's included</h2>
-  <div class="feature-grid">
-    <article><svg class="icon"><use href="#i-calc"/></svg><h3>PAYE and SSNIT</h3><p>Current GRA PAYE bands and SSNIT rates, kept as dated versions, so an earlier month always recalculates the same way.</p></article>
-    <article><svg class="icon"><use href="#i-alert"/></svg><h3>Checks before approval</h3><p>Each run is compared with the last one. Large pay changes, headcount changes and duplicate rows are held for review.</p></article>
-    <article><svg class="icon"><use href="#i-mail"/></svg><h3>Payslip delivery</h3><p>Email, WhatsApp and SMS, with a delivery status for every employee and one-click resend for any that failed.</p></article>
-    <article><svg class="icon"><use href="#i-chart"/></svg><h3>Reports</h3><p>A bank listing and the GRA PAYE schedule for every approved run, ready to download.</p></article>
-    <article><svg class="icon"><use href="#i-people"/></svg><h3>Employee records</h3><p>Staff details, bank or MoMo accounts, SSNIT and TIN numbers, and documents, kept in one roster.</p></article>
-    <article><svg class="icon"><use href="#i-list"/></svg><h3>Audit trail</h3><p>Every upload, edit, approval and send is logged with who did it and when.</p></article>
+  <div class="features-head">
+    <p class="eyebrow">Features</p>
+    <h2 id="features-title" class="section-title">Everything payday needs, in one place.</h2>
+    <p class="features-intro">From the first upload to the last payslip, every step is checked, recorded and ready for GRA.</p>
+  </div>
+  {# Each card's h3 and p carry its meaning; the small illustrations under them
+     are decorative (aria-hidden) and use made-up staff. #}
+  <div class="bento" data-reveal>
+    <article class="bento-card bento-card--paye" style="--i:0">
+      <div class="bento-copy">
+        <span class="bento-icon" aria-hidden="true"><svg class="icon"><use href="#i-calc"/></svg></span>
+        <h3>PAYE and SSNIT, worked out for you</h3>
+        <p>Current GRA PAYE bands and SSNIT rates, kept as dated versions, so an earlier month always recalculates the same way.</p>
+      </div>
+      {# Real figures: raw_engine.compute_payslip under the StatutoryRate effective
+         2026-09-01 (Act 1178 bands), basic 4,500 + allowances 500. Recompute
+         these if the bands change. #}
+      <div class="mini-slip" aria-hidden="true">
+        <div class="mini-slip-head"><span class="mini-slip-who"><span class="mini-avatar">KB</span>Kofi Boateng</span><span class="mini-tag">Sample payslip</span></div>
+        <dl>
+          <div><dt>Basic salary</dt><dd>4,500.00</dd></div>
+          <div><dt>Allowances</dt><dd>500.00</dd></div>
+          <div class="is-sub"><dt>Gross pay</dt><dd>5,000.00</dd></div>
+          <div class="is-ded"><dt>SSNIT, 5.5% of basic</dt><dd>&minus;247.50</dd></div>
+          <div class="is-ded"><dt>PAYE</dt><dd>&minus;792.63</dd></div>
+          <div class="is-net"><dt>Net pay</dt><dd>GH₵ 3,959.87</dd></div>
+        </dl>
+      </div>
+    </article>
+
+    <article class="bento-card" style="--i:1">
+      <span class="bento-icon bento-icon--gold" aria-hidden="true"><svg class="icon"><use href="#i-alert"/></svg></span>
+      <h3>Checks before approval</h3>
+      <p>Each run is compared with the last one. Large pay changes, headcount changes and duplicate rows are held for review.</p>
+      <ul class="mini-flags" aria-hidden="true">
+        <li><span>Ama Mensah<small>Pay up 42% on last month</small></span><b>Held</b></li>
+        <li><span>Kwame Asante<small>Appears twice in the upload</small></span><b>Held</b></li>
+      </ul>
+    </article>
+
+    <article class="bento-card" style="--i:2">
+      <span class="bento-icon" aria-hidden="true"><svg class="icon"><use href="#i-send"/></svg></span>
+      <h3>Payslip delivery</h3>
+      <p>Email, WhatsApp and SMS, with a delivery status for every employee and one-click resend for any that failed.</p>
+      <ul class="mini-channels" aria-hidden="true">
+        <li><svg class="icon"><use href="#i-mail"/></svg>Email<span class="mini-status is-ok">Delivered</span></li>
+        <li><svg class="icon"><use href="#i-chat"/></svg>WhatsApp<span class="mini-status is-ok">Delivered</span></li>
+        <li><svg class="icon"><use href="#i-sms"/></svg>SMS<span class="mini-status is-retry">Resend</span></li>
+      </ul>
+    </article>
+
+    <article class="bento-card bento-card--dark" style="--i:3">
+      <span class="bento-icon" aria-hidden="true"><svg class="icon"><use href="#i-chart"/></svg></span>
+      <h3>GRA-ready reports</h3>
+      <p>A bank listing and the GRA PAYE schedule for every approved run, ready to download.</p>
+      <ul class="mini-files" aria-hidden="true">
+        <li><svg class="icon"><use href="#i-file"/></svg>Bank listing<small>XLSX</small></li>
+        <li><svg class="icon"><use href="#i-file"/></svg>GRA PAYE schedule<small>XLSX</small></li>
+      </ul>
+    </article>
+
+    <article class="bento-card" style="--i:4">
+      <span class="bento-icon" aria-hidden="true"><svg class="icon"><use href="#i-people"/></svg></span>
+      <h3>Employee records</h3>
+      <p>Staff details, bank or MoMo accounts, SSNIT and TIN numbers, and documents, kept in one roster.</p>
+      <dl class="mini-fields" aria-hidden="true">
+        <div><dt>SSNIT no.</dt><dd>C01•••••4521</dd></div>
+        <div><dt>TIN</dt><dd>P00•••••612</dd></div>
+        <div><dt>MoMo</dt><dd>024 ••• 7781</dd></div>
+      </dl>
+    </article>
+
+    <article class="bento-card bento-card--audit" style="--i:5">
+      <div class="bento-copy">
+        <span class="bento-icon" aria-hidden="true"><svg class="icon"><use href="#i-list"/></svg></span>
+        <h3>Audit trail</h3>
+        <p>Every upload, edit, approval and send is logged with who did it and when.</p>
+      </div>
+      <ol class="mini-timeline" aria-hidden="true">
+        <li><b>Uploaded</b><small>Mon 09:12</small></li>
+        <li><b>Calculated</b><small>Mon 09:13</small></li>
+        <li><b>Approved</b><small>A. Owusu, Mon 14:40</small></li>
+        <li><b>Sent</b><small>48 payslips, Mon 14:42</small></li>
+      </ol>
+    </article>
   </div>
 </section>
 
@@ -281,6 +363,6 @@
 ]} %}
 <script type="application/ld+json">{{ faq_ld | tojson }}</script>
 </div>
-<script src="{{ url_for('static', filename='landing.js', v='20261101') }}" defer></script>
+<script src="{{ url_for('static', filename='landing.js', v='20261104') }}" defer></script>
 <script src="{{ url_for('static', filename='landing-hero-carousel.js', v='20261102') }}" defer></script>
 {% endblock %}

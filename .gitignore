@@ -36,3 +36,5 @@ tests/fixtures/*
 
 # Original licensed fonts are downloaded at build time for our own app.
 app/static/fonts/*.woff2
+# Montserrat is OFL, so it is kept in source (see app/static/fonts/README.md).
+!app/static/fonts/montserrat-*.woff2

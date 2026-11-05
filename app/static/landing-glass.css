@@ -1,7 +1,8 @@
 /* Public landing page. Everything is scoped under .glass-landing so it cannot
    leak into the signed-in shells, and no class here shares a name with
    Bootstrap (base.html still loads it): .lp-wrap, not .container; .lp-btn, not
-   .btn. Headings use the Newsreader serif; body, labels and figures Satoshi. */
+   .btn. Headings and the hero copy use Montserrat; body, labels and figures
+   Satoshi. (The signed-in shells keep Newsreader for their headings.) */
 
 .glass-landing {
   --ink: #163a35;
@@ -19,7 +20,7 @@
   --shadow: 0 18px 48px -26px #1f5a4a40, 0 2px 6px #1f5a4a08;
   --radius: 22px;
   --gutter: clamp(20px, 4vw, 72px);
-  --serif: Newsreader, Georgia, "Times New Roman", serif;
+  --display: Montserrat, "Segoe UI", system-ui, -apple-system, sans-serif;
   --sans: Satoshi, "Segoe UI", system-ui, -apple-system, sans-serif;
   --header-h: 72px;
 
@@ -75,14 +76,14 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
   margin-bottom: 14px;
 }
 .glass-landing h1 {
-  font-family: var(--serif); font-weight: 500; letter-spacing: -.025em; line-height: 1.04;
-  font-size: clamp(42px, 5.6vw, 76px); color: var(--ink);
+  font-family: var(--display); font-weight: 800; letter-spacing: -.035em; line-height: 1.02;
+  font-size: clamp(42px, 4.9vw, 72px); color: var(--ink);
 }
 .glass-landing .section-title {
-  font-family: var(--serif); font-weight: 500; letter-spacing: -.02em; line-height: 1.1;
-  font-size: clamp(32px, 3.6vw, 50px); color: var(--ink);
+  font-family: var(--display); font-weight: 700; letter-spacing: -.025em; line-height: 1.12;
+  font-size: clamp(30px, 3.2vw, 46px); color: var(--ink); text-wrap: balance;
 }
-.glass-landing h3 { font-family: var(--sans); font-size: 18px; font-weight: 700; line-height: 1.3; letter-spacing: -.01em; }
+.glass-landing h3 { font-family: var(--display); font-size: 17px; font-weight: 700; line-height: 1.3; letter-spacing: -.015em; }
 .glass-landing section p { color: var(--muted); }
 
 /* ---- Buttons ------------------------------------------------------------- */
@@ -162,14 +163,40 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: clamp(32px, 4vw, 72px);
   align-items: center; padding-block: clamp(48px, 7vw, 104px) clamp(56px, 7vw, 96px);
 }
-.glass-landing .hero-copy { max-width: 620px; }
-.glass-landing .hero h1 { margin-bottom: 24px; }
-.glass-landing .hero-lede { font-size: clamp(17px, 1.35vw, 19px); line-height: 1.6; color: var(--ink-soft); max-width: 560px; }
-.glass-landing .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
-.glass-landing .hero-note { margin-top: 16px; font-size: 14px; color: var(--muted); }
+.glass-landing .hero-copy { max-width: 640px; font-family: var(--display); }
+/* Read order: badge, headline, accent line, lede, the three facts, buttons. */
+.glass-landing .hero-badge {
+  display: inline-flex; align-items: center; gap: 10px; margin-bottom: 26px;
+  padding: 8px 16px 8px 12px; border-radius: 999px;
+  background: #ffffffc2; border: 1px solid #0c6e6229; box-shadow: 0 8px 22px -16px #1f5a4a66;
+  color: var(--deep); font-size: 12.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; line-height: 1;
+}
+.glass-landing .hero-badge-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 4px #c9a22733;
+}
+.glass-landing .hero h1 { margin-bottom: 26px; text-wrap: balance; }
+.glass-landing .hero-h1-accent {
+  display: block; margin-top: .1em; padding-bottom: .06em; font-size: .8em; letter-spacing: -.03em; color: var(--brand);
+  background: linear-gradient(100deg, var(--deep) 0%, var(--brand) 45%, var(--bright) 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+@media (forced-colors: active), (prefers-contrast: more) {
+  .glass-landing .hero-h1-accent { background: none; -webkit-text-fill-color: currentColor; color: var(--brand); }
+}
+.glass-landing .hero-lede {
+  font-size: clamp(17px, 1.3vw, 19px); font-weight: 500; line-height: 1.62; letter-spacing: -.005em;
+  color: var(--ink-soft); max-width: 34em;
+}
+.glass-landing .hero-facts { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 11px; }
+.glass-landing .hero-facts li { display: flex; align-items: center; gap: 12px; font-size: 15px; font-weight: 600; color: var(--ink); }
+.glass-landing .hero-facts .icon {
+  width: 24px; height: 24px; padding: 5px; border-radius: 50%; background: var(--soft); color: var(--brand); stroke-width: 2.4;
+}
+.glass-landing .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
+.glass-landing .hero-note { margin-top: 16px; font-size: 14px; color: var(--muted); font-family: var(--sans); }
 
 /* ---- Shared card look ------------------------------------------------------ */
-.glass-landing .audience-card, .glass-landing .feature-grid article, .glass-landing .desktop-card,
+.glass-landing .audience-card, .glass-landing .desktop-card,
 .glass-landing .request-card, .glass-landing .faq-list details {
   background: var(--card); border: 1px solid #fff; border-radius: var(--radius); box-shadow: var(--shadow);
 }
@@ -250,15 +277,134 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 @keyframes lp-rise { to { opacity: 1; transform: none; } }
 
 /* ---- Features -------------------------------------------------------------- */
+/* A bento grid: one large card with a sample payslip, four small cards, and a
+   full-width audit strip. Every card's h3/p carries the meaning; the mini
+   illustrations are aria-hidden. Cards rise in, staggered by --i, the first
+   time the grid scrolls into view (landing.js, [data-reveal]). */
 .glass-landing .features { padding-block: clamp(64px, 8vw, 112px); }
-.glass-landing .features .section-title { margin-bottom: 40px; }
-.glass-landing .feature-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
-.glass-landing .feature-grid article { padding: 28px; }
-.glass-landing .feature-grid .icon {
-  width: 44px; height: 44px; padding: 10px; border-radius: 12px; background: var(--soft); color: var(--brand); margin-bottom: 18px;
+.glass-landing .features-head { max-width: 720px; margin-bottom: 44px; }
+.glass-landing .features-intro { margin-top: 14px; font-size: 17px; max-width: 560px; }
+.glass-landing .bento {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px;
+  grid-template-areas: "paye paye a b" "paye paye c d" "audit audit audit audit";
 }
-.glass-landing .feature-grid h3 { margin-bottom: 8px; }
-.glass-landing .feature-grid p { font-size: 15.5px; }
+.glass-landing .bento-card {
+  position: relative; display: flex; flex-direction: column; min-width: 0; padding: 26px;
+  background: var(--card); border: 1px solid #fff; border-radius: var(--radius); box-shadow: var(--shadow);
+  transition: transform .25s cubic-bezier(.2, .7, .3, 1), box-shadow .25s ease, border-color .25s ease;
+}
+.glass-landing .bento-card:nth-child(2) { grid-area: a; }
+.glass-landing .bento-card:nth-child(3) { grid-area: b; }
+.glass-landing .bento-card:nth-child(4) { grid-area: c; }
+.glass-landing .bento-card:nth-child(5) { grid-area: d; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .glass-landing .bento-card:hover { transform: translateY(-4px); box-shadow: 0 26px 56px -28px #1f5a4a66, 0 2px 8px #1f5a4a0d; border-color: #cfe9e0; }
+}
+.glass-landing .bento-card h3 { margin-bottom: 8px; }
+.glass-landing .bento-card p { font-size: 15px; }
+.glass-landing .bento-icon {
+  display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 18px; border-radius: 13px;
+  background: var(--soft); color: var(--brand);
+}
+.glass-landing .bento-icon .icon { width: 22px; height: 22px; }
+.glass-landing .bento-icon--gold { background: #f6edcc; color: #8a6d12; }
+/* Mini illustrations sit at the foot of each card. */
+.glass-landing .bento-card > ul, .glass-landing .bento-card > dl, .glass-landing .bento-card > ol { margin: auto 0 0; padding: 18px 0 0; list-style: none; }
+
+/* PAYE: the large card, copy above a sample payslip. */
+.glass-landing .bento-card--paye {
+  grid-area: paye; padding: clamp(26px, 3vw, 40px); overflow: hidden;
+  background: radial-gradient(ellipse 70% 55% at 100% 100%, #c9ede3b3, transparent 70%), var(--card);
+}
+.glass-landing .bento-card--paye h3 { font-size: clamp(21px, 1.9vw, 27px); font-weight: 800; letter-spacing: -.025em; line-height: 1.2; }
+.glass-landing .bento-card--paye .bento-copy p { font-size: 16px; max-width: 440px; }
+.glass-landing .mini-slip {
+  margin-top: auto; padding: 20px 22px 18px; border-radius: 18px; transform: rotate(-1.2deg); transform-origin: 30% 100%;
+  background: #fff; border: 1px solid var(--line); box-shadow: 0 30px 60px -34px #0d4d4d73;
+  font-variant-numeric: tabular-nums; max-width: 500px; width: 100%; align-self: flex-end; margin-bottom: auto;
+}
+.glass-landing .bento-card--paye .bento-copy { margin-bottom: 32px; }
+.glass-landing .mini-slip-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 14px; margin-bottom: 6px; border-bottom: 1px dashed var(--line); }
+.glass-landing .mini-slip-who { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
+.glass-landing .mini-avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--deep); color: #fff; font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+.glass-landing .mini-tag { padding: 4px 10px; border-radius: 999px; background: var(--soft); color: var(--deep); font-size: 12px; font-weight: 700; }
+.glass-landing .mini-slip dl { margin: 0; }
+.glass-landing .mini-slip dl > div { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; font-size: 15px; }
+.glass-landing .mini-slip dt { color: var(--muted); }
+.glass-landing .mini-slip dd { margin: 0; font-weight: 700; color: var(--ink); }
+.glass-landing .mini-slip .is-sub { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 10px; }
+.glass-landing .mini-slip .is-ded dd { color: #a14a1c; }
+.glass-landing .mini-slip .is-net {
+  margin: 10px -10px 0; padding: 12px 10px; border-radius: 12px; background: linear-gradient(100deg, var(--deep), var(--brand));
+}
+.glass-landing .mini-slip .is-net dt { color: #cfe9e2; font-weight: 700; }
+.glass-landing .mini-slip .is-net dd { color: #fff; font-size: 18px; font-weight: 900; }
+
+/* Checks: rows held for review. */
+.glass-landing .mini-flags { display: grid; gap: 8px; }
+.glass-landing .mini-flags li {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px;
+  border-radius: 12px; background: #fff; border: 1px solid var(--line); font-size: 14px; font-weight: 700; color: var(--ink);
+}
+.glass-landing .mini-flags small { display: block; font-weight: 500; font-size: 12.5px; color: var(--muted); }
+.glass-landing .mini-flags b { flex: none; padding: 3px 9px; border-radius: 999px; background: #f6edcc; color: #7a5f0e; font-size: 12px; }
+
+/* Delivery: one row per channel with its status. */
+.glass-landing .mini-channels { display: grid; gap: 8px; }
+.glass-landing .mini-channels li {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px;
+  background: #fff; border: 1px solid var(--line); font-size: 14px; font-weight: 700; color: var(--ink);
+}
+.glass-landing .mini-channels .icon { width: 18px; height: 18px; color: var(--brand); }
+.glass-landing .mini-status { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; }
+.glass-landing .mini-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.glass-landing .mini-status.is-ok { color: #12775f; }
+.glass-landing .mini-status.is-retry { color: #8a6d12; }
+
+/* Reports: the dark card, with the two downloads as file chips. */
+.glass-landing .bento-card--dark { background: linear-gradient(150deg, #0d4d4d, #0c6e62); border-color: transparent; color: #eaf7f3; }
+.glass-landing .bento-card--dark h3 { color: #fff; }
+.glass-landing .bento-card--dark p { color: #cfe9e2; }
+.glass-landing .bento-card--dark .bento-icon { background: #ffffff1f; color: #8fe3d6; }
+.glass-landing .mini-files { display: grid; gap: 8px; }
+.glass-landing .mini-files li {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px;
+  background: #ffffff14; border: 1px solid #ffffff2e; font-size: 14px; font-weight: 700; color: #fff;
+}
+.glass-landing .mini-files .icon { width: 18px; height: 18px; color: #8fe3d6; }
+.glass-landing .mini-files small { margin-left: auto; padding: 2px 8px; border-radius: 6px; background: #8fe3d6; color: var(--deep); font-size: 11px; font-weight: 900; letter-spacing: .04em; }
+
+/* Records: masked field rows. */
+.glass-landing .mini-fields { display: grid; gap: 0; }
+.glass-landing .mini-fields > div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.glass-landing .mini-fields > div:last-child { border-bottom: 0; }
+.glass-landing .mini-fields dt { color: var(--muted); }
+.glass-landing .mini-fields dd { margin: 0; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+
+/* Audit: a full-width strip, copy beside a four-step timeline. */
+.glass-landing .bento-card--audit { grid-area: audit; flex-direction: row; align-items: center; gap: clamp(24px, 4vw, 56px); }
+.glass-landing .bento-card--audit .bento-copy { flex: 0 1 340px; }
+.glass-landing .bento-card > .mini-timeline {
+  flex: 1 1 auto; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); position: relative;
+}
+.glass-landing .mini-timeline::before {
+  content: ""; position: absolute; top: 9px; left: 9px; right: 12.5%; height: 2px;
+  background: linear-gradient(90deg, var(--bright), var(--brand) 70%, var(--gold));
+}
+.glass-landing .mini-timeline li { position: relative; padding: 30px 12px 0 0; font-size: 14px; }
+.glass-landing .mini-timeline li::before {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; border: 3px solid var(--brand); box-sizing: border-box;
+}
+.glass-landing .mini-timeline li:last-child::before { border-color: var(--gold); background: var(--gold); }
+.glass-landing .mini-timeline b { display: block; color: var(--ink); font-weight: 700; }
+.glass-landing .mini-timeline small { display: block; color: var(--muted); font-size: 12.5px; }
+
+/* Reveal: armed only when JS runs and motion is allowed. */
+.glass-landing .bento.is-armed .bento-card { opacity: 0; transform: translateY(22px); }
+.glass-landing .bento.is-in .bento-card {
+  animation: lp-rise .7s cubic-bezier(.2, .7, .3, 1) forwards; animation-delay: calc(var(--i, 0) * 90ms);
+}
 
 /* ---- Desktop app ----------------------------------------------------------- */
 .glass-landing .desktop { padding-block: clamp(48px, 6vw, 88px); }
@@ -344,7 +490,7 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 .glass-landing .request-privacy { margin-top: 12px; font-size: 13px; text-align: center; }
 .glass-landing .request-done { text-align: center; padding: 32px 8px; outline: none; }
 .glass-landing .request-done .icon { width: 52px; height: 52px; padding: 12px; border-radius: 50%; background: var(--soft); color: var(--brand); margin: 0 auto 16px; }
-.glass-landing .request-done h3 { font-family: var(--serif); font-weight: 500; font-size: 30px; margin-bottom: 8px; }
+.glass-landing .request-done h3 { font-family: var(--display); font-weight: 800; font-size: 28px; letter-spacing: -.025em; margin-bottom: 8px; }
 
 /* ---- Footer ---------------------------------------------------------------- */
 .glass-landing .site-footer { border-top: 1px solid var(--line); margin-top: 24px; }
@@ -357,7 +503,18 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 
 /* ---- Responsive ------------------------------------------------------------ */
 @media (max-width: 1100px) {
-  .glass-landing .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .glass-landing .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "paye paye" "a b" "c d" "audit audit"; }
+  .glass-landing .bento-card--paye { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: center; }
+  .glass-landing .bento-card--paye .bento-copy { margin-bottom: 0; }
+  .glass-landing .bento-card--paye .mini-slip { margin-block: 0; }
+}
+@media (max-width: 760px) {
+  .glass-landing .bento-card--paye { display: flex; }
+  .glass-landing .bento-card--paye .bento-copy { margin-bottom: 28px; }
+  .glass-landing .bento-card--audit { flex-direction: column; align-items: stretch; }
+  .glass-landing .bento-card--audit .bento-copy { flex: none; }
+  .glass-landing .bento-card > .mini-timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 18px; }
+  .glass-landing .mini-timeline::before { display: none; }
 }
 @media (max-width: 960px) {
   .glass-landing { --header-h: 64px; }
@@ -390,7 +547,9 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
   @keyframes lp-draw { to { transform: none; } }
 }
 @media (max-width: 600px) {
-  .glass-landing .feature-grid, .glass-landing .field-grid { grid-template-columns: 1fr; }
+  .glass-landing .field-grid { grid-template-columns: 1fr; }
+  .glass-landing .bento { grid-template-columns: 1fr; grid-template-areas: "paye" "a" "b" "c" "d" "audit"; }
+  .glass-landing .mini-slip { transform: none; }
   .glass-landing .hero-actions .lp-btn { flex: 1 1 auto; }
   .glass-landing .pipe-ring { width: 72px; height: 72px; }
   .glass-landing .pipe-ring .icon { width: 26px; height: 26px; }
@@ -401,6 +560,7 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 @media print {
   .glass-landing .site-header { position: static; }
   .glass-landing .pipe.is-armed * { opacity: 1 !important; transform: none !important; }
+  .glass-landing .bento.is-armed .bento-card { opacity: 1 !important; transform: none !important; }
 }
 .glass-landing main:focus { outline: none; }
 

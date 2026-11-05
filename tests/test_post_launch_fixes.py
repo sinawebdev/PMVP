@@ -127,6 +127,24 @@ class SlashClientExportTestCase(unittest.TestCase):
                 path = exporter(self.run, self.temp_dir.name)
                 self._assert_opens(path)
 
+    def test_gra_paye_schedule_carries_both_header_pictures(self):
+        # The template's GRA seal is an EMF that openpyxl drops on load, so
+        # schedules used to go out with only the Coat of Arms. Both pictures
+        # must survive: the seal top left (col A), the arms top right (col AA).
+        import zipfile
+
+        path = export_gra_paye_schedule(self.run, self.temp_dir.name)
+        with zipfile.ZipFile(path) as archive:
+            media = [n for n in archive.namelist() if n.startswith("xl/media/")]
+        self.assertEqual(len(media), 2, media)
+        self.assertTrue(all(n.endswith(".png") for n in media), media)
+
+        sheet = load_workbook(path).active
+        corners = sorted(
+            (image.anchor._from.col, image.anchor._from.row) for image in sheet._images
+        )
+        self.assertEqual(corners, [(0, 0), (26, 0)])
+
 
 class RejectedRunDeletionTestCase(unittest.TestCase):
     """Item 2: Rejected runs are deletable and replaceable."""

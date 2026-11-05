@@ -80,5 +80,43 @@ class AnimatedMarkTests(unittest.TestCase):
         self.assertRegex(html, r'class="hero-mark-still"[^>]*alt=""')
 
 
+class HeroAndFeaturesTests(unittest.TestCase):
+    """The hero copy, its Montserrat face and the features bento."""
+
+    def test_hero_headline_and_accent_line(self):
+        _, html = landing_html()
+        h1 = re.search(r'<h1 id="hero-title">(.*?)</h1>', html, re.S).group(1)
+        self.assertIn("Payday, sorted.", h1)
+        self.assertIn('class="hero-h1-accent">Every cedi, every payslip.</span>', h1)
+        self.assertEqual(html.count('<ul class="hero-facts">'), 1)
+
+    def test_montserrat_is_preloaded_and_every_face_file_exists(self):
+        app, html = landing_html()
+        preload = re.search(
+            r'<link rel="preload" href="(/static/fonts/montserrat-[^"]+)" as="font" type="font/woff2" crossorigin>',
+            html,
+        )
+        self.assertIsNotNone(preload, "Montserrat preload link missing")
+        with open(os.path.join(app.static_folder, "fonts.css"), encoding="utf-8") as handle:
+            faces = re.findall(r"font-family:Montserrat;src:url\('([^']+)'\)", handle.read())
+        self.assertEqual(len(faces), 2, faces)
+        for rel in faces + [preload.group(1)[len("/static/"):]]:
+            with self.subTest(font=rel):
+                path = os.path.join(app.static_folder, rel)
+                self.assertTrue(os.path.isfile(path), rel)
+                with open(path, "rb") as font:
+                    self.assertEqual(font.read(4), b"wOF2", rel)
+
+    def test_features_render_six_cards_with_decorative_illustrations(self):
+        _, html = landing_html()
+        section = html[html.index('id="features"'):]
+        section = section[:section.index("</section>")]
+        self.assertEqual(section.count('<article class="bento-card'), 6)
+        self.assertEqual(section.count("<h3>"), 6)
+        for mini in ("mini-slip", "mini-flags", "mini-channels", "mini-files", "mini-fields", "mini-timeline"):
+            with self.subTest(mini=mini):
+                self.assertRegex(section, rf'class="{mini}" aria-hidden="true"')
+
+
 if __name__ == "__main__":
     unittest.main()
