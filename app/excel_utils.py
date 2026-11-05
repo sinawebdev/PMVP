@@ -1223,6 +1223,15 @@ def format_tax_office_tickboxes(tax_office):
 # 2022 bands would print tax that disagrees with the payslips we already issue.
 GRA_TEMPLATE_PATH = Path(__file__).resolve().parent / "assets" / "gra_paye_template.xlsx"
 
+# The template's GRA seal (top left, opposite the Coat of Arms) is an EMF
+# picture, a format openpyxl cannot read, so it is dropped on every load. This
+# PNG of the same seal, cropped from GRA's own published logo, goes back in its
+# place. The anchor below is copied from the template's drawing1.xml, so the
+# seal lands at the same offset and size the form was designed with.
+GRA_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "gra_logo.png"
+_GRA_LOGO_ANCHOR = {"col": 0, "col_off": 114299, "row": 0, "row_off": 38101,
+                    "cx": 917576, "cy": 895825}  # offsets and size in EMU
+
 # Data rows begin at row 18 on the GRA template (rows 1-17 are the header block
 # and the column-number/label rows).
 _GRA_DATA_START_ROW = 18
@@ -1247,6 +1256,40 @@ def _gra_month_code(month, year):
     return f"{number:02d}/{year}" if number else f"{month} {year}"
 
 
+def _load_gra_template():
+    """Open the GRA template, silencing only openpyxl's warning about the EMF
+    seal it drops (``_place_gra_logo`` puts the seal back)."""
+    import warnings
+
+    from openpyxl import load_workbook
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message="wmf image format is not supported", category=UserWarning
+        )
+        return load_workbook(GRA_TEMPLATE_PATH)
+
+
+def _place_gra_logo(sheet):
+    """Put the GRA seal back in the top-left corner of the form. If the PNG is
+    missing, the schedule still exports, just without the seal."""
+    if not GRA_LOGO_PATH.exists():
+        logger.warning("GRA logo asset missing at %s; schedule exported without it", GRA_LOGO_PATH)
+        return
+    from openpyxl.drawing.image import Image
+    from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
+    from openpyxl.drawing.xdr import XDRPositiveSize2D
+
+    spot = _GRA_LOGO_ANCHOR
+    logo = Image(str(GRA_LOGO_PATH))
+    logo.anchor = OneCellAnchor(
+        _from=AnchorMarker(col=spot["col"], colOff=spot["col_off"],
+                           row=spot["row"], rowOff=spot["row_off"]),
+        ext=XDRPositiveSize2D(cx=spot["cx"], cy=spot["cy"]),
+    )
+    sheet.add_image(logo)
+
+
 def _fill_gra_skeleton_workbook(
     payroll_run, employer_tin, tax_office, employer_name="CHRISNAT LIMITED"
 ):
@@ -1256,13 +1299,12 @@ def _fill_gra_skeleton_workbook(
     the filed schedule reconciles to the payslips exactly. Columns with no
     backing data (accommodation/vehicle/non-cash elements, secondary employment,
     severance) are left blank for hand-filling."""
-    from openpyxl import load_workbook
-
     def m(value):
         return round(float(value or 0), 2)
 
-    workbook = load_workbook(GRA_TEMPLATE_PATH)
+    workbook = _load_gra_template()
     sheet = workbook.active
+    _place_gra_logo(sheet)
 
     # --- header block (write to the top-left cell of each merged range) ---
     sheet["D9"] = escape_formula(employer_name)            # NAME OF EMPLOYER
