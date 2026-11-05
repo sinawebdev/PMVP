@@ -1,9 +1,44 @@
 {% extends "base.html" %}
-{% block title %}{{ app_name }} — Payroll software for Ghana{% endblock %}
+{% block title %}{{ app_name }} — Payroll software for Ghana | PAYE, SSNIT, payslips{% endblock %}
 {% block head %}
-<meta name="description" content="{{ app_brand_name }} works out pay, PAYE and SSNIT from your Excel workbook, takes each run through approval, and sends payslips by email, WhatsApp or SMS.">
+{# Search and link-preview tags. SITE_URL (app config) is the canonical host,
+   never the request's: behind Render the request arrives as http://. #}
+{% set site = config.SITE_URL %}
+{% set page_url = site ~ url_for('main.index') %}
+{% set share_title = app_brand_name ~ " — Payroll software for Ghana" %}
+{% set share_text = "Payday, sorted. Upload the Excel sheet you already keep; " ~ app_brand_name ~ " works out PAYE and SSNIT, sends the run for sign-off, and delivers every payslip by email, WhatsApp or SMS." %}
+{% set share_image = site ~ url_for('static', filename='img/og-payrolla.jpg', v='20261105') %}
+<meta name="description" content="Payroll software for Ghana. {{ app_brand_name }} works out PAYE and SSNIT from your Excel workbook, takes each run through approval, and sends payslips by email, WhatsApp or SMS.">
+<link rel="canonical" href="{{ page_url }}">
+<meta name="theme-color" content="#eef6f1">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{ app_brand_name }}">
+<meta property="og:url" content="{{ page_url }}">
+<meta property="og:title" content="{{ share_title }}">
+<meta property="og:description" content="{{ share_text }}">
+<meta property="og:image" content="{{ share_image }}">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{{ app_brand_name }}: Payday, sorted. Every cedi, every payslip. A sample payslip showing PAYE and SSNIT.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ share_title }}">
+<meta name="twitter:description" content="{{ share_text }}">
+<meta name="twitter:image" content="{{ share_image }}">
+{% set org_id = site ~ "/#organization" %}
+{% set site_ld = {"@context": "https://schema.org", "@graph": [
+  {"@type": "Organization", "@id": org_id, "name": app_brand_name, "url": page_url,
+   "logo": site ~ url_for('static', filename='img/apple-touch-icon.png')},
+  {"@type": "WebSite", "@id": site ~ "/#website", "name": app_brand_name, "url": page_url,
+   "inLanguage": "en-GH", "publisher": {"@id": org_id}},
+  {"@type": "SoftwareApplication", "name": app_brand_name, "url": page_url,
+   "applicationCategory": "BusinessApplication", "operatingSystem": "Web, Windows",
+   "description": "Payroll software for Ghana: PAYE and SSNIT at current GRA rates, approval before anything is sent, and payslips by email, WhatsApp or SMS.",
+   "publisher": {"@id": org_id}}
+]} %}
+<script type="application/ld+json">{{ site_ld | tojson }}</script>
 <link rel="preload" href="{{ url_for('static', filename='fonts/montserrat-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="{{ url_for('static', filename='landing-glass.css', v='20261104') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='landing-glass.css', v='20261105') }}">
 {% endblock %}
 {% block public_content %}
 {% from 'macros/brand.html' import logo with context %}
@@ -64,8 +99,10 @@
 
 <section class="hero lp-wrap" aria-labelledby="hero-title">
   <div class="hero-copy">
-    <p class="hero-badge"><span class="hero-badge-dot" aria-hidden="true"></span>GRA PAYE &amp; SSNIT ready</p>
-    <h1 id="hero-title">Payday, sorted. <span class="hero-h1-accent">Every cedi, every payslip.</span></h1>
+    {# The pill is the page's h1, so search engines read "payroll" and "Ghana"
+       as the heading; the big slogan below is styled text, not a heading. #}
+    <h1 class="hero-badge" id="hero-title"><span class="hero-badge-dot" aria-hidden="true"></span>Payroll software for Ghana</h1>
+    <p class="hero-display">Payday, sorted. <span class="hero-accent">Every cedi, every payslip.</span></p>
     <p class="hero-lede">Upload the Excel sheet you already keep. {{ app_brand_name }} works out PAYE and SSNIT, sends the run for sign-off, and delivers every payslip by email, WhatsApp or SMS.</p>
     <ul class="hero-facts">
       <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Current GRA PAYE bands and SSNIT rates</li>
@@ -82,9 +119,9 @@
      (markup, controls and landing-hero-carousel.js behaviour). #}
 <div class="hero-visual hero-carousel" id="hero-carousel" role="region" aria-roledescription="carousel" aria-label="Payrolla hero illustrations" tabindex="0" data-slide="1" data-rotating="false">
  <div class="carousel-viewport" aria-live="off">
-  <figure class="hero-slide is-active" id="hero-slide-1" role="group" aria-roledescription="slide" aria-label="1 of 3: The glass payslip" data-title="The glass payslip" aria-hidden="false"><img src="{{ url_for('static', filename='img/hero-glass-payslip.png') }}" alt="A frosted glass sample payslip with layered sheets and an approval record." width="1360" height="1156" decoding="async" fetchpriority="high"></figure>
-  <figure class="hero-slide" id="hero-slide-2" role="group" aria-roledescription="slide" aria-label="2 of 3: The clear workspace" data-title="The clear workspace" aria-hidden="true"><img src="{{ url_for('static', filename='img/hero-clear-workspace.png') }}" alt="Payrolla’s glass workspace with sample employee rows, net pay and a payslip." width="1360" height="1156" decoding="async"></figure>
-  <figure class="hero-slide" id="hero-slide-3" role="group" aria-roledescription="slide" aria-label="3 of 3: From workbook to payslip" data-title="Workbook to payslip" aria-hidden="true"><img src="{{ url_for('static', filename='img/hero-payday-flow.png') }}" alt="Three frosted documents show the path from a workbook through payroll review to a payslip." width="1360" height="1156" decoding="async"></figure>
+  <figure class="hero-slide is-active" id="hero-slide-1" role="group" aria-roledescription="slide" aria-label="1 of 3: The glass payslip" data-title="The glass payslip" aria-hidden="false"><img src="{{ url_for('static', filename='img/hero-glass-payslip.webp') }}" alt="A frosted glass sample payslip with layered sheets and an approval record." width="1360" height="1156" decoding="async" fetchpriority="high"></figure>
+  <figure class="hero-slide" id="hero-slide-2" role="group" aria-roledescription="slide" aria-label="2 of 3: The clear workspace" data-title="The clear workspace" aria-hidden="true"><img src="{{ url_for('static', filename='img/hero-clear-workspace.webp') }}" alt="Payrolla’s glass workspace with sample employee rows, net pay and a payslip." width="1360" height="1156" decoding="async"></figure>
+  <figure class="hero-slide" id="hero-slide-3" role="group" aria-roledescription="slide" aria-label="3 of 3: From workbook to payslip" data-title="Workbook to payslip" aria-hidden="true"><img src="{{ url_for('static', filename='img/hero-payday-flow.webp') }}" alt="Three frosted documents show the path from a workbook through payroll review to a payslip." width="1360" height="1156" decoding="async"></figure>
  </div>
  <div class="carousel-toolbar"><p class="carousel-caption"><span class="carousel-counter" id="carousel-counter">1 / 3</span><span class="carousel-slide-title" id="carousel-slide-title">The glass payslip</span></p><div class="carousel-controls"><div class="carousel-dots" role="group" aria-label="Choose a hero illustration"><button type="button" class="carousel-dot" data-carousel-slide="0" aria-label="Show the glass payslip" aria-controls="hero-slide-1" aria-pressed="true"></button><button type="button" class="carousel-dot" data-carousel-slide="1" aria-label="Show the clear workspace" aria-controls="hero-slide-2" aria-pressed="false"></button><button type="button" class="carousel-dot" data-carousel-slide="2" aria-label="Show workbook to payslip" aria-controls="hero-slide-3" aria-pressed="false"></button></div><button type="button" class="carousel-toggle" id="carousel-toggle" aria-label="Pause automatic slide rotation">Pause</button></div></div>
  <p class="sr-only" id="carousel-status" role="status" aria-live="polite" aria-atomic="true"></p>

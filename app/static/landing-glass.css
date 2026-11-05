@@ -75,7 +75,7 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
   color: var(--brand); font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
   margin-bottom: 14px;
 }
-.glass-landing h1 {
+.glass-landing .hero-display {
   font-family: var(--display); font-weight: 800; letter-spacing: -.035em; line-height: 1.02;
   font-size: clamp(42px, 4.9vw, 72px); color: var(--ink);
 }
@@ -174,14 +174,14 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 .glass-landing .hero-badge-dot {
   width: 9px; height: 9px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 4px #c9a22733;
 }
-.glass-landing .hero h1 { margin-bottom: 26px; text-wrap: balance; }
-.glass-landing .hero-h1-accent {
+.glass-landing .hero .hero-display { margin-bottom: 26px; text-wrap: balance; }
+.glass-landing .hero-accent {
   display: block; margin-top: .1em; padding-bottom: .06em; font-size: .8em; letter-spacing: -.03em; color: var(--brand);
   background: linear-gradient(100deg, var(--deep) 0%, var(--brand) 45%, var(--bright) 100%);
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 }
 @media (forced-colors: active), (prefers-contrast: more) {
-  .glass-landing .hero-h1-accent { background: none; -webkit-text-fill-color: currentColor; color: var(--brand); }
+  .glass-landing .hero-accent { background: none; -webkit-text-fill-color: currentColor; color: var(--brand); }
 }
 .glass-landing .hero-lede {
   font-size: clamp(17px, 1.3vw, 19px); font-weight: 500; line-height: 1.62; letter-spacing: -.005em;
