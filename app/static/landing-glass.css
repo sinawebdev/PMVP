@@ -16,9 +16,14 @@
   --line: #d3e4dc;
   --line-control: #7a958b;
   --border: var(--line-control);
-  --card: #fbfefcde;
-  --shadow: 0 18px 48px -26px #1f5a4a40, 0 2px 6px #1f5a4a08;
-  --radius: 22px;
+  /* Surfaces commit to a defined edge (solid fill + 1px line, no shadow).
+     The one exception is --lift, kept for the sample payslip, the single
+     object on the page meant to read as a sheet of paper. Radius stays modest:
+     soft blobs and glass panels are the generated-site look we are avoiding. */
+  --card: #ffffff;
+  --edge: 1px solid var(--line);
+  --lift: 0 1px 2px #0d4d4d1f, 0 14px 28px -18px #0d4d4d66;
+  --radius: 14px;
   --gutter: clamp(20px, 4vw, 72px);
   --display: Montserrat, "Segoe UI", system-ui, -apple-system, sans-serif;
   --sans: Satoshi, "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -28,23 +33,11 @@
   isolation: isolate;
   min-height: 100vh;
   overflow-x: clip;
-  background: #eef6f1;
+  background: #f1f6f3;
   color: var(--ink);
   font-family: var(--sans);
   font-size: 16px;
   line-height: 1.6;
-}
-.glass-landing::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 45% 18% at 88% 6%, #a8e6d78c, transparent 100%),
-    radial-gradient(ellipse 42% 16% at 4% 30%, #c6eee39c, transparent 100%),
-    radial-gradient(ellipse 50% 14% at 94% 62%, #d2e7ceaa, transparent 100%),
-    linear-gradient(160deg, #f5f9f5, #edf7f1 45%, #e9f4ee);
 }
 .glass-landing *, .glass-landing *::before, .glass-landing *::after { box-sizing: border-box; }
 html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var(--header-h, 72px) + 16px); }
@@ -71,32 +64,30 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 .glass-landing .lp-wrap { width: 100%; padding-inline: var(--gutter); margin-inline: auto; max-width: 1440px; }
 
 /* ---- Type scale ---------------------------------------------------------- */
-.glass-landing .eyebrow {
-  color: var(--brand); font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  margin-bottom: 14px;
-}
+/* No eyebrow labels above section titles: the titles say what the section is,
+   and the nav already names each one. */
 .glass-landing .hero-display {
-  font-family: var(--display); font-weight: 800; letter-spacing: -.035em; line-height: 1.02;
+  font-family: var(--display); font-weight: 800; letter-spacing: -.02em; line-height: 1.04;
   font-size: clamp(42px, 4.9vw, 72px); color: var(--ink);
 }
 .glass-landing .section-title {
-  font-family: var(--display); font-weight: 700; letter-spacing: -.025em; line-height: 1.12;
+  font-family: var(--display); font-weight: 700; letter-spacing: -.015em; line-height: 1.12;
   font-size: clamp(30px, 3.2vw, 46px); color: var(--ink); text-wrap: balance;
 }
-.glass-landing h3 { font-family: var(--display); font-size: 17px; font-weight: 700; line-height: 1.3; letter-spacing: -.015em; }
+.glass-landing h3 { font-family: var(--display); font-size: 17px; font-weight: 700; line-height: 1.3; letter-spacing: -.01em; }
 .glass-landing section p { color: var(--muted); }
 
 /* ---- Buttons ------------------------------------------------------------- */
 .glass-landing .lp-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  min-height: 48px; padding: 0 22px; border-radius: 12px; border: 1px solid transparent;
+  min-height: 48px; padding: 0 22px; border-radius: 10px; border: 1px solid transparent;
   font: 700 15px/1 var(--sans); text-decoration: none; white-space: nowrap; cursor: pointer;
-  transition: background-color .16s ease, border-color .16s ease, transform .12s ease, box-shadow .16s ease;
+  transition: background-color .16s ease, border-color .16s ease, transform .12s ease;
 }
 .glass-landing .lp-btn:active { transform: scale(.98); }
-.glass-landing .lp-btn--primary { background: var(--deep); color: #fff; box-shadow: 0 10px 24px -14px #0d4d4dcc; }
+.glass-landing .lp-btn--primary { background: var(--deep); color: #fff; }
 .glass-landing .lp-btn--primary:hover { background: #0a3d3d; color: #fff; }
-.glass-landing .lp-btn--ghost { background: #ffffffb3; border-color: var(--line-control); color: var(--ink); }
+.glass-landing .lp-btn--ghost { background: #fff; border-color: var(--line-control); color: var(--ink); }
 .glass-landing .lp-btn--ghost:hover { background: #fff; border-color: var(--brand); color: var(--deep); }
 .glass-landing .lp-btn--sm { min-height: 42px; padding: 0 16px; font-size: 14px; }
 .glass-landing .lp-btn--block { width: 100%; }
@@ -110,7 +101,7 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 @supports (backdrop-filter: blur(1px)) {
   .glass-landing .site-header { background: #f4faf6b8; backdrop-filter: blur(14px) saturate(1.2); }
 }
-.glass-landing .site-header.is-scrolled { border-bottom-color: var(--line); box-shadow: 0 8px 24px -20px #1f5a4a66; }
+.glass-landing .site-header.is-scrolled { border-bottom-color: var(--line); }
 .glass-landing .site-header-inner {
   display: flex; align-items: center; gap: 28px; min-height: var(--header-h);
   padding-inline: var(--gutter);
@@ -164,59 +155,50 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
   align-items: center; padding-block: clamp(48px, 7vw, 104px) clamp(56px, 7vw, 96px);
 }
 .glass-landing .hero-copy { max-width: 640px; font-family: var(--display); }
-/* Read order: badge, headline, accent line, lede, the three facts, buttons. */
-.glass-landing .hero-badge {
-  display: inline-flex; align-items: center; gap: 10px; margin-bottom: 26px;
-  padding: 8px 16px 8px 12px; border-radius: 999px;
-  background: #ffffffc2; border: 1px solid #0c6e6229; box-shadow: 0 8px 22px -16px #1f5a4a66;
-  color: var(--deep); font-size: 12.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; line-height: 1;
-}
-.glass-landing .hero-badge-dot {
-  width: 9px; height: 9px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 4px #c9a22733;
-}
-.glass-landing .hero .hero-display { margin-bottom: 26px; text-wrap: balance; }
+/* Read order: slogan, accent line, the intro (which opens with the h1 as a
+   bold run-in, so no pill or eyebrow sits above the headline), the facts,
+   buttons. The h1 carries the search words; the slogan is display text. */
+.glass-landing .hero .hero-display { margin-bottom: 24px; text-wrap: balance; }
 .glass-landing .hero-accent {
-  display: block; margin-top: .1em; padding-bottom: .06em; font-size: .8em; letter-spacing: -.03em; color: var(--brand);
-  background: linear-gradient(100deg, var(--deep) 0%, var(--brand) 45%, var(--bright) 100%);
-  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  display: block; margin-top: .1em; font-size: .8em; letter-spacing: -.015em; color: var(--brand);
 }
-@media (forced-colors: active), (prefers-contrast: more) {
-  .glass-landing .hero-accent { background: none; -webkit-text-fill-color: currentColor; color: var(--brand); }
-}
-.glass-landing .hero-lede {
-  font-size: clamp(17px, 1.3vw, 19px); font-weight: 500; line-height: 1.62; letter-spacing: -.005em;
+.glass-landing .hero-intro {
+  font-size: clamp(17px, 1.3vw, 19px); font-weight: 500; line-height: 1.62;
   color: var(--ink-soft); max-width: 34em;
 }
-.glass-landing .hero-facts { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 11px; }
-.glass-landing .hero-facts li { display: flex; align-items: center; gap: 12px; font-size: 15px; font-weight: 600; color: var(--ink); }
-.glass-landing .hero-facts .icon {
-  width: 24px; height: 24px; padding: 5px; border-radius: 50%; background: var(--soft); color: var(--brand); stroke-width: 2.4;
+.glass-landing .hero-intro h1, .glass-landing .hero-intro .hero-lede {
+  display: inline; font: inherit; color: inherit; margin: 0;
 }
+.glass-landing .hero-intro h1 { font-weight: 700; color: var(--ink); }
+.glass-landing .hero-facts { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 10px; }
+.glass-landing .hero-facts li { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; color: var(--ink); }
+.glass-landing .hero-facts .icon { width: 18px; height: 18px; color: var(--brand); stroke-width: 2.4; }
 .glass-landing .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
 .glass-landing .hero-note { margin-top: 16px; font-size: 14px; color: var(--muted); font-family: var(--sans); }
 
 /* ---- Shared card look ------------------------------------------------------ */
-.glass-landing .audience-card, .glass-landing .desktop-card,
-.glass-landing .request-card, .glass-landing .faq-list details {
-  background: var(--card); border: 1px solid #fff; border-radius: var(--radius); box-shadow: var(--shadow);
+.glass-landing .request-card {
+  background: var(--card); border: var(--edge); border-radius: var(--radius);
 }
 
-/* ---- Audience -------------------------------------------------------------- */
-.glass-landing .audience { padding-block: 24px clamp(64px, 8vw, 112px); }
-.glass-landing .audience .section-title { font-size: clamp(26px, 2.4vw, 34px); margin-bottom: 24px; }
-.glass-landing .audience-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
-.glass-landing .audience-card { padding: 28px; }
-.glass-landing .audience-card .icon { width: 26px; height: 26px; color: var(--brand); margin-bottom: 18px; }
-.glass-landing .audience-card h3 { margin-bottom: 8px; }
-.glass-landing .audience-card p { font-size: 15.5px; }
+/* ---- Audience: three columns under a rule, not three icon cards ------------ */
+.glass-landing .audience { padding-block: 16px clamp(40px, 5vw, 72px); }
+.glass-landing .audience .section-title { font-size: clamp(26px, 2.4vw, 34px); margin-bottom: 28px; }
+.glass-landing .audience-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 clamp(24px, 3vw, 48px);
+  border-top: 1px solid var(--line-control);
+}
+.glass-landing .audience-item { padding-top: 22px; }
+.glass-landing .audience-item h3 { margin-bottom: 8px; font-size: 18px; }
+.glass-landing .audience-item p { font-size: 15.5px; max-width: 38ch; }
 
 /* ---- Pipeline (the October 2026 animation, restyled) -------------------------
    The track draws left to right, a pulse travels along it, each step pops in
    as the line reaches it, and the delivery channels arrive last. Runs once,
    when scrolled into view (landing.js adds .is-in). Without JS, or with reduced
    motion, everything is simply shown (.is-done, or no .is-armed). */
-.glass-landing .pipeline-section { padding-block: clamp(64px, 8vw, 112px); }
-.glass-landing .pipeline-section .section-title { margin-bottom: 56px; }
+.glass-landing .pipeline-section { padding-block: clamp(40px, 5vw, 72px) clamp(48px, 6vw, 88px); }
+.glass-landing .pipeline-section .section-title { margin-bottom: 48px; }
 .glass-landing .pipe, .glass-landing .pipe-row { position: relative; }
 .glass-landing .pipe-track {
   position: absolute; top: 46px; left: 12.5%; right: 12.5%; height: 3px;
@@ -224,18 +206,17 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 }
 .glass-landing .pipe-fill {
   position: absolute; inset: 0; width: 100%; border-radius: inherit;
-  background: linear-gradient(90deg, var(--bright), var(--brand) 60%, var(--gold));
-  box-shadow: 0 0 14px #17c3b266; transform-origin: left center;
+  background: var(--brand); transform-origin: left center;
 }
 .glass-landing .pipe-pulse {
-  position: absolute; top: 50%; left: 0; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
-  background: var(--gold); box-shadow: 0 0 18px var(--gold); opacity: 0;
+  position: absolute; top: 50%; left: 0; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+  background: var(--gold); opacity: 0;
 }
 .glass-landing .pipe-nodes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .glass-landing .pipe-node { display: flex; flex-direction: column; align-items: center; text-align: center; padding-inline: 14px; position: relative; z-index: 1; }
 .glass-landing .pipe-ring {
   position: relative; display: grid; place-items: center; flex: none; width: 94px; height: 94px; border-radius: 50%;
-  background: #fbfefc; border: 2px solid #cfe5dc; color: var(--brand); box-shadow: var(--shadow);
+  background: #fff; border: 2px solid #cfe5dc; color: var(--brand);
 }
 .glass-landing .pipe-node:last-child .pipe-ring { border-color: var(--gold); color: #8a6d12; }
 .glass-landing .pipe-ring .icon { width: 32px; height: 32px; }
@@ -247,12 +228,12 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 .glass-landing .pipe-text p { font-size: 15px; max-width: 250px; margin-inline: auto; }
 .glass-landing .pipe-channels { list-style: none; margin: 48px 0 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; }
 .glass-landing .pipe-channels li {
-  display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-radius: 14px;
-  background: var(--card); border: 1px solid #fff; box-shadow: var(--shadow); font-weight: 700; font-size: 15px;
+  display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-radius: 10px;
+  background: var(--card); border: var(--edge); font-weight: 700; font-size: 15px;
 }
 .glass-landing .pipe-channels .icon { width: 22px; height: 22px; color: var(--brand); }
 .glass-landing .pipe-channels small { display: block; font-weight: 500; font-size: 13px; color: var(--muted); }
-.glass-landing .section-note { margin-top: 32px; text-align: center; font-size: 14px; }
+.glass-landing .section-note { margin: 32px auto 0; text-align: center; font-size: 14px; max-width: 60ch; }
 
 .glass-landing .pipe.is-armed .pipe-fill { transform: scaleX(0); }
 .glass-landing .pipe.is-armed .pipe-ring { opacity: 0; transform: scale(.6); }
@@ -260,7 +241,7 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 .glass-landing .pipe.is-armed .pipe-channels { opacity: 0; transform: translateY(16px); }
 .glass-landing .pipe.is-in .pipe-fill { animation: lp-draw 2.4s cubic-bezier(.4, 0, .2, 1) .3s forwards; }
 .glass-landing .pipe.is-in .pipe-pulse { animation: lp-travel 2.4s cubic-bezier(.4, 0, .2, 1) .3s forwards; }
-.glass-landing .pipe.is-in .pipe-ring { animation: lp-pop .6s cubic-bezier(.3, 1.4, .5, 1) forwards; }
+.glass-landing .pipe.is-in .pipe-ring { animation: lp-pop .6s cubic-bezier(.22, 1, .36, 1) forwards; }
 .glass-landing .pipe.is-in .pipe-text { animation: lp-rise .6s ease forwards; }
 .glass-landing .pipe.is-in .pipe-node:nth-child(1) .pipe-ring { animation-delay: .3s; }
 .glass-landing .pipe.is-in .pipe-node:nth-child(2) .pipe-ring { animation-delay: .85s; }
@@ -277,109 +258,88 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 @keyframes lp-rise { to { opacity: 1; transform: none; } }
 
 /* ---- Features -------------------------------------------------------------- */
-/* A bento grid: one large card with a sample payslip, four small cards, and a
-   full-width audit strip. Every card's h3/p carries the meaning; the mini
-   illustrations are aria-hidden. Cards rise in, staggered by --i, the first
-   time the grid scrolls into view (landing.js, [data-reveal]). */
-.glass-landing .features { padding-block: clamp(64px, 8vw, 112px); }
-.glass-landing .features-head { max-width: 720px; margin-bottom: 44px; }
+/* A bento grid: one large panel with a sample payslip, four small cards, and a
+   full-width audit strip. Every card's h3/p carries the meaning; the small
+   illustrations are aria-hidden. Deliberately plain: white cards with a 1px
+   edge, no icon tiles, no hover lift (the cards are not links), no scroll
+   reveal, no gradients. Rows inside a card are divided by rules, not boxed,
+   so nothing nests. The payslip is the one lifted object. */
+.glass-landing .features { padding-block: clamp(40px, 5vw, 72px) clamp(32px, 4vw, 56px); }
+.glass-landing .features-head { max-width: 720px; margin-bottom: 40px; }
 .glass-landing .features-intro { margin-top: 14px; font-size: 17px; max-width: 560px; }
 .glass-landing .bento {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;
   grid-template-areas: "paye paye a b" "paye paye c d" "audit audit audit audit";
 }
 .glass-landing .bento-card {
-  position: relative; display: flex; flex-direction: column; min-width: 0; padding: 26px;
-  background: var(--card); border: 1px solid #fff; border-radius: var(--radius); box-shadow: var(--shadow);
-  transition: transform .25s cubic-bezier(.2, .7, .3, 1), box-shadow .25s ease, border-color .25s ease;
+  display: flex; flex-direction: column; min-width: 0; padding: 24px;
+  background: var(--card); border: var(--edge); border-radius: var(--radius);
 }
 .glass-landing .bento-card:nth-child(2) { grid-area: a; }
 .glass-landing .bento-card:nth-child(3) { grid-area: b; }
 .glass-landing .bento-card:nth-child(4) { grid-area: c; }
 .glass-landing .bento-card:nth-child(5) { grid-area: d; }
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .glass-landing .bento-card:hover { transform: translateY(-4px); box-shadow: 0 26px 56px -28px #1f5a4a66, 0 2px 8px #1f5a4a0d; border-color: #cfe9e0; }
-}
 .glass-landing .bento-card h3 { margin-bottom: 8px; }
 .glass-landing .bento-card p { font-size: 15px; }
-.glass-landing .bento-icon {
-  display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 18px; border-radius: 13px;
-  background: var(--soft); color: var(--brand);
-}
-.glass-landing .bento-icon .icon { width: 22px; height: 22px; }
-.glass-landing .bento-icon--gold { background: #f6edcc; color: #8a6d12; }
-/* Mini illustrations sit at the foot of each card. */
+/* Illustrations sit at the foot of each card, as ruled rows. */
 .glass-landing .bento-card > ul, .glass-landing .bento-card > dl, .glass-landing .bento-card > ol { margin: auto 0 0; padding: 18px 0 0; list-style: none; }
+.glass-landing .mini-flags li, .glass-landing .mini-channels li, .glass-landing .mini-fields > div {
+  display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line);
+  font-size: 14px; font-weight: 700; color: var(--ink);
+}
 
-/* PAYE: the large card, copy above a sample payslip. */
+/* PAYE: a tinted panel (no edge of its own) holding the payslip. */
 .glass-landing .bento-card--paye {
-  grid-area: paye; padding: clamp(26px, 3vw, 40px); overflow: hidden;
-  background: radial-gradient(ellipse 70% 55% at 100% 100%, #c9ede3b3, transparent 70%), var(--card);
+  grid-area: paye; padding: clamp(26px, 3vw, 40px); background: #e4efe9; border-color: transparent;
 }
-.glass-landing .bento-card--paye h3 { font-size: clamp(21px, 1.9vw, 27px); font-weight: 800; letter-spacing: -.025em; line-height: 1.2; }
-.glass-landing .bento-card--paye .bento-copy p { font-size: 16px; max-width: 440px; }
-.glass-landing .mini-slip {
-  margin-top: auto; padding: 20px 22px 18px; border-radius: 18px; transform: rotate(-1.2deg); transform-origin: 30% 100%;
-  background: #fff; border: 1px solid var(--line); box-shadow: 0 30px 60px -34px #0d4d4d73;
-  font-variant-numeric: tabular-nums; max-width: 500px; width: 100%; align-self: flex-end; margin-bottom: auto;
-}
+.glass-landing .bento-card--paye h3 { font-size: clamp(21px, 1.9vw, 27px); font-weight: 800; letter-spacing: -.02em; line-height: 1.2; }
+.glass-landing .bento-card--paye .bento-copy p { font-size: 16px; max-width: 440px; color: var(--ink-soft); }
 .glass-landing .bento-card--paye .bento-copy { margin-bottom: 32px; }
+.glass-landing .mini-slip {
+  margin-block: auto; padding: 20px 22px 18px; border-radius: 12px; align-self: flex-end; width: 100%; max-width: 500px;
+  background: #fff; box-shadow: var(--lift); font-variant-numeric: tabular-nums;
+}
 .glass-landing .mini-slip-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 14px; margin-bottom: 6px; border-bottom: 1px dashed var(--line); }
 .glass-landing .mini-slip-who { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
-.glass-landing .mini-avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--deep); color: #fff; font-size: 12px; font-weight: 700; letter-spacing: .02em; }
-.glass-landing .mini-tag { padding: 4px 10px; border-radius: 999px; background: var(--soft); color: var(--deep); font-size: 12px; font-weight: 700; }
+.glass-landing .mini-avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--deep); color: #fff; font-size: 12px; font-weight: 700; }
+.glass-landing .mini-tag { font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .glass-landing .mini-slip dl { margin: 0; }
 .glass-landing .mini-slip dl > div { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; font-size: 15px; }
 .glass-landing .mini-slip dt { color: var(--muted); }
 .glass-landing .mini-slip dd { margin: 0; font-weight: 700; color: var(--ink); }
 .glass-landing .mini-slip .is-sub { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 10px; }
 .glass-landing .mini-slip .is-ded dd { color: #a14a1c; }
-.glass-landing .mini-slip .is-net {
-  margin: 10px -10px 0; padding: 12px 10px; border-radius: 12px; background: linear-gradient(100deg, var(--deep), var(--brand));
-}
-.glass-landing .mini-slip .is-net dt { color: #cfe9e2; font-weight: 700; }
-.glass-landing .mini-slip .is-net dd { color: #fff; font-size: 18px; font-weight: 900; }
+.glass-landing .mini-slip .is-net { margin-top: 6px; padding-top: 12px; border-top: 2px solid var(--ink); }
+.glass-landing .mini-slip .is-net dt { color: var(--ink); font-weight: 700; }
+.glass-landing .mini-slip .is-net dd { font-size: 19px; font-weight: 900; color: var(--deep); }
 
 /* Checks: rows held for review. */
-.glass-landing .mini-flags { display: grid; gap: 8px; }
-.glass-landing .mini-flags li {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px;
-  border-radius: 12px; background: #fff; border: 1px solid var(--line); font-size: 14px; font-weight: 700; color: var(--ink);
-}
+.glass-landing .mini-flags li { justify-content: space-between; }
 .glass-landing .mini-flags small { display: block; font-weight: 500; font-size: 12.5px; color: var(--muted); }
-.glass-landing .mini-flags b { flex: none; padding: 3px 9px; border-radius: 999px; background: #f6edcc; color: #7a5f0e; font-size: 12px; }
+.glass-landing .mini-flags b { flex: none; font-size: 12.5px; color: #7a5f0e; }
 
 /* Delivery: one row per channel with its status. */
-.glass-landing .mini-channels { display: grid; gap: 8px; }
-.glass-landing .mini-channels li {
-  display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px;
-  background: #fff; border: 1px solid var(--line); font-size: 14px; font-weight: 700; color: var(--ink);
-}
 .glass-landing .mini-channels .icon { width: 18px; height: 18px; color: var(--brand); }
 .glass-landing .mini-status { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; }
 .glass-landing .mini-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .glass-landing .mini-status.is-ok { color: #12775f; }
 .glass-landing .mini-status.is-retry { color: #8a6d12; }
 
-/* Reports: the dark card, with the two downloads as file chips. */
-.glass-landing .bento-card--dark { background: linear-gradient(150deg, #0d4d4d, #0c6e62); border-color: transparent; color: #eaf7f3; }
+/* Reports: the one dark card, with the two downloads as ruled rows. */
+.glass-landing .bento-card--dark { background: var(--deep); border-color: var(--deep); color: #eaf7f3; }
 .glass-landing .bento-card--dark h3 { color: #fff; }
-.glass-landing .bento-card--dark p { color: #cfe9e2; }
-.glass-landing .bento-card--dark .bento-icon { background: #ffffff1f; color: #8fe3d6; }
-.glass-landing .mini-files { display: grid; gap: 8px; }
+.glass-landing .bento-card--dark p { color: #d5ece6; }
 .glass-landing .mini-files li {
-  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px;
-  background: #ffffff14; border: 1px solid #ffffff2e; font-size: 14px; font-weight: 700; color: #fff;
+  display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid #ffffff33;
+  font-size: 14px; font-weight: 700; color: #fff;
 }
-.glass-landing .mini-files .icon { width: 18px; height: 18px; color: #8fe3d6; }
-.glass-landing .mini-files small { margin-left: auto; padding: 2px 8px; border-radius: 6px; background: #8fe3d6; color: var(--deep); font-size: 11px; font-weight: 900; letter-spacing: .04em; }
+.glass-landing .mini-files .icon { width: 18px; height: 18px; color: #a9e9de; }
+.glass-landing .mini-files small { margin-left: auto; font-size: 12px; font-weight: 700; color: #a9e9de; }
 
 /* Records: masked field rows. */
-.glass-landing .mini-fields { display: grid; gap: 0; }
-.glass-landing .mini-fields > div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: 14px; }
-.glass-landing .mini-fields > div:last-child { border-bottom: 0; }
+.glass-landing .mini-fields > div { justify-content: space-between; font-weight: 500; }
 .glass-landing .mini-fields dt { color: var(--muted); }
-.glass-landing .mini-fields dd { margin: 0; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.glass-landing .mini-fields dd { margin: 0; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
 
 /* Audit: a full-width strip, copy beside a four-step timeline. */
 .glass-landing .bento-card--audit { grid-area: audit; flex-direction: row; align-items: center; gap: clamp(24px, 4vw, 56px); }
@@ -388,58 +348,55 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
   flex: 1 1 auto; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); position: relative;
 }
 .glass-landing .mini-timeline::before {
-  content: ""; position: absolute; top: 9px; left: 9px; right: 12.5%; height: 2px;
-  background: linear-gradient(90deg, var(--bright), var(--brand) 70%, var(--gold));
+  content: ""; position: absolute; top: 9px; left: 9px; right: 12.5%; height: 2px; background: var(--line-control);
 }
 .glass-landing .mini-timeline li { position: relative; padding: 30px 12px 0 0; font-size: 14px; }
 .glass-landing .mini-timeline li::before {
   content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
   background: #fff; border: 3px solid var(--brand); box-sizing: border-box;
 }
-.glass-landing .mini-timeline li:last-child::before { border-color: var(--gold); background: var(--gold); }
+.glass-landing .mini-timeline li:last-child::before { background: var(--brand); }
 .glass-landing .mini-timeline b { display: block; color: var(--ink); font-weight: 700; }
 .glass-landing .mini-timeline small { display: block; color: var(--muted); font-size: 12.5px; }
 
-/* Reveal: armed only when JS runs and motion is allowed. */
-.glass-landing .bento.is-armed .bento-card { opacity: 0; transform: translateY(22px); }
-.glass-landing .bento.is-in .bento-card {
-  animation: lp-rise .7s cubic-bezier(.2, .7, .3, 1) forwards; animation-delay: calc(var(--i, 0) * 90ms);
-}
-
 /* ---- Desktop app ----------------------------------------------------------- */
-.glass-landing .desktop { padding-block: clamp(48px, 6vw, 88px); }
+.glass-landing .desktop { padding-block: clamp(24px, 3vw, 40px); }
 .glass-landing .desktop-card {
   display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: clamp(28px, 4vw, 64px);
   padding: clamp(28px, 4vw, 56px); align-items: center;
-  background: linear-gradient(150deg, #0d4d4d, #0c6e62); border: 0; color: #eaf7f3;
+  background: var(--deep); border-radius: var(--radius); color: #eaf7f3;
 }
-.glass-landing .desktop-card .eyebrow { color: #8fe3d6; }
 .glass-landing .desktop-card .section-title { color: #fff; margin-bottom: 16px; }
-.glass-landing .desktop-card p { color: #cfe9e2; }
+.glass-landing .desktop-card p { color: #d5ece6; max-width: 60ch; }
 .glass-landing .desktop-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
 .glass-landing .desktop-card .lp-btn--primary { background: #fff; color: var(--deep); }
 .glass-landing .desktop-card .lp-btn--primary:hover { background: #e6f6f1; }
 .glass-landing .desktop-card .lp-btn--ghost { background: transparent; color: #fff; border-color: #ffffff80; }
 .glass-landing .desktop-card .lp-btn--ghost:hover { border-color: #fff; background: #ffffff14; color: #fff; }
 .glass-landing .desktop-note { margin-top: 14px; font-size: 14px; }
-.glass-landing .desktop-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
-.glass-landing .desktop-steps li { display: flex; gap: 16px; align-items: flex-start; padding: 18px 20px; border-radius: 16px; background: #ffffff12; border: 1px solid #ffffff24; }
+/* The three install steps are a real sequence, so they keep their numbers,
+   but sit as ruled rows rather than boxes inside the card. */
+.glass-landing .desktop-steps { list-style: none; margin: 0; padding: 0; display: grid; }
+.glass-landing .desktop-steps li { display: flex; gap: 16px; align-items: flex-start; padding: 16px 0; border-top: 1px solid #ffffff33; }
+.glass-landing .desktop-steps li:last-child { border-bottom: 1px solid #ffffff33; }
 .glass-landing .desktop-steps span {
-  flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
-  background: #8fe3d6; color: var(--deep); font-weight: 700; font-size: 14px;
+  flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  border: 1.5px solid #a9e9de; color: #fff; font-weight: 700; font-size: 14px;
 }
 .glass-landing .desktop-steps strong { display: block; color: #fff; margin-bottom: 2px; }
 .glass-landing .desktop-steps p { font-size: 14.5px; }
 
 /* ---- FAQ ------------------------------------------------------------------- */
-.glass-landing .faq { padding-block: clamp(64px, 8vw, 112px); max-width: 980px; }
-.glass-landing .faq .section-title { margin-bottom: 32px; text-align: center; }
-.glass-landing .faq-list { display: grid; gap: 12px; }
-.glass-landing .faq-list details { padding: 0; border-radius: 16px; }
+/* A ruled list, not a stack of boxes. */
+.glass-landing .faq { padding-block: clamp(48px, 6vw, 88px); max-width: 980px; }
+.glass-landing .faq .section-title { margin-bottom: 24px; }
+.glass-landing .faq-list { display: grid; border-top: 1px solid var(--line-control); }
+.glass-landing .faq-list details { border-bottom: 1px solid var(--line); }
 .glass-landing .faq-list summary {
   list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 20px 24px; font-weight: 700; font-size: 17px; color: var(--ink);
+  padding: 20px 4px; font-weight: 700; font-size: 17px; color: var(--ink);
 }
+.glass-landing .faq-list summary:hover { color: var(--deep); }
 .glass-landing .faq-list summary::-webkit-details-marker { display: none; }
 .glass-landing .faq-list summary::after {
   content: ""; flex: none; width: 12px; height: 12px; margin-right: 4px;
@@ -447,18 +404,18 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
   transform: rotate(45deg) translateY(-3px); transition: transform .2s ease;
 }
 .glass-landing .faq-list details[open] summary::after { transform: rotate(-135deg) translateY(-3px); }
-.glass-landing .faq-list details p { padding: 0 24px 22px; font-size: 15.5px; max-width: 760px; }
+.glass-landing .faq-list details p { padding: 0 4px 22px; font-size: 15.5px; max-width: 62ch; }
 
 /* ---- Request access ------------------------------------------------------------ */
 .glass-landing .request {
   display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: clamp(32px, 5vw, 80px);
-  align-items: start; padding-block: clamp(64px, 8vw, 112px);
+  align-items: start; padding-block: clamp(40px, 5vw, 72px) clamp(56px, 7vw, 96px);
 }
 .glass-landing .request-intro .section-title { margin-bottom: 16px; }
 .glass-landing .request-intro > p { font-size: 17px; max-width: 460px; }
 .glass-landing .request-points { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 12px; }
 .glass-landing .request-points li { display: flex; align-items: center; gap: 12px; font-weight: 500; }
-.glass-landing .request-points .icon { color: var(--brand); width: 22px; height: 22px; padding: 3px; border-radius: 50%; background: var(--soft); }
+.glass-landing .request-points .icon { color: var(--brand); width: 18px; height: 18px; stroke-width: 2.4; }
 .glass-landing .request-card { padding: clamp(24px, 3vw, 40px); }
 .glass-landing .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; margin-bottom: 22px; }
 .glass-landing .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; border: 0; padding: 0; margin: 0; }
@@ -481,7 +438,7 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 .glass-landing .interest-option { position: relative; cursor: pointer; }
 .glass-landing .interest-option input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .glass-landing .interest-option span {
-  display: inline-flex; align-items: center; min-height: 42px; padding: 0 16px; border-radius: 10px;
+  display: inline-flex; align-items: center; min-height: 42px; padding: 8px 16px; border-radius: 10px;
   border: 1px solid var(--line-control); background: #fff; font-size: 14.5px; font-weight: 500;
 }
 .glass-landing .interest-option input:checked + span { border-color: var(--brand); background: var(--soft); color: var(--deep); font-weight: 700; box-shadow: inset 0 0 0 1px var(--brand); }
@@ -523,7 +480,7 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
   .glass-landing .site-nav {
     position: absolute; left: 0; right: 0; top: 100%; margin: 0;
     flex-direction: column; align-items: stretch; gap: 2px; padding: 12px var(--gutter) 20px;
-    background: #f7fcf9; border-bottom: 1px solid var(--line); box-shadow: 0 18px 30px -20px #1f5a4a55;
+    background: #f7fcf9; border-bottom: 1px solid var(--line);
     display: none;
   }
   .glass-landing .site-nav.is-open { display: flex; }
@@ -549,7 +506,6 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 @media (max-width: 600px) {
   .glass-landing .field-grid { grid-template-columns: 1fr; }
   .glass-landing .bento { grid-template-columns: 1fr; grid-template-areas: "paye" "a" "b" "c" "d" "audit"; }
-  .glass-landing .mini-slip { transform: none; }
   .glass-landing .hero-actions .lp-btn { flex: 1 1 auto; }
   .glass-landing .pipe-ring { width: 72px; height: 72px; }
   .glass-landing .pipe-ring .icon { width: 26px; height: 26px; }
@@ -560,7 +516,6 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 @media print {
   .glass-landing .site-header { position: static; }
   .glass-landing .pipe.is-armed * { opacity: 1 !important; transform: none !important; }
-  .glass-landing .bento.is-armed .bento-card { opacity: 1 !important; transform: none !important; }
 }
 .glass-landing main:focus { outline: none; }
 
@@ -625,8 +580,10 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
   display:none
 }
 }
+/* No halo behind the slideshow: it framed the old frosted-glass renders, and
+   the real-screen device mockups sit on the page ground like the rest of it. */
 .glass-landing .hero-carousel:before {
-  inset:25px 5px 62px 12px
+  content:none
 }
 .glass-landing .hero-carousel .carousel-viewport {
   position:absolute;
@@ -652,7 +609,14 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
   height:100%;
   max-width:none;
   object-fit:contain;
-  display:block
+  display:block;
+  /* The incoming slide's devices rise a little as it fades in, so a change of
+     slide reads as movement rather than a swap in place. */
+  transform:translateY(18px);
+  transition:transform 700ms cubic-bezier(.22,.61,.36,1)
+}
+.glass-landing .hero-carousel .hero-slide.is-active img {
+  transform:none
 }
 .glass-landing .hero-carousel .carousel-toolbar {
   position:absolute;
@@ -798,8 +762,12 @@ html:has(.glass-landing) { scroll-behavior: smooth; scroll-padding-top: calc(var
 }
 @media(prefers-reduced-motion:reduce) {
 .glass-landing .hero-carousel .hero-slide,
+.glass-landing .hero-carousel .hero-slide img,
 .glass-landing .carousel-dot:before {
   transition:none!important
+}
+.glass-landing .hero-carousel .hero-slide img {
+  transform:none
 }
 }
 @media print {

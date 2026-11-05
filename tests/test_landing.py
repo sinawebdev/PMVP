@@ -86,7 +86,7 @@ class HeroAndFeaturesTests(unittest.TestCase):
     def test_hero_heading_carries_the_search_words_and_the_slogan_follows(self):
         _, html = landing_html()
         self.assertEqual(html.count("<h1"), 1)
-        h1 = re.search(r'<h1 class="hero-badge" id="hero-title">(.*?)</h1>', html, re.S).group(1)
+        h1 = re.search(r'<div class="hero-intro"><h1 id="hero-title">(.*?)</h1>', html, re.S).group(1)
         self.assertIn("Payroll software for Ghana", h1)
         display = re.search(r'<p class="hero-display">(.*?)</p>', html, re.S).group(1)
         self.assertIn("Payday, sorted.", display)
