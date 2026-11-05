@@ -550,6 +550,11 @@ def create_app():
     # No-login payslip links: PUBLIC_BASE_URL is the public host used in the link we send
     # (falls back to the request host when unset); PAYSLIP_LINK_MAX_AGE is the link lifetime.
     app.config["PUBLIC_BASE_URL"] = os.getenv("PUBLIC_BASE_URL")
+    # SITE_URL is the one address search engines and link previews should credit
+    # (canonical link, Open Graph, sitemap, robots.txt). It is fixed rather than
+    # read from the request: behind Render the request arrives as http://, and
+    # the same app also answers on its onrender.com host.
+    app.config["SITE_URL"] = (os.getenv("SITE_URL") or "https://payrollagh.com").rstrip("/")
     # 5 days, down from 30. A payslip link is opened within hours of delivery in
     # practice, so a month-long window was exposure bought for almost nothing —
     # and a worker who misses it can be sent a fresh link. Tunable without a

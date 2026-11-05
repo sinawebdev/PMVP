@@ -50,6 +50,54 @@ def index():
     return render_landing(sent=request.args.get("sent") == "1")
 
 
+# Public pages listed in sitemap.xml, by endpoint. An endpoint that is not
+# registered (the legal pages before their branch lands) is simply skipped.
+SITEMAP_ENDPOINTS = ("main.index", "legal.privacy", "legal.terms", "legal.data_protection")
+
+
+@main_bp.route("/robots.txt")
+def robots_txt():
+    site = current_app.config["SITE_URL"]
+    body = f"User-agent: *\nAllow: /\n\nSitemap: {site}/sitemap.xml\n"
+    response = current_app.response_class(body, mimetype="text/plain")
+    response.cache_control.public = True
+    response.cache_control.max_age = 86400
+    return response
+
+
+@main_bp.route("/sitemap.xml")
+def sitemap_xml():
+    from xml.sax.saxutils import escape
+
+    site = current_app.config["SITE_URL"]
+    urls = [
+        site + url_for(endpoint)
+        for endpoint in SITEMAP_ENDPOINTS
+        if endpoint in current_app.view_functions
+    ]
+    entries = "".join(f"  <url><loc>{escape(url)}</loc></url>\n" for url in urls)
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{entries}</urlset>\n"
+    )
+    response = current_app.response_class(body, mimetype="application/xml")
+    response.cache_control.public = True
+    response.cache_control.max_age = 86400
+    return response
+
+
+@main_bp.route("/favicon.ico")
+def favicon_ico():
+    # Browsers and some crawlers ask for /favicon.ico whatever the page says.
+    from flask import send_from_directory
+
+    return send_from_directory(
+        os.path.join(current_app.static_folder, "img"), "favicon.ico",
+        mimetype="image/vnd.microsoft.icon", max_age=604800,
+    )
+
+
 @main_bp.route("/health")
 def health():
     return {
