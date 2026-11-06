@@ -85,7 +85,10 @@ All scoping goes through one module so it can never be forgotten:
 - **Stage 1 (now):** default-deny — RLS enabled on tenant tables with **no
   policies**, so the database rejects any connection that isn't the app role.
   Isolation is enforced at the **application layer** (the choke point above) on
-  every request. Reproducible via `scripts/rls_stage1.sql`.
+  every request. Reproducible via `scripts/rls_stage1.sql`. Tables added by
+  later migrations get the same treatment automatically: `flask db upgrade`
+  enables RLS on any `public` table that lacks it (`app/rls_guard.py`, Supabase
+  only).
 - **Stage 2 (deferred):** JWT-based RLS policies that push tenant scoping into the
   database itself, as defence in depth behind the app layer.
 

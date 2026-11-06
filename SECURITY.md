@@ -40,7 +40,9 @@ The guarantees and their tests are catalogued in
 - **Stage 1 (implemented):** RLS is enabled on tenant tables with **no policies**
   (default-deny), so the database rejects any connection that is not the app
   role. Isolation is enforced at the application layer on every request.
-  Reproducible via `scripts/rls_stage1.sql`.
+  Reproducible via `scripts/rls_stage1.sql`. New tables are covered without a
+  manual step: after any migration, `flask db upgrade` enables RLS on each
+  `public` table that lacks it (`app/rls_guard.py`, Supabase only).
 - **Stage 2 (deferred):** JWT-based RLS policies that push tenant scoping into the
   database itself, behind the app layer.
 
