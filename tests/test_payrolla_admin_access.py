@@ -159,19 +159,26 @@ class RoleRenameMigrationTestCase(unittest.TestCase):
     Data-only, so the check is on row values rather than schema: downgrade must
     restore the original strings exactly (a rolled-back deploy runs old code
     that writes ``chrisnat_*``), and upgrade must move every one of them.
+
+    The chain builds the database from empty to the revision before the rename,
+    where rows carrying the old spellings are written by hand. It cannot start
+    from head: 9d2026c1020 deliberately refuses to downgrade, so nothing at head
+    can ever walk back this far.
     """
 
+    BEFORE_RENAME = "e5a2c8d13f60"
+    RENAME = "a4e7c2b81d95"
     ROLE_COLUMNS = (
         ('user', 'role'),
         ('audit_trail', 'user_role'),
         ('domain_event', 'actor_role'),
         ('distribution_batch', 'initiated_by_role'),
     )
+    OLD_ROLES = {"chrisnat_admin", "chrisnat_reviewer"}
 
     def test_role_strings_round_trip(self):
         import sqlalchemy as sa
         from flask_migrate import downgrade as fm_downgrade
-        from flask_migrate import stamp as fm_stamp
         from flask_migrate import upgrade as fm_upgrade
 
         from app import create_app as _create_app
@@ -179,31 +186,52 @@ class RoleRenameMigrationTestCase(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         dbfile = os.path.join(tmp, "role_rename.sqlite")
         previous = os.environ.get("DATABASE_URL")
+        previous_init = os.environ.get("AUTO_INIT_DB")
         os.environ["DATABASE_URL"] = f"sqlite:///{dbfile}"
+        os.environ["AUTO_INIT_DB"] = "false"  # an empty database: the chain builds it
         try:
-            app = _create_app()  # create_all builds the current schema + seed
+            app = _create_app()
             with app.app_context():
-                fm_stamp(revision="head")
+                fm_upgrade(revision=self.BEFORE_RENAME)
 
-                # Seed wrote the new names; every role-bearing table is checked,
-                # so a column added to ROLE_COLUMNS but missed by the migration
-                # fails here.
+                # One row per old spelling in every role-bearing column, so a
+                # column added to ROLE_COLUMNS but missed by the migration fails
+                # here. SQLite does not enforce foreign keys, so bare rows do.
+                for n, role in enumerate(sorted(self.OLD_ROLES)):
+                    db.session.execute(sa.text(
+                        'INSERT INTO "user" (name, email, password_hash, role) '
+                        "VALUES (:name, :email, 'x', :role)"
+                    ), {"name": role, "email": f"{role}@example.com", "role": role})
+                    db.session.execute(sa.text(
+                        "INSERT INTO audit_trail (action, user_role) VALUES ('test', :role)"
+                    ), {"role": role})
+                    db.session.execute(sa.text(
+                        "INSERT INTO domain_event (event_type, actor_role) VALUES ('test', :role)"
+                    ), {"role": role})
+                    db.session.execute(sa.text(
+                        "INSERT INTO distribution_batch (payroll_run_id, client_company_id, "
+                        "channel, only_failed, status, initiated_by_role) "
+                        "VALUES (:n, 1, 'email', 0, 'queued', :role)"
+                    ), {"n": n + 1, "role": role})
+                db.session.commit()
+
                 def roles_in(table, column):
                     rows = db.session.execute(
                         sa.text(f'SELECT DISTINCT {column} FROM "{table}"')
                     ).scalars().all()
                     return {r for r in rows if r}
 
-                self.assertIn(
-                    PAYROLLA_ADMIN, roles_in('user', 'role')
-                )
+                fm_upgrade(revision=self.RENAME)
+                for table, column in self.ROLE_COLUMNS:
+                    with self.subTest("up", table=table, column=column):
+                        self.assertEqual(
+                            roles_in(table, column), {PAYROLLA_ADMIN, PAYROLLA_REVIEWER}
+                        )
 
-                fm_downgrade(revision="e5a2c8d13f60")
-                after_down = roles_in('user', 'role')
-                self.assertIn("chrisnat_admin", after_down)
-                self.assertIn("chrisnat_reviewer", after_down)
-                self.assertNotIn(PAYROLLA_ADMIN, after_down)
-                self.assertNotIn(PAYROLLA_REVIEWER, after_down)
+                fm_downgrade(revision=self.BEFORE_RENAME)
+                for table, column in self.ROLE_COLUMNS:
+                    with self.subTest("down", table=table, column=column):
+                        self.assertEqual(roles_in(table, column), self.OLD_ROLES)
 
                 fm_upgrade(revision="head")
                 for table, column in self.ROLE_COLUMNS:
@@ -218,6 +246,10 @@ class RoleRenameMigrationTestCase(unittest.TestCase):
                 self.assertIn(PAYROLLA_REVIEWER, after_up)
         finally:
             os.environ["DATABASE_URL"] = previous or "sqlite:///:memory:"
+            if previous_init is None:
+                os.environ.pop("AUTO_INIT_DB", None)
+            else:
+                os.environ["AUTO_INIT_DB"] = previous_init
 
 
 if __name__ == "__main__":

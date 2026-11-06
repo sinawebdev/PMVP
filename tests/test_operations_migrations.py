@@ -2,10 +2,10 @@
 
 Both are additive, so the risk is not "does it apply" but "does it apply
 reversibly": a deploy that has to be rolled back must be able to drop these
-columns cleanly on SQLite (batch mode) too. Same shape as the existing
-MigrationUpDownTests in test_raw_engine_web.py — create_all builds the current
-schema, stamp head, walk back to the revision before this sprint, walk forward
-again.
+columns cleanly on SQLite (batch mode) too. The chain builds the database from
+empty up to the end of this sprint, walks back to the revision before it, then
+walks forward to head. It cannot start from head: 9d2026c1020 deliberately
+refuses to downgrade, so nothing at head can ever walk back this far.
 """
 
 import os
@@ -20,8 +20,9 @@ import sqlalchemy as sa  # noqa: E402
 
 from app import create_app, db  # noqa: E402
 
-# The head immediately before this sprint's migrations.
+# The head immediately before this sprint's migrations, and its last migration.
 BEFORE_SPRINT = "b1c3e5f70a29"
+SPRINT_END = "e5a2c8d13f60"
 NEW_CLIENT_COLUMNS = {"company_code", "address", "notes"}
 
 
@@ -36,17 +37,20 @@ class OperationsMigrationTestCase(unittest.TestCase):
 
     def test_onboarding_and_expense_columns_round_trip(self):
         from flask_migrate import downgrade as fm_downgrade
-        from flask_migrate import stamp as fm_stamp
         from flask_migrate import upgrade as fm_upgrade
 
         tmp = tempfile.mkdtemp()
         dbfile = os.path.join(tmp, "operations_mig.sqlite")
         previous = os.environ.get("DATABASE_URL")
+        previous_init = os.environ.get("AUTO_INIT_DB")
         os.environ["DATABASE_URL"] = f"sqlite:///{dbfile}"
+        os.environ["AUTO_INIT_DB"] = "false"  # an empty database: the chain builds it
         try:
-            app = create_app()  # create_all builds the current schema
+            app = create_app()
             with app.app_context():
-                fm_stamp(revision="head")
+                fm_upgrade(revision=SPRINT_END)
+                client_columns = {c["name"] for c in sa.inspect(db.engine).get_columns("client_company")}
+                self.assertTrue(NEW_CLIENT_COLUMNS <= client_columns)
 
                 fm_downgrade(revision=BEFORE_SPRINT)
                 inspector = sa.inspect(db.engine)
@@ -68,6 +72,10 @@ class OperationsMigrationTestCase(unittest.TestCase):
                 self.assertTrue(indexes["ix_client_company_company_code"]["unique"])
         finally:
             os.environ["DATABASE_URL"] = previous or "sqlite:///:memory:"
+            if previous_init is None:
+                os.environ.pop("AUTO_INIT_DB", None)
+            else:
+                os.environ["AUTO_INIT_DB"] = previous_init
 
 
 if __name__ == "__main__":
