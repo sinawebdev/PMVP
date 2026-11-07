@@ -38,17 +38,68 @@
     {% endif %}
 </section>
 
+{% if licence %}
+<section class="panel mt-3">
+    <div class="panel-header">
+        <h2><i class="bi bi-key"></i>Desktop licence</h2>
+        {% if licence.emailed_at %}<span class="badge text-bg-success">Emailed</span>{% else %}<span class="badge text-bg-warning">Not sent</span>{% endif %}
+    </div>
+    <dl class="request-facts">
+        <div><dt>Licence</dt><dd>{{ licence.license_id }} ({{ licence.plan }})</dd></div>
+        <div><dt>Expires</dt><dd>{{ licence.expires_on.strftime('%d %b %Y') }}</dd></div>
+        <div><dt>Sent to</dt><dd>{{ licence.recipient }}</dd></div>
+        <div><dt>Email</dt><dd>{% if licence.emailed_at %}Sent {{ licence.emailed_at.strftime('%d %b %Y, %H:%M') }}{% else %}Not sent: {{ licence.email_error or "unknown error" }}{% endif %}</dd></div>
+    </dl>
+    <div class="toolbar">
+        <form method="post" action="{{ url_for('licences.resend', licence_id=licence.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-envelope"></i>Resend licence email</button>
+        </form>
+        <a class="btn btn-outline-secondary" href="{{ url_for('licences.ledger') }}">All desktop licences</a>
+    </div>
+</section>
+{% endif %}
+
+{# A desktop-only request is answered by its licence, so that becomes the one
+   primary action; the web company stays available as a secondary path. #}
+{% set can_licence = licences_enabled and entry.interest in ('desktop', 'both') and not licence and entry.status != 'declined' %}
 <div class="toolbar mt-3">
-    {% if entry.is_open %}
-    <a class="btn btn-primary" href="{{ url_for('main.add_client', request=entry.id) }}"><i class="bi bi-building-add"></i>Approve and create company</a>
+    {% if entry.is_open and can_licence and entry.interest == 'desktop' %}
+    <form method="post" action="{{ url_for('licences.issue_for_request', request_id=entry.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-primary" type="submit"><i class="bi bi-key"></i>Approve and send trial licence</button>
+    </form>
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.add_client', request=entry.id) }}"><i class="bi bi-building-add"></i>Create a web company instead</a>
     {% if entry.status == 'new' %}
     <form method="post" action="{{ url_for('access.contacted', request_id=entry.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-telephone"></i>Mark as contacted</button>
     </form>
     {% endif %}
-    {% elif entry.client_company %}
+    {% elif entry.is_open %}
+    <a class="btn btn-primary" href="{{ url_for('main.add_client', request=entry.id) }}"><i class="bi bi-building-add"></i>Approve and create company</a>
+    {% if can_licence %}
+    <form method="post" action="{{ url_for('licences.issue_for_request', request_id=entry.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-key"></i>Send desktop trial licence</button>
+    </form>
+    {% endif %}
+    {% if entry.status == 'new' %}
+    <form method="post" action="{{ url_for('access.contacted', request_id=entry.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-telephone"></i>Mark as contacted</button>
+    </form>
+    {% endif %}
+    {% else %}
+    {% if entry.client_company %}
     <a class="btn btn-outline-secondary" href="{{ url_for('main.client_onboarding', client_id=entry.client_company.id) }}"><i class="bi bi-building"></i>Open {{ entry.client_company.name }}</a>
+    {% endif %}
+    {% if can_licence %}
+    <form method="post" action="{{ url_for('licences.issue_for_request', request_id=entry.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-key"></i>Send desktop trial licence</button>
+    </form>
+    {% endif %}
     {% endif %}
     <a class="btn btn-outline-secondary" href="{{ url_for('main.clients') }}">Back to clients</a>
 </div>

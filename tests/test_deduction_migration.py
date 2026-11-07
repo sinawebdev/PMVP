@@ -61,7 +61,7 @@ class DeductionMigrationTests(unittest.TestCase):
                         total_deductions=154, net_pay=846,
                     )).inserted_primary_key[0]
                 upgrade(directory=migrations)
-                self.assertEqual(db.session.execute(sa.text("select version_num from alembic_version")).scalar_one(), "b3d2026b1102")
+                self.assertEqual(db.session.execute(sa.text("select version_num from alembic_version")).scalar_one(), "c5e2026b1106")
                 item = db.session.get(PayrollItem, item_id)
                 self.assertEqual((item.gross_pay, item.paye, item.ssnit, item.net_pay), (1000, 99, 55, 846))
                 self.assertEqual(item.deductions_policy_version, 0)

@@ -38,7 +38,7 @@
 ]} %}
 <script type="application/ld+json">{{ site_ld | tojson }}</script>
 <link rel="preload" href="{{ url_for('static', filename='fonts/montserrat-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="{{ url_for('static', filename='landing-glass.css', v='2026110504') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='landing-glass.css', v='2026110601') }}">
 {% endblock %}
 {% block public_content %}
 {% from 'macros/brand.html' import logo with context %}
@@ -303,6 +303,7 @@
 <section class="request lp-wrap" id="request-access" aria-labelledby="request-title">
   <div class="request-intro">
     <h2 id="request-title" class="section-title">Tell us about your company.</h2>
+    {% if trial_offer_ends %}<p class="request-offer"><strong>Free for any business until {{ trial_offer_ends }}.</strong> Ask for the desktop app and your trial licence comes by email once we approve your request.</p>{% endif %}
     <p>We'll reply by email to talk through setup and pricing. Nothing is charged until you agree to it.</p>
     <ul class="request-points">
       <li><svg class="icon"><use href="#i-check"/></svg>Your company set up for you</li>
@@ -315,7 +316,7 @@
     <div class="request-done" role="status" tabindex="-1" data-request-done>
       <svg class="icon"><use href="#i-check"/></svg>
       <h3>Request received.</h3>
-      <p>Thank you. We'll email you shortly to arrange the next step.</p>
+      <p>Thank you. We'll email you shortly to arrange the next step.{% if trial_offer_ends %} If you asked for the desktop app, your free trial licence comes with that email.{% endif %}</p>
     </div>
     {% else %}
     <form method="post" action="{{ url_for('access.submit') }}#request-access" class="request-form" novalidate>
