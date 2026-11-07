@@ -14,7 +14,7 @@ that form calls :func:`mark_approved`. Declining records a reason.
 import re
 import threading
 import time as _time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
@@ -137,7 +137,16 @@ def render_landing(form=None, errors=None, status=200, sent=False):
         request_sent=sent,
         employee_bands=EMPLOYEE_BANDS,
         interests=INTERESTS,
+        trial_offer_ends=_trial_offer_label(),
     ), status
+
+
+def _trial_offer_label():
+    """"31 December 2026" while the free-trial offer runs; None afterwards."""
+    from app.desktop_licences import long_date, trial_offer_ends
+
+    ends = trial_offer_ends()
+    return long_date(ends) if ends and ends >= date.today() else None
 
 
 @access_bp.route("/request-access", methods=["POST"])
@@ -211,7 +220,10 @@ def mark_approved(entry, company):
 @role_required(*CLIENT_MANAGEMENT_ROLES)
 def detail(request_id):
     entry = db.get_or_404(AccessRequest, request_id)
-    return render_template("access_request.html", entry=entry, interests=INTERESTS)
+    from app.desktop_licences import licences_enabled
+
+    return render_template("access_request.html", entry=entry, interests=INTERESTS,
+                           licence=entry.licences.first(), licences_enabled=licences_enabled())
 
 
 @access_bp.route("/clients/requests/<int:request_id>/contacted", methods=["POST"])

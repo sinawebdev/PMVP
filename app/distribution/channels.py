@@ -383,6 +383,83 @@ class SmtpEmailSender(Sender):
         return SendResult(True, self.provider)
 
 
+class AppsScriptEmailSender(Sender):
+    """Email through a Google Apps Script web app running as the sender's Gmail.
+
+    Render's free plan blocks outbound SMTP, so the message travels as JSON over
+    HTTPS to ``scripts/gmail_relay/Code.gs``, which hands it to MailApp. Apps
+    Script cannot read request headers, so the shared secret rides in the body.
+    Apps Script answers a POST with a 302 to the result; urllib follows it as a
+    GET, which is exactly what Google expects.
+
+    Google allows 100 recipients a day on a personal account. This suits
+    invites and licences, not a payroll's worth of payslips.
+    """
+
+    provider = "apps-script"
+
+    def send(self, message):
+        cfg = current_app.config
+        url = cfg.get("APPS_SCRIPT_MAIL_URL")
+        secret = cfg.get("APPS_SCRIPT_MAIL_SECRET")
+        if not url or not secret:
+            return SendResult(False, self.provider, "APPS_SCRIPT_MAIL_URL / _SECRET not set",
+                              retryable=False)
+        if not is_valid_email(message.recipient):
+            return SendResult(False, self.provider, f"invalid recipient email: {message.recipient!r}",
+                              retryable=False)
+
+        max_bytes = cfg.get("EMAIL_MAX_ATTACHMENT_BYTES", 5 * 1024 * 1024)
+        attachments = [
+            {"filename": att.filename, "mimeType": att.mimetype,
+             "content": base64.b64encode(att.content).decode("ascii")}
+            for att in message.attachments or []
+            if att.content and len(att.content) <= max_bytes
+        ]
+        payload = {
+            "secret": secret,
+            "to": message.recipient,
+            "subject": _header_safe(message.subject),
+            "text": message.body_text,
+            "html": message.body_html or "",
+            "name": _header_safe(message.from_name or cfg.get("EMAIL_SENDER_NAME")) or "",
+            "replyTo": _header_safe(message.reply_to or cfg.get("EMAIL_REPLY_TO")) or "",
+            "attachments": attachments,
+        }
+        try:
+            status, body = _http_post(url, json=payload, timeout=30)
+        except (urllib.error.URLError, OSError) as exc:
+            # The relay may have sent it before the connection dropped.
+            current_app.logger.warning(
+                "[email] relay unreachable to=%s item=%s: %s",
+                recipient_fingerprint(message.recipient), message.item_id, exc,
+            )
+            return SendResult(False, self.provider, f"relay unreachable: {exc}", ambiguous=True)
+
+        try:
+            answer = _json.loads(body)
+        except ValueError:
+            answer = None
+        if status != 200 or not isinstance(answer, dict):
+            # Usually a Google sign-in page: the web app is not deployed with
+            # "Who has access: Anyone".
+            return SendResult(False, self.provider,
+                              f"relay answered HTTP {status} without JSON; check its deployment access")
+        if not answer.get("ok"):
+            error = str(answer.get("error") or "relay refused the message")[:200]
+            current_app.logger.warning(
+                "[email] relay refused to=%s item=%s: %s",
+                recipient_fingerprint(message.recipient), message.item_id, error,
+            )
+            return SendResult(False, self.provider, error, retryable=False)
+        current_app.logger.info(
+            "[email] sent provider=%s item=%s to=%s remaining_today=%s",
+            self.provider, message.item_id, recipient_fingerprint(message.recipient),
+            answer.get("remaining"),
+        )
+        return SendResult(True, self.provider)
+
+
 def simulated_channels():
     """The channels still on their console backend, i.e. logged but never delivered.
 
@@ -393,7 +470,7 @@ def simulated_channels():
     callers use this to render that disclosure. Empty once every channel is live.
     """
     cfg = current_app.config
-    live = {"sms": {"hubtel", "sasusync"}, "whatsapp": {"cloud"}, "email": {"smtp"}}
+    live = {"sms": {"hubtel", "sasusync"}, "whatsapp": {"cloud"}, "email": {"smtp", "apps_script"}}
     return [
         channel
         for channel in sendable_channels()
@@ -456,5 +533,10 @@ def get_sender(channel: str) -> Sender:
             else ConsoleWhatsAppSender()
         )
     if channel == "email":
-        return SmtpEmailSender() if cfg.get("EMAIL_BACKEND") == "smtp" else ConsoleEmailSender()
+        backend = cfg.get("EMAIL_BACKEND")
+        if backend == "smtp":
+            return SmtpEmailSender()
+        if backend == "apps_script":
+            return AppsScriptEmailSender()
+        return ConsoleEmailSender()
     return ConsoleSmsSender()

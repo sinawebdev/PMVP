@@ -1189,3 +1189,39 @@ class AccessRequest(db.Model):
     def is_open(self):
         return self.status in ACCESS_OPEN_STATUSES
 
+
+class DesktopLicence(db.Model):
+    """Every desktop licence this server has issued: the registry that did not
+    exist while licences were signed by hand on one laptop.
+
+    The signed document itself is kept (``document``) so a failed email can be
+    resent with the same licence rather than a new one -- a second licence would
+    point a second install at an empty data directory.
+    """
+
+    __tablename__ = "desktop_licence"
+
+    id = db.Column(db.Integer, primary_key=True)
+    license_id = db.Column(db.String(40), nullable=False, unique=True)
+    install_id = db.Column(db.String(64), nullable=False)
+    firm_name = db.Column(db.String(160), nullable=False)
+    plan = db.Column(db.String(40), nullable=False)
+    expires_on = db.Column(db.Date, nullable=False)
+    max_employees = db.Column(db.Integer, nullable=False)
+    document = db.Column(db.Text, nullable=False)
+    recipient = db.Column(db.String(160), nullable=False)
+    access_request_id = db.Column(
+        db.Integer, db.ForeignKey("access_request.id", name="fk_desktop_licence_access_request"),
+        index=True)
+    issued_by_id = db.Column(db.Integer, db.ForeignKey("user.id", name="fk_desktop_licence_issued_by"))
+    issued_at = db.Column(db.DateTime, default=utc_now, nullable=False, index=True)
+    emailed_at = db.Column(db.DateTime)
+    email_error = db.Column(db.String(255))
+
+    access_request = db.relationship("AccessRequest", backref=db.backref("licences", lazy="dynamic"))
+    issued_by = db.relationship("User")
+
+    @property
+    def filename(self):
+        return f"{self.install_id}.license.json"
+

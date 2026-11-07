@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% import "macros/ui.html" as ui %}
+{% import "macros/breadcrumbs.html" as bc %}
+{% block title %}Desktop licences · {{ app_name }}{% endblock %}
+{% block page_title %}Desktop licences{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Client Companies", url_for('main.clients')),
+    ("Desktop licences", None),
+]) }}
+{% endblock %}
+{% block content %}
+{# Every licence this server has issued (app.desktop_licences). Licences signed
+   by hand with the Sinaforte tool before 2026-11-06 are not listed here. #}
+<section class="panel">
+    {% if not enabled %}
+    <p class="mini-note mb-2"><i class="bi bi-info-circle"></i> Trial licences are off on this server until TRIAL_LICENCE_SIGNING_KEY is set.</p>
+    {% endif %}
+    {% set columns = [
+         {"label": "Issued"},
+         {"label": "Company"},
+         {"label": "Licence"},
+         {"label": "Expires"},
+         {"label": "Sent to"},
+         {"label": "Email"},
+         {"label": "Actions", "align": "num"},
+       ] %}
+    {% call ui.data_table(columns, page=page, caption="Desktop licences",
+                          empty_title="No desktop licences issued yet",
+                          empty_detail="Approve an access request that asks for the desktop app to send the first one.",
+                          table_id="licences-table") %}
+      {% for licence in page.items %}
+        <tr>
+            <td>{{ licence.issued_at.strftime('%d %b %Y') }}</td>
+            <td>{% if licence.access_request %}<a href="{{ url_for('access.detail', request_id=licence.access_request_id) }}">{{ licence.firm_name }}</a>{% else %}{{ licence.firm_name }}{% endif %}</td>
+            <td><span class="dt-code">{{ licence.license_id }}</span> <span class="dt-muted">{{ licence.plan }}</span></td>
+            <td>{{ licence.expires_on.strftime('%d %b %Y') }}{% if licence.expires_on < today %} <span class="badge text-bg-secondary">Expired</span>{% endif %}</td>
+            <td>{{ licence.recipient }}</td>
+            <td>
+                {% if licence.emailed_at %}<span class="badge text-bg-success">Sent {{ licence.emailed_at.strftime('%d %b') }}</span>
+                {% else %}<span class="badge text-bg-warning" title="{{ licence.email_error or '' }}">Not sent</span>{% endif %}
+            </td>
+            <td class="num">
+                <form method="post" action="{{ url_for('licences.resend', licence_id=licence.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-envelope"></i>Resend</button>
+                </form>
+            </td>
+        </tr>
+      {% endfor %}
+    {% endcall %}
+</section>
+{% endblock %}

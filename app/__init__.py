@@ -333,6 +333,14 @@ def create_app():
     app.config["DESKTOP_DOWNLOAD_URL"] = https_url_or_none(_download)
     if _download.strip() and not app.config["DESKTOP_DOWNLOAD_URL"]:
         app.logger.warning("DESKTOP_DOWNLOAD_URL ignored: it must be an absolute https:// URL")
+    # Desktop trial licences (app.desktop_licences). The key is the dedicated
+    # server trial key, never the master key; without it the feature is off.
+    app.config["TRIAL_LICENCE_SIGNING_KEY"] = (os.getenv("TRIAL_LICENCE_SIGNING_KEY") or "").strip()
+    app.config["TRIAL_LICENCE_EXPIRY"] = os.getenv("TRIAL_LICENCE_EXPIRY", "2027-01-31")
+    app.config["TRIAL_MAX_EMPLOYEES"] = int(os.getenv("TRIAL_MAX_EMPLOYEES", "500"))
+    # The offer as advertised. Deliberately earlier than TRIAL_LICENCE_EXPIRY:
+    # the extra month lets a firm finish December payroll in early January.
+    app.config["TRIAL_OFFER_ENDS"] = os.getenv("TRIAL_OFFER_ENDS", "2026-12-31")
     # Sign-in hints on the login page. Only meaningful where the demo roster was
     # actually seeded, and hard-off in production — a real deployment must never
     # advertise accounts, seeded or not.
@@ -522,7 +530,12 @@ def create_app():
     app.config["WHATSAPP_VERIFY_TOKEN"] = os.getenv("WHATSAPP_VERIFY_TOKEN")
     app.config["WHATSAPP_APP_SECRET"] = os.getenv("WHATSAPP_APP_SECRET")
     app.config["HUBTEL_WEBHOOK_SECRET"] = os.getenv("HUBTEL_WEBHOOK_SECRET")
-    app.config["EMAIL_BACKEND"] = os.getenv("EMAIL_BACKEND", "console")        # console|smtp
+    app.config["EMAIL_BACKEND"] = os.getenv("EMAIL_BACKEND", "console")  # console|smtp|apps_script
+    # apps_script: a Google Apps Script web app under the sender's Gmail
+    # (scripts/gmail_relay/Code.gs). Render's free plan blocks outbound SMTP,
+    # so mail leaves over HTTPS instead; Google allows 100 recipients a day.
+    app.config["APPS_SCRIPT_MAIL_URL"] = https_url_or_none(os.getenv("APPS_SCRIPT_MAIL_URL", ""))
+    app.config["APPS_SCRIPT_MAIL_SECRET"] = os.getenv("APPS_SCRIPT_MAIL_SECRET")
     app.config["DEFAULT_FROM_EMAIL"] = os.getenv("DEFAULT_FROM_EMAIL", "payroll@payrolla.app")
     # Optional sender display name and reply-to (Phase 3, Slice 9). Both optional
     # so existing config keeps working: with neither set, From is the bare
@@ -797,6 +810,7 @@ def create_app():
     )
 
     from app.access_requests import access_bp
+    from app.desktop_licences import licences_bp
     from app.audit import audit_bp
     from app.auth import auth_bp
     from app.client import client_bp
@@ -813,6 +827,7 @@ def create_app():
     from app.statutory import statutory_bp
 
     app.register_blueprint(access_bp)
+    app.register_blueprint(licences_bp)
     app.register_blueprint(invites_bp)
     app.register_blueprint(audit_bp)
     app.register_blueprint(auth_bp)
