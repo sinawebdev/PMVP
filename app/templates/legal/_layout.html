@@ -2,6 +2,7 @@
 {% block title %}{{ self.doc_title() }} · {{ app_name }}{% endblock %}
 {% block head %}
 <meta name="description" content="{% block doc_description %}{% endblock %}">
+<link rel="canonical" href="{{ config.SITE_URL }}{{ request.path }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='landing-glass.css', v='20261101') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='legal.css', v='20261102') }}">
 {% endblock %}
