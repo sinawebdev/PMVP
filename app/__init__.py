@@ -324,6 +324,9 @@ def create_app():
     # The address the privacy policy and terms give for questions and data
     # requests, so it must be a mailbox someone reads.
     app.config["SUPPORT_EMAIL"] = os.getenv("SUPPORT_EMAIL", "support@payrollagh.com")
+    # Act 843 s.27(2)(b) wants the responsible party's address in the privacy
+    # notice. Blank until the business has given one; the pages then omit it.
+    app.config["COMPANY_ADDRESS"] = (os.getenv("COMPANY_ADDRESS") or "").strip()
     app.config["SERVICE_SLUG"] = os.getenv("SERVICE_SLUG", "payrolla")
     # Public desktop installer hosted outside this app. Per-firm builds carry
     # their customer's license and must not be used for a general download.
@@ -864,6 +867,7 @@ def create_app():
             "app_tagline": app.config["APP_TAGLINE"],
             "company_name": app.config["COMPANY_NAME"],
             "support_email": app.config["SUPPORT_EMAIL"],
+            "company_address": app.config["COMPANY_ADDRESS"],
         }
 
     @app.context_processor

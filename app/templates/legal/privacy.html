@@ -7,22 +7,22 @@
 </div>
 
 <h2 id="who-we-are">1. Who we are</h2>
-<p>{{ app_brand_name }} ("we", "us") is a payroll service provided by {{ company_name }}, a business based in Ghana. This policy explains what personal data we handle through the {{ app_brand_name }} website, the {{ app_brand_name }} web workspace and the payslip links we send, and what rights you have under Ghana's Data Protection Act, 2012 (Act 843).</p>
+<p>{{ app_brand_name }} ("we", "us") is a payroll service provided by {{ company_name }}, a business based in Ghana{% if company_address %}, at {{ company_address }}{% endif %}. This policy explains what personal data we handle through the {{ app_brand_name }} website, the {{ app_brand_name }} web workspace and the payslip links we send, and what rights you have under Ghana's Data Protection Act, 2012 (Act 843).</p>
 <p>For questions or requests about your data, email <a href="mailto:{{ support_email }}">{{ support_email }}</a>.</p>
 
 <h2 id="roles">2. Our two roles</h2>
 <ul>
-  <li><strong>On behalf of our clients.</strong> A client company (an employer, or a payroll bureau acting for one) adds its employees' details and runs its payroll in {{ app_brand_name }}. The client is the data controller for that data. We process it only to provide {{ app_brand_name }} to that client, and only on its instructions. If you work for one of our clients, your employer is your first point of contact; see <a href="#rights">section 9</a>.</li>
+  <li><strong>On behalf of our clients.</strong> A client company (an employer, or a payroll bureau acting for one) adds its employees' details and runs its payroll in {{ app_brand_name }}. The client is the data controller for that data. We process it to provide {{ app_brand_name }} to that client, following its instructions. If you work for one of our clients, your employer is your first point of contact; see <a href="#rights">section 9</a>.</li>
   <li><strong>For our own purposes.</strong> We are the data controller for the details you send us when you request access, for the user accounts we create, and for the records we keep to secure the service.</li>
 </ul>
 
 <h2 id="what-we-collect">3. What we collect</h2>
 <h3>When you request access</h3>
-<p>Your company name, your name and your work email. If you choose to give them, also your phone number, town or city, number of employees and a message.</p>
+<p>Your company name, your name, your work email and what you are interested in. We need these to reply, and we can't deal with your request without them. You can also choose to give your phone number, town or city, number of employees and a message. If we issue a trial licence for the Windows app, we keep a record of it.</p>
 <h3>When you have a {{ app_brand_name }} account</h3>
-<p>Your name, email address, role and company. Your password is stored only as a one-way hash, so nobody at {{ app_brand_name }} can read it. We also record when you were invited and when you activated your account.</p>
+<p>Your name, email address, role and company. Your password is stored only as a one-way hash, so it can't be read back. We also record when you were invited and when you activated your account.</p>
 <h3>Security and activity records</h3>
-<p>Each sign-in and sign-out is recorded with your IP address and browser type. The audit trail records who uploaded, changed, approved or sent what, and when.</p>
+<p>Each sign-in and sign-out is recorded with your IP address and browser type. The audit trail records key actions, such as uploads, approvals and sends, with who did them and when.</p>
 <h3>Payroll data we process for clients</h3>
 <p>Depending on what the client provides, this can include:</p>
 <ul>
@@ -30,9 +30,9 @@
   <li>government identifiers: Ghana Card number, SSNIT number and TIN</li>
   <li>payment details: bank name, branch and account number, or mobile money number</li>
   <li>pay information: salary, allowances, overtime, deductions, PAYE, SSNIT contributions, net pay and payslips</li>
-  <li>the payroll workbooks the client uploads, kept as they were uploaded</li>
+  <li>the payroll workbooks the client uploads</li>
   <li>expense records and receipts</li>
-  <li>payslip delivery records: the email address or phone number used, the channel, and whether delivery succeeded</li>
+  <li>payslip delivery records: the email address or phone number used, the channel, and the delivery status reported to us</li>
 </ul>
 <h3>Technical data</h3>
 <p>Our hosting and network providers keep server logs, which include IP addresses and details of each request, for security and troubleshooting.</p>
@@ -40,48 +40,48 @@
 <h2 id="how-we-use-it">4. How we use it</h2>
 <ul>
   <li>To reply to access requests and set up client companies, which are steps you have asked us to take before a contract.</li>
-  <li>To provide {{ app_brand_name }} under our contract with the client: calculating payroll, producing reports, and delivering payslips by email, WhatsApp or SMS.</li>
+  <li>To provide {{ app_brand_name }} to the client: calculating payroll, producing reports, and delivering payslips.</li>
   <li>To keep the service secure: limiting repeated sign-in attempts, investigating misuse and keeping an audit trail.</li>
-  <li>To send service messages, such as account invitations and notices about changes to {{ app_brand_name }}.</li>
+  <li>To send service messages, such as account invitations, licences and notices about changes to {{ app_brand_name }}.</li>
   <li>To meet our legal obligations, for example answering a lawful request from a court or regulator.</li>
 </ul>
-<p>We don't sell personal data, use it for advertising, or use it to make automated decisions about people. Payroll is calculated from the client's figures and the statutory rates, and the client reviews and approves every run.</p>
+<p>We don't sell personal data, use it for advertising, or use it to make automated decisions about people. Payroll is calculated from the client's figures and the statutory rates we hold, and the client reviews and approves each run.</p>
 
 <h2 id="sharing">5. Who we share it with</h2>
-<p>We use these service providers to run {{ app_brand_name }}. Each one processes data only to provide its service to us.</p>
+<p>We use these service providers to run {{ app_brand_name }}, each under its own terms. The list changes as the service changes, and this page shows the current one.</p>
 <div class="table-scroll">
   <table>
     <thead><tr><th scope="col">Provider</th><th scope="col">What it does</th></tr></thead>
     <tbody>
       <tr><td>Render</td><td>Hosts the {{ app_brand_name }} application</td></tr>
       <tr><td>Supabase</td><td>Hosts the database where {{ app_brand_name }} data is stored</td></tr>
-      <tr><td>Cloudflare</td><td>Protects the website and routes traffic to it</td></tr>
-      <tr><td>Our email provider</td><td>Sends account invitations and payslip emails</td></tr>
-      <tr><td>Hubtel and SasuSync</td><td>Send payslip text messages (SMS)</td></tr>
-      <tr><td>Meta (WhatsApp Business Platform)</td><td>Delivers payslips on WhatsApp</td></tr>
+      <tr><td>Cloudflare</td><td>Sits in front of our hosting and routes traffic to it</td></tr>
+      <tr><td>Google (Gmail)</td><td>Sends account invitations, licences and payslip emails</td></tr>
+      <tr><td>SasuSync</td><td>Sends text messages (SMS) carrying payslip links</td></tr>
       <tr><td>jsDelivr</td><td>Serves some of the website's style and script files, so your browser connects to it and it sees your IP address</td></tr>
       <tr><td>GitHub</td><td>Hosts the download of the Windows app installer</td></tr>
     </tbody>
   </table>
 </div>
-<p>We also disclose personal data where the law requires it, for example to the Ghana Revenue Authority or under a court order, or where it is needed to protect someone's safety or our legal rights. If {{ company_name }}'s business is sold or reorganised, the data would pass to the new owner, who would remain bound by this policy.</p>
+<p>We also disclose personal data where the law requires it, for example to the Ghana Revenue Authority or under a court order, or where it is needed to protect someone's safety or our legal rights. If {{ company_name }}'s business is reorganised or changes hands, we would deal with client data only as Act 843 allows, and we would tell our clients first.</p>
 
 <h2 id="outside-ghana">6. Data stored outside Ghana</h2>
-<p>The {{ app_brand_name }} database is hosted in Ireland and the application runs in the United States, so data you or your employer give us leaves Ghana. We use established providers that commit by contract to keep the data secure and to use it only for the service they provide to us, and we transfer only what {{ app_brand_name }} needs to work.</p>
+<p>The {{ app_brand_name }} database is hosted in Ireland and the application runs in the United States, and some of our other providers work on global networks. So data you or your employer give us leaves Ghana. We choose established providers, and we try to send them only what {{ app_brand_name }} needs to work.</p>
 
 <h2 id="retention">7. How long we keep it</h2>
-<p>A client's payroll data is kept while the client uses {{ app_brand_name }}. When the contract ends, we give the client an export of it on request, and we delete it within 90 days. Access requests that don't lead to a contract are deleted within 12 months. The full schedule is in our <a href="{{ url_for('legal.data_protection') }}#retention">data protection and retention policy</a>.</p>
+<p>A client's payroll data is kept while the client uses {{ app_brand_name }}. When the contract ends, we give the client an export of it on request, and we normally delete it within 90 days. Access requests that don't lead to a contract are normally deleted within 12 months. The full schedule is in our <a href="{{ url_for('legal.data_protection') }}#retention">data protection and retention policy</a>.</p>
 
 <h2 id="security">8. How we protect it</h2>
+<p>We take steps we consider reasonable for a service of this kind, including these:</p>
 <ul>
-  <li>Every connection to {{ app_brand_name }} is encrypted (HTTPS).</li>
-  <li>Passwords are stored as one-way hashes, and repeated failed sign-ins are slowed down and then blocked.</li>
-  <li>Each client company sees only its own data, and each user sees only what their role allows.</li>
-  <li>An audit trail records every upload, change, approval and send.</li>
-  <li>Payslip links are signed and can be revoked. They expire after 5 days, or 30 days for links sent by SMS.</li>
-  <li>Access to the production systems is limited to the people who need it.</li>
+  <li>Connections to {{ app_brand_name }} use HTTPS.</li>
+  <li>Passwords are stored as one-way hashes, and repeated failed sign-ins can be temporarily blocked.</li>
+  <li>{{ app_brand_name }} is built so that each client company sees only its own data, and each user only what their role allows. The people who run {{ app_brand_name }} can see client data when their work on the service requires it.</li>
+  <li>An audit trail records key actions, such as uploads, approvals and sends.</li>
+  <li>Payslip links are signed and can be revoked. They expire after 5 days, or 30 days for links sent by SMS. Until then, anyone who has a link can open that payslip, so please treat it like the payslip itself.</li>
+  <li>Access to the production systems is limited.</li>
 </ul>
-<p>No system is perfectly secure. If a breach puts personal data at risk, we will tell the affected clients without delay and, as Act 843 requires, notify the Data Protection Commission and the people affected.</p>
+<p>No system is perfectly secure, and we can't promise that data will never be lost or accessed without permission. If we have reasonable grounds to believe that personal data has been accessed by someone without permission, we will tell the affected clients and, as Act 843 requires, notify the Data Protection Commission and the people affected as soon as reasonably practicable.</p>
 
 <h2 id="rights">9. Your rights</h2>
 <p>Under Act 843 you can ask us:</p>
@@ -91,8 +91,8 @@
   <li>to delete data, or to stop or limit how we use it, where the law allows</li>
 </ul>
 <p><strong>If you work for one of our clients,</strong> your employer controls your payroll data, so please ask them first. If you contact us instead, we will pass your request to your employer and help them answer it.</p>
-<p><strong>Anyone else</strong> can email <a href="mailto:{{ support_email }}">{{ support_email }}</a>. We will check who you are before we release any data, and reply within 30 days.</p>
-<p>You can also complain to the Data Protection Commission of Ghana at <a href="https://dataprotection.org.gh" rel="noopener">dataprotection.org.gh</a>.</p>
+<p><strong>Anyone else</strong> can email <a href="mailto:{{ support_email }}">{{ support_email }}</a>. We will check who you are before we release any data, and reply promptly, within the 40 days Act 843 allows.</p>
+<p>You can also complain to the Data Protection Commission of Ghana at <a href="https://dpc.gov.gh/file-a-complaint/" rel="noopener">dpc.gov.gh</a>.</p>
 
 <h2 id="cookies">10. Cookies</h2>
 <p>We use one essential cookie. It keeps you signed in and protects our forms against forged requests. We don't use analytics or advertising cookies. Your browser also notes, for the current visit only, that the {{ app_brand_name }} logo animation has already played, so it doesn't replay on every page. That note stays on your device.</p>
@@ -101,8 +101,8 @@
 <p>{{ app_brand_name }} Desktop keeps payroll data on your own computer, not on our servers, and checks its licence without going online. We don't receive the payroll data you enter in it. The installer is downloaded from GitHub, which handles that download under its own privacy statement.</p>
 
 <h2 id="changes">12. Changes to this policy</h2>
-<p>When we change this policy, we update the date at the top. If a change matters, we tell client administrators by email or in {{ app_brand_name }} before it takes effect.</p>
+<p>When we change this policy, we update the date at the top. If a change matters, we aim to tell client administrators by email or in {{ app_brand_name }}.</p>
 
 <h2 id="contact">13. Contact</h2>
-<p>{{ company_name }}, Ghana. Email <a href="mailto:{{ support_email }}">{{ support_email }}</a>.</p>
+<p>{{ company_name }}, {% if company_address %}{{ company_address }}, {% endif %}Ghana. Email <a href="mailto:{{ support_email }}">{{ support_email }}</a>.</p>
 {% endblock %}
