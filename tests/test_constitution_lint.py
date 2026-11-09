@@ -226,17 +226,21 @@ class PollingRegionsTerminateTests(unittest.TestCase):
         self.assertGreaterEqual(len(self._polling_templates()), 3)
 
     def test_every_poll_stands_down_when_the_tab_is_hidden(self):
-        offenders = []
-        for path in self._polling_templates():
-            for trigger in self.POLL.findall(_read(path)):
-                if "visibilityState" not in trigger:
-                    offenders.append(f"{_relpath(path)}: {trigger}")
+        """In one place, app.js, because the obvious way is not available: htmx
+        compiles a trigger filter with eval, the CSP refuses it, and the filter is
+        dropped with only a console error, leaving hidden tabs polling."""
+        source = _read("app/static/app.js")
+        self.assertIn("htmx:beforeRequest", source)
+        self.assertIn('document.visibilityState !== "visible"', source)
+
+    def test_no_trigger_uses_a_filter_the_csp_would_refuse(self):
+        trigger = re.compile(r'hx-trigger="[^"]*\[[^"]*"')
+        offenders = [_relpath(path) for path in TEMPLATES if trigger.search(_read(path))]
         self.assertEqual(
             offenders,
             [],
-            "polling that continues in a backgrounded tab — add the trigger "
-            "filter [document.visibilityState === 'visible']:\n  "
-            + "\n  ".join(offenders),
+            "an hx-trigger filter needs eval, which the CSP refuses, so it silently "
+            "does nothing. Do the check in app.js:\n  " + "\n  ".join(offenders),
         )
 
     def test_every_poll_is_conditional_on_something_being_in_flight(self):

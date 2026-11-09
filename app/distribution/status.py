@@ -23,6 +23,8 @@ which is a shell concern and lives in ``macros/distribution.html``.
 
 from datetime import datetime, timezone
 
+from flask import make_response, request
+
 from app.models import DistributionBatch, PayslipDelivery
 from app.paging import paginate_list
 from app.payroll_status import SENDABLE_STATUSES
@@ -67,6 +69,17 @@ def latest_deliveries_by_item(item_ids):
     return latest
 
 
+def status_fragment_response(html, live):
+    """A polled status fragment. Once nothing is live, the page reloads instead of
+    just swapping the fragment, because the send controls and the "in progress"
+    badge sit outside the polled region and would otherwise go stale. A poll only
+    happens while live, so this reloads once and then stops."""
+    response = make_response(html)
+    if not live and request.headers.get("HX-Request"):
+        response.headers["HX-Refresh"] = "true"
+    return response
+
+
 def delivery_status_context(run, now=None):
     """Everything either portal needs to render a run's delivery state.
 
@@ -89,6 +102,8 @@ def delivery_status_context(run, now=None):
     failed = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "failed")
     # May have been sent (a provider timeout); counted apart, never as failed.
     unknown = sum(1 for r in rows if r["delivery"] and r["delivery"].status == "unknown")
+    # Confirmed by a delivery report, not just accepted by the provider.
+    delivered = sum(1 for r in rows if r["delivery"] and r["delivery"].delivered_at)
 
     batch = latest_batch(run.id)
     # A pending automatic retry (a failed delivery still scheduled) keeps the
@@ -123,6 +138,7 @@ def delivery_status_context(run, now=None):
         "sent_count": sent,
         "failed_count": failed,
         "unknown_count": unknown,
+        "delivered_count": delivered,
         "batch": batch,
         "in_flight": batch_active or pending_retry or scheduled,
         # Drives live polling — a far-future scheduled batch changes nothing

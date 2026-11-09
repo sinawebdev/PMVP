@@ -12,11 +12,12 @@
 <div id="distribute-status"
      {% if live %}
      hx-get="{{ url_for('client.distribute_status_fragment', run_id=run.id) }}"
-     hx-trigger="every 3s [document.visibilityState === 'visible']"
+     hx-trigger="every 3s"
      hx-swap="outerHTML"
      {% endif %}>
 
-{{ ds.totals(rows, sent_count, failed_count, unknown_count=unknown_count) }}
+{{ ds.totals(rows, sent_count, failed_count, unknown_count=unknown_count,
+             delivered_count=delivered_count) }}
 
 {{ ds.queue_status(batch, in_flight=in_flight, scheduled=scheduled,
                    seconds_until=seconds_until_scheduled) }}

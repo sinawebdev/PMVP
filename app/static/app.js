@@ -28,6 +28,17 @@
     if (t && evt.detail && evt.detail.headers) evt.detail.headers["X-CSRFToken"] = t;
   });
 
+  // Polling regions stand down while the tab is hidden. This lives here and not
+  // as an hx-trigger filter ("every 3s [condition]") because htmx builds those
+  // with eval, which our Content-Security-Policy refuses: it logged an error and
+  // dropped the condition, so hidden tabs kept polling.
+  document.addEventListener("htmx:beforeRequest", function (evt) {
+    var trigger = evt.target && evt.target.getAttribute && evt.target.getAttribute("hx-trigger");
+    if (trigger && trigger.indexOf("every ") === 0 && document.visibilityState !== "visible") {
+      evt.preventDefault();
+    }
+  });
+
   // fetch: attach the header to mutating requests (leave GET/HEAD alone).
   var _origFetch = window.fetch;
   if (typeof _origFetch === "function") {

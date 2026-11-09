@@ -25,10 +25,13 @@
 
 
 {# --- Totals ---------------------------------------------------------------- #}
-{% macro totals(rows, sent_count, failed_count, net_total=none, unknown_count=0) %}
+{% macro totals(rows, sent_count, failed_count, net_total=none, unknown_count=0, delivered_count=0) %}
 <dl class="ds-totals">
   <div class="ds-total"><dt>Payslips</dt><dd>{{ rows|length }}</dd></div>
   <div class="ds-total ds-total--ok"><dt>Sent</dt><dd>{{ sent_count }}</dd></div>
+  {% if delivered_count %}
+  <div class="ds-total ds-total--ok"><dt>Delivered</dt><dd>{{ delivered_count }}</dd></div>
+  {% endif %}
   <div class="ds-total ds-total--bad"><dt>Failed</dt><dd>{{ failed_count }}</dd></div>
   {% if unknown_count %}
   <div class="ds-total ds-total--warn"><dt>Unconfirmed</dt><dd>{{ unknown_count }}</dd></div>
@@ -97,8 +100,6 @@
   <p class="ds-note">Some deliveries failed and are scheduled for automatic retry — this page updates automatically as they are re-attempted.</p>
   {% elif batch.status == "cancelled" %}
   <p class="ds-note">This batch was cancelled before it sent. Nothing further will go out from it.</p>
-  {% elif batch.status == "completed" %}
-  <p class="ds-note">Refresh the page to send again.</p>
   {% endif %}
 </section>
 {% endif %}

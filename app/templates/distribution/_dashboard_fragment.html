@@ -28,7 +28,7 @@
 <div id="distribution-monitor" class="dist"
      {% if stats.live %}
      hx-get="{{ url_for('distribution.dashboard_fragment', window=stats.window.days) }}"
-     hx-trigger="every 5s [document.visibilityState === 'visible']"
+     hx-trigger="every 5s"
      hx-swap="outerHTML"
      {% endif %}>
 

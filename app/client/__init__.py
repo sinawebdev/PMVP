@@ -46,7 +46,7 @@ from app.distribution.queue import (
 )
 from app.paging import paginate
 from app.distribution.service import resolve_channel
-from app.distribution.status import delivery_status_context
+from app.distribution.status import delivery_status_context, status_fragment_response
 from app.excel_utils import allowed_excel_file, export_import_error_report, mapping_conflicts
 from app.models import (
     CHANNEL_AUTO,
@@ -619,12 +619,14 @@ def distribute(run_id):
 @tenant_required
 def distribute_status_fragment(run_id):
     run = tenant_get_or_404(PayrollRun, run_id)  # 404 if another tenant's run
-    return render_template(
+    context = _distribute_context(run)
+    html = render_template(
         "client/_distribute_status_fragment.html",
         can_send=active_tenant_id() is not None
         and can_send_payslips(current_user.role),
-        **_distribute_context(run),
+        **context,
     )
+    return status_fragment_response(html, context["live"])
 
 
 def _do_client_send(run, only_failed):
