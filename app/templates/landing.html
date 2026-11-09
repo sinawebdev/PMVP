@@ -6,9 +6,9 @@
 {% set site = config.SITE_URL %}
 {% set page_url = site ~ url_for('main.index') %}
 {% set share_title = app_brand_name ~ " — Payroll software for Ghana" %}
-{% set share_text = "Payday, sorted. Upload the Excel sheet you already keep; " ~ app_brand_name ~ " works out PAYE and SSNIT, sends the run for sign-off, and delivers every payslip by email, WhatsApp or SMS." %}
+{% set share_text = "Payday, sorted. Upload the Excel sheet you already keep; " ~ app_brand_name ~ " works out PAYE and SSNIT, sends the run for sign-off, and delivers payslips by email or SMS." %}
 {% set share_image = site ~ url_for('static', filename='img/og-payrolla.jpg', v='20261105') %}
-<meta name="description" content="Payroll software for Ghana. {{ app_brand_name }} works out PAYE and SSNIT from your Excel workbook, takes each run through approval, and sends payslips by email, WhatsApp or SMS.">
+<meta name="description" content="Payroll software for Ghana. {{ app_brand_name }} works out PAYE and SSNIT from your Excel workbook, takes each run through approval, and sends payslips by email or SMS.">
 <link rel="canonical" href="{{ page_url }}">
 <meta name="theme-color" content="#eef6f1">
 <meta property="og:type" content="website">
@@ -33,7 +33,7 @@
    "inLanguage": "en-GH", "publisher": {"@id": org_id}},
   {"@type": "SoftwareApplication", "name": app_brand_name, "url": page_url,
    "applicationCategory": "BusinessApplication", "operatingSystem": "Web, Windows",
-   "description": "Payroll software for Ghana: PAYE and SSNIT at current GRA rates, approval before anything is sent, and payslips by email, WhatsApp or SMS.",
+   "description": "Payroll software for Ghana: PAYE and SSNIT calculations, approval before anything is sent, and payslips by email or SMS.",
    "publisher": {"@id": org_id}}
 ]} %}
 <script type="application/ld+json">{{ site_ld | tojson }}</script>
@@ -103,11 +103,11 @@
        search engines still read "payroll software for Ghana" as the page's
        heading, without a pill or eyebrow label sitting above the slogan. #}
     <p class="hero-display">Payday, sorted. <span class="hero-accent">Every cedi, every payslip.</span></p>
-    <div class="hero-intro"><h1 id="hero-title">Payroll software for Ghana.</h1> <p class="hero-lede">Upload the Excel sheet you already keep. {{ app_brand_name }} works out PAYE and SSNIT, sends the run for sign-off, and delivers every payslip by email, WhatsApp or SMS.</p></div>
+    <div class="hero-intro"><h1 id="hero-title">Payroll software for Ghana.</h1> <p class="hero-lede">Upload the Excel sheet you already keep. {{ app_brand_name }} works out PAYE and SSNIT, sends the run for sign-off, and delivers payslips by email or SMS.</p></div>
     <ul class="hero-facts">
-      <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Current GRA PAYE bands and SSNIT rates</li>
+      <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>GRA PAYE bands and SSNIT rates built in</li>
       <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Nothing goes out until it's approved</li>
-      <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Payslips on email, WhatsApp and SMS</li>
+      <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Payslips by email or SMS</li>
     </ul>
     <div class="hero-actions">
       <a class="lp-btn lp-btn--primary" href="#request-access">Request access <svg class="icon"><use href="#i-arrow"/></svg></a>
@@ -159,7 +159,7 @@
       </li>
       <li class="pipe-node">
         <span class="pipe-ring" aria-hidden="true"><svg class="icon"><use href="#i-calc"/></svg><span class="pipe-num">2</span></span>
-        <div class="pipe-text"><h3>Calculate</h3><p>Gross pay, PAYE, SSNIT and deductions, at the GRA rates in force for that month.</p></div>
+        <div class="pipe-text"><h3>Calculate</h3><p>Gross pay, PAYE, SSNIT and deductions, at the rates we hold for that month.</p></div>
       </li>
       <li class="pipe-node">
         <span class="pipe-ring" aria-hidden="true"><svg class="icon"><use href="#i-shield"/></svg><span class="pipe-num">3</span></span>
@@ -167,14 +167,13 @@
       </li>
       <li class="pipe-node">
         <span class="pipe-ring" aria-hidden="true"><svg class="icon"><use href="#i-send"/></svg><span class="pipe-num">4</span></span>
-        <div class="pipe-text"><h3>Deliver</h3><p>Payslips go out to each employee, and you can see which ones arrived.</p></div>
+        <div class="pipe-text"><h3>Deliver</h3><p>Payslips go out to your employees, and you can see the delivery status of each one.</p></div>
       </li>
     </ol>
     </div>
     <ul class="pipe-channels" aria-label="Delivery channels">
       <li><svg class="icon"><use href="#i-mail"/></svg><span>Email<small>The full payslip</small></span></li>
-      <li><svg class="icon"><use href="#i-chat"/></svg><span>WhatsApp<small>The full payslip</small></span></li>
-      <li><svg class="icon"><use href="#i-sms"/></svg><span>SMS<small>A secure link to it</small></span></li>
+      <li><svg class="icon"><use href="#i-sms"/></svg><span>SMS<small>A link to it</small></span></li>
     </ul>
   </div>
   <p class="section-note">Approving a run records the decision. {{ app_brand_name }} doesn't move money; you pay staff through your bank as usual.</p>
@@ -184,7 +183,7 @@
 <section class="features lp-wrap" id="features" aria-labelledby="features-title">
   <div class="features-head">
     <h2 id="features-title" class="section-title">Everything payday needs, in one place.</h2>
-    <p class="features-intro">From the first upload to the last payslip, every step is checked, recorded and ready for GRA.</p>
+    <p class="features-intro">From the first upload to the last payslip: checks, records and your reports for GRA.</p>
   </div>
   {# Each card's h3 and p carry its meaning; the small illustrations under them
      are decorative (aria-hidden) and use made-up staff. #}
@@ -192,7 +191,7 @@
     <article class="bento-card bento-card--paye">
       <div class="bento-copy">
         <h3>PAYE and SSNIT, worked out for you</h3>
-        <p>Current GRA PAYE bands and SSNIT rates, kept as dated versions, so an earlier month always recalculates the same way.</p>
+        <p>GRA PAYE bands and SSNIT rates, kept as dated versions, so an earlier month keeps the rates it was calculated with.</p>
       </div>
       {# Real figures: raw_engine.compute_payslip under the StatutoryRate effective
          2026-09-01 (Act 1178 bands), basic 4,500 + allowances 500. Recompute
@@ -212,26 +211,25 @@
 
     <article class="bento-card">
       <h3>Checks before approval</h3>
-      <p>Each run is compared with the last one. Large pay changes, headcount changes and duplicate rows are held for review.</p>
+      <p>Each run is compared with the last one. Large pay changes, headcount changes and duplicate rows are flagged for review.</p>
       <ul class="mini-flags" aria-hidden="true">
-        <li><span>Ama Mensah<small>Pay up 42% on last month</small></span><b>Held</b></li>
-        <li><span>Kwame Asante<small>Appears twice in the upload</small></span><b>Held</b></li>
+        <li><span>Ama Mensah<small>Pay up 42% on last month</small></span><b>Flagged</b></li>
+        <li><span>Kwame Asante<small>Appears twice in the upload</small></span><b>Flagged</b></li>
       </ul>
     </article>
 
     <article class="bento-card">
       <h3>Payslip delivery</h3>
-      <p>Email, WhatsApp and SMS, with a delivery status for every employee and one-click resend for any that failed.</p>
+      <p>Email and SMS, with a delivery status for each employee and one-click resend for any that failed.</p>
       <ul class="mini-channels" aria-hidden="true">
         <li><svg class="icon"><use href="#i-mail"/></svg>Email<span class="mini-status is-ok">Delivered</span></li>
-        <li><svg class="icon"><use href="#i-chat"/></svg>WhatsApp<span class="mini-status is-ok">Delivered</span></li>
         <li><svg class="icon"><use href="#i-sms"/></svg>SMS<span class="mini-status is-retry">Resend</span></li>
       </ul>
     </article>
 
     <article class="bento-card bento-card--dark">
-      <h3>GRA-ready reports</h3>
-      <p>A bank listing and the GRA PAYE schedule for every approved run, ready to download.</p>
+      <h3>Reports for GRA and your bank</h3>
+      <p>A bank listing and a GRA PAYE schedule for each approved run, to download and check before you file.</p>
       <ul class="mini-files" aria-hidden="true">
         <li><svg class="icon"><use href="#i-file"/></svg>Bank listing<small>XLSX</small></li>
         <li><svg class="icon"><use href="#i-file"/></svg>GRA PAYE schedule<small>XLSX</small></li>
@@ -251,7 +249,7 @@
     <article class="bento-card bento-card--audit">
       <div class="bento-copy">
         <h3>Audit trail</h3>
-        <p>Every upload, edit, approval and send is logged with who did it and when.</p>
+        <p>Uploads, approvals and sends are logged with who did them and when.</p>
       </div>
       <ol class="mini-timeline" aria-hidden="true">
         <li><b>Uploaded</b><small>Mon 09:12</small></li>
@@ -294,8 +292,8 @@
     <details><summary>Do we have to change how we keep our payroll records?</summary><p>No. You can upload the Excel workbook you use now, or start from our employee roster template.</p></details>
     <details><summary>What happens when GRA changes the PAYE bands?</summary><p>We add the new rates as a dated version. Runs for months after the change use the new rates. Earlier months keep the rates they were calculated with.</p></details>
     <details><summary>Does approving a run pay my staff?</summary><p>No. Approval records that the run was checked and agreed. You pay staff through your bank as usual, using the bank listing {{ app_brand_name }} produces.</p></details>
-    <details><summary>How do employees receive their payslips?</summary><p>By email, WhatsApp or SMS, depending on the contact details you hold for them. Every payslip's delivery status shows on the run, and failed ones can be resent.</p></details>
-    <details><summary>What's the difference between the web workspace and the desktop app?</summary><p>The web workspace runs in your browser, and your data is held on our servers. The desktop app runs on one Windows computer, works offline, and keeps the data on that computer.</p></details>
+    <details><summary>How do employees receive their payslips?</summary><p>By email or SMS, depending on the contact details you hold for them. Each payslip's delivery status shows on the run, and failed ones can be resent.</p></details>
+    <details><summary>What's the difference between the web workspace and the desktop app?</summary><p>The web workspace runs in your browser, and your data is held online by us and our hosting providers. The desktop app runs on one Windows computer, works offline, and keeps the data on that computer.</p></details>
     {% if desktop_download_url %}<details><summary>How does the Windows app activate?</summary><p>On first launch it asks for the licence file we send your company. It checks the file without going online. You then create the administrator login, and the app opens.</p></details>{% endif %}
   </div>
 </section>

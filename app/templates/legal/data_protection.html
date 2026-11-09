@@ -3,35 +3,35 @@
 {% block doc_description %}How {{ app_brand_name }} protects the payroll data it processes for client companies, who it shares it with, and how long each kind of data is kept.{% endblock %}
 {% block doc %}
 <div class="legal-summary">
-  <p><strong>In short:</strong> we process employee payroll data only on our clients' instructions, keep it only while the client uses {{ app_brand_name }}, and delete it within 90 days after the contract ends. Employers must keep their own payroll records for six years, so we give each client an export of its data before deleting it.</p>
+  <p><strong>In short:</strong> we process employee payroll data to provide {{ app_brand_name }} to our clients, keep it while the client uses {{ app_brand_name }}, and normally delete it within 90 days after the contract ends. Employers must keep their own payroll records for at least six years, so a client should ask for an export before it leaves.</p>
 </div>
 
 <h2 id="scope">1. Scope</h2>
-<p>This policy covers the personal data {{ company_name }} processes in the {{ app_brand_name }} web workspace. It sits alongside our <a href="{{ url_for('legal.privacy') }}">privacy policy</a>, which explains what we collect and why, and our <a href="{{ url_for('legal.terms') }}">terms of service</a>. Data entered into the {{ app_brand_name }} Desktop app stays on the client's own computer and is not covered here: the client keeps it, backs it up and deletes it.</p>
+<p>This policy covers the personal data {{ company_name }} processes in the {{ app_brand_name }} web workspace. It sits alongside our <a href="{{ url_for('legal.privacy') }}">privacy policy</a>, which explains what we collect and why, and our <a href="{{ url_for('legal.terms') }}">terms of service</a>, which it forms part of. Data entered into the {{ app_brand_name }} Desktop app stays on the client's own computer and is not covered here: the client keeps it, backs it up and deletes it.</p>
 
-<h2 id="principles">2. The principles we follow</h2>
-<p>We handle personal data in line with the data protection principles in Ghana's Data Protection Act, 2012 (Act 843):</p>
+<h2 id="principles">2. The principles we work from</h2>
+<p>Ghana's Data Protection Act, 2012 (Act 843) sets out eight data protection principles. This is how we try to apply them:</p>
 <ul>
-  <li><strong>Accountability:</strong> we take responsibility for how {{ app_brand_name }} handles personal data, and keep records that show it.</li>
-  <li><strong>Lawful processing:</strong> we process data only where the law allows it, and no more than the purpose needs.</li>
-  <li><strong>Specific purpose:</strong> payroll data is used for payroll, payslips and the records that go with them, not for anything else.</li>
+  <li><strong>Accountability:</strong> we take responsibility for how {{ app_brand_name }} handles personal data, and keep records of key actions.</li>
+  <li><strong>Lawful processing:</strong> we aim to process data only where the law allows it, and no more than the purpose needs.</li>
+  <li><strong>Specific purpose:</strong> payroll data is used for payroll, payslips and the records that go with them.</li>
   <li><strong>Compatible further use:</strong> we don't reuse data for a purpose that doesn't fit why it was collected.</li>
-  <li><strong>Quality:</strong> clients can correct employee records at any time, and every change is logged.</li>
+  <li><strong>Quality:</strong> clients can correct employee records at any time.</li>
   <li><strong>Openness:</strong> we publish what we collect, who we share it with and how long we keep it.</li>
   <li><strong>Security safeguards:</strong> see <a href="#security">section 6</a>.</li>
-  <li><strong>Data subject participation:</strong> people can see and correct their data, as described in <a href="#requests">section 7</a>.</li>
+  <li><strong>Data subject participation:</strong> people can ask to see and correct their data, as described in <a href="#requests">section 7</a>.</li>
 </ul>
 
 <h2 id="processor">3. Our commitments when we process data for a client</h2>
 <p>For employee payroll data, the client company is the data controller and we are its data processor. As processor, we:</p>
 <ul>
-  <li>process the data only to provide {{ app_brand_name }}, and only on the client's documented instructions</li>
-  <li>make sure everyone at {{ company_name }} with access to it is bound to keep it confidential</li>
-  <li>keep it secure, as described in <a href="#security">section 6</a></li>
-  <li>use only the service providers listed in <a href="#providers">section 4</a>, and tell clients before we add or replace one</li>
+  <li>process the data to provide {{ app_brand_name }}, following the client's instructions</li>
+  <li>treat it as confidential, and disclose it only where the law requires or our work on the service needs it</li>
+  <li>take the security steps described in <a href="#security">section 6</a></li>
+  <li>use the service providers listed in <a href="#providers">section 4</a>, and keep that list up to date</li>
   <li>help the client answer requests from its employees, and pass on any request we receive directly</li>
-  <li>tell the client without undue delay, and within 72 hours where we can, if we become aware of a breach affecting its data</li>
-  <li>give the client an export of its data on request, and delete it within 90 days after the contract ends</li>
+  <li>tell the client as soon as reasonably practicable if we have reasonable grounds to believe its data has been accessed without permission</li>
+  <li>give the client an export of its data on request, and normally delete it within 90 days after the contract ends</li>
 </ul>
 
 <h2 id="providers">4. Service providers</h2>
@@ -41,49 +41,52 @@
     <tbody>
       <tr><td>Supabase</td><td>Database hosting</td><td>Ireland (EU)</td></tr>
       <tr><td>Render</td><td>Application hosting</td><td>United States</td></tr>
-      <tr><td>Cloudflare</td><td>Website protection and traffic routing</td><td>Global network</td></tr>
-      <tr><td>Our email provider</td><td>Invitations and payslip emails</td><td>Depends on the provider</td></tr>
-      <tr><td>Hubtel and SasuSync</td><td>Payslip text messages (SMS)</td><td>Depends on the provider</td></tr>
-      <tr><td>Meta (WhatsApp Business Platform)</td><td>Payslips on WhatsApp</td><td>Global network</td></tr>
+      <tr><td>Cloudflare</td><td>Sits in front of our hosting and routes traffic to it</td><td>Global network</td></tr>
+      <tr><td>Google (Gmail)</td><td>Invitations, licences and payslip emails</td><td>Global network</td></tr>
+      <tr><td>SasuSync</td><td>Text messages (SMS) carrying payslip links</td><td>Depends on the provider and mobile network</td></tr>
     </tbody>
   </table>
 </div>
-<p>Because the database is in Ireland and the application runs in the United States, client data leaves Ghana. We transfer only what {{ app_brand_name }} needs, to providers that commit by contract to protecting it.</p>
+<p>Because the database is in Ireland and the application runs in the United States, client data leaves Ghana. We choose established providers, use them under their own terms, and try to send them only what {{ app_brand_name }} needs.</p>
 
 <h2 id="retention">5. How long we keep data</h2>
 <div class="table-scroll">
   <table>
     <thead><tr><th scope="col">Data</th><th scope="col">How long we keep it</th></tr></thead>
     <tbody>
-      <tr><td>Client payroll data: employees, payroll runs, payslips, uploaded workbooks, expenses and receipts, and payslip delivery records</td><td>While the client uses {{ app_brand_name }}. Deleted within 90 days after the contract ends, after an export if the client asks for one.</td></tr>
-      <tr><td>A client's audit trail, including sign-in records with IP address and browser type</td><td>As long as that client's payroll data, and deleted with it.</td></tr>
-      <tr><td>User accounts</td><td>While the account is in use. Deleted with the client's data, or sooner if the client asks us to.</td></tr>
+      <tr><td>Client payroll data: employees, payroll runs, payslips, uploaded workbooks, expenses and payslip delivery records</td><td>While the client uses {{ app_brand_name }}. Normally deleted within 90 days after the contract ends, after an export if the client asks for one.</td></tr>
+      <tr><td>Receipt files uploaded with expenses</td><td>While the client uses {{ app_brand_name }}, and no longer than the client's other data. They are held on the application server, where they can be lost during server maintenance, so please keep your originals.</td></tr>
+      <tr><td>A client's audit trail, including sign-in records with IP address and browser type</td><td>As long as that client's payroll data, and normally deleted with it.</td></tr>
+      <tr><td>User accounts</td><td>While the account is in use. Normally deleted with the client's data, or sooner if the client asks us to.</td></tr>
       <tr><td>Payslip links</td><td>Expire after 5 days, or 30 days for links sent by SMS. The client can revoke a link earlier.</td></tr>
-      <tr><td>Access requests that don't lead to a contract</td><td>Deleted within 12 months of our last contact.</td></tr>
+      <tr><td>Copies of emails we send, including any payslip attached</td><td>Can stay in the sending Google account and with the recipient's email provider after the rest of the data is deleted.</td></tr>
+      <tr><td>Access requests that don't lead to a contract</td><td>Normally deleted within 12 months of our last contact.</td></tr>
       <tr><td>Server logs kept by our hosting and network providers</td><td>For the period each provider keeps them.</td></tr>
       <tr><td>Database backups</td><td>Deleted data also disappears from backups when those backups expire.</td></tr>
     </tbody>
   </table>
 </div>
-<p><strong>Six-year rule for employers:</strong> the Revenue Administration Act, 2016 (Act 915) requires taxpayers, including employers, to keep their records for at least six years. That duty rests with the client, so we provide an export before deleting a client's data. A client can download each payroll run's reports and exports at any time while the contract lasts.</p>
-<p>We keep data longer than this schedule only where the law requires it, or where it is needed for an open legal claim or investigation. We delete it once that need ends.</p>
+<p><strong>Six-year rule for employers:</strong> the Revenue Administration Act, 2016 (Act 915) requires taxpayers, including employers, to keep their records for at least six years. That duty rests with the client, so a client should keep its own copies and ask us for an export before its contract ends. A client can download each payroll run's reports and exports at any time while the contract lasts.</p>
+<p>We may keep data longer than this schedule where the law requires it, or where it is needed for an open legal claim or investigation.</p>
 
 <h2 id="security">6. Security measures</h2>
+<p>We take steps we consider reasonable for a service of this kind, including these:</p>
 <ul>
-  <li>Every connection is encrypted (HTTPS), and data is stored with a database provider that encrypts it at rest.</li>
-  <li>Passwords are stored as one-way hashes. Repeated failed sign-ins are slowed down and then blocked.</li>
-  <li>Each client sees only its own data, and each user only what their role allows.</li>
-  <li>Every upload, change, approval and send is recorded in an audit trail.</li>
+  <li>Connections to {{ app_brand_name }} use HTTPS. The database is hosted by Supabase, which says it encrypts stored data.</li>
+  <li>Passwords are stored as one-way hashes. Repeated failed sign-ins can be temporarily blocked.</li>
+  <li>{{ app_brand_name }} is built so that each client sees only its own data, and each user only what their role allows.</li>
+  <li>An audit trail records key actions, such as uploads, approvals and sends.</li>
   <li>Payslip links are signed with their own key, expire, and can be revoked.</li>
-  <li>Only the people who run {{ app_brand_name }} can access production systems, and only when their work requires it.</li>
+  <li>Access to production systems is limited to the people who run {{ app_brand_name }}.</li>
 </ul>
+<p>No system is perfectly secure, and these steps may change as the service changes.</p>
 
 <h2 id="requests">7. Requests from the people whose data we hold</h2>
-<p>An employee who wants to see, correct or delete their payroll data should ask their employer, which controls it. If the request comes to us, we pass it to the employer within 5 working days and help them answer it. For data we hold as controller, such as access requests and user accounts, email <a href="mailto:{{ support_email }}">{{ support_email }}</a>. We check who you are first and reply within 30 days.</p>
+<p>An employee who wants to see, correct or delete their payroll data should ask their employer, which controls it. If the request comes to us, we pass it to the employer promptly and help them answer it. For data we hold as controller, such as access requests and user accounts, email <a href="mailto:{{ support_email }}">{{ support_email }}</a>. We check who you are first and reply promptly, within the 40 days Act 843 allows.</p>
 
 <h2 id="breaches">8. Breaches</h2>
-<p>If we find that personal data in {{ app_brand_name }} may have been accessed by someone without permission, we act straight away to contain it. We then tell the affected clients without undue delay. As Act 843 requires, the Data Protection Commission and the people affected are told as soon as reasonably practicable. We record every breach, what was affected, and what we changed as a result.</p>
+<p>If we have reasonable grounds to believe that personal data in {{ app_brand_name }} has been accessed by someone without permission, we work to contain it and tell the affected clients. As Act 843 requires, the Data Protection Commission and the people affected are told as soon as reasonably practicable.</p>
 
 <h2 id="review">9. Review</h2>
-<p>We review this policy at least once a year, and whenever we change how {{ app_brand_name }} stores or shares data. The date at the top shows the last change. Questions: <a href="mailto:{{ support_email }}">{{ support_email }}</a>.</p>
+<p>We review this policy from time to time, and when we change how {{ app_brand_name }} stores or shares data. The date at the top shows the last change. Questions: <a href="mailto:{{ support_email }}">{{ support_email }}</a>.</p>
 {% endblock %}

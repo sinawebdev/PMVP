@@ -56,8 +56,44 @@ class LegalPageTests(unittest.TestCase):
                 _, html = get(path)
                 self.assertIn("90 days", html)
 
+    def test_company_address_is_shown_only_once_it_is_set(self):
+        _, html = get("/privacy")
+        self.assertNotIn(", at ", html)
+        _, html = get("/privacy", COMPANY_ADDRESS="12 Example Road, Koforidua")
+        self.assertIn("at 12 Example Road, Koforidua", html)
+
+    def test_pages_do_not_overstate_what_we_do(self):
+        # Each of these was on a live page and was not true, or could not be
+        # backed up. A claim comes back only with the code or paperwork behind it.
+        unbacked = (
+            "72 hours",
+            "every change",
+            "every upload",
+            "commit by contract",
+            "in line with the data protection principles",
+            "at least once a year",
+            "WhatsApp",
+            "dataprotection.org.gh",
+        )
+        for path in PAGES:
+            _, html = get(path)
+            for phrase in unbacked:
+                with self.subTest(path=path, phrase=phrase):
+                    self.assertNotIn(phrase, html.replace("Every", "every"))
+
 
 class LandingLinksTests(unittest.TestCase):
+    def test_landing_and_login_do_not_advertise_a_channel_that_is_not_live(self):
+        for path in ("/", "/login"):
+            with self.subTest(path=path):
+                _, html = get(path)
+                self.assertNotIn("WhatsApp", html)
+
+    def test_landing_does_not_claim_every_edit_is_logged(self):
+        _, html = get("/")
+        self.assertNotIn("Every upload, edit", html)
+
+
     def test_footer_links_to_every_legal_page(self):
         _, html = get("/")
         footer = html[html.index('<footer class="site-footer">'):]
