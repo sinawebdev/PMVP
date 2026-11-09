@@ -47,7 +47,7 @@ from .queue import (
     reschedule_distribution,
 )
 from .service import resolve_channel
-from .status import delivery_status_context
+from .status import delivery_status_context, status_fragment_response
 from app.paging import paginate
 from .tokens import resolve_payslip_item
 
@@ -203,8 +203,9 @@ def run_status(run_id):
 @role_required(*PAYROLL_ROLES)
 def run_status_fragment(run_id):
     run = db.get_or_404(PayrollRun, run_id)
-    return render_template(
-        "distribution/_status_fragment.html", **_run_status_context(run)
+    context = _run_status_context(run)
+    return status_fragment_response(
+        render_template("distribution/_status_fragment.html", **context), context["live"]
     )
 
 

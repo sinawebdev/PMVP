@@ -26,6 +26,9 @@ def load_sms_config(app, *, is_production, is_desktop):
     # nothing and charges nothing. Going live is a deliberate SASUSYNC_SANDBOX=false.
     cfg["SASUSYNC_SANDBOX"] = _flag("SASUSYNC_SANDBOX", "true")
     cfg["SASUSYNC_WEBHOOK_SECRET"] = os.getenv("SASUSYNC_WEBHOOK_SECRET")
+    # One run produces a burst of reports from one address, so this sits well
+    # above a payroll's worth per minute.
+    cfg["SASUSYNC_WEBHOOK_RATE_PER_MIN"] = int(os.getenv("SASUSYNC_WEBHOOK_RATE_PER_MIN", "600"))
     # Lifetime of the short link an SMS carries. The SMS text quotes this
     # number, so the wording and the real expiry cannot drift apart.
     cfg["PAYSLIP_SMS_LINK_DAYS"] = int(os.getenv("PAYSLIP_SMS_LINK_DAYS", "30"))

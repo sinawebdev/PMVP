@@ -86,6 +86,7 @@ def _mark_sent(delivery, provider, message_id=None, units=None):
         delivery.provider_message_id = message_id
         # A fresh send supersedes any prior receipt state.
         delivery.provider_status = None
+        delivery.provider_status_at = None
         delivery.delivered_at = None
 
 

@@ -65,12 +65,17 @@ def _units(data):
         return None
 
 
+def scrub_numbers(text):
+    """Provider text, safe to store and show: long digit runs blanked, and capped."""
+    return _NUMBER_RUN.sub("[number]", text)[:200]
+
+
 def _detail(body):
     data = _parse(body)
     text = data.get("detail") if data else None
     if not isinstance(text, str):
         text = body or ""
-    return _NUMBER_RUN.sub("[number]", text)[:200]
+    return scrub_numbers(text)
 
 
 def _nothing_was_sent(exc):

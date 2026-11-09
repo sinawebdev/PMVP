@@ -1,9 +1,9 @@
 {# Auto-refreshing portion of the operator run-status page.
 
    Rendered by the full page on first load and by
-   distribution.run_status_fragment while a batch is live; polling stops on its
-   own once the swapped-in markup no longer carries hx-trigger (the batch
-   reached a terminal state).
+   distribution.run_status_fragment while a batch is live. Once it isn't, the
+   route answers HX-Refresh: the page reloads once, the send controls outside
+   this region catch up, and the reloaded markup no longer carries hx-trigger.
 
    The markup itself is macros/distribution.html — the same macros the tenant
    portal's distribute page calls. Only `scope` differs. #}
@@ -11,7 +11,7 @@
 <div id="distribution-status"
      {% if live %}
      hx-get="{{ url_for('distribution.run_status_fragment', run_id=run.id) }}"
-     hx-trigger="every 3s [document.visibilityState === 'visible']"
+     hx-trigger="every 3s"
      hx-swap="outerHTML"
      {% endif %}>
 
@@ -21,7 +21,7 @@
         <span class="badge text-bg-{{ 'success' if sendable else 'secondary' }}">{{ run.status }}</span>
     </div>
     {{ ds.totals(rows, sent_count, failed_count, net_total=run.total_net_pay|cedis,
-                 unknown_count=unknown_count) }}
+                 unknown_count=unknown_count, delivered_count=delivered_count) }}
     {% if not sendable %}
     <div class="mini-note"><i class="bi bi-info-circle"></i> Payslips can be distributed once this payroll run is <strong>Approved</strong>.</div>
     {% endif %}

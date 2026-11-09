@@ -769,6 +769,9 @@ class PayslipDelivery(db.Model):
     # the later handset confirmation the provider posts back via webhook.
     provider_message_id = db.Column(db.String(128), index=True)
     provider_status = db.Column(db.String(32))
+    # When the report last applied happened, by the provider's clock. Reports can
+    # arrive out of order, so an older one is ignored.
+    provider_status_at = db.Column(db.DateTime)
     delivered_at = db.Column(db.DateTime)
     error = db.Column(db.String(512))
     attempts = db.Column(db.Integer, nullable=False, default=0)

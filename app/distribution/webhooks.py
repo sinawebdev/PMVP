@@ -12,7 +12,16 @@ import hmac
 
 from flask import Blueprint, current_app, request
 
-from .receipts import apply_receipts, parse_hubtel_status, parse_whatsapp_statuses
+from app import db
+from app.client_ip import client_ip, rate_limit_key
+
+from .receipts import (
+    apply_receipts,
+    apply_sasusync_event,
+    parse_hubtel_status,
+    parse_whatsapp_statuses,
+)
+from .request_limit import allow
 
 distribution_webhooks_bp = Blueprint(
     "distribution_webhooks", __name__, url_prefix="/distribution/webhooks"
@@ -77,3 +86,24 @@ def hubtel_callback():
     payload = request.get_json(silent=True) or {}
     applied = apply_receipts(parse_hubtel_status(payload))
     return {"applied": applied}, 200
+
+
+@distribution_webhooks_bp.route("/sasusync", methods=["POST"])
+def sasusync_callback():
+    """SasuSync delivery report. X-Webhook-Signature is the hex HMAC-SHA256 of the
+    raw body under the secret issued with the webhook URL. Anything verified gets a
+    200, including a report that changes nothing, because they repeat by design."""
+    secret = current_app.config.get("SASUSYNC_WEBHOOK_SECRET")
+    if not secret:
+        return "", 404  # disabled until configured
+    per_minute = current_app.config.get("SASUSYNC_WEBHOOK_RATE_PER_MIN", 600)
+    if not allow("sasusync-webhook", rate_limit_key(client_ip()), per_minute):
+        return "", 429
+    raw_body = request.get_data()
+    expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+    supplied = request.headers.get("X-Webhook-Signature", "")
+    if not hmac.compare_digest(supplied.encode(), expected.encode()):
+        return "", 401
+    delivery = apply_sasusync_event(request.get_json(force=True, silent=True))
+    db.session.commit()
+    return {"applied": 1 if delivery is not None else 0}, 200

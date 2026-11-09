@@ -447,6 +447,12 @@ it's "no contact" when there were none.
 - **Matching:** use `metadata.delivery_id` first. Otherwise match `data.message_id` against
   `provider_message_id`. Confirm in the sandbox whether `message_id` equals the send response's
   job ID, and record the answer in this file.
+  - **Answer (2026-11-09, from the API docs, not yet from a live report):** they differ. The status
+    endpoint lists a per-message `message_id` under one `task_id`, and the webhook example carries
+    only `message_id`, `recipient` and `status`. The send docs say metadata is echoed on webhooks
+    and that webhooks refer to `task_id`, but the webhook section shows neither. So matching also
+    tries `task_id`/`job_id`, then falls back to the one recent send to that number still awaiting
+    a report. The log line says which match was used; check it on the first live report.
 - **Ordering:** a new column `provider_status_at` holds the event timestamp. Apply an event only if
   it's newer than the stored one; an identical repeat does nothing.
 - **Outcomes:**
