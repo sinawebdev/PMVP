@@ -50,6 +50,7 @@ from app.excel_utils import (
     allowed_excel_file,
     calculate_status_breakdown,
     calculate_worker_stats,
+    employer_for_run,
     extract_payroll_sheet,
     export_bank_listing,
     export_gra_paye_schedule,
@@ -59,6 +60,7 @@ from app.excel_utils import (
     mapping_conflicts,
     match_client_sheet,
     normalize_company_key,
+    operator_employer_name,
     payroll_sheet_candidates,
     workbook_sheet_names,
 )
@@ -165,11 +167,14 @@ def load_import_session(import_id):
 
 
 def summarize_import(mapped_rows, validation):
-    invalid_rows = len(validation["per_row_warnings"])
+    # A row warning is a notice, not a failure. Confirming creates an item for
+    # every row, or refuses the whole upload (collect_blocking_errors), so no
+    # single row is ever left out. Counting warned rows as invalid made the
+    # preview say "1 row failed, 0 will import" and then import it.
     return {
         "total_rows": len(mapped_rows),
-        "valid_rows": max(len(mapped_rows) - invalid_rows, 0),
-        "invalid_rows": invalid_rows,
+        "valid_rows": len(mapped_rows),
+        "invalid_rows": 0,
         "gross_total": sum(float(row.get("gross_pay") or 0) for row in mapped_rows),
         "net_total": sum(float(row.get("net_pay") or 0) for row in mapped_rows),
         "paye_total": sum(float(row.get("paye") or 0) for row in mapped_rows),
@@ -681,10 +686,16 @@ def preview(import_id):
     payload = load_import_session(import_id)
     client = None
     unregistered, no_contact = [], []
+    blocked_by = []
     if payload.get("mode") != "multi_client":
         client = db.get_or_404(ClientCompany, payload["client_company_id"])
         unregistered, no_contact = crossref_employee_records(
             client.id, payload.get("mapped_rows", [])
+        )
+        # The same hard-stops confirm enforces, shown before the click, so the
+        # page never says rows will import when the upload is going to be refused.
+        blocked_by = mapping_conflicts(payload.get("mapping") or {}) + collect_blocking_errors(
+            payload.get("mapped_rows", []), payload.get("detected_company_name", "")
         )
     return render_template(
         "payroll_preview.html",
@@ -693,6 +704,7 @@ def preview(import_id):
         client=client,
         unregistered=unregistered,
         no_contact=no_contact,
+        blocked_by=blocked_by,
     )
 
 
@@ -2097,11 +2109,12 @@ def run_reports(run_id):
         payroll_run=run,
         bank_groups=bank_groups,
         bank_grand_total=bank_grand_total,
-        # The bureau is the employer of record on operator-side exports; the
-        # tenant's own copy carries the tenant's name instead (see
-        # app/client/reports.py::_employer_name). Same engine, different
-        # letterhead, and that difference is deliberate.
-        employer_name=current_app.config["APP_BRAND_NAME"],
+        # The bureau, where there is one, is the employer of record on
+        # operator-side exports; the tenant's own copy carries the tenant's name
+        # instead (see app/client/reports.py::_employer_name). Same engine,
+        # different letterhead, and that difference is deliberate. This preview
+        # must name whoever the download below will name.
+        employer_name=employer_for_run(run),
         has_rows=run.item_count > 0,
     )
 
@@ -2146,11 +2159,14 @@ def export_wages_sheet_route(run_id):
 def export_gra_paye_route(run_id):
     """GRA Employer's Monthly Tax Deductions Schedule (P.A.Y.E.) for the run."""
     payroll_run = db.get_or_404(PayrollRun, run_id)
+    # The TIN and tax office are the bureau's, so they go only on a form that
+    # names the bureau. Without one they stay blank for the firm to fill in.
+    has_bureau = bool(operator_employer_name())
     file_path = export_gra_paye_schedule(
         payroll_run,
         current_app.config["EXPORT_FOLDER"],
-        employer_tin=os.getenv("CHRISNAT_EMPLOYER_TIN", ""),
-        tax_office=os.getenv("CHRISNAT_TAX_OFFICE", ""),
+        employer_tin=os.getenv("CHRISNAT_EMPLOYER_TIN", "") if has_bureau else "",
+        tax_office=os.getenv("CHRISNAT_TAX_OFFICE", "") if has_bureau else "",
     )
     record_audit("GRA PAYE schedule export", payroll_run, "GRA PAYE schedule generated.")
     db.session.commit()

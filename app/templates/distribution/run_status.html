@@ -24,8 +24,8 @@
             <select class="form-select form-select-sm" name="channel">
                 <option value="auto" selected>Auto (per worker)</option>
                 {% if "sms" in channels %}<option value="sms">SMS</option>{% endif %}
-                <option value="whatsapp">WhatsApp</option>
-                <option value="email">Email</option>
+                {% if "whatsapp" in channels %}<option value="whatsapp">WhatsApp</option>{% endif %}
+                {% if "email" in channels %}<option value="email">Email</option>{% endif %}
             </select>
         </div>
         <div>

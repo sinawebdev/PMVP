@@ -11,7 +11,7 @@ reaches it at all.
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user
 
-from app.distribution.channels import SMS_BLOCKED_MESSAGE, sms_refused
+from app.distribution.channels import channel_refused, refusal_message
 from app.distribution.confirm import CONFIRMED_CHANNELS, confirm_context
 from app.distribution.status import delivery_status_context
 from app.models import CHANNEL_AUTO, PayrollRun
@@ -38,8 +38,8 @@ def distribute_confirm(run_id):
         return redirect(back)
     if channel not in CONFIRMED_CHANNELS or action not in _SEND_ENDPOINTS:
         return redirect(back)
-    if sms_refused(channel):
-        flash(SMS_BLOCKED_MESSAGE, "warning")
+    if channel_refused(channel):
+        flash(refusal_message(channel), "warning")
         return redirect(back)
     confirm = confirm_context(
         run, channel, action, request.args,

@@ -80,8 +80,8 @@
    so the one figure that decides whether to confirm was styled exactly like
    the twelve that don't. #}
 
-{% set invalid = payload.import_summary.invalid_rows or 0 %}
-{% set blocking = invalid or (client and unregistered) or (client and no_contact) or payload.validation.summary_warnings %}
+{% set warned = payload.validation.per_row_warnings|length %}
+{% set blocking = blocked_by or warned or (client and unregistered) or (client and no_contact) or payload.validation.summary_warnings %}
 
 {% if blocking %}
 <section class="panel action-required mb-3">
@@ -90,11 +90,14 @@
         <span>Nothing is written until you confirm</span>
     </div>
     <ul class="mb-0 ps-3">
-        {% if invalid %}
+        {% for message in blocked_by %}
+        <li class="mb-2"><strong>{{ message }}</strong> Fix this in the workbook and upload it again.</li>
+        {% endfor %}
+        {% if warned %}
         <li class="mb-2">
-            <strong>{{ invalid }} row{{ "" if invalid == 1 else "s" }} failed validation</strong> and will not produce
-            payroll items. {{ payload.import_summary.valid_rows }} row{{ "" if payload.import_summary.valid_rows == 1 else "s" }} will import.
-            <a href="{{ url_for('payroll.error_report', import_id=import_id) }}">Download the error report</a>
+            <strong>{{ warned }} row{{ " has" if warned == 1 else "s have" }} warnings.</strong>
+            {% if not blocked_by %}{{ "It" if warned == 1 else "They" }} will still import, so check {{ "it" if warned == 1 else "them" }} before you confirm.{% endif %}
+            <a href="{{ url_for('payroll.error_report', import_id=import_id) }}">Download the report</a>
             to see which rows and why.
         </li>
         {% endif %}
@@ -121,7 +124,7 @@
 <div class="mini-note mb-3"><i class="bi bi-check-circle"></i> Nothing blocking — every row read from this workbook validated.</div>
 {% endif %}
 
-{{ ip.figures(payload, client.name, subtitle=payload.month ~ ' ' ~ payload.year) }}
+{{ ip.figures(payload, client.name, subtitle=payload.month ~ ' ' ~ payload.year, blocked=blocked_by) }}
 {{ ip.rows_vs_workers(payload) }}
 
 <form method="post" action="{{ url_for('payroll.confirm', import_id=import_id) }}" class="mt-3">

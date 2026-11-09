@@ -36,14 +36,14 @@
       </form>
       {% endif %}
     {% else %}
-      <p class="sub">Send each worker a link to their own payslip over SMS, WhatsApp, or email. Delivery is logged per worker below; already-sent workers are skipped, so it is safe to run again.</p>
+      <p class="sub">Send each worker a link to their own payslip. Delivery is logged per worker below; already-sent workers are skipped, so it is safe to run again.</p>
       <form method="post" action="{{ url_for('client.distribute_send', run_id=run.id) }}" class="formrow">
         <input type="hidden" name="nonce" value="{{ nonce }}" />
         <div>
           <label for="channel">Channel</label>
           <select id="channel" name="channel">
             <option value="auto">Auto (best contact per worker)</option>
-            {% for ch in channels %}<option value="{{ ch }}">{{ ch|capitalize }}</option>{% endfor %}
+            {% for ch in channels %}<option value="{{ ch }}">{{ "SMS" if ch == "sms" else ("WhatsApp" if ch == "whatsapp" else ch|capitalize) }}</option>{% endfor %}
           </select>
         </div>
         <button class="btn primary" type="submit">Send payslips</button>

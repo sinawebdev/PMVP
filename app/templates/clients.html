@@ -96,9 +96,9 @@
                page. Monospace is kept because a company code is a string you
                compare character by character. #}
             <td>{% if client.company_code %}<span class="dt-code">{{ client.company_code }}</span>{% else %}<span class="dt-muted">—</span>{% endif %}</td>
-            <td>{{ client.contact_person }}</td>
-            <td>{{ client.email }}</td>
-            <td>{{ client.location }}</td>
+            <td>{{ client.contact_person or "—" }}</td>
+            <td>{{ client.email or "—" }}</td>
+            <td>{{ client.location or "—" }}</td>
             <td>
                 {# Red for Inactive is deliberate and pinned by
                    test_mvp.test_inactive_client_status_is_red — an inactive

@@ -635,11 +635,11 @@ def _do_client_send(run, only_failed):
     if channel not in _VALID_SEND_CHANNELS:
         flash(f"Unknown channel: {channel}", "warning")
         return redirect(url_for("client.distribute", run_id=run.id))
-    from app.distribution.channels import SMS_BLOCKED_MESSAGE, sms_refused
+    from app.distribution.channels import channel_refused, refusal_message
     from app.distribution.confirm import confirm_url, needs_confirm
 
-    if sms_refused(channel):
-        flash(SMS_BLOCKED_MESSAGE, "warning")
+    if channel_refused(channel):
+        flash(refusal_message(channel), "warning")
         return redirect(url_for("client.distribute", run_id=run.id))
     if needs_confirm(channel, request.form):  # SMS / auto: show who it reaches first
         return redirect(confirm_url("client.distribute_confirm", run, channel,

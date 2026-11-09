@@ -463,22 +463,26 @@ class AppsScriptEmailSender(Sender):
         return SendResult(True, self.provider)
 
 
+LIVE_BACKENDS = {"sms": {"hubtel", "sasusync"}, "whatsapp": {"cloud"}, "email": {"smtp", "apps_script"}}
+
+
+def channel_is_live(channel):
+    """True when ``channel`` has a real provider behind it, not the console one."""
+    backend = current_app.config.get(f"{channel.upper()}_BACKEND")
+    return backend in LIVE_BACKENDS.get(channel, ())
+
+
 def simulated_channels():
-    """The channels still on their console backend, i.e. logged but never delivered.
+    """The channels on offer that are logged but never delivered.
 
     A console send returns ok=True, so the delivery is recorded `sent` and the
     status screens show a green badge and a 100% success rate for a payslip that
     only ever reached a log line. Until a real provider is configured, the UI has
     to say that plainly rather than let the badge imply a delivery happened —
-    callers use this to render that disclosure. Empty once every channel is live.
+    callers use this to render that disclosure. Empty once any channel is live,
+    because :func:`sendable_channels` then stops offering the console ones.
     """
-    cfg = current_app.config
-    live = {"sms": {"hubtel", "sasusync"}, "whatsapp": {"cloud"}, "email": {"smtp", "apps_script"}}
-    return [
-        channel
-        for channel in sendable_channels()
-        if cfg.get(f"{channel.upper()}_BACKEND") not in live[channel]
-    ]
+    return [channel for channel in sendable_channels() if not channel_is_live(channel)]
 
 
 def delivery_is_simulated():
@@ -504,19 +508,39 @@ def sms_blocked():
 SMS_BLOCKED_MESSAGE = "SMS isn't available in the desktop app. Choose another channel."
 
 
-def sms_refused(channel):
-    """True when an explicit send on ``channel`` must be refused at enqueue."""
-    return channel == "sms" and sms_blocked()
+def channel_refused(channel):
+    """True when an explicit send on ``channel`` must be refused at enqueue:
+    this deployment does not offer it. "auto" is always allowed, because routing
+    only ever picks from :func:`sendable_channels`."""
+    from app.models import CHANNEL_AUTO
+
+    return channel != CHANNEL_AUTO and channel not in sendable_channels()
+
+
+def refusal_message(channel):
+    """What to tell someone whose send :func:`channel_refused` stopped."""
+    if channel == "sms" and sms_blocked():
+        return SMS_BLOCKED_MESSAGE
+    label = CHANNEL_LABELS.get(channel, channel)
+    return f"{label[:1].upper()}{label[1:]} isn't connected yet. Choose another channel."
 
 
 def sendable_channels():
     """The delivery channels this deployment may offer and route to, in
-    routing order. Everything except SMS on a desktop install."""
+    routing order. Everything except SMS on a desktop install.
+
+    Once any channel has a real provider, the ones without are left out. A
+    console channel beside live ones would record `sent` for a payslip that went
+    nowhere, and Auto would route workers into it. With nothing connected (local
+    development, or a fresh install) every channel stays on offer, under the
+    "not connected yet" notice."""
     from app.models import CHANNEL_SMS, DELIVERY_CHANNELS
 
+    channels = DELIVERY_CHANNELS
     if sms_blocked():
-        return tuple(c for c in DELIVERY_CHANNELS if c != CHANNEL_SMS)
-    return DELIVERY_CHANNELS
+        channels = tuple(c for c in channels if c != CHANNEL_SMS)
+    live = tuple(c for c in channels if channel_is_live(c))
+    return live or channels
 
 
 def get_sender(channel: str) -> Sender:
