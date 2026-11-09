@@ -33,6 +33,14 @@ class LegalPageTests(unittest.TestCase):
                 self.assertIn(f"<h1>{title}</h1>", html)
                 self.assertIn("Sinaforte Technologies", html)
 
+    def test_each_page_names_itself_as_canonical_on_the_live_domain(self):
+        for path in PAGES:
+            with self.subTest(path=path):
+                _, html = get(path)
+                self.assertIn(
+                    f'<link rel="canonical" href="https://payrollagh.com{path}">', html
+                )
+
     def test_each_page_links_to_the_others(self):
         for path in PAGES:
             with self.subTest(path=path):
