@@ -154,6 +154,15 @@ class SearchAndSharingTests(unittest.TestCase):
         self.assertNotIn("Disallow: /\n", body)
         self.assertIn(f"Sitemap: {self.SITE}/sitemap.xml", body)
 
+    def test_login_is_noindex_but_not_blocked_and_landing_stays_indexable(self):
+        # Google has to be able to fetch /login to see the tag, so it must stay
+        # out of robots.txt: a Disallow would hide the noindex from the crawler.
+        login = self.client.get("/login").get_data(as_text=True)
+        head = login.split("</head>")[0]
+        self.assertIn('<meta name="robots" content="noindex">', head)
+        self.assertNotIn("/login", self.client.get("/robots.txt").get_data(as_text=True))
+        self.assertNotIn("noindex", self.html)
+
     def test_sitemap_lists_the_landing_page_on_the_live_domain(self):
         import xml.etree.ElementTree as ET
 

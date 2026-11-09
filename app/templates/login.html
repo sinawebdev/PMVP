@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Log in · {{ app_name }}{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">{% endblock %}
+{% block head %}<meta name="robots" content="noindex">
+<link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">{% endblock %}
 {% block public_content %}
 {% from 'macros/brand.html' import logo, mark_watermark with context %}
 <main class="auth-page">{{ mark_watermark() }}
