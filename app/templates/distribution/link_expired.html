@@ -17,7 +17,7 @@
         .wrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
             box-shadow: inset 0 4px 0 var(--brand), var(--shadow-sm); display: block; margin: 48px auto;
             max-width: 440px; padding: 36px 24px 32px; text-align: center; }
-        .brand-mark { border-radius: var(--radius); box-shadow: none; font-size: 1.3rem; height: 56px; width: 56px; }
+        .expired-logo { display: block; height: auto; margin: 0 auto; max-width: 100%; }
         .wrap h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; margin: 0 0 10px; }
         .wrap p { color: var(--ink-soft); line-height: 1.6; margin: 0; }
         .wrap .status-word { color: var(--warn); font-size: 13px; font-weight: 700; letter-spacing: .08em;
@@ -30,7 +30,7 @@
 </head>
 <body class="brand-shell-bg">
 <main class="wrap">
-    <div class="brand-mark" aria-hidden="true">{{ app_brand_mark }}</div>
+    <img class="expired-logo" src="{{ url_for('static', filename='img/payrolla-logo.svg') }}" alt="{{ app_brand_name }}" width="148" height="40">
     <p class="status-word">Link unavailable</p>
     <h1>This payslip link is no longer valid</h1>
     <p>

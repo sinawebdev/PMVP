@@ -36,7 +36,7 @@ from app.models import (
 from app.payroll_status import SENDABLE_STATUSES
 from app.pdf_service import generate_payslip_pdf
 
-from .channels import SMS_BLOCKED_MESSAGE, sms_refused
+from .channels import channel_refused, refusal_message, sendable_channels
 from .confirm import confirm_url, needs_confirm
 from .idempotency import replay_or_run
 from .links import resolve_payslip_link
@@ -218,8 +218,8 @@ def _do_send(run_id, only_failed):
     if channel not in VALID_SEND_CHANNELS:
         flash(f"Unknown channel: {channel}", "danger")
         return redirect(url_for("distribution.run_status", run_id=run.id))
-    if sms_refused(channel):
-        flash(SMS_BLOCKED_MESSAGE, "warning")
+    if channel_refused(channel):
+        flash(refusal_message(channel), "warning")
         return redirect(url_for("distribution.run_status", run_id=run.id))
     if needs_confirm(channel, request.form):  # SMS / auto: show who it reaches first
         return redirect(confirm_url("distribution.confirm_send", run, channel,
@@ -300,8 +300,8 @@ def schedule(run_id):
     if channel not in VALID_SEND_CHANNELS:
         flash(f"Unknown channel: {channel}", "danger")
         return redirect(url_for("distribution.run_status", run_id=run.id))
-    if sms_refused(channel):
-        flash(SMS_BLOCKED_MESSAGE, "warning")
+    if channel_refused(channel):
+        flash(refusal_message(channel), "warning")
         return redirect(url_for("distribution.run_status", run_id=run.id))
     when = _parse_schedule(request.form.get("scheduled_for"))
     if when is None or when <= datetime.now(timezone.utc):
@@ -344,6 +344,8 @@ def set_preferred_channel(item_id):
     channel = request.form.get("preferred_channel") or None
     if channel and channel not in DELIVERY_CHANNELS:
         flash(f"Unknown channel: {channel}", "danger")
+    elif channel and channel not in sendable_channels():
+        flash(refusal_message(channel), "warning")
     elif item.employee_id:
         employee = db.session.get(Employee, item.employee_id)
         employee.preferred_channel = channel

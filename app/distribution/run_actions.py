@@ -20,7 +20,7 @@ from app.payroll_status import SENDABLE_STATUSES
 from app.permissions import PAYROLL_ROLES
 
 from . import distribution_bp
-from .channels import SMS_BLOCKED_MESSAGE, sms_refused
+from .channels import channel_refused, refusal_message
 from .confirm import CONFIRM_ACTIONS, CONFIRMED_CHANNELS, bulk_confirm_context, confirm_context
 from .phones import mask_msisdn
 from .settle import SETTLE_OUTCOMES, SETTLE_SENT, settle_unknown
@@ -60,8 +60,8 @@ def confirm_send(run_id):
         return redirect(back)
     if channel not in CONFIRMED_CHANNELS or action not in CONFIRM_ACTIONS:
         return redirect(back)
-    if sms_refused(channel):
-        flash(SMS_BLOCKED_MESSAGE, "warning")
+    if channel_refused(channel):
+        flash(refusal_message(channel), "warning")
         return redirect(back)
     confirm = confirm_context(
         run, channel, action, request.args,

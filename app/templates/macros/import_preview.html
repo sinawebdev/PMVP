@@ -24,16 +24,15 @@
    `total_rows` is what the importer READ from the file; `total_unique_workers`
    is how many distinct people it recognised in them. Presented as two of
    thirteen equal stat tiles, they invited being read as the same number twice. #}
-{% macro figures(payload, title, subtitle="") %}
-{% set invalid = payload.import_summary.invalid_rows or 0 %}
+{% macro figures(payload, title, subtitle="", blocked=false) %}
 {{ ui.decision_header(
      title,
      subtitle=subtitle,
      figures=[
        {"label": "Rows read from file", "value": payload.worker_stats.total_rows},
        {"label": "Workers recognised", "value": payload.worker_stats.total_unique_workers},
-       {"label": "Rows importing", "value": payload.import_summary.valid_rows},
-       {"label": "Rows failing", "value": invalid},
+       {"label": "Rows importing", "value": 0 if blocked else payload.import_summary.total_rows},
+       {"label": "Rows with warnings", "value": payload.validation.per_row_warnings|length},
        {"label": "Total net pay", "value": payload.import_summary.net_total|cedis},
      ]) }}
 {% endmacro %}
@@ -78,7 +77,7 @@
 {% macro row_warnings(per_row_warnings, error_report_href=none) %}
 {% if per_row_warnings %}
 {% if error_report_href %}
-<p class="ip-note"><a href="{{ error_report_href }}">Download the error report</a> to work through these in the workbook itself.</p>
+<p class="ip-note"><a href="{{ error_report_href }}">Download the report</a> to work through these in the workbook itself.</p>
 {% endif %}
 <div class="dt-wrap">
   <table class="dt">

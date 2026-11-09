@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+from flask import current_app, has_app_context
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 
@@ -12,6 +13,35 @@ from app.csv_safety import escape_formula
 
 
 logger = logging.getLogger(__name__)
+
+
+def operator_employer_name():
+    """The bureau this deployment files for, or "" if it has none (a desktop
+    install is a firm running its own payroll). See OPERATOR_EMPLOYER_NAME."""
+    if not has_app_context():
+        return ""
+    return (current_app.config.get("OPERATOR_EMPLOYER_NAME") or "").strip()
+
+
+def employer_for_run(payroll_run):
+    """Who an operator-side export names as employer: the bureau if there is one,
+    otherwise the run's own company. The client portal always passes the client's
+    own name instead (app/client/reports.py::_employer_name)."""
+    company = payroll_run.client_company
+    return operator_employer_name() or (company.name if company else "Client")
+
+
+def _report_org_name():
+    """The letterhead on reports that span several companies."""
+    if operator_employer_name():
+        return operator_employer_name()
+    return current_app.config.get("APP_BRAND_NAME", "Payrolla") if has_app_context() else "Payrolla"
+
+
+def _report_filename(name):
+    """A cross-company report's filename, prefixed with whoever it is for."""
+    prefix = operator_employer_name().split(" ")[0] or "Payrolla"
+    return f"{prefix}_{name}"
 
 
 COLUMN_ALIASES = {
@@ -781,11 +811,12 @@ def safe_sheet_title(title):
     return cleaned or "Sheet"
 
 
-def create_workbook(report_title, org_name="Chrisnat Limited"):
+def create_workbook(report_title, org_name=None):
     """Start a report workbook. ``org_name`` is the letterhead written to A1 —
-    defaults to the platform bureau for operator/cross-client reports; the client
-    portal passes the tenant's own company so a client's export carries THEIR
-    name, not the bureau's."""
+    defaults to the bureau, if there is one, for operator/cross-client reports;
+    the client portal passes the tenant's own company so a client's export
+    carries THEIR name, not the bureau's."""
+    org_name = org_name or _report_org_name()
     workbook = Workbook()
     sheet = workbook.active
     # Only the sheet tab name is constrained by Excel; the A2 header cell keeps
@@ -843,13 +874,13 @@ def export_employees(employees, export_folder):
         for employee in employees
     ]
     write_table(sheet, 5, headers, rows)
-    return save_workbook(workbook, export_folder, "Chrisnat_Employee_List.xlsx")
+    return save_workbook(workbook, export_folder, _report_filename("Employee_List.xlsx"))
 
 
 def export_payroll_run(payroll_run, export_folder, org_name=None):
     client_name = payroll_run.client_company.name if payroll_run.client_company else "Client"
     title = f"{client_name} Payroll {payroll_run.month} {payroll_run.year}"
-    workbook, sheet = create_workbook(title, org_name=org_name or "Chrisnat Limited")
+    workbook, sheet = create_workbook(title, org_name=org_name or employer_for_run(payroll_run))
     headers = [
         "Staff ID",
         "Name",
@@ -927,7 +958,7 @@ def export_payment_vouchers(vouchers, export_folder):
         for voucher in vouchers
     ]
     write_table(sheet, 5, headers, rows)
-    return save_workbook(workbook, export_folder, "Chrisnat_Payment_Vouchers.xlsx")
+    return save_workbook(workbook, export_folder, _report_filename("Payment_Vouchers.xlsx"))
 
 
 def export_remittances(remittances, export_folder):
@@ -946,7 +977,7 @@ def export_remittances(remittances, export_folder):
         for remittance in remittances
     ]
     write_table(sheet, 5, headers, rows)
-    return save_workbook(workbook, export_folder, "Chrisnat_Remittance_Summary.xlsx")
+    return save_workbook(workbook, export_folder, _report_filename("Remittance_Summary.xlsx"))
 
 
 def export_expenses(expenses, export_folder):
@@ -967,7 +998,7 @@ def export_expenses(expenses, export_folder):
     total_row = len(rows) + 7
     sheet.cell(row=total_row, column=1, value="Total").font = Font(bold=True)
     sheet.cell(row=total_row, column=4, value=sum(expense.amount for expense in expenses))
-    return save_workbook(workbook, export_folder, "Chrisnat_Expenses.xlsx")
+    return save_workbook(workbook, export_folder, _report_filename("Expenses.xlsx"))
 
 
 def export_monthly_payroll_summary(payroll_runs, export_folder, month, year):
@@ -1009,7 +1040,7 @@ def export_monthly_payroll_summary(payroll_runs, export_folder, month, year):
     return save_workbook(
         workbook,
         export_folder,
-        f"Chrisnat_Monthly_Payroll_{slug_filename(month)}_{year}.xlsx",
+        _report_filename(f"Monthly_Payroll_{slug_filename(month)}_{year}.xlsx"),
     )
 
 
@@ -1068,7 +1099,7 @@ def export_bank_listing(payroll_run, export_folder, org_name=None):
     source workbooks."""
     client_name = payroll_run.client_company.name if payroll_run.client_company else "Client"
     title = f"{client_name} Bank Listing {payroll_run.month} {payroll_run.year}"
-    workbook, sheet = create_workbook(title, org_name=org_name or "Chrisnat Limited")
+    workbook, sheet = create_workbook(title, org_name=org_name or employer_for_run(payroll_run))
 
     groups, grand_total = bank_listing_groups(payroll_run)
 
@@ -1128,7 +1159,7 @@ def export_wages_sheet(payroll_run, export_folder):
     are calculator output persisted at Calculate/confirm time."""
     client_name = payroll_run.client_company.name if payroll_run.client_company else "Client"
     title = f"{client_name} Wages Sheet {payroll_run.month} {payroll_run.year}"
-    workbook, sheet = create_workbook(title)
+    workbook, sheet = create_workbook(title, org_name=employer_for_run(payroll_run))
     headers = [
         "Staff ID",
         "Name",
@@ -1290,8 +1321,16 @@ def _place_gra_logo(sheet):
     sheet.add_image(logo)
 
 
+def _gra_employer_name(payroll_run):
+    """Name of Employer on a GRA form when the caller doesn't pass one. The bureau
+    is written in capitals, as on the form it files; a company's own name is kept
+    as that company typed it."""
+    bureau = operator_employer_name()
+    return bureau.upper() if bureau else employer_for_run(payroll_run)
+
+
 def _fill_gra_skeleton_workbook(
-    payroll_run, employer_tin, tax_office, employer_name="CHRISNAT LIMITED"
+    payroll_run, employer_tin, tax_office, employer_name=None
 ):
     """Load the official GRA workbook and pour this run's already-computed
     figures into cells A-AB, one worker per row from row 18. GRA's own formula
@@ -1307,7 +1346,7 @@ def _fill_gra_skeleton_workbook(
     _place_gra_logo(sheet)
 
     # --- header block (write to the top-left cell of each merged range) ---
-    sheet["D9"] = escape_formula(employer_name)            # NAME OF EMPLOYER
+    sheet["D9"] = escape_formula(employer_name or _gra_employer_name(payroll_run))  # NAME OF EMPLOYER
     sheet["D11"] = escape_formula(employer_tin or "")      # EMPLOYER'S TIN
     sheet["U9"] = _gra_month_code(payroll_run.month, payroll_run.year)
     if tax_office:
@@ -1405,9 +1444,10 @@ def export_gra_paye_schedule(
     falls back to the summary layout below so exports never hard-fail.
 
     ``employer_name`` is the Name of Employer on the form — defaults to the
-    platform bureau for operator exports; the client portal passes the tenant's
-    own company so the filing names the client as employer, not the bureau."""
-    employer = employer_name or "CHRISNAT LIMITED"
+    bureau for operator exports where there is one, otherwise the run's own
+    company; the client portal passes the tenant's own company so the filing
+    names the client as employer, not the bureau."""
+    employer = employer_name or _gra_employer_name(payroll_run)
     if GRA_TEMPLATE_PATH.exists():
         client_name = (
             payroll_run.client_company.name if payroll_run.client_company else "Client"
@@ -1426,14 +1466,15 @@ def export_gra_paye_schedule(
 
 
 def _export_gra_summary_layout(
-    payroll_run, export_folder, employer_tin="", tax_office="", employer_name="CHRISNAT LIMITED"
+    payroll_run, export_folder, employer_tin="", tax_office="", employer_name=None
 ):
     """Fallback summary layout (used only when the GRA template asset is absent).
-    ``employer_name`` is the Name of Employer on the schedule (the bureau for
-    operator exports, the tenant's own company for client-portal exports).
+    ``employer_name`` is the Name of Employer on the schedule (see
+    :func:`export_gra_paye_schedule`).
     Columns with no backing data yet (TIN where unset, Non-Resident, Secondary
     Employment, benefit elements, Severance, Remark) are left blank for
     hand-filling in Excel."""
+    employer_name = employer_name or _gra_employer_name(payroll_run)
     client_name = payroll_run.client_company.name if payroll_run.client_company else "Client"
     workbook, sheet = create_workbook(
         f"GRA PAYE {payroll_run.month} {payroll_run.year}", org_name=employer_name

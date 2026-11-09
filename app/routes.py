@@ -626,14 +626,16 @@ def client_form(client=None):
     values = {
         "name": client.name if client else "",
         "company_code": client.company_code if client else "",
-        "contact_person": client.contact_person if client else "",
-        "email": client.email if client else "",
-        "phone": client.phone if client else "",
-        "address": client.address if client else "",
-        "location": client.location if client else "",
-        "service_type": client.service_type if client else "",
+        # A blank column is None, and {{ None }} renders as the word "None": the
+        # email then failed validation, and the rest saved as the text "None".
+        "contact_person": (client.contact_person or "") if client else "",
+        "email": (client.email or "") if client else "",
+        "phone": (client.phone or "") if client else "",
+        "address": (client.address or "") if client else "",
+        "location": (client.location or "") if client else "",
+        "service_type": (client.service_type or "") if client else "",
         "status": client.status if client else "Active",
-        "notes": client.notes if client else "",
+        "notes": (client.notes or "") if client else "",
     }
     if source is not None:
         values.update(

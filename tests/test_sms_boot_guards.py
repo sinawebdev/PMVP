@@ -151,6 +151,12 @@ class DesktopGuardTests(_EnvCase):
         self.desktop(SMS_BACKEND="console")
         self.assertTrue(create_app().config["IS_DESKTOP"])
 
+    def test_desktop_has_no_bureau_so_exports_name_the_firms_own_company(self):
+        # The default used to be Chrisnat, which put another company's name on
+        # every desktop trial business's GRA schedule.
+        self.desktop(SMS_BACKEND="console")
+        self.assertEqual(create_app().config["OPERATOR_EMPLOYER_NAME"], "")
+
 
 class DesktopBlocksSmsTests(unittest.TestCase):
     """The runtime half: no SMS option, no SMS routing, no SMS enqueue. Booted

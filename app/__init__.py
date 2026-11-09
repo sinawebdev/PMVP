@@ -321,6 +321,13 @@ def create_app():
         "APP_TAGLINE", "Modern payroll, compliance & workforce management"
     )
     app.config["COMPANY_NAME"] = os.getenv("COMPANY_NAME", "Sinaforte Technologies")
+    # The bureau named as employer on operator-side exports. The live site is run
+    # by Chrisnat, the employer of record for its outsourced workers. A desktop
+    # install is a firm doing its own payroll, so it has no bureau and its exports
+    # name the run's own company. Set this blank to do the same on the web.
+    app.config["OPERATOR_EMPLOYER_NAME"] = os.getenv(
+        "OPERATOR_EMPLOYER_NAME", "" if is_desktop else "Chrisnat Limited"
+    ).strip()
     # The address the privacy policy and terms give for questions and data
     # requests, so it must be a mailbox someone reads.
     app.config["SUPPORT_EMAIL"] = os.getenv("SUPPORT_EMAIL", "support@payrollagh.com")

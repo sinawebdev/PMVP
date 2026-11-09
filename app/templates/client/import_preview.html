@@ -16,19 +16,19 @@
      used to open on a six-tile stat grid with the blocking list above it and
      the roster notes four sections below, so "can I confirm this?" was answered
      in three places at three different weights. #}
-  {% set invalid = payload.import_summary.invalid_rows or 0 %}
-  {% if blocking or invalid or unregistered or no_contact or payload.validation.summary_warnings or period_exists %}
+  {% set warned = payload.validation.per_row_warnings|length %}
+  {% if blocking or warned or unregistered or no_contact or payload.validation.summary_warnings or period_exists %}
   <div class="panel ip-blockers">
     <h2>Check before you confirm</h2>
     <ul>
       {% for message in blocking %}
       <li><strong>{{ message }}</strong> — fix this in your workbook and upload it again.</li>
       {% endfor %}
-      {% if invalid %}
+      {% if warned %}
       <li>
-        <strong>{{ invalid }} row{{ "" if invalid == 1 else "s" }} failed validation</strong> and will not
-        produce payslips. {{ payload.import_summary.valid_rows }} row{{ "" if payload.import_summary.valid_rows == 1 else "s" }} will import.
-        <a href="{{ url_for('client.import_errors', import_id=batch.id) }}">Download the error report</a>.
+        <strong>{{ warned }} row{{ " has" if warned == 1 else "s have" }} warnings.</strong>
+        {% if not blocking %}{{ "It" if warned == 1 else "They" }} will still import, so check {{ "it" if warned == 1 else "them" }} before you confirm.{% endif %}
+        <a href="{{ url_for('client.import_errors', import_id=batch.id) }}">Download the report</a>.
       </li>
       {% endif %}
       {% if unregistered %}
@@ -59,7 +59,7 @@
   {% endif %}
 
   {{ ip.figures(payload, batch.original_filename,
-                subtitle=payload.month ~ " " ~ payload.year) }}
+                subtitle=payload.month ~ " " ~ payload.year, blocked=blocking) }}
   {{ ip.rows_vs_workers(payload) }}
 
   <div class="toolbar end">
