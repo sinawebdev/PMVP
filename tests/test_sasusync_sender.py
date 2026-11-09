@@ -173,6 +173,17 @@ class RequestShapeTests(_SenderCase):
             "metadata": {"delivery_id": 7},
         })
 
+    def test_the_real_request_carries_a_user_agent_cloudflare_accepts(self):
+        # Cloudflare answers urllib's default "Python-urllib" with 403, code 1010,
+        # which every mocked _http_post above would hide. Found on a live send.
+        response = mock.MagicMock(status=200)
+        response.__enter__.return_value = response
+        response.read.return_value = OK_BODY.encode()
+        with mock.patch("urllib.request.urlopen", return_value=response) as urlopen:
+            result = SasuSyncSmsSender().send(self._message())
+        self.assertTrue(result.ok)
+        self.assertEqual(urlopen.call_args.args[0].get_header("User-agent"), "Payrolla/1.0")
+
     def test_live_endpoint_when_the_sandbox_is_off(self):
         self.app.config["SASUSYNC_SANDBOX"] = False
         _, post = self._send_with_status(200, OK_BODY)

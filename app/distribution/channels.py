@@ -163,6 +163,9 @@ def _extract_message_id(body):
 def _http_post(url, *, headers=None, json=None, timeout=30):
     """POST JSON; return (status, body). HTTPError -> (code, body); transport errors raise."""
     out_headers = dict(headers or {})
+    # Cloudflare, in front of SasuSync, refuses urllib's default "Python-urllib"
+    # User-Agent with 403 "error code: 1010", so every SMS failed permanently.
+    out_headers.setdefault("User-Agent", "Payrolla/1.0")
     payload = None
     if json is not None:
         payload = _json.dumps(json).encode("utf-8")
