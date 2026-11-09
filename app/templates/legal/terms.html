@@ -1,0 +1,80 @@
+{% extends "legal/_layout.html" %}
+{% block doc_title %}Terms of service{% endblock %}
+{% block doc_description %}The terms that apply when a company uses {{ app_brand_name }}, the web workspace and the Windows app.{% endblock %}
+{% block doc %}
+<div class="legal-summary">
+  <p><strong>In short:</strong> {{ app_brand_name }} calculates payroll and sends payslips. Your company stays responsible for its payroll figures, for paying staff and for filing with the Ghana Revenue Authority and SSNIT. Your data stays yours, and you can take it with you when you leave.</p>
+</div>
+
+<h2 id="agreement">1. The agreement</h2>
+<p>These terms are an agreement between {{ company_name }} ("we", "us") and the company that uses {{ app_brand_name }} ("you"). By using {{ app_brand_name }}, people at your company accept these terms on your company's behalf. If we have signed a separate written agreement or quote with you, that document takes priority where it differs from these terms.</p>
+
+<h2 id="service">2. The service</h2>
+<p>{{ app_brand_name }} includes the web workspace, the {{ app_brand_name }} Desktop app for Windows, payslip delivery by email, WhatsApp and SMS, and the support we provide with them. Which of these you get depends on what we have agreed with you.</p>
+<p>Approving a payroll run records that it was checked and agreed. {{ app_brand_name }} does not move money. You pay your staff, and any taxes and contributions, through your own bank.</p>
+
+<h2 id="accounts">3. Accounts</h2>
+<ul>
+  <li>We set up your company and invite your administrator, who can then invite your other users.</li>
+  <li>Each user needs their own login. Keep passwords private, and don't share accounts.</li>
+  <li>You are responsible for what your users do in {{ app_brand_name }}, and for removing access when someone leaves.</li>
+  <li>Tell us at once at <a href="mailto:{{ support_email }}">{{ support_email }}</a> if you think someone has used an account without permission.</li>
+</ul>
+
+<h2 id="your-responsibilities">4. Your responsibilities</h2>
+<ul>
+  <li><strong>Your data.</strong> The employee and pay details you enter or upload must be accurate, and you must be allowed to give them to us. That includes telling your employees that their payroll data is processed by a service provider, and that their payslips will be sent to the email address or phone number you hold for them.</li>
+  <li><strong>Checking each run.</strong> Review every payroll run before you approve it. Approval is your confirmation that the figures are right.</li>
+  <li><strong>Payments and filings.</strong> You remain responsible for paying your staff, and for filing and paying PAYE to the Ghana Revenue Authority and contributions to SSNIT on time.</li>
+</ul>
+
+<h2 id="calculations">5. Calculations and statutory rates</h2>
+<p>We add each change to the PAYE bands and SSNIT rates as a dated version, and we work in good faith to keep them current and correct. {{ app_brand_name }} is a calculation tool, not tax or legal advice. If you find a calculation you think is wrong, tell us. We will look into it promptly and, if the error is ours, correct it and help you recalculate the affected runs.</p>
+
+<h2 id="fees">6. Fees</h2>
+<p>Fees are set out in the quote or agreement we make with you, and nothing is charged until you have agreed to it. Invoices are due within the period stated on them. If an invoice is more than 30 days overdue, we may suspend access after giving you written notice. Your data is not deleted during a suspension.</p>
+
+<h2 id="desktop-licence">7. The Windows app licence</h2>
+<p>The {{ app_brand_name }} Desktop installer is free to download. The app works only with a licence file we issue to your company. The licence is for your company's own use, on the number of computers and for the period we have agreed. You may not copy it for, or share it with, another company, or change or try to get around the licence check.</p>
+<p>The Desktop app keeps its data on your computer. Backing up that computer, and protecting it, is your responsibility.</p>
+
+<h2 id="acceptable-use">8. Acceptable use</h2>
+<p>You must not use {{ app_brand_name }} to:</p>
+<ul>
+  <li>break the law, or process personal data you have no right to process</li>
+  <li>send messages that are not payslips or payroll notices, including marketing or spam</li>
+  <li>try to see another client's data, or get around any security or access control</li>
+  <li>test our security without our written permission, or put an unreasonable load on the service</li>
+  <li>copy, resell or reverse-engineer {{ app_brand_name }}</li>
+</ul>
+
+<h2 id="your-data">9. Your data</h2>
+<p>The data you put into {{ app_brand_name }} belongs to your company. We use it only to provide {{ app_brand_name }} to you, as our <a href="{{ url_for('legal.privacy') }}">privacy policy</a> and <a href="{{ url_for('legal.data_protection') }}">data protection and retention policy</a> describe. You can download each payroll run's reports and exports at any time, and we will give you a full export of your data on request.</p>
+<p>When the agreement ends, we give you an export of your data if you ask for one, and we delete it within 90 days. Ghanaian tax law requires employers to keep payroll records for at least six years, so keep your own copy.</p>
+
+<h2 id="availability">10. Availability and support</h2>
+<p>We aim to keep {{ app_brand_name }} available at all times, but we can't promise it will never be interrupted. We will try to schedule maintenance outside working hours and give notice of planned downtime. For support, email <a href="mailto:{{ support_email }}">{{ support_email }}</a>.</p>
+<p>Payslips sent by email, WhatsApp and SMS pass through the providers listed in our privacy policy. We show the delivery status of every payslip, but we can't guarantee that a provider will deliver every message.</p>
+
+<h2 id="ownership">11. Ownership</h2>
+<p>We own {{ app_brand_name }}, its software and its design. While the agreement lasts, you have the right to use {{ app_brand_name }} for your company's payroll. If you send us suggestions, we may use them without owing you anything.</p>
+
+<h2 id="confidentiality">12. Confidentiality</h2>
+<p>Each of us will keep the other's confidential information private and use it only for this agreement. That includes your payroll data and our pricing. This does not cover information that is already public, or anything the law requires either of us to disclose.</p>
+
+<h2 id="liability">13. Liability</h2>
+<p>Except as these terms say, {{ app_brand_name }} is provided as it is, without other promises. Neither of us is liable for indirect losses, such as lost profit or lost business. We are not liable for losses caused by inaccurate data you provided, or by a run you approved without checking it. Our total liability in any 12-month period is limited to the fees you paid us in that period.</p>
+<p>Nothing in these terms limits liability that cannot be limited under Ghanaian law, such as liability for fraud.</p>
+
+<h2 id="ending">14. Ending the agreement</h2>
+<p>Either of us can end the agreement by giving 30 days' written notice. Either of us can end it at once if the other seriously breaks these terms and does not put it right within 14 days of being told. When it ends, access stops, and <a href="#your-data">section 9</a> applies to your data.</p>
+
+<h2 id="changes">15. Changes to these terms</h2>
+<p>We may update these terms. If a change matters, we tell your administrator at least 30 days before it takes effect. If you continue to use {{ app_brand_name }} after that date, you accept the new terms.</p>
+
+<h2 id="law">16. Governing law</h2>
+<p>These terms are governed by the laws of the Republic of Ghana. We will both try to settle any disagreement by talking first. If that doesn't work, the courts of Ghana will decide it.</p>
+
+<h2 id="contact">17. Contact</h2>
+<p>{{ company_name }}, Ghana. Email <a href="mailto:{{ support_email }}">{{ support_email }}</a>.</p>
+{% endblock %}

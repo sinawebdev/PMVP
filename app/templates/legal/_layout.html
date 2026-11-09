@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ self.doc_title() }} · {{ app_name }}{% endblock %}
+{% block head %}
+<meta name="description" content="{% block doc_description %}{% endblock %}">
+<link rel="stylesheet" href="{{ url_for('static', filename='landing-glass.css', v='20261101') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='legal.css', v='20261102') }}">
+{% endblock %}
+{% block public_content %}
+{% from 'macros/brand.html' import logo with context %}
+<div class="glass-landing legal-page" id="top">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="logo" href="{{ url_for('main.index') }}" aria-label="{{ app_brand_name }} home">{{ logo() }}</a>
+    <nav class="legal-actions" aria-label="Main">
+      <a class="nav-login" href="{{ url_for('main.index') }}">Home</a>
+      <a class="nav-login" href="{{ url_for('auth.login') }}">Log in</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" tabindex="-1" class="lp-wrap legal-wrap">
+  <nav class="legal-tabs" aria-label="Legal documents">
+    {% for endpoint, label in legal_pages %}
+    <a href="{{ url_for(endpoint) }}" {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <article class="legal-doc">
+    <h1>{% block doc_title %}{% endblock %}</h1>
+    <p class="legal-updated">Last updated {{ updated.day }} {{ updated.strftime('%B %Y') }}</p>
+    {% block doc %}{% endblock %}
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="lp-wrap footer-inner">
+    <a class="logo" href="{{ url_for('main.index') }}" aria-label="{{ app_brand_name }} home">{{ logo() }}</a>
+    <nav aria-label="Footer">
+      {% for endpoint, label in legal_pages %}<a href="{{ url_for(endpoint) }}">{{ label }}</a>{% endfor %}
+      <a href="mailto:{{ support_email }}">Contact</a>
+    </nav>
+    <p>© 2026 {{ app_brand_name }}. By {{ company_name }}.</p>
+  </div>
+</footer>
+</div>
+{% endblock %}
