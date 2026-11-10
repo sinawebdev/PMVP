@@ -209,9 +209,10 @@ full, commented list. Key groups:
   addressed by an opaque storage key rather than a path, so swapping the backend
   needs no data change — see [Receipt storage](#receipt-storage). On a platform
   with an ephemeral filesystem, point `STORAGE_ROOT` at a mounted disk.
-- **Statutory / payroll:** `RAW_BANK_WHITELIST`, `CHRISNAT_EMPLOYER_TIN`,
-  `CHRISNAT_TAX_OFFICE` (the employer's TIN and tax office printed on GRA
-  returns — employer configuration, not product identity).
+- **Statutory / payroll:** `RAW_BANK_WHITELIST`. Operator-side exports name the
+  run's own company as employer. A deployment that files as a bureau sets
+  `OPERATOR_EMPLOYER_NAME`, and then `CHRISNAT_EMPLOYER_TIN` and
+  `CHRISNAT_TAX_OFFICE` (the bureau's TIN and tax office on GRA returns).
 
 ### Receipt storage
 
@@ -276,11 +277,10 @@ The repository was called `pmvp-v1` ("Payroll MVP") until it was renamed to
 `pmvp-v1.onrender.com`, because Render fixes a service's `onrender.com` subdomain
 when the service is created. A custom domain is the way to move off it.
 
-A few identifiers also carry the founding operator's name (**Chrisnat Limited**):
-the GRA employer defaults (`CHRISNAT_EMPLOYER_TIN`, `CHRISNAT_TAX_OFFICE`) and the
-operator-side export filenames and report letterhead. Those name the **bureau**
-the reports are printed for, not the software, so they are deliberately left
-alone. The **product** is Payrolla throughout.
+Two environment variables also carry the founding operator's name (**Chrisnat
+Limited**): `CHRISNAT_EMPLOYER_TIN` and `CHRISNAT_TAX_OFFICE`. They apply only when
+`OPERATOR_EMPLOYER_NAME` names a bureau, which it no longer does by default. The
+**product** is Payrolla throughout.
 
 The platform *role* strings were in that list until the brand cleanup; they are
 now `payrolla_admin` / `payrolla_reviewer`, moved by a reversible data migration

@@ -42,8 +42,9 @@ non-negotiables:
 
 Optional groups (all documented in [.env.example](.env.example)): the branding
 seam (`APP_NAME`, …), distribution channels and their credentials, webhook
-secrets, rate limits, retry policy, and SLA thresholds. The employer identity on
-GRA returns is configured with `CHRISNAT_EMPLOYER_TIN` and `CHRISNAT_TAX_OFFICE`.
+secrets, rate limits, retry policy, and SLA thresholds. GRA returns name the
+run's own company as employer. To file as a bureau instead, set
+`OPERATOR_EMPLOYER_NAME`, `CHRISNAT_EMPLOYER_TIN` and `CHRISNAT_TAX_OFFICE`.
 
 ## Database migrations
 
