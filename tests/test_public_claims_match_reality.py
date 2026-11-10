@@ -72,14 +72,17 @@ class EmployerOnOperatorExportsTests(_SeededCase):
                  for row in sheet.iter_rows() for cell in row)
         return "\n".join(str(value) for value in cells if value is not None)
 
-    def test_the_bureau_stays_employer_of_record_on_the_live_site(self):
+    def test_the_live_site_has_no_bureau_by_default(self):
+        # It printed Chrisnat on every company's GRA form until 2026-11-10.
+        self.assertEqual(self.app.config["OPERATOR_EMPLOYER_NAME"], "")
+
+    def test_a_configured_bureau_is_named_as_employer(self):
+        self.app.config["OPERATOR_EMPLOYER_NAME"] = "Chrisnat Limited"
         self._login()
-        self.assertEqual(self.app.config["OPERATOR_EMPLOYER_NAME"], "Chrisnat Limited")
         self.assertEqual(self._workbook("/export/gra-paye").active["D9"].value, "CHRISNAT LIMITED")
         self.assertEqual(self._workbook("/export/bank-listing").active["A1"].value, "Chrisnat Limited")
 
     def test_without_a_bureau_every_export_names_the_runs_own_company(self):
-        self.app.config["OPERATOR_EMPLOYER_NAME"] = ""
         self._login()
         company = self.run.client_company.name
         self.assertEqual(self._workbook("/export/gra-paye").active["D9"].value, company)
@@ -90,7 +93,6 @@ class EmployerOnOperatorExportsTests(_SeededCase):
                 self.assertNotIn("chrisnat", text.lower())
 
     def test_without_a_bureau_its_tin_is_not_stamped_on_someone_elses_form(self):
-        self.app.config["OPERATOR_EMPLOYER_NAME"] = ""
         self._login()
         with mock.patch.dict(os.environ, {"CHRISNAT_EMPLOYER_TIN": "C0000000000"}):
             self.assertNotIn("C0000000000", self._text("/export/gra-paye"))
@@ -98,7 +100,8 @@ class EmployerOnOperatorExportsTests(_SeededCase):
     def test_the_reports_page_names_who_the_download_will_name(self):
         self._login()
         html = self.client.get(f"/payroll/runs/{self.run.id}/reports").get_data(as_text=True)
-        self.assertIn("Chrisnat Limited", html)
+        self.assertIn(self.run.client_company.name, html)
+        self.assertNotIn("Chrisnat", html)
 
 
 class ImportPreviewTests(_SeededCase):
