@@ -10,6 +10,7 @@ from unittest.mock import patch
 import sqlalchemy as sa
 from flask_migrate import upgrade, check
 from alembic import command
+from alembic.script import ScriptDirectory
 
 from app import create_app, db
 from app.models import Employee, PayrollItem, StatutoryRate
@@ -61,7 +62,10 @@ class DeductionMigrationTests(unittest.TestCase):
                         total_deductions=154, net_pay=846,
                     )).inserted_primary_key[0]
                 upgrade(directory=migrations)
-                self.assertEqual(db.session.execute(sa.text("select version_num from alembic_version")).scalar_one(), "d7a2026b1109")
+                # Upgraded all the way to the newest migration, whichever that is
+                # (a hardcoded revision id broke this test with every new migration).
+                head = ScriptDirectory(migrations).get_current_head()
+                self.assertEqual(db.session.execute(sa.text("select version_num from alembic_version")).scalar_one(), head)
                 item = db.session.get(PayrollItem, item_id)
                 self.assertEqual((item.gross_pay, item.paye, item.ssnit, item.net_pay), (1000, 99, 55, 846))
                 self.assertEqual(item.deductions_policy_version, 0)
