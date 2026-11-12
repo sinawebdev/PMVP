@@ -345,6 +345,12 @@ def create_app():
     app.config["DESKTOP_DOWNLOAD_URL"] = https_url_or_none(_download)
     if _download.strip() and not app.config["DESKTOP_DOWNLOAD_URL"]:
         app.logger.warning("DESKTOP_DOWNLOAD_URL ignored: it must be an absolute https:// URL")
+    # What /desktop/latest.json tells installed desktop copies (app.desktop_release).
+    from app.desktop_release import release_config
+
+    app.config.update(release_config(os.environ))
+    if os.getenv("DESKTOP_LATEST_VERSION", "").strip() and not app.config["DESKTOP_LATEST_VERSION"]:
+        app.logger.warning("DESKTOP_LATEST_VERSION ignored: use major.minor.patch, e.g. 0.2.0")
     # Desktop trial licences (app.desktop_licences). The key is the dedicated
     # server trial key, never the master key; without it the feature is off.
     app.config["TRIAL_LICENCE_SIGNING_KEY"] = (os.getenv("TRIAL_LICENCE_SIGNING_KEY") or "").strip()
@@ -823,6 +829,7 @@ def create_app():
 
     from app.access_requests import access_bp
     from app.desktop_licences import licences_bp
+    from app.desktop_release import desktop_release_bp
     from app.audit import audit_bp
     from app.auth import auth_bp
     from app.client import client_bp
@@ -841,6 +848,7 @@ def create_app():
 
     app.register_blueprint(access_bp)
     app.register_blueprint(licences_bp)
+    app.register_blueprint(desktop_release_bp)
     app.register_blueprint(invites_bp)
     app.register_blueprint(legal_bp)
     app.register_blueprint(audit_bp)

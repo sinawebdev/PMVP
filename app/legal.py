@@ -9,7 +9,7 @@ from flask import Blueprint, render_template
 
 legal_bp = Blueprint("legal", __name__)
 
-LEGAL_UPDATED = date(2026, 11, 9)
+LEGAL_UPDATED = date(2026, 11, 12)
 
 # (endpoint, label) in the order the pages link to each other.
 LEGAL_PAGES = (
