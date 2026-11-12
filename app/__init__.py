@@ -861,6 +861,12 @@ def create_app():
     app.register_blueprint(oversight_bp)
     app.register_blueprint(notifications_bp)
 
+    # Payroll bureaus: hold a bureau's staff to their own client companies on
+    # the operator plane. Deny by default (app/bureau_scope.py).
+    from app import bureau_scope
+
+    bureau_scope.register(app)
+
     @app.context_processor
     def inject_app_identity():
         # Product-name strings for templates (title, brand, footer attribution).

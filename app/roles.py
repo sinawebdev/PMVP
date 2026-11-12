@@ -41,6 +41,30 @@ CLIENT_ADMIN = "client_admin"        # can approve (maker-checker OFF for v1)
 CLIENT_PREPARER = "client_preparer"  # create/edit employees, prepare runs
 TENANT_ROLES = frozenset({CLIENT_ADMIN, CLIENT_PREPARER})
 
+# --- Payroll-bureau roles: bureau_id = their bureau, client_company_id NULL ---
+# A bureau runs payroll for its own client companies through the operator
+# interface, limited to those companies (app.bureau_scope). Deliberately NOT in
+# PLATFORM_ROLES: nothing that means "Payrolla staff" (platform_admins(), seeded
+# platform identities) may ever include a bureau's people.
+BUREAU_ADMIN = "bureau_admin"        # runs the bureau: clients, rates, approve
+BUREAU_OFFICER = "bureau_officer"    # prepares payroll; never approves
+BUREAU_ROLES = frozenset({BUREAU_ADMIN, BUREAU_OFFICER})
+
+
+def is_bureau_user(user):
+    """A payroll bureau's staff member: scoped to that bureau's companies.
+
+    True for a bureau role even with no bureau set, so a half-configured login
+    is scoped to nothing rather than treated as Payrolla staff.
+    """
+    return bool(
+        getattr(user, "is_authenticated", False)
+        and (
+            getattr(user, "bureau_id", None) is not None
+            or normalise_role(getattr(user, "role", None)) in BUREAU_ROLES
+        )
+    )
+
 
 def normalise_role(role):
     """The canonical spelling of a role string.

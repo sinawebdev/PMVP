@@ -203,14 +203,17 @@ def ensure_paye_2026_rates():
     Existing September and later versions remain operator-owned. The caller
     owns the commit, just as it does for the other seed helpers.
     """
+    # Default versions only: a bureau's own override dated the same day must not
+    # stop the default being inserted (StatutoryRate.bureau_id).
     existing = StatutoryRate.query.filter_by(
-        effective_from=PAYE_2026_EFFECTIVE_FROM
+        effective_from=PAYE_2026_EFFECTIVE_FROM, bureau_id=None
     ).first()
     if existing is not None:
         return existing
     previous = (
         StatutoryRate.query.filter(
-            StatutoryRate.effective_from < PAYE_2026_EFFECTIVE_FROM
+            StatutoryRate.effective_from < PAYE_2026_EFFECTIVE_FROM,
+            StatutoryRate.bureau_id.is_(None),
         )
         .order_by(StatutoryRate.effective_from.desc())
         .first()
@@ -248,7 +251,7 @@ def seed_statutory_rates():
     # Previous guard skipped all future statutory updates on existing installs:
     # if StatutoryRate.query.count():
     #     return
-    if not StatutoryRate.query.count():
+    if not StatutoryRate.query.filter(StatutoryRate.bureau_id.is_(None)).count():
         db.session.add(
             StatutoryRate(
                 effective_from=date(2026, 1, 1),
