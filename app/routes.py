@@ -16,6 +16,12 @@ from app.permissions import (
     PLATFORM_OPS_ROLES,
 )
 from app.tenancy import platform_required
+from app.bureau_scope import (
+    current_bureau_id,
+    is_payrolla_staff,
+    operator_query,
+    scoped_company_ids,
+)
 from app.paging import paginate
 from app.models import (
     AuditTrail,
@@ -164,7 +170,10 @@ def dashboard():
     except ValueError:
         selected_year = now.year
 
-    current_runs = PayrollRun.query.filter_by(
+    # Every query on this page goes through operator_query: Payrolla staff see
+    # the whole book, a bureau's staff see their own clients and nothing else.
+    scope = scoped_company_ids()
+    current_runs = operator_query(PayrollRun).filter_by(
         month=selected_month,
         year=selected_year,
     ).all()
@@ -176,7 +185,7 @@ def dashboard():
     # queries); with it the whole dashboard costs three queries no matter how
     # many companies exist.
     all_clients = (
-        ClientCompany.query.options(
+        operator_query(ClientCompany).options(
             selectinload(ClientCompany.employees),
             selectinload(ClientCompany.payroll_runs),
         )
@@ -199,14 +208,13 @@ def dashboard():
             selected_month,
         )
     )
-    known_years = {
-        row[0]
-        for row in db.session.query(PayrollRun.year).distinct().all()
-        if row[0]
-    }
+    year_query = db.session.query(PayrollRun.year)
+    if scope is not None:
+        year_query = year_query.filter(PayrollRun.client_company_id.in_(scope))
+    known_years = {row[0] for row in year_query.distinct().all() if row[0]}
     known_years.update({now.year - 1, now.year, now.year + 1, selected_year})
-    pending_approvals = PayrollRun.query.filter(PayrollRun.status.in_(pending_statuses)).count()
-    warning_count = PayrollItem.query.filter_by(validation_status="Warning").count()
+    pending_approvals = operator_query(PayrollRun).filter(PayrollRun.status.in_(pending_statuses)).count()
+    warning_count = operator_query(PayrollItem).filter(PayrollItem.validation_status == "Warning").count()
 
     # Payslip delivery rate for the selected period: distinct workers whose payslip was
     # actually pushed (SMS/WhatsApp/email) over the payslips that were ELIGIBLE to be
@@ -273,13 +281,14 @@ def dashboard():
         statutory_summary,
     )
 
-    active_employees = Employee.query.filter_by(status="Active").count()
+    active_employees = operator_query(Employee).filter_by(status="Active").count()
     # Summed in the database rather than by loading every Expense row — this
     # figure is a single number and the table grows with every client's monthly
     # spend.
-    total_expenses = (
-        db.session.query(func.coalesce(func.sum(Expense.amount), 0.0)).scalar() or 0.0
-    )
+    expense_query = db.session.query(func.coalesce(func.sum(Expense.amount), 0.0))
+    if scope is not None:
+        expense_query = expense_query.filter(Expense.client_company_id.in_(scope))
+    total_expenses = expense_query.scalar() or 0.0
     analytics = platform_dashboard_analytics(
         all_clients,
         expense_total=total_expenses,
@@ -290,8 +299,8 @@ def dashboard():
     # Hoisted so the KPI band and the raw template variables describe the exact
     # same numbers — computed once, read twice, never two slightly different
     # queries that could drift apart on a future edit.
-    total_employees_count = Employee.query.count()
-    total_clients_count = ClientCompany.query.count()
+    total_employees_count = operator_query(Employee).count()
+    total_clients_count = operator_query(ClientCompany).count()
     current_month_total = sum(run.total_net_pay for run in current_runs)
     period_label = f"{selected_month} {selected_year}"
 
@@ -324,8 +333,11 @@ def dashboard():
         held_count,
         pending_approvals,
         warning_count,
-        awaiting_credentials=len(ClientCompany.ids_awaiting_credentials()),
-        new_applications=open_request_count(),
+        awaiting_credentials=len(ClientCompany.ids_awaiting_credentials(
+            None if scope is None else [c.id for c in all_clients]
+        )),
+        # Applications to use Payrolla are Payrolla's to review, not a bureau's.
+        new_applications=open_request_count() if is_payrolla_staff() else 0,
     )
     # Combined employee (5.5%) + employer (13%) SSF — the figure actually
     # remitted to SSNIT, not just the worker-side deduction.
@@ -352,7 +364,7 @@ def dashboard():
         # last look, short enough that the panel stays a glance and the audit
         # trail stays the place you go for the record. Capped in the query, not
         # sliced in the template.
-        activity=platform_activity(limit=3),
+        activity=platform_activity(limit=3, company_ids=scope),
         held_count=held_count,
         warning_count=warning_count,
         delivery_rate=delivery_rate,
@@ -430,7 +442,7 @@ def clients():
     # used to hide rows in the browser, and the moment the list is paged a match
     # on page 2 reads as "no results".
     search = (request.args.get("q") or "").strip()
-    query = ClientCompany.query
+    query = operator_query(ClientCompany)
     if search:
         like = f"%{search}%"
         query = query.filter(
@@ -452,7 +464,7 @@ def clients():
         clients=clients,
         # Landing-page applications waiting on a decision; oldest first, because
         # whoever applied first has waited longest.
-        access_requests=open_requests(),
+        access_requests=open_requests() if is_payrolla_staff() else [],
         interests=INTERESTS,
         # One query for the whole page — the per-company property would be an
         # N+1 here. See ClientCompany.ids_awaiting_credentials.
@@ -519,7 +531,13 @@ def validate_client_form(form, client=None):
         ).first()
         is not None
     ):
-        errors["name"] = f"Another company is already registered as {values['name']}."
+        # Names are unique across the whole platform. A bureau must not learn
+        # from this message which other firms' clients exist.
+        errors["name"] = (
+            f"Another company is already registered as {values['name']}."
+            if is_payrolla_staff()
+            else "That name can't be used. Add something to tell it apart, such as the town."
+        )
 
     if not values["company_code"]:
         errors["company_code"] = "Company code is required."
@@ -534,7 +552,11 @@ def validate_client_form(form, client=None):
         ).first()
         is not None
     ):
-        errors["company_code"] = f"Company code {values['company_code']} is already in use."
+        errors["company_code"] = (
+            f"Company code {values['company_code']} is already in use."
+            if is_payrolla_staff()
+            else "That code can't be used. Choose another."
+        )
 
     # Email is optional, but a typo'd address is worse than a blank one — this is
     # where the client's own onboarding correspondence goes.
@@ -562,7 +584,7 @@ def edit_client(client_id):
 
 def _source_request(client):
     """The open access request a new company is being created from, if any."""
-    if client is not None:
+    if client is not None or not is_payrolla_staff():
         return None
     from app.models import AccessRequest
 
@@ -579,7 +601,7 @@ def client_form(client=None):
         values, errors = validate_client_form(request.form, client)
         # The form came from an access request that someone else has since
         # approved or declined: refuse rather than create an unlinked company.
-        if client is None and request.form.get("request") and source is None:
+        if client is None and request.form.get("request") and source is None and is_payrolla_staff():
             errors["_request"] = ("That access request was decided while you were filling this in. "
                                   "Check the Applications list before creating the company.")
         if errors:
@@ -592,7 +614,8 @@ def client_form(client=None):
             )
         creating = client is None
         if creating:
-            client = ClientCompany()
+            # A bureau's new client is the bureau's: set here, never from the form.
+            client = ClientCompany(bureau_id=current_bureau_id())
             db.session.add(client)
         client.name = values["name"]
         client.company_code = values["company_code"]
@@ -750,13 +773,13 @@ def search():
     if q:
         like = f"%{q}%"
         clients = (
-            ClientCompany.query.filter(ClientCompany.name.ilike(like))
+            operator_query(ClientCompany).filter(ClientCompany.name.ilike(like))
             .order_by(ClientCompany.name)
             .limit(25)
             .all()
         )
         items = (
-            PayrollItem.query.filter(
+            operator_query(PayrollItem).filter(
                 or_(
                     PayrollItem.full_name.ilike(like),
                     PayrollItem.staff_id.ilike(like),

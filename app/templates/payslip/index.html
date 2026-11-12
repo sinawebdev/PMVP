@@ -5,7 +5,7 @@
 {% block page_actions %}
 {# Distribution left the sidebar (it is delivery telemetry, not a domain the
    operator navigates to daily). Payslips owns it, so it stays one click away. #}
-<a class="btn btn-outline-light btn-sm" href="{{ url_for('distribution.dashboard') }}"><i class="bi bi-hdd-network"></i>Distribution Monitor</a>
+{% if is_payrolla_staff %}<a class="btn btn-outline-light btn-sm" href="{{ url_for('distribution.dashboard') }}"><i class="bi bi-hdd-network"></i>Distribution Monitor</a>{% else %}<a class="btn btn-outline-light btn-sm" href="{{ url_for('distribution.history') }}"><i class="bi bi-clock-history"></i>Delivery history</a>{% endif %}
 <a class="btn btn-outline-light btn-sm" href="{{ url_for('distribution.history') }}"><i class="bi bi-clock-history"></i>Delivery History</a>
 {% endblock %}
 {% block content %}

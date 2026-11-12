@@ -6,7 +6,7 @@
 {% block breadcrumbs %}
 {{ bc.trail([
     ("Dashboard", url_for('main.dashboard')),
-    ("Distribution Monitor", url_for('distribution.dashboard')),
+    (("Distribution Monitor", url_for('distribution.dashboard')) if is_payrolla_staff else ("Delivery history", url_for('distribution.history'))),
     ("History", url_for('distribution.history')),
     ("Distribution #" ~ batch.id, None),
 ]) }}

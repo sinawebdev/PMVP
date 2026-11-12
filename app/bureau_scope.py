@@ -33,6 +33,43 @@ from app.roles import is_bureau_user
 # Endpoints every signed-in bureau user needs that carry no client data.
 SHARED_ENDPOINTS = frozenset({"static", "auth.logout"})
 
+# Operator endpoints a bureau may use. Each one either takes the company from an
+# id the gate checks (OWNERSHIP_RESOLVERS) or scopes its lists through
+# operator_query / scoped_company_ids. Everything not listed stays Payrolla's
+# alone: access requests, desktop licences, database health, the distribution
+# monitor (it reports worker health across every tenant), and the default
+# statutory rates. tests/test_bureau_isolation.py checks these pages show a
+# bureau nothing of anyone else's.
+BUREAU_ENDPOINTS = frozenset({
+    "main.index", "main.dashboard", "main.search",
+    "main.clients", "main.client_detail", "main.client_onboarding",
+    "main.add_client", "main.edit_client",
+    "invites.invite_admin", "invites.resend_invite",
+    "employees.roster", "employees.add", "employees.edit", "employees.deactivate",
+    "employees.reactivate", "employees.delete", "employees.roster_template",
+    "employees.bulk_import", "employees.bulk_import_confirm",
+    "payroll.runs", "payroll.new_run", "payroll.preview", "payroll.error_report",
+    "payroll.confirm", "payroll.detail", "payroll.calculate", "payroll.edit_items",
+    "payroll.submit_for_approval", "payroll.approve", "payroll.reject",
+    "payroll.bulk_approve", "payroll.bulk_reject", "payroll.bulk_distribute",
+    "payroll.mark_paid", "payroll.delete_run", "payroll.run_reports", "payroll.export",
+    "payroll.export_bank_listing_route", "payroll.export_wages_sheet_route",
+    "payroll.export_gra_paye_route", "payroll.payslip", "payroll.wage_rates",
+    "raw_engine.upload", "raw_engine.confirm", "raw_engine.download_template",
+    "raw_engine.run_exports", "raw_engine.download_archive",
+    "oversight.risk_queue", "oversight.risk_check", "oversight.release_hold",
+    "payslip.index", "payslip.generate",
+    "distribution.run_status", "distribution.run_status_fragment",
+    "distribution.confirm_send", "distribution.bulk_confirm", "distribution.send",
+    "distribution.resend_failed", "distribution.cancel", "distribution.schedule",
+    "distribution.reschedule", "distribution.set_preferred_channel",
+    "distribution.settle_delivery", "distribution.batch_detail",
+    "distribution.history", "distribution.analytics",
+    "distribution.history_export_csv", "distribution.history_export_xlsx",
+    "audit.audit_trail", "audit.add_expense",
+    "notifications.inbox", "notifications.mark_read", "notifications.mark_all_read",
+})
+
 
 def current_bureau_id():
     """The signed-in user's bureau id, or None (Payrolla staff, tenants, anonymous)."""
@@ -149,6 +186,48 @@ def _same(value):
     return _as_int(value)
 
 
+# Returned by a resolver that has already decided the id is in scope (an object
+# that belongs to the user or the bureau rather than to one company).
+IN_SCOPE = object()
+
+
+def _own_notification(value):
+    from app.models import Notification
+
+    note = db.session.get(Notification, _as_int(value))
+    return IN_SCOPE if note is not None and note.user_id == getattr(current_user, "id", None) else None
+
+
+def _staged_import(value):
+    """A staged payroll import (ImportBatch) is in scope only if every company it
+    would create a run for is: a multi-company workbook names several."""
+    import json
+
+    from app.models import ImportBatch
+
+    batch = db.session.get(ImportBatch, _as_int(value))
+    if batch is None:
+        return None
+    try:
+        payload = json.loads(batch.payload_json or "{}")
+    except ValueError:
+        return None
+    company_ids = {batch.client_company_id, payload.get("client_company_id")}
+    company_ids.update(run.get("client_company_id") for run in payload.get("runs") or [])
+    company_ids.discard(None)
+    if not company_ids:
+        return None
+    return IN_SCOPE if all(company_in_scope(cid) for cid in company_ids) else None
+
+
+def _user_of_company(value):
+    """A client login (invite resend): owned through its company."""
+    from app.models import User
+
+    user = db.session.get(User, _as_int(value))
+    return user.client_company_id if user is not None else None
+
+
 def _as_int(value):
     try:
         return int(value)
@@ -168,8 +247,11 @@ OWNERSHIP_RESOLVERS = {
     "voucher_id": _company_via_run("PaymentVoucher"),
     "delivery_id": _company_via_run("PayslipDelivery"),
     "archive_id": _company_via_run("RawUploadArchive"),
-    "import_id": _company_of("ImportBatch"),
+    "import_id": _staged_import,
     "expense_id": _company_of("Expense"),
+    "batch_id": _company_of("DistributionBatch"),
+    "note_id": _own_notification,
+    "user_id": _user_of_company,
 }
 
 # Form or query keys that carry an id, checked on every bureau request whether
@@ -187,7 +269,10 @@ def _owned(key, value):
     resolver = OWNERSHIP_RESOLVERS.get(resolver_key)
     if resolver is None:
         return False
-    return company_in_scope(resolver(value))
+    owner = resolver(value)
+    if owner is IN_SCOPE:
+        return True
+    return company_in_scope(owner)
 
 
 def _request_values():
@@ -210,7 +295,7 @@ def enforce_operator_scope():
     from flask import current_app
 
     view = current_app.view_functions.get(endpoint)
-    if not getattr(view, "_bureau_scoped", False):
+    if endpoint not in BUREAU_ENDPOINTS and not getattr(view, "_bureau_scoped", False):
         abort(404)
     for key, value in (request.view_args or {}).items():
         if not _owned(key, value):
@@ -223,6 +308,15 @@ def enforce_operator_scope():
 
 def register(app):
     app.before_request(enforce_operator_scope)
+
+    @app.context_processor
+    def inject_bureau_scope():
+        # Templates ask "is this Payrolla's own staff?" through these, never by
+        # comparing role strings (the constitution lint forbids role literals).
+        from flask_login import current_user as user
+
+        bureau = getattr(user, "bureau", None) if getattr(user, "is_authenticated", False) else None
+        return {"is_payrolla_staff": is_payrolla_staff(), "current_bureau": bureau}
 
 
 def require_bureau_consistency(user):

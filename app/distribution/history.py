@@ -50,9 +50,16 @@ def filtered_delivery_query(filters):
     """A PayslipDelivery query (joined to item + run) with every `filters` clause
     applied, but no ordering, eager-loading, or pagination. Shared by the history
     list, analytics, and exports so they always agree on what a filter means."""
+    from app.bureau_scope import scoped_company_ids
+
     query = PayslipDelivery.query.join(
         PayrollItem, PayslipDelivery.payroll_item_id == PayrollItem.id
     ).join(PayrollRun, PayslipDelivery.payroll_run_id == PayrollRun.id)
+    # The one choke point for history, analytics and both exports: a bureau's
+    # staff only ever see deliveries for their own clients.
+    scope = scoped_company_ids()
+    if scope is not None:
+        query = query.filter(PayrollRun.client_company_id.in_(scope))
 
     company_id = filters.get("company_id")
     if company_id:
@@ -134,19 +141,21 @@ def export_rows(filters, limit=50000):
 
 def filter_options():
     """Dropdown option lists for the history filter form."""
+    from app.bureau_scope import operator_query, scoped_company_ids
+
     companies = (
-        ClientCompany.query.filter_by(status="Active")
+        operator_query(ClientCompany).filter_by(status="Active")
         .order_by(ClientCompany.name)
         .all()
     )
-    # Only users who have actually initiated a distribution.
-    operator_ids = [
-        row[0]
-        for row in db.session.query(DistributionBatch.initiated_by_user_id)
-        .filter(DistributionBatch.initiated_by_user_id.isnot(None))
-        .distinct()
-        .all()
-    ]
+    # Only users who have actually initiated a distribution (for these companies).
+    initiators = db.session.query(DistributionBatch.initiated_by_user_id).filter(
+        DistributionBatch.initiated_by_user_id.isnot(None)
+    )
+    scope = scoped_company_ids()
+    if scope is not None:
+        initiators = initiators.filter(DistributionBatch.client_company_id.in_(scope))
+    operator_ids = [row[0] for row in initiators.distinct().all()]
     operators = (
         User.query.filter(User.id.in_(operator_ids)).order_by(User.name).all()
         if operator_ids
