@@ -29,6 +29,7 @@ from app.models import (  # noqa: E402
 )
 
 CLIENT_PAGES = ["/company", "/company/employees", "/company/employees/add",
+                "/company/employees/import",
                 "/company/runs", "/company/statutory", "/company/expenses", "/company/audit"]
 
 
@@ -137,6 +138,22 @@ class ClientInterfaceTestCase(unittest.TestCase):
             content_type="multipart/form-data",
         )
 
+    def _stage_roster_import(self):
+        """Stage an employee import so its preview page has something to render."""
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["Staff ID", "Full name", "Phone"])
+        sheet.append(["IMP-1", "Preview Import Worker", "0241234567"])
+        stream = BytesIO()
+        workbook.save(stream)
+        stream.seek(0)
+        resp = self.client.post(
+            "/company/employees/import",
+            data={"file": (stream, "roster.xlsx")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(resp.status_code, 302, "fixture: the roster import should stage")
+
     # --- company identity renders exactly once on every client page ---------
     def _identity_renders(self, html):
         """How many times this page tells the user whose data they are looking at.
@@ -189,12 +206,15 @@ class ClientInterfaceTestCase(unittest.TestCase):
             client_company_id=self.msc.client_company_id
         ).first()
         self.assertIsNotNone(expense, "fixture: the expense pages need a seeded expense")
+        self._stage_roster_import()
 
         pages = [
             "/company",
             "/company/employees",
             "/company/employees/add",
             f"/company/employees/{self.msc_emp.id}/edit",
+            "/company/employees/import",
+            "/company/employees/import/preview",   # staged below
             "/company/runs",
             f"/company/runs/{self.msc_run.id}",
             "/company/runs/upload",

@@ -34,14 +34,14 @@
 </section>
 
 <section class="panel mb-3">
-    <div class="panel-header"><h2><i class="bi bi-pencil-square text-warning"></i>To be updated</h2><span>{{ to_update|length }} existing employees will be updated</span></div>
+    <div class="panel-header"><h2><i class="bi bi-pencil-square text-warning"></i>To be updated</h2><span>{{ to_update|length }} existing employees will be updated{% if unchanged %} · {{ unchanged }} already up to date{% endif %}</span></div>
     {% if to_update %}
     <div class="excel-grid-wrap">
         <table class="table table-sm align-middle excel-grid">
-            <thead><tr><th>Employee ID</th><th>Full Name</th><th>Email</th><th>Phone</th><th>Department</th></tr></thead>
+            <thead><tr><th>Employee ID</th><th>Full Name</th><th>What changes</th></tr></thead>
             <tbody>
             {% for r in to_update %}
-                <tr><td>{{ r.staff_id }}</td><td>{{ r.full_name }}</td><td>{{ r.email or "—" }}</td><td>{{ r.phone or "—" }}</td><td>{{ r.department or "—" }}</td></tr>
+                <tr><td>{{ r.staff_id }}</td><td>{{ r.full_name }}</td><td>{{ r.changes|join(", ") }}</td></tr>
             {% endfor %}
             </tbody>
         </table>
@@ -50,6 +50,22 @@
         <p class="text-muted mb-0">No existing employees matched in this file.</p>
     {% endif %}
 </section>
+
+{% if warnings %}
+<section class="panel mb-3">
+    <div class="panel-header"><h2><i class="bi bi-exclamation-triangle text-warning"></i>Warnings</h2><span>{{ warnings|length }} rows will still import</span></div>
+    <div class="excel-grid-wrap">
+        <table class="table table-sm align-middle excel-grid">
+            <thead><tr><th>Row #</th><th>Employee ID</th><th>Note</th></tr></thead>
+            <tbody>
+            {% for w in warnings %}
+                <tr><td>{{ w.row }}</td><td>{{ w.staff_id }}</td><td>{{ w.issue }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
 
 {% if errors %}
 <section class="panel mb-3">

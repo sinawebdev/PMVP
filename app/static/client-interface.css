@@ -318,3 +318,14 @@
   background: radial-gradient(circle at 30% 20%, #127a6d, #0d4d4d 70%);
   box-shadow: var(--shadow);
 }
+/* Employee bulk import: the three steps above the upload, and the column list
+   one interaction deeper. */
+.import-steps { margin: 0 0 18px; padding-left: 20px; color: var(--ink); line-height: 1.55; }
+.import-steps li { margin-bottom: 6px; }
+.import-columns { margin-top: 18px; max-width: 760px; }
+.import-columns summary { cursor: pointer; font-weight: 600; }
+.import-columns ul { columns: 2; margin: 8px 0 0; padding-left: 18px; }
+@media (max-width: 560px) { .import-columns ul { columns: 1; } }
+.import-steps a { color: var(--brand); font-weight: 600; }
+.import-actions { flex-wrap: wrap; margin: 4px 0 8px; }
+.import-actions form { margin: 0; }

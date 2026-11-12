@@ -1,0 +1,36 @@
+{% extends "client/base.html" %}
+{% block title %}Import employees{% endblock %}
+{% block body %}
+  <div class="page-bar">
+    <div class="page-head">
+      <h1>Import employees</h1>
+      <p class="sub">Add or update your whole roster from one Excel sheet.</p>
+    </div>
+    <a class="btn" href="{{ url_for('client.employees') }}">Back to employees</a>
+  </div>
+
+  <div class="card form narrow">
+    <ol class="import-steps">
+      <li><a href="{{ url_for('client.employee_import_template') }}">Download the Excel template</a>, or use your own sheet with the same column headings.</li>
+      <li>Put one employee on each row. <strong>Staff ID</strong> and <strong>Full name</strong> are required; every other column is optional.</li>
+      <li>Upload it below. You'll see who will be added and what will change before anything is saved.</li>
+    </ol>
+    <form method="post" action="{{ url_for('client.employee_import') }}" enctype="multipart/form-data">
+      <label for="roster_file">Employee sheet (.xlsx or .xls)</label>
+      <input id="roster_file" name="file" type="file" accept=".xlsx,.xls" required />
+      <div class="form-foot">
+        <button class="btn primary" type="submit">Upload &amp; preview</button>
+      </div>
+    </form>
+  </div>
+
+  <details class="import-columns">
+    <summary>Columns we read</summary>
+    <p class="sub">Common variations of these headings are recognised too, such as "Employee ID" for Staff ID or "Mobile" for Phone. Up to {{ "{:,}".format(max_rows) }} employees per file. A Staff ID that is already on your roster updates that person, and empty cells leave what is saved untouched.</p>
+    <ul>
+      {% for field, header, _aliases in columns %}
+      <li>{{ header }}{% if field in required %} <strong>(required)</strong>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </details>
+{% endblock %}

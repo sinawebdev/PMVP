@@ -1,0 +1,114 @@
+{% extends "client/base.html" %}
+{% block title %}Check the import{% endblock %}
+{% block body %}
+  {% set adds = staged.to_create|length %}
+  {% set updates = staged.to_update|length %}
+  {% set skipped = staged.errors|length %}
+  {% set flagged = staged.warnings|length %}
+  <div class="page-bar">
+    <div class="page-head">
+      <h1>Check the import</h1>
+      <p class="sub">From {{ staged.filename }}: {{ adds }} to add, {{ updates }} to update{% if staged.unchanged %}, {{ staged.unchanged }} already up to date{% endif %}{% if skipped %}, {{ skipped }} skipped{% endif %}.</p>
+    </div>
+    <a class="btn" href="{{ url_for('client.employee_import') }}">Upload a different sheet</a>
+  </div>
+
+  {% if skipped or flagged %}
+  <div class="panel ip-blockers">
+    <h2>Check before you confirm</h2>
+    <ul>
+      {% if skipped %}
+      <li><strong>{{ skipped }} row{{ " can't" if skipped == 1 else "s can't" }} be imported</strong> and will be skipped. The reasons are listed below. Fix them in your sheet and upload it again, or add those people by hand afterwards.</li>
+      {% endif %}
+      {% if flagged %}
+      <li><strong>{{ flagged }} row{{ " has a" if flagged == 1 else "s have" }} warning{{ "" if flagged == 1 else "s" }}.</strong> {{ "It" if flagged == 1 else "They" }} will still import.</li>
+      {% endif %}
+    </ul>
+  </div>
+  {% else %}
+  <p class="ip-note">Every row in the sheet read cleanly.</p>
+  {% endif %}
+
+  <div class="actions import-actions">
+    {% if adds or updates %}
+    <form method="post" action="{{ url_for('client.employee_import_confirm') }}">
+      <button class="btn primary" type="submit">{% if adds and updates %}Add {{ adds }} and update {{ updates }}{% elif adds %}Add {{ adds }} employee{{ "" if adds == 1 else "s" }}{% else %}Update {{ updates }} employee{{ "" if updates == 1 else "s" }}{% endif %}</button>
+    </form>
+    <form method="post" action="{{ url_for('client.employee_import_discard') }}">
+      <button class="btn" type="submit">Discard</button>
+    </form>
+    {% else %}
+    <a class="btn primary" href="{{ url_for('client.employee_import') }}">Upload a corrected sheet</a>
+    {% endif %}
+  </div>
+
+  {% if skipped %}
+  <h2>Skipped rows</h2>
+  <div class="panel dt-wrap">
+    <table class="emp-table">
+      <thead><tr><th>Row in your sheet</th><th>Problem</th></tr></thead>
+      <tbody>
+        {% for e in staged.errors %}
+        <tr>
+          <td><span class="cell-main">{{ e.name or e.staff_id or 'Unnamed row' }}</span><span class="cell-sub">Row {{ e.row }}{% if e.name and e.staff_id %} · {{ e.staff_id }}{% endif %}</span></td>
+          <td>{{ e.issue }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if adds %}
+  <h2>New employees</h2>
+  <div class="panel dt-wrap">
+    <table class="emp-table">
+      <thead><tr><th>Employee</th><th>Job title</th><th>Contact</th><th class="right">Basic</th></tr></thead>
+      <tbody>
+        {% for r in staged.to_create %}
+        <tr>
+          <td><span class="cell-main">{{ r.full_name }}</span><span class="cell-sub">{{ r.staff_id }}</span></td>
+          <td>{{ r.job_title or '—' }}</td>
+          <td>{{ r.phone or r.email or r.momo_number or '—' }}</td>
+          <td class="right nums">{% if r.basic_salary is not none %}{{ r.basic_salary | cedis }}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if updates %}
+  <h2>Updates to people already on your roster</h2>
+  <div class="panel dt-wrap">
+    <table class="emp-table">
+      <thead><tr><th>Employee</th><th>What changes</th></tr></thead>
+      <tbody>
+        {% for r in staged.to_update %}
+        <tr>
+          <td><span class="cell-main">{{ r.full_name }}</span><span class="cell-sub">{{ r.staff_id }}</span></td>
+          <td>{{ r.changes|join(", ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if flagged %}
+  <h2>Warnings</h2>
+  <div class="panel dt-wrap">
+    <table class="emp-table">
+      <thead><tr><th>Row in your sheet</th><th>Note</th></tr></thead>
+      <tbody>
+        {% for w in staged.warnings %}
+        <tr>
+          <td><span class="cell-main">{{ w.name or w.staff_id }}</span><span class="cell-sub">Row {{ w.row }} · {{ w.staff_id }}</span></td>
+          <td>{{ w.issue }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+{% endblock %}
