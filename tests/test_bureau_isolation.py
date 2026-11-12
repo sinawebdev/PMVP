@@ -46,6 +46,7 @@ PAYROLLA_ONLY = {
     "licences.ledger", "licences.issue_for_request", "licences.resend",  # Payrolla's desktop licences
     "main.db_health", "main.db_health_json",                         # infrastructure
     "distribution.dashboard", "distribution.dashboard_fragment",     # worker health across every tenant
+    "bureaus.approve_request", "bureaus.convert_company",            # creating bureaus is Payrolla's
 }
 
 

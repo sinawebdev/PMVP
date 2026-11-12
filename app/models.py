@@ -1260,6 +1260,9 @@ class AccessRequest(db.Model):
     # A band, not a count: applicants estimate, and the band is what pricing uses.
     employee_band = db.Column(db.String(20))
     interest = db.Column(db.String(20), nullable=False, default="web")  # web|desktop|both
+    # "company" (wants its own payroll run) or "bureau" (runs payroll for other
+    # companies, so it is approved as a payroll bureau). See app/bureaus.py.
+    account_type = db.Column(db.String(20), nullable=False, default="company", server_default="company")
     message = db.Column(db.Text)
     status = db.Column(db.String(20), nullable=False, default=ACCESS_NEW, index=True)
     decline_reason = db.Column(db.String(255))

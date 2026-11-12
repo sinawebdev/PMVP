@@ -823,6 +823,7 @@ def create_app():
 
     from app.access_requests import access_bp
     from app.desktop_licences import licences_bp
+    from app.bureaus import bureaus_bp
     from app.audit import audit_bp
     from app.auth import auth_bp
     from app.client import client_bp
@@ -841,6 +842,7 @@ def create_app():
 
     app.register_blueprint(access_bp)
     app.register_blueprint(licences_bp)
+    app.register_blueprint(bureaus_bp)
     app.register_blueprint(invites_bp)
     app.register_blueprint(legal_bp)
     app.register_blueprint(audit_bp)
