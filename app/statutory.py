@@ -22,7 +22,8 @@ from flask_login import current_user
 from app import db
 from app.audit import record_audit
 from app.auth import role_required
-from app.models import PayrollRun, StatutoryRate, utc_now
+from app.bureau_scope import current_bureau_id
+from app.models import ClientCompany, PayrollRun, StatutoryRate, utc_now
 from app.payroll_calculations import period_start
 from app.payroll_status import CLOSED_STATUSES, REJECTED
 from app.permissions import STATUTORY_ROLES
@@ -33,16 +34,27 @@ statutory_bp = Blueprint("statutory", __name__, url_prefix="/statutory-rates")
 @statutory_bp.route("/")
 @role_required(*STATUTORY_ROLES)
 def index():
-    # Default versions only. A bureau's overrides are managed by that bureau.
+    # Payrolla staff manage the defaults. A bureau sees the defaults (read-only)
+    # beside its own versions, which apply to its own clients only.
+    bureau_id = current_bureau_id()
     rates = (
-        StatutoryRate.query.filter(StatutoryRate.bureau_id.is_(None))
-        .order_by(StatutoryRate.effective_from.desc())
+        _visible_versions(bureau_id)
+        .order_by(StatutoryRate.effective_from.desc(), StatutoryRate.bureau_id.is_(None))
         .all()
     )
-    active = StatutoryRate.active_for(date.today())
+    active = StatutoryRate.active_for(date.today(), bureau_id)
     return render_template(
-        "statutory_rates.html", rates=rates, active=active, locks=rate_locks()
+        "statutory_rates.html", rates=rates, active=active, locks=rate_locks(),
+        bureau_id=bureau_id,
     )
+
+
+def _visible_versions(bureau_id):
+    """The defaults, plus this bureau's own versions when there is one."""
+    query = StatutoryRate.query
+    if bureau_id is None:
+        return query.filter(StatutoryRate.bureau_id.is_(None))
+    return query.filter(db.or_(StatutoryRate.bureau_id.is_(None), StatutoryRate.bureau_id == bureau_id))
 
 
 def _parse_bands(raw):
@@ -125,16 +137,14 @@ def rate_locks():
     that one. Runs calculated before the stamp existed (NULL) depend on the
     version that was in force for their period, so those are counted too.
     """
-    versions = (
-        StatutoryRate.query.filter(StatutoryRate.bureau_id.is_(None))
-        .order_by(StatutoryRate.effective_from)
-        .all()
-    )
+    versions = StatutoryRate.query.all()
+    bureau_of = dict(db.session.query(ClientCompany.id, ClientCompany.bureau_id).all())
     counts = defaultdict(int)
     closed = PayrollRun.query.filter(PayrollRun.status.in_(CLOSED_STATUSES)).with_entities(
-        PayrollRun.month, PayrollRun.year, PayrollRun.statutory_rate_id
+        PayrollRun.month, PayrollRun.year, PayrollRun.statutory_rate_id,
+        PayrollRun.client_company_id,
     )
-    for month, year, stamped in closed:
+    for month, year, stamped, company_id in closed:
         if stamped:
             counts[stamped] += 1
             continue
@@ -142,10 +152,7 @@ def rate_locks():
             start = period_start(month, year)
         except (TypeError, ValueError):
             continue
-        in_force = None
-        for version in versions:
-            if version.effective_from <= start:
-                in_force = version
+        in_force = _in_force(versions, start, bureau_of.get(company_id))
         if in_force is not None:
             counts[in_force.id] += 1
     return {
@@ -155,6 +162,17 @@ def rate_locks():
         )
         for rate_id, n in counts.items()
     }
+
+
+def _in_force(versions, on_date, bureau_id):
+    """StatutoryRate.active_for, over versions already loaded."""
+    candidates = [
+        v for v in versions
+        if v.effective_from <= on_date and (v.bureau_id is None or v.bureau_id == bureau_id)
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda v: (v.effective_from, v.bureau_id is not None))
 
 
 def open_runs_using(rate):
@@ -273,6 +291,8 @@ def _render_form(mode, prefill, band_rows, rate=None, form_error=None, status=20
         heading = "New Rate Version (copied)"
     else:
         heading = "Add Statutory Rate Version"
+    if current_bureau_id() is not None:
+        heading += " · for your clients"
     return render_template(
         "statutory_rate_form.html", mode=mode, rate=rate, prefill=prefill,
         band_rows=band_rows, form_error=form_error, heading=heading,
@@ -301,9 +321,12 @@ def _rerender(error, mode="new", rate=None):
 @statutory_bp.route("/new", methods=["GET", "POST"])
 @role_required(*STATUTORY_ROLES)
 def new():
+    bureau_id = current_bureau_id()
+    # Pre-filled from the newest version this user works from: for a bureau,
+    # its own latest version or the newest default, whichever starts later.
     latest = (
-        StatutoryRate.query.filter(StatutoryRate.bureau_id.is_(None))
-        .order_by(StatutoryRate.effective_from.desc())
+        _visible_versions(bureau_id)
+        .order_by(StatutoryRate.effective_from.desc(), StatutoryRate.bureau_id.is_(None))
         .first()
     )
     if request.method == "POST":
@@ -317,11 +340,13 @@ def new():
         except ValueError as exc:
             return _rerender(str(exc))
 
-        if StatutoryRate.query.filter_by(effective_from=effective_from, bureau_id=None).first():
+        if StatutoryRate.query.filter_by(effective_from=effective_from, bureau_id=bureau_id).first():
             return _rerender("A rate version with that effective date already exists.")
 
         rate = StatutoryRate(
             effective_from=effective_from,
+            # A bureau's version is its own: taken from the signed-in user, never the form.
+            bureau_id=bureau_id,
             deductions_policy_version=1 if effective_from >= date(2026, 9, 1) else 0,
             created_by=current_user.id,
             **values,
@@ -345,10 +370,20 @@ def new():
     return _render_form("new", _prefill_from(latest), band_rows)
 
 
-def _default_version_or_404(rate_id):
-    """A default rate version. A bureau's override is never reached from here."""
+def _visible_version_or_404(rate_id):
+    """A version this user may read: a default, or their own bureau's."""
     rate = db.session.get(StatutoryRate, rate_id)
-    if rate is None or rate.bureau_id is not None:
+    if rate is None or (rate.bureau_id is not None and rate.bureau_id != current_bureau_id()):
+        abort(404)
+    return rate
+
+
+def _editable_version_or_404(rate_id):
+    """A version this user may change: Payrolla staff the defaults, a bureau
+    only its own. Nobody edits another bureau's version, and a bureau never
+    edits the defaults everyone else relies on."""
+    rate = db.session.get(StatutoryRate, rate_id)
+    if rate is None or rate.bureau_id != current_bureau_id():
         abort(404)
     return rate
 
@@ -357,7 +392,7 @@ def _default_version_or_404(rate_id):
 @role_required(*STATUTORY_ROLES)
 def copy(rate_id):
     """The add form, pre-filled from ``rate_id``: how a locked version changes."""
-    source = _default_version_or_404(rate_id)
+    source = _visible_version_or_404(rate_id)
     prefill = _prefill_from(source)
     prefill["notes"] = (
         f"Copied from the version effective {source.effective_from.strftime('%d %b %Y')}."
@@ -380,7 +415,7 @@ def _display(name, value):
 @statutory_bp.route("/<int:rate_id>/edit", methods=["GET", "POST"])
 @role_required(*STATUTORY_ROLES)
 def edit(rate_id):
-    rate = _default_version_or_404(rate_id)
+    rate = _editable_version_or_404(rate_id)
     lock = rate_locks().get(rate.id)
     if lock:
         flash(f"{lock}. Copy it as a new version instead.", "warning")

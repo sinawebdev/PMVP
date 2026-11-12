@@ -46,7 +46,6 @@ PAYROLLA_ONLY = {
     "licences.ledger", "licences.issue_for_request", "licences.resend",  # Payrolla's desktop licences
     "main.db_health", "main.db_health_json",                         # infrastructure
     "distribution.dashboard", "distribution.dashboard_fragment",     # worker health across every tenant
-    "statutory.index", "statutory.new", "statutory.edit", "statutory.copy",  # default rates (bureau overrides: part C)
 }
 
 
@@ -175,7 +174,7 @@ class BureauIsolationTestCase(unittest.TestCase):
     def test_payrolla_only_pages_are_404(self):
         self._as_alpha()
         for path in ("/clients/licences", "/admin/db-health", "/db-health", "/distribution/dashboard",
-                     "/statutory-rates/", f"/clients/requests/{self.request.id}"):
+                     f"/clients/requests/{self.request.id}"):
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 404)
 

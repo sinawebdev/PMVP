@@ -3,21 +3,25 @@
 {% block page_title %}Statutory Rates{% endblock %}
 {% block content %}
 <div class="toolbar">
-    <a class="btn btn-primary" href="{{ url_for('statutory.new') }}"><i class="bi bi-plus-circle"></i>Add Rate Version</a>
+    <a class="btn btn-primary" href="{{ url_for('statutory.new') }}"><i class="bi bi-plus-circle"></i>{% if bureau_id %}Add your rate version{% else %}Add Rate Version{% endif %}</a>
 </div>
 <section class="panel">
     <div class="panel-header"><h2><i class="bi bi-bank"></i>Rate Versions</h2><span>{{ rates|length }} versions</span></div>
     <p class="mini-note"><i class="bi bi-shield-check"></i> A run uses the version in force for its own period. You can edit a version until a payroll run that uses it is approved; after that it's locked, so approved pay never changes. To change locked rates, copy the version and give the copy a new start date.</p>
+    {% if bureau_id %}
+    <p class="mini-note"><i class="bi bi-people"></i> Versions marked <strong>Your clients</strong> apply to the companies you run payroll for, and nobody else. The defaults are set by {{ app_brand_name }} and are read-only here; copy one to make your own. When yours and a default start on the same date, yours applies. A newer default replaces your older versions until you add another.</p>
+    {% endif %}
     {% if not rates %}
         <p class="text-muted mb-0">No statutory rate versions yet. Add the current GRA/SSNIT rates to enable payroll calculation.</p>
     {% else %}
     <div class="table-responsive">
         <table class="table table-sm align-middle">
-            <thead><tr><th>Effective From</th><th>SSF Employee</th><th>SSF Employer</th><th>PAYE Bands</th><th>Notes</th><th></th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+            <thead><tr><th>Effective From</th>{% if bureau_id %}<th>Applies to</th>{% endif %}<th>SSF Employee</th><th>SSF Employer</th><th>PAYE Bands</th><th>Notes</th><th></th><th><span class="visually-hidden">Actions</span></th></tr></thead>
             <tbody>
             {% for rate in rates %}
                 <tr>
                     <td>{{ rate.effective_from.strftime("%d %b %Y") }}</td>
+                    {% if bureau_id %}<td>{% if rate.bureau_id %}<span class="badge text-bg-info">Your clients</span>{% else %}<span class="text-muted">Default</span>{% endif %}</td>{% endif %}
                     <td>{{ "%.2f%%"|format(rate.ssf_employee_rate * 100) }}</td>
                     <td>{{ "%.2f%%"|format(rate.ssf_employer_rate * 100) }}</td>
                     <td>
@@ -39,7 +43,9 @@
                     </td>
                     <td>{% if active and rate.id == active.id %}<span class="badge text-bg-success">Active today</span>{% endif %}</td>
                     <td class="text-end text-nowrap">
-                        {% if locks.get(rate.id) %}
+                        {% if rate.bureau_id != bureau_id %}
+                        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('statutory.copy', rate_id=rate.id) }}">Copy as your version</a>
+                        {% elif locks.get(rate.id) %}
                         <span class="small text-muted d-block" title="{{ locks[rate.id] }}"><i class="bi bi-lock"></i> Locked</span>
                         <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('statutory.copy', rate_id=rate.id) }}">Copy as new version</a>
                         {% else %}

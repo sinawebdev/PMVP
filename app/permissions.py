@@ -72,7 +72,9 @@ REP_ROLES = frozenset(
 AUDIT_ROLES = frozenset({"admin", *SUPERUSERS, BUREAU_ADMIN})
 
 # Statutory-rate administration. ``md`` reached these routes via the bypass.
-STATUTORY_ROLES = frozenset({"admin", *SUPERUSERS})
+# bureau_admin keeps its own versions for its own clients (app.statutory); it
+# can never edit the defaults.
+STATUTORY_ROLES = frozenset({"admin", *SUPERUSERS, BUREAU_ADMIN})
 
 # Destructive roster action: remove an employee record outright.
 ROSTER_DELETE_ROLES = frozenset({"admin", *SUPERUSERS, BUREAU_ADMIN})

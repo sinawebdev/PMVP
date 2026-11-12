@@ -37,8 +37,9 @@ SHARED_ENDPOINTS = frozenset({"static", "auth.logout"})
 # id the gate checks (OWNERSHIP_RESOLVERS) or scopes its lists through
 # operator_query / scoped_company_ids. Everything not listed stays Payrolla's
 # alone: access requests, desktop licences, database health, the distribution
-# monitor (it reports worker health across every tenant), and the default
-# statutory rates. tests/test_bureau_isolation.py checks these pages show a
+# monitor (it reports worker health across every tenant). On the statutory
+# pages a bureau reads the defaults and manages only its own versions
+# (app.statutory). tests/test_bureau_isolation.py checks these pages show a
 # bureau nothing of anyone else's.
 BUREAU_ENDPOINTS = frozenset({
     "main.index", "main.dashboard", "main.search",
@@ -68,6 +69,7 @@ BUREAU_ENDPOINTS = frozenset({
     "distribution.history_export_csv", "distribution.history_export_xlsx",
     "audit.audit_trail", "audit.add_expense",
     "notifications.inbox", "notifications.mark_read", "notifications.mark_all_read",
+    "statutory.index", "statutory.new", "statutory.copy", "statutory.edit",
 })
 
 
@@ -220,6 +222,20 @@ def _staged_import(value):
     return IN_SCOPE if all(company_in_scope(cid) for cid in company_ids) else None
 
 
+def _rate_version(value):
+    """A statutory rate version: the defaults are readable by every bureau, a
+    bureau's own versions by that bureau only. (Who may EDIT which is decided in
+    app.statutory: a bureau never edits a default.)"""
+    from app.models import StatutoryRate
+
+    rate = db.session.get(StatutoryRate, _as_int(value))
+    if rate is None:
+        return None
+    if rate.bureau_id is None or rate.bureau_id == current_bureau_id():
+        return IN_SCOPE
+    return None
+
+
 def _user_of_company(value):
     """A client login (invite resend): owned through its company."""
     from app.models import User
@@ -252,6 +268,7 @@ OWNERSHIP_RESOLVERS = {
     "batch_id": _company_of("DistributionBatch"),
     "note_id": _own_notification,
     "user_id": _user_of_company,
+    "rate_id": _rate_version,
 }
 
 # Form or query keys that carry an id, checked on every bureau request whether

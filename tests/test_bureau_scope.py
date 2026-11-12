@@ -144,12 +144,16 @@ class BureauTestCase(unittest.TestCase):
                 db.session.rollback()
 
     # --- the gate -------------------------------------------------------------
-    def test_bureau_user_reaches_no_unmarked_operator_page(self):
+    def test_bureau_user_reaches_no_unopened_operator_page(self):
+        # Pages a bureau may never open (Payrolla's own), and pages it may open
+        # pointed at a company that is not its own.
         self._login("admin@testbureau.example", "bureau-pass-1")
-        for path in ("/dashboard", "/clients", f"/clients/{self.ours.id}", "/statutory-rates/",
-                     f"/payroll/{self.our_run.id}", "/audit", "/notifications"):
+        for path in ("/clients/licences", "/admin/db-health", "/distribution/dashboard",
+                     f"/clients/{self.theirs.id}", f"/clients/{self.managed.id}",
+                     f"/payroll/runs/{self.their_run.id}"):
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 404)
+        self.assertEqual(self.client.get(f"/clients/{self.ours.id}").status_code, 200)
 
     def test_marked_page_checks_every_id(self):
         self._login("admin@testbureau.example", "bureau-pass-1")
