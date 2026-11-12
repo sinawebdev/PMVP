@@ -32,8 +32,18 @@ def statutory_rate_for_run(payroll_run):
     Every calculation path asks here for its rates, so this is also where the
     run records which version it used. Only an open run (Draft or Pending
     Approval) is stamped: a finalised run keeps the version it was approved
-    with, even if a later, backdated version would now be selected."""
-    from app.payroll_status import PENDING_STATUSES
+    with, even if a later, backdated version would now be selected — and it is
+    that stamped version which is returned for it, so editing or adding a rate
+    version can never change the figures of an approved or processed run."""
+    from app import db
+    from app.payroll_status import CLOSED_STATUSES, PENDING_STATUSES
+
+    status = getattr(payroll_run, "status", None)
+    stamped_id = getattr(payroll_run, "statutory_rate_id", None)
+    if status in CLOSED_STATUSES and stamped_id:
+        stamped = db.session.get(StatutoryRate, stamped_id)
+        if stamped is not None:
+            return stamped
 
     on_date = period_start(payroll_run.month, payroll_run.year)
     rate = StatutoryRate.active_for(on_date)
@@ -42,7 +52,6 @@ def statutory_rate_for_run(payroll_run):
             f"No statutory rate version is effective on {on_date.isoformat()}. "
             "Add one under Statutory Rates before calculating this run."
         )
-    status = getattr(payroll_run, "status", None)
     if status is None or status in PENDING_STATUSES:
         payroll_run.statutory_rate_id = rate.id
     return rate

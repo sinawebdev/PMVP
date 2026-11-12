@@ -7,13 +7,13 @@
 </div>
 <section class="panel">
     <div class="panel-header"><h2><i class="bi bi-bank"></i>Rate Versions</h2><span>{{ rates|length }} versions</span></div>
-    <p class="mini-note"><i class="bi bi-shield-check"></i> A run always uses the version in force for its own period, so adding a version never changes a past run.</p>
+    <p class="mini-note"><i class="bi bi-shield-check"></i> A run uses the version in force for its own period. You can edit a version until a payroll run that uses it is approved; after that it's locked, so approved pay never changes. To change locked rates, copy the version and give the copy a new start date.</p>
     {% if not rates %}
         <p class="text-muted mb-0">No statutory rate versions yet. Add the current GRA/SSNIT rates to enable payroll calculation.</p>
     {% else %}
     <div class="table-responsive">
         <table class="table table-sm align-middle">
-            <thead><tr><th>Effective From</th><th>SSF Employee</th><th>SSF Employer</th><th>PAYE Bands</th><th>Notes</th><th></th></tr></thead>
+            <thead><tr><th>Effective From</th><th>SSF Employee</th><th>SSF Employer</th><th>PAYE Bands</th><th>Notes</th><th></th><th><span class="visually-hidden">Actions</span></th></tr></thead>
             <tbody>
             {% for rate in rates %}
                 <tr>
@@ -33,8 +33,19 @@
                             </table>
                         </details>
                     </td>
-                    <td class="small text-muted">{{ rate.notes or "" }}</td>
+                    <td class="small text-muted">
+                        {{ rate.notes or "" }}
+                        {% if rate.updated_at %}<div>Edited {{ rate.updated_at.strftime("%d %b %Y") }}{% if rate.editor %} by {{ rate.editor.name or rate.editor.email }}{% endif %}</div>{% endif %}
+                    </td>
                     <td>{% if active and rate.id == active.id %}<span class="badge text-bg-success">Active today</span>{% endif %}</td>
+                    <td class="text-end text-nowrap">
+                        {% if locks.get(rate.id) %}
+                        <span class="small text-muted d-block" title="{{ locks[rate.id] }}"><i class="bi bi-lock"></i> Locked</span>
+                        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('statutory.copy', rate_id=rate.id) }}">Copy as new version</a>
+                        {% else %}
+                        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('statutory.edit', rate_id=rate.id) }}">Edit</a>
+                        {% endif %}
+                    </td>
                 </tr>
             {% endfor %}
             </tbody>

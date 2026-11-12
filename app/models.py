@@ -952,8 +952,15 @@ class StatutoryRate(db.Model):
     notes = db.Column(db.Text)
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
     created_at = db.Column(db.DateTime, default=utc_now)
+    # Set when a version is edited in place (app.statutory.edit). Editing is
+    # refused once an approved or processed run depends on the version.
+    updated_at = db.Column(db.DateTime)
+    updated_by = db.Column(
+        db.Integer, db.ForeignKey("user.id", name="fk_statutory_rates_updated_by")
+    )
 
-    creator = db.relationship("User")
+    creator = db.relationship("User", foreign_keys=[created_by])
+    editor = db.relationship("User", foreign_keys=[updated_by])
 
     @property
     def paye_bands(self):

@@ -1,11 +1,19 @@
 """Admin-only management of versioned statutory rates (SSF split + PAYE bands).
 
-Reps never see these screens — every route is gated to the admin role. Rates
-are effective-dated: adding a new version never edits or deletes an old one,
-which is what keeps historical payroll runs reproducible.
+Reps never see these screens — every route is gated to STATUTORY_ROLES. Rates
+are effective-dated, and a run uses the version in force for its own period.
+
+A version can be edited in place while no approved or processed run depends on
+it, because then no figure anyone has signed off can change. Once one does, it
+is locked: the page offers "Copy as a new version" instead, which pre-fills the
+add form. Approved and processed runs always keep the version they were stamped
+with (``statutory_rate_for_run``), and the effective date never changes on
+edit, so the desktop's start-up re-seed (which only inserts missing dates)
+cannot bring an edited version back.
 """
 import json
 import math
+from collections import defaultdict
 from datetime import date, datetime
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
@@ -14,8 +22,10 @@ from flask_login import current_user
 from app import db
 from app.audit import record_audit
 from app.auth import role_required
+from app.models import PayrollRun, StatutoryRate, utc_now
+from app.payroll_calculations import period_start
+from app.payroll_status import CLOSED_STATUSES, REJECTED
 from app.permissions import STATUTORY_ROLES
-from app.models import StatutoryRate
 
 statutory_bp = Blueprint("statutory", __name__, url_prefix="/statutory-rates")
 
@@ -25,7 +35,9 @@ statutory_bp = Blueprint("statutory", __name__, url_prefix="/statutory-rates")
 def index():
     rates = StatutoryRate.query.order_by(StatutoryRate.effective_from.desc()).all()
     active = StatutoryRate.active_for(date.today())
-    return render_template("statutory_rates.html", rates=rates, active=active)
+    return render_template(
+        "statutory_rates.html", rates=rates, active=active, locks=rate_locks()
+    )
 
 
 def _parse_bands(raw):
@@ -98,6 +110,185 @@ def _band_rows_for_display(bands):
     ]
 
 
+# --- Which versions are locked --------------------------------------------------
+
+
+def rate_locks():
+    """{rate id: reason} for every version an approved or processed run depends on.
+
+    A run stamped with a version (``PayrollRun.statutory_rate_id``) depends on
+    that one. Runs calculated before the stamp existed (NULL) depend on the
+    version that was in force for their period, so those are counted too.
+    """
+    versions = StatutoryRate.query.order_by(StatutoryRate.effective_from).all()
+    counts = defaultdict(int)
+    closed = PayrollRun.query.filter(PayrollRun.status.in_(CLOSED_STATUSES)).with_entities(
+        PayrollRun.month, PayrollRun.year, PayrollRun.statutory_rate_id
+    )
+    for month, year, stamped in closed:
+        if stamped:
+            counts[stamped] += 1
+            continue
+        try:
+            start = period_start(month, year)
+        except (TypeError, ValueError):
+            continue
+        in_force = None
+        for version in versions:
+            if version.effective_from <= start:
+                in_force = version
+        if in_force is not None:
+            counts[in_force.id] += 1
+    return {
+        rate_id: (
+            f"{n} approved or processed payroll run{'' if n == 1 else 's'} "
+            f"{'uses' if n == 1 else 'use'} this version, so it can no longer be changed"
+        )
+        for rate_id, n in counts.items()
+    }
+
+
+def open_runs_using(rate):
+    """Runs not yet approved that were last calculated with ``rate``."""
+    return (
+        PayrollRun.query.filter(
+            PayrollRun.statutory_rate_id == rate.id,
+            ~PayrollRun.status.in_(CLOSED_STATUSES + (REJECTED,)),
+        )
+        .order_by(PayrollRun.id)
+        .all()
+    )
+
+
+# --- Reading the form -------------------------------------------------------------
+
+# Labels for the audit trail when a version is edited.
+RATE_FIELD_LABELS = {
+    "ssf_employee_rate": "SSF employee rate",
+    "ssf_employer_rate": "SSF employer rate",
+    "overtime_rate_low": "Overtime rate (within threshold)",
+    "overtime_rate_high": "Overtime rate (excess)",
+    "overtime_basic_threshold": "Overtime threshold",
+    "bonus_rate": "Bonus concession rate",
+    "bonus_annual_basic_threshold": "Bonus threshold",
+    "overtime_junior_monthly_threshold": "OT junior-staff threshold",
+    "icu_member_rate": "ICU union dues",
+    "ssnit_limits_year": "SSNIT notice year",
+    "ssnit_min_insurable": "Minimum insurable earnings",
+    "ssnit_max_insurable": "Maximum insurable earnings",
+    "ssnit_min_monthly_remittance": "Minimum monthly SSNIT payment",
+    "provident_fund_tax_limit": "Provident-fund tax limit",
+    "overtime_qualifying_annual_limit": "Overtime qualifying annual limit",
+    "paye_bands_json": "PAYE bands",
+    "notes": "Notes",
+}
+_DEDUCTION_DEFAULTS = (
+    ("ssnit_min_insurable", 587.80), ("ssnit_max_insurable", 69000),
+    ("ssnit_min_monthly_remittance", 79.40),
+    ("provident_fund_tax_limit", 0.165),
+    ("overtime_qualifying_annual_limit", 18000),
+)
+
+
+def _values_from_form(form, fallback):
+    """Every field of a version except its effective date, from ``form``.
+
+    ``fallback`` supplies a deduction limit the form left blank (the latest
+    version when adding, the version itself when editing). Raises KeyError for
+    a missing required field and ValueError for a bad one.
+    """
+    ssf_employee = float(form["ssf_employee_rate"])
+    ssf_employer = float(form["ssf_employer_rate"])
+    if form.getlist("band_over"):
+        bands = bands_from_rows(_rows_from_form(form))
+    else:
+        bands = _parse_bands(form["paye_bands_json"])
+    values = {
+        "ssf_employee_rate": ssf_employee,
+        "ssf_employer_rate": ssf_employer,
+        "paye_bands_json": json.dumps(bands),
+        "overtime_rate_low": float(form["overtime_rate_low"]),
+        "overtime_rate_high": float(form["overtime_rate_high"]),
+        "overtime_basic_threshold": float(form["overtime_basic_threshold"]),
+        "bonus_rate": float(form["bonus_rate"]),
+        "bonus_annual_basic_threshold": float(form["bonus_annual_basic_threshold"]),
+        "overtime_junior_monthly_threshold": float(
+            form.get("overtime_junior_monthly_threshold") or 1500
+        ),
+        "icu_member_rate": float(form.get("icu_member_rate") or 0.03),
+        "notes": form.get("notes") or None,
+    }
+    # New versions carry explicit, sourced deduction limits. The old
+    # basic-pay warning remains only on historical policy versions.
+    deduction_config = {
+        name: float(form.get(name) or getattr(fallback, name, default) or default)
+        for name, default in _DEDUCTION_DEFAULTS
+    }
+    deduction_config["ssnit_limits_year"] = int(
+        form.get("ssnit_limits_year") or getattr(fallback, "ssnit_limits_year", None) or 2026
+    )
+    if any(not math.isfinite(value) or value <= 0 for value in deduction_config.values()):
+        raise ValueError("Deduction limits must be finite positive values.")
+    if deduction_config["ssnit_min_insurable"] > deduction_config["ssnit_max_insurable"]:
+        raise ValueError("The minimum pensionable earnings cannot exceed the maximum.")
+    if deduction_config["provident_fund_tax_limit"] > 1:
+        raise ValueError("Provident-fund tax limit must be a fraction no greater than 1.")
+    if not 2000 <= deduction_config["ssnit_limits_year"] <= 2100:
+        raise ValueError("Enter the year covered by the verified SSNIT notice.")
+    if not (0 < ssf_employee < 1 and 0 < ssf_employer < 1):
+        raise ValueError("SSF rates must be fractions, e.g. 0.055 for 5.5%.")
+    values.update(deduction_config)
+    return values
+
+
+def _prefill_from(rate):
+    """Form values taken from ``rate``, or the built-in defaults when there is none."""
+    defaults = {
+        "ssf_employee_rate": 0.055, "ssf_employer_rate": 0.13,
+        "overtime_rate_low": 0.05, "overtime_rate_high": 0.10,
+        "overtime_basic_threshold": 0.50, "bonus_rate": 0.05,
+        "bonus_annual_basic_threshold": 0.15, "overtime_junior_monthly_threshold": 1500.0,
+        "icu_member_rate": 0.03, "ssnit_limits_year": 2026,
+        **dict(_DEDUCTION_DEFAULTS),
+    }
+    prefill = {"effective_from": "", "notes": ""}
+    for name, default in defaults.items():
+        prefill[name] = getattr(rate, name, default) if rate else default
+    return prefill
+
+
+def _render_form(mode, prefill, band_rows, rate=None, form_error=None, status=200):
+    if mode == "edit":
+        heading = f"Edit Rate Version · effective {rate.effective_from.strftime('%d %b %Y')}"
+    elif mode == "copy":
+        heading = "New Rate Version (copied)"
+    else:
+        heading = "Add Statutory Rate Version"
+    return render_template(
+        "statutory_rate_form.html", mode=mode, rate=rate, prefill=prefill,
+        band_rows=band_rows, form_error=form_error, heading=heading,
+    ), status
+
+
+def _rerender(error, mode="new", rate=None):
+    """Show the form again with everything the operator typed, and the reason.
+
+    It used to flash and redirect, which threw away a dozen fields and the
+    bands because one of them was wrong."""
+    prefill = {key: request.form.get(key, "") for key in request.form.keys()
+               if key not in ("band_over", "band_rate", "csrf_token")}
+    if mode == "edit" and rate is not None:
+        prefill["effective_from"] = rate.effective_from.isoformat()
+    band_rows = [
+        {"over": over, "rate": percent, "base": ""}
+        for over, percent in zip(request.form.getlist("band_over"), request.form.getlist("band_rate"))
+    ] or [{"over": "", "rate": "", "base": ""}]
+    return _render_form(mode, prefill, band_rows, rate=rate, form_error=error, status=400)
+
+
+# --- Routes -----------------------------------------------------------------------
+
+
 @statutory_bp.route("/new", methods=["GET", "POST"])
 @role_required(*STATUTORY_ROLES)
 def new():
@@ -107,45 +298,7 @@ def new():
             effective_from = datetime.strptime(
                 request.form["effective_from"], "%Y-%m-%d"
             ).date()
-            ssf_employee = float(request.form["ssf_employee_rate"])
-            ssf_employer = float(request.form["ssf_employer_rate"])
-            if request.form.getlist("band_over"):
-                bands = bands_from_rows(_rows_from_form(request.form))
-            else:
-                bands = _parse_bands(request.form["paye_bands_json"])
-            overtime_rate_low = float(request.form["overtime_rate_low"])
-            overtime_rate_high = float(request.form["overtime_rate_high"])
-            overtime_basic_threshold = float(request.form["overtime_basic_threshold"])
-            bonus_rate = float(request.form["bonus_rate"])
-            bonus_annual_basic_threshold = float(
-                request.form["bonus_annual_basic_threshold"]
-            )
-            overtime_junior_monthly_threshold = float(
-                request.form.get("overtime_junior_monthly_threshold") or 1500
-            )
-            icu_member_rate = float(request.form.get("icu_member_rate") or 0.03)
-            # New versions carry explicit, sourced deduction limits. The old
-            # basic-pay warning remains only on historical policy versions.
-            deduction_config = {
-                name: float(request.form.get(name) or getattr(latest, name, default) or default)
-                for name, default in (
-                    ("ssnit_min_insurable", 587.80), ("ssnit_max_insurable", 69000),
-                    ("ssnit_min_monthly_remittance", 79.40),
-                    ("provident_fund_tax_limit", 0.165),
-                    ("overtime_qualifying_annual_limit", 18000),
-                )
-            }
-            deduction_config["ssnit_limits_year"] = int(
-                request.form.get("ssnit_limits_year") or getattr(latest, "ssnit_limits_year", None) or 2026
-            )
-            if any(not math.isfinite(value) or value <= 0 for value in deduction_config.values()):
-                raise ValueError("Deduction limits must be finite positive values.")
-            if deduction_config["ssnit_min_insurable"] > deduction_config["ssnit_max_insurable"]:
-                raise ValueError("The minimum pensionable earnings cannot exceed the maximum.")
-            if deduction_config["provident_fund_tax_limit"] > 1:
-                raise ValueError("Provident-fund tax limit must be a fraction no greater than 1.")
-            if not 2000 <= deduction_config["ssnit_limits_year"] <= 2100:
-                raise ValueError("Enter the year covered by the verified SSNIT notice.")
+            values = _values_from_form(request.form, latest)
         except KeyError as exc:
             return _rerender(f"{exc.args[0].replace('_', ' ')} is missing.")
         except ValueError as exc:
@@ -153,74 +306,116 @@ def new():
 
         if StatutoryRate.query.filter_by(effective_from=effective_from).first():
             return _rerender("A rate version with that effective date already exists.")
-        if not (0 < ssf_employee < 1 and 0 < ssf_employer < 1):
-            return _rerender("SSF rates must be fractions, e.g. 0.055 for 5.5%.")
 
         rate = StatutoryRate(
             effective_from=effective_from,
-            ssf_employee_rate=ssf_employee,
-            ssf_employer_rate=ssf_employer,
-            paye_bands_json=json.dumps(bands),
-            overtime_rate_low=overtime_rate_low,
-            overtime_rate_high=overtime_rate_high,
-            overtime_basic_threshold=overtime_basic_threshold,
-            bonus_rate=bonus_rate,
-            bonus_annual_basic_threshold=bonus_annual_basic_threshold,
-            overtime_junior_monthly_threshold=overtime_junior_monthly_threshold,
-            icu_member_rate=icu_member_rate,
             deductions_policy_version=1 if effective_from >= date(2026, 9, 1) else 0,
-            **deduction_config,
-            notes=request.form.get("notes") or None,
             created_by=current_user.id,
+            **values,
         )
         db.session.add(rate)
         record_audit(
             "Statutory rate version added",
             rate,
-            f"Effective {effective_from.isoformat()}: SSF {ssf_employee:.3%}/{ssf_employer:.3%}, "
-            f"{len(bands)} PAYE bands.",
+            f"Effective {effective_from.isoformat()}: SSF "
+            f"{values['ssf_employee_rate']:.3%}/{values['ssf_employer_rate']:.3%}, "
+            f"{len(rate.paye_bands)} PAYE bands.",
         )
         db.session.commit()
         flash("New statutory rate version saved.", "success")
         return redirect(url_for("statutory.index"))
 
-    prefill = {
-        "effective_from": "",
-        "notes": "",
-        "ssf_employee_rate": latest.ssf_employee_rate if latest else 0.055,
-        "ssf_employer_rate": latest.ssf_employer_rate if latest else 0.13,
-        "overtime_rate_low": latest.overtime_rate_low if latest else 0.05,
-        "overtime_rate_high": latest.overtime_rate_high if latest else 0.10,
-        "overtime_basic_threshold": latest.overtime_basic_threshold if latest else 0.50,
-        "bonus_rate": latest.bonus_rate if latest else 0.05,
-        "bonus_annual_basic_threshold": (
-            latest.bonus_annual_basic_threshold if latest else 0.15
-        ),
-        "overtime_junior_monthly_threshold": (
-            latest.overtime_junior_monthly_threshold if latest else 1500.0
-        ),
-        "icu_member_rate": latest.icu_member_rate if latest else 0.03,
-    }
-    for name, default in (
-        ("ssnit_min_insurable", 587.80), ("ssnit_max_insurable", 69000),
-        ("ssnit_min_monthly_remittance", 79.40), ("ssnit_limits_year", 2026),
-        ("provident_fund_tax_limit", 0.165), ("overtime_qualifying_annual_limit", 18000),
-    ):
-        prefill[name] = getattr(latest, name, default) if latest else default
-    band_rows = _band_rows_for_display(latest.paye_bands) if latest else [{"over": "", "rate": "", "base": 0}]
-    return render_template("statutory_rate_form.html", prefill=prefill, band_rows=band_rows)
+    band_rows = (
+        _band_rows_for_display(latest.paye_bands) if latest
+        else [{"over": "", "rate": "", "base": 0}]
+    )
+    return _render_form("new", _prefill_from(latest), band_rows)
 
 
-def _rerender(error):
-    """Show the form again with everything the operator typed, and the reason.
+@statutory_bp.route("/<int:rate_id>/copy")
+@role_required(*STATUTORY_ROLES)
+def copy(rate_id):
+    """The add form, pre-filled from ``rate_id``: how a locked version changes."""
+    source = db.get_or_404(StatutoryRate, rate_id)
+    prefill = _prefill_from(source)
+    prefill["notes"] = (
+        f"Copied from the version effective {source.effective_from.strftime('%d %b %Y')}."
+    )
+    return _render_form("copy", prefill, _band_rows_for_display(source.paye_bands), rate=source)
 
-    It used to flash and redirect, which threw away a dozen fields and the
-    bands because one of them was wrong."""
-    prefill = {key: request.form.get(key, "") for key in request.form.keys()
-               if key not in ("band_over", "band_rate", "csrf_token")}
-    band_rows = [
-        {"over": over, "rate": rate, "base": ""}
-        for over, rate in zip(request.form.getlist("band_over"), request.form.getlist("band_rate"))
-    ] or [{"over": "", "rate": "", "base": ""}]
-    return render_template("statutory_rate_form.html", prefill=prefill, band_rows=band_rows,
-                           form_error=error), 400
+
+def _display(name, value):
+    """A field's value as the audit trail shows it."""
+    if name == "paye_bands_json":
+        return "; ".join(
+            f"from {b['over']:,.2f} at {b['rate'] * 100:g}%"
+            for b in sorted(json.loads(value or "[]"), key=lambda b: b["over"])
+        )
+    if value in (None, ""):
+        return "blank"
+    return f"{value:g}" if isinstance(value, float) else str(value)
+
+
+@statutory_bp.route("/<int:rate_id>/edit", methods=["GET", "POST"])
+@role_required(*STATUTORY_ROLES)
+def edit(rate_id):
+    rate = db.get_or_404(StatutoryRate, rate_id)
+    lock = rate_locks().get(rate.id)
+    if lock:
+        flash(f"{lock}. Copy it as a new version instead.", "warning")
+        return redirect(url_for("statutory.index"))
+
+    if request.method == "POST":
+        try:
+            values = _values_from_form(request.form, rate)
+        except KeyError as exc:
+            return _rerender(f"{exc.args[0].replace('_', ' ')} is missing.", "edit", rate)
+        except ValueError as exc:
+            return _rerender(str(exc), "edit", rate)
+
+        changes = []
+        for name, new_value in values.items():
+            old_value = getattr(rate, name)
+            if name == "paye_bands_json":
+                same = json.loads(old_value or "[]") == json.loads(new_value)
+            else:
+                same = old_value == new_value
+            if not same:
+                changes.append(
+                    f"{RATE_FIELD_LABELS.get(name, name)}: "
+                    f"{_display(name, old_value)} -> {_display(name, new_value)}"
+                )
+                setattr(rate, name, new_value)
+        if not changes:
+            flash("Nothing changed.", "info")
+            return redirect(url_for("statutory.index"))
+
+        rate.updated_at = utc_now()
+        rate.updated_by = current_user.id
+        record_audit(
+            "Statutory rate version edited",
+            rate,
+            f"Effective {rate.effective_from.isoformat()}. " + " | ".join(changes),
+        )
+        db.session.commit()
+        flash(_saved_message(open_runs_using(rate)), "success")
+        return redirect(url_for("statutory.index"))
+
+    prefill = _prefill_from(rate)
+    prefill["effective_from"] = rate.effective_from.isoformat()
+    prefill["notes"] = rate.notes or ""
+    return _render_form("edit", prefill, _band_rows_for_display(rate.paye_bands), rate=rate)
+
+
+def _saved_message(open_runs):
+    message = "Rate version saved."
+    if not open_runs:
+        return message
+    count = len(open_runs)
+    names = ", ".join(f"{run.month} {run.year}" for run in open_runs[:5])
+    more = f" and {count - 5} more" if count > 5 else ""
+    return (
+        f"{message} {count} payroll run{'' if count == 1 else 's'} not yet approved "
+        f"{'uses' if count == 1 else 'use'} it ({names}{more}). "
+        "Recalculate them to apply the new rates."
+    )
