@@ -3,7 +3,7 @@
 {% block title %}Delivery Analytics · {{ app_name }}{% endblock %}
 {% block page_title %}Delivery Analytics{% endblock %}
 {% block breadcrumbs %}
-{{ bc.trail([("Dashboard", url_for('main.dashboard')), ("Distribution Monitor", url_for('distribution.dashboard')), ("Analytics", None)]) }}
+{{ bc.trail([("Dashboard", url_for('main.dashboard')), (("Distribution Monitor", url_for('distribution.dashboard')) if is_payrolla_staff else ("Delivery history", url_for('distribution.history'))), ("Analytics", None)]) }}
 {% endblock %}
 {% block page_actions %}
 <a class="btn btn-outline-light btn-sm" href="{{ url_for('distribution.history_export_csv', **filters) }}"><i class="bi bi-filetype-csv"></i>Export CSV</a>

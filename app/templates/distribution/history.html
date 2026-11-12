@@ -3,7 +3,7 @@
 {% block title %}Distribution History · {{ app_name }}{% endblock %}
 {% block page_title %}Distribution History{% endblock %}
 {% block breadcrumbs %}
-{{ bc.trail([("Dashboard", url_for('main.dashboard')), ("Distribution Monitor", url_for('distribution.dashboard')), ("History", None)]) }}
+{{ bc.trail([("Dashboard", url_for('main.dashboard')), (("Distribution Monitor", url_for('distribution.dashboard')) if is_payrolla_staff else ("Delivery history", url_for('distribution.history'))), ("History", None)]) }}
 {% endblock %}
 {% block page_actions %}
 <a class="btn btn-outline-light btn-sm" href="{{ url_for('distribution.analytics') }}"><i class="bi bi-bar-chart"></i>Analytics</a>

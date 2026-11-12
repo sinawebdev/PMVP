@@ -364,8 +364,11 @@ def held_run_criterion():
 
 
 def held_run_count():
-    """How many runs are held right now, across every tenant."""
-    return PayrollRun.query.filter(held_run_criterion()).count()
+    """How many runs are held right now, across every company the signed-in
+    operator may see (all of them for Payrolla staff, its own for a bureau)."""
+    from app.bureau_scope import operator_query
+
+    return operator_query(PayrollRun).filter(held_run_criterion()).count()
 
 
 # The orders the review queue offers, and the one it opens on.
@@ -394,7 +397,9 @@ def held_runs_query(order="newest"):
     which the operator dashboard's panel relies on). An unknown value falls back
     to the default rather than raising: it arrives from a query string.
     """
-    query = PayrollRun.query.filter(held_run_criterion())
+    from app.bureau_scope import operator_query
+
+    query = operator_query(PayrollRun).filter(held_run_criterion())
     if order == "oldest":
         # NULLs last would need a dialect-specific clause; a run scored before
         # risk_checked_at existed sorts first here, which is the safe direction
@@ -540,16 +545,18 @@ def queue_summary():
     number of rows; "GH₵ 223,813 of payroll and 109 workers, oldest waiting
     three days" is the reason the page exists. Three aggregates in one query,
     over a table already filtered to a state a human is expected to clear."""
-    row = (
-        db.session.query(
-            func.count(PayrollRun.id),
-            func.coalesce(func.sum(PayrollRun.total_net_pay), 0),
-            func.coalesce(func.sum(PayrollRun.total_workers), 0),
-            func.min(PayrollRun.risk_checked_at),
-        )
-        .filter(held_run_criterion())
-        .one()
-    )
+    from app.bureau_scope import scoped_company_ids
+
+    query = db.session.query(
+        func.count(PayrollRun.id),
+        func.coalesce(func.sum(PayrollRun.total_net_pay), 0),
+        func.coalesce(func.sum(PayrollRun.total_workers), 0),
+        func.min(PayrollRun.risk_checked_at),
+    ).filter(held_run_criterion())
+    scope = scoped_company_ids()
+    if scope is not None:
+        query = query.filter(PayrollRun.client_company_id.in_(scope))
+    row = query.one()
     count, net_pay, workers, oldest = row
     return {
         "count": int(count or 0),

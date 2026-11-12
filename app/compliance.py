@@ -59,6 +59,18 @@ def _missing(count, total, what):
     return f"{count} of {total} active employees {what}."
 
 
+def _bureau_of(latest_run, employees):
+    """The bureau whose rate versions apply to this company, or None."""
+    from app import db
+    from app.models import ClientCompany
+
+    company_id = getattr(latest_run, "client_company_id", None) or next(
+        (e.client_company_id for e in employees if e.client_company_id), None
+    )
+    company = db.session.get(ClientCompany, company_id) if company_id else None
+    return getattr(company, "bureau_id", None)
+
+
 def compliance_overview(employees, latest_run, today=None):
     """``{score, state, headline, checks, gaps}`` for one company.
 
@@ -81,7 +93,7 @@ def compliance_overview(employees, latest_run, today=None):
     # PAYE is a two-part fact: a rate version must be in force AND a run must
     # have actually computed tax against it. A live rate with no run yet is a
     # half-mark, not a pass — nothing has been proven.
-    rate = StatutoryRate.active_for(today)
+    rate = StatutoryRate.active_for(today, _bureau_of(latest_run, employees))
     paye_ok = rate is not None and bool(latest_run and (latest_run.total_paye or 0) > 0)
     paye_ratio = 1.0 if paye_ok else (0.5 if rate is not None else 0.0)
     filing_ok = bool(latest_run and latest_run.status in CLOSED_STATUSES)

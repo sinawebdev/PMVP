@@ -26,6 +26,22 @@ def period_start(month, year):
     return date(int(year), month_number, 1)
 
 
+def bureau_id_for_run(payroll_run):
+    """The bureau whose rate overrides apply to this run, or None.
+
+    Read through the session rather than the relationship: the raw-hours engine
+    stamps rates before the run's company relationship has loaded.
+    """
+    from app import db
+    from app.models import ClientCompany
+
+    company_id = getattr(payroll_run, "client_company_id", None)
+    if not company_id:
+        return None
+    company = db.session.get(ClientCompany, company_id)
+    return getattr(company, "bureau_id", None)
+
+
 def statutory_rate_for_run(payroll_run):
     """The StatutoryRate version in force for the run's period, or raise.
 
@@ -46,7 +62,7 @@ def statutory_rate_for_run(payroll_run):
             return stamped
 
     on_date = period_start(payroll_run.month, payroll_run.year)
-    rate = StatutoryRate.active_for(on_date)
+    rate = StatutoryRate.active_for(on_date, bureau_id=bureau_id_for_run(payroll_run))
     if rate is None:
         raise LookupError(
             f"No statutory rate version is effective on {on_date.isoformat()}. "

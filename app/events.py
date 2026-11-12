@@ -74,8 +74,16 @@ def record_event(
     db.session.add(event)
     db.session.flush()  # assign event.id so notifications can reference it
 
+    recipients = list(recipients or [])
+    # Whoever runs the company's payroll should hear what Payrolla's operators
+    # hear about it: for a bureau's client that is the bureau's own staff too.
+    if client_company_id and any(
+        u is not None and u.client_company_id is None and u.bureau_id is None for u in recipients
+    ):
+        recipients.extend(bureau_staff_for(client_company_id))
+
     seen = set()
-    for user in recipients or []:
+    for user in recipients:
         if user is None or user.id in seen:
             continue
         seen.add(user.id)
@@ -93,6 +101,16 @@ def record_event(
 
 
 # --- Recipient resolvers ----------------------------------------------------
+def bureau_staff_for(client_company_id):
+    """The staff of the payroll bureau that runs this company, if it has one."""
+    from app.models import ClientCompany
+
+    company = db.session.get(ClientCompany, client_company_id) if client_company_id else None
+    if company is None or company.bureau_id is None:
+        return []
+    return User.query.filter(User.bureau_id == company.bureau_id).all()
+
+
 def tenant_users(client_company_id):
     """All users belonging to a client company (client_admin + client_preparer)."""
     if not client_company_id:
@@ -213,7 +231,7 @@ def timeline_look(title):
     return _TIMELINE_LOOKS.get(title, _DEFAULT_LOOK)
 
 
-def platform_activity(limit=10, now=None):
+def platform_activity(limit=10, now=None, company_ids=None):
     """The most recent cross-tenant milestones, newest first.
 
     Two bounded queries (each capped at ``limit``), merged and re-sorted — never
@@ -227,9 +245,13 @@ def platform_activity(limit=10, now=None):
     now = now or datetime.now(timezone.utc)
     items = []
 
-    events = (
-        DomainEvent.query.order_by(DomainEvent.created_at.desc()).limit(limit).all()
-    )
+    # ``company_ids`` (a subquery from app.bureau_scope) limits the timeline to a
+    # payroll bureau's own clients. The platform-plane audit milestones below are
+    # Payrolla's own business (new companies, licences), so a bureau gets none.
+    events_query = DomainEvent.query
+    if company_ids is not None:
+        events_query = events_query.filter(DomainEvent.client_company_id.in_(company_ids))
+    events = events_query.order_by(DomainEvent.created_at.desc()).limit(limit).all()
     for event in events:
         title = event_type_label(event.event_type)
         icon, tone = timeline_look(title)
@@ -250,7 +272,7 @@ def platform_activity(limit=10, now=None):
         .order_by(AuditTrail.created_at.desc())
         .limit(limit)
         .all()
-    )
+    ) if company_ids is None else []
     for entry in audits:
         icon, tone = timeline_look(entry.action)
         items.append(

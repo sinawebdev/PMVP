@@ -555,9 +555,17 @@ def payslip(item_id):
 @client_bp.route("/statutory")
 @tenant_required
 def statutory():
-    # Global, platform-owned rates; clients are read-only (§4).
-    rate = StatutoryRate.active_for(date.today())
-    history = StatutoryRate.query.order_by(StatutoryRate.effective_from.desc()).all()
+    # Read-only for clients (§4). A bureau's client sees the rates that actually
+    # apply to it: the defaults plus its bureau's own versions, never another
+    # bureau's.
+    bureau_id = _company().bureau_id
+    rate = StatutoryRate.active_for(date.today(), bureau_id)
+    history_query = StatutoryRate.query.filter(StatutoryRate.bureau_id.is_(None))
+    if bureau_id is not None:
+        history_query = StatutoryRate.query.filter(
+            db.or_(StatutoryRate.bureau_id.is_(None), StatutoryRate.bureau_id == bureau_id)
+        )
+    history = history_query.order_by(StatutoryRate.effective_from.desc()).all()
     return render_template(
         "client/statutory.html", company=_company(), rate=rate, history=history
     )

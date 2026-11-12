@@ -25,6 +25,7 @@
         <div><dt>Location</dt><dd>{{ entry.location or "—" }}</dd></div>
         <div><dt>Team size</dt><dd>{{ entry.employee_band ~ " staff" if entry.employee_band else "—" }}</dd></div>
         <div><dt>Wants</dt><dd>{{ interests.get(entry.interest, entry.interest) }}</dd></div>
+        <div><dt>Runs payroll for others</dt><dd>{% if entry.account_type == 'bureau' %}<strong>Yes</strong>, a payroll bureau{% else %}No{% endif %}</dd></div>
         <div><dt>Received</dt><dd>{{ entry.created_at.strftime('%d %b %Y, %H:%M') }}</dd></div>
         {% if entry.reviewed_at %}<div><dt>Decided</dt><dd>{{ entry.reviewed_at.strftime('%d %b %Y') }}{% if entry.reviewed_by %} by {{ entry.reviewed_by.name }}{% endif %}</dd></div>{% endif %}
     </dl>
@@ -64,7 +65,28 @@
    primary action; the web company stays available as a secondary path. #}
 {% set can_licence = licences_enabled and entry.interest in ('desktop', 'both') and not licence and entry.status != 'declined' %}
 <div class="toolbar mt-3">
-    {% if entry.is_open and can_licence and entry.interest == 'desktop' %}
+    {% if entry.is_open and entry.account_type == 'bureau' and entry.interest != 'desktop' %}
+    {# A firm that runs payroll for others gets the bureau package: the operator
+       interface over its own clients. Its contact is invited as bureau admin. #}
+    <form method="post" action="{{ url_for('bureaus.approve_request', request_id=entry.id) }}"
+          data-confirm="Set up {{ entry.company_name }} as a payroll bureau and invite {{ entry.email }} as its admin?" data-confirm-title="Approve as payroll bureau" data-confirm-ok="Approve">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-primary" type="submit"><i class="bi bi-diagram-3"></i>Approve as payroll bureau</button>
+    </form>
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.add_client', request=entry.id) }}"><i class="bi bi-building-add"></i>Create a single company instead</a>
+    {% if can_licence %}
+    <form method="post" action="{{ url_for('licences.issue_for_request', request_id=entry.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-key"></i>Send desktop trial licence</button>
+    </form>
+    {% endif %}
+    {% if entry.status == 'new' %}
+    <form method="post" action="{{ url_for('access.contacted', request_id=entry.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-telephone"></i>Mark as contacted</button>
+    </form>
+    {% endif %}
+    {% elif entry.is_open and can_licence and entry.interest == 'desktop' %}
     <form method="post" action="{{ url_for('licences.issue_for_request', request_id=entry.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-primary" type="submit"><i class="bi bi-key"></i>Approve and send trial licence</button>

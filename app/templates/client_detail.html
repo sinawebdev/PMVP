@@ -31,6 +31,21 @@
         {% if client.notes %}
         <div class="col-md-6"><strong>Notes</strong><p class="mb-0 text-muted">{{ client.notes }}</p></div>
         {% endif %}
+        {% if is_payrolla_staff %}
+        <div class="col-md-6">
+            <strong>Payroll run by</strong>
+            {% if client.bureau %}
+            <p class="mb-0">{{ client.bureau.name }} <span class="text-muted">(payroll bureau)</span></p>
+            {% else %}
+            <p class="mb-1">{{ app_brand_name }}</p>
+            <form method="post" action="{{ url_for('bureaus.convert_company', client_id=client.id) }}"
+                  data-confirm="Make {{ client.name }} a payroll bureau? It becomes its own first client, and its logins move to the bureau interface, where they run payroll for the companies they add. This can't be undone from the screen." data-confirm-title="Set up as payroll bureau" data-confirm-ok="Set up as bureau">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-diagram-3"></i>This company runs payroll for others: set up as payroll bureau</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
 </section>
 <section class="stats-grid mt-3">
