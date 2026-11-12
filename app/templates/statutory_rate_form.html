@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% import "macros/breadcrumbs.html" as bc %}
-{% block title %}Add Statutory Rate Version · {{ app_name }}{% endblock %}
-{% block page_title %}Add Statutory Rate Version{% endblock %}
+{% block title %}{{ heading }} · {{ app_name }}{% endblock %}
+{% block page_title %}{{ heading }}{% endblock %}
 {% block breadcrumbs %}
 {{ bc.trail([
     ("Dashboard", url_for('main.dashboard')),
     ("Statutory Rates", url_for('statutory.index')),
-    ("Add Rate Version", None),
+    ("Edit Rate Version" if mode == "edit" else "Add Rate Version", None),
 ]) }}
 {% endblock %}
 {% block content %}
@@ -14,11 +14,13 @@
 <div class="alert alert-danger" role="alert"><i class="bi bi-exclamation-triangle"></i> Nothing was saved. {{ form_error }}</div>
 {% endif %}
 <section class="panel form-panel">
-    <form method="post" class="row g-3">
+    <form method="post" class="row g-3" action="{{ url_for('statutory.edit', rate_id=rate.id) if mode == 'edit' else url_for('statutory.new') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="col-md-4">
             <label class="form-label" for="effective_from">Effective From</label>
-            <input class="form-control" type="date" id="effective_from" name="effective_from" value="{{ prefill.effective_from or '' }}" required>
+            <input class="form-control" type="date" id="effective_from" name="effective_from" value="{{ prefill.effective_from or '' }}" {% if mode == "edit" %}readonly aria-describedby="effective-from-help"{% else %}required{% endif %}>
+            {% if mode == "edit" %}<div class="form-text" id="effective-from-help">The start date of a version can't change. To start new rates on another date, copy this version instead.</div>
+            {% elif mode == "copy" %}<div class="form-text">Pick the date the new rates start. Runs for earlier months keep using the version you copied.</div>{% endif %}
         </div>
         <div class="col-md-4">
             <label class="form-label" for="ssf_employee_rate">SSF Employee Rate (fraction)</label>
@@ -104,8 +106,13 @@
             <input class="form-control" type="text" id="notes" name="notes" value="{{ prefill.notes or '' }}" placeholder="e.g. GRA circular ref, gazette date">
         </div>
         <div class="col-12 d-flex gap-2">
-            <p class="mini-note"><i class="bi bi-shield-check"></i> Versions are never edited in place. Runs dated before this version's effective date keep using the old rates.</p>
+            {% if mode == "edit" %}
+            <p class="mini-note"><i class="bi bi-shield-check"></i> Payroll runs that are already approved or processed never change. Runs not yet approved pick up the new rates when they're recalculated.</p>
+            <button class="btn btn-primary" type="submit"><i class="bi bi-save"></i>Save changes</button>
+            {% else %}
+            <p class="mini-note"><i class="bi bi-shield-check"></i> Runs dated before this version's effective date keep using the old rates.</p>
             <button class="btn btn-primary" type="submit"><i class="bi bi-save"></i>Save Rate Version</button>
+            {% endif %}
             <a class="btn btn-outline-secondary" href="{{ url_for('statutory.index') }}">Cancel</a>
         </div>
     </form>
