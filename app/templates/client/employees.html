@@ -5,9 +5,12 @@
   <div class="page-bar">
     <div class="page-head">
       <h1>Employees</h1>
-      <p class="sub">{{ employees|length }} on your roster.</p>
+      <p class="sub">{{ page.total }} on your roster.</p>
     </div>
-    <a class="btn primary" href="{{ url_for('client.employee_add') }}">Add employee</a>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('client.employee_import') }}">Bulk import</a>
+      <a class="btn primary" href="{{ url_for('client.employee_add') }}">Add employee</a>
+    </div>
   </div>
 
   {% if employees %}
@@ -46,6 +49,6 @@
   </div>
   {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
   {% else %}
-  <div class="empty-state">No employees yet. Add your first with the button above.</div>
+  <div class="empty-state">No employees yet. Add them one at a time, or <a href="{{ url_for('client.employee_import') }}">import your whole list from Excel</a>.</div>
   {% endif %}
 {% endblock %}

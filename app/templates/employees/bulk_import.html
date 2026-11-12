@@ -16,11 +16,12 @@
     <div class="mini-note mb-3">
         <i class="bi bi-info-circle"></i>
         Upload an Excel file with one row per employee.
-        <strong>Required columns:</strong> Employee ID, Full Name.
-        <strong>Optional columns:</strong> Email, Phone, Department, Bank Account.
+        <strong>Required columns:</strong> Staff ID, Full name.
+        <strong>Optional columns:</strong>
+        {% for field, header, _aliases in columns if field not in ("staff_id", "full_name") %}{{ header }}{{ ", " if not loop.last else "." }}{% endfor %}
         Column names are flexible — common variations are accepted. Existing employees
-        (matched by Employee ID) will be updated; new employees are created with
-        <strong>Active</strong> status.
+        (matched by Staff ID) are updated, and only the cells filled in change anything;
+        new employees are created with <strong>Active</strong> status.
     </div>
     <form method="post" enctype="multipart/form-data" class="row g-3">
         <div class="col-12">
