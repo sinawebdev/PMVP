@@ -5,23 +5,19 @@ inside the system. Contact details (email, phone) used when sending payslips alw
 from these records, never from uploaded payroll Excel files.
 
 Access is rep-only (admin / md / payroll_officer / accounts_officer). Client self-service
-is deferred to Phase 3. Deactivation is the default for a worker who has left — it keeps
+goes through the client portal (app/client), and both portals bulk-import rosters
+through app/roster_import.py. Deactivation is the default for a worker who has left — it keeps
 past payroll runs intact. Hard delete exists too but is deliberately narrow (admin/md
 only) and refused outright for any employee with payroll history, so payslip records can
 never be silently destroyed. The join key is ``staff_id``, normalised on every read and
 write so "DCL 9" and "DCL9" resolve to the same record.
 """
-import io
-import json
 import os
-import uuid
 from datetime import date
 from math import isfinite
 
-import pandas as pd
 from flask import (
     Blueprint,
-    current_app,
     flash,
     make_response,
     redirect,
@@ -32,7 +28,7 @@ from flask import (
     url_for,
 )
 
-from app import db
+from app import db, roster_import
 from app.audit import record_audit
 from app.auth import role_required
 from app.htmx_utils import wants_htmx, with_toast
@@ -57,12 +53,6 @@ from app.permissions import (  # canonical operator capability groups
 
 ACTIVE = "Active"
 INACTIVE = "Inactive"
-
-
-def _stage_path(token):
-    folder = current_app.config["IMPORT_SESSION_FOLDER"]
-    os.makedirs(folder, exist_ok=True)
-    return os.path.join(folder, f"emp_import_{token}.json")
 
 
 # ── Roster page ──────────────────────────────────────────────────────────────
@@ -506,56 +496,25 @@ def delete(client_id, emp_id):
     return redirect(url_for("employees.roster", client_id=client_id))
 
 
-# ── Excel template download ───────────────────────────────────────────────────
+# ── Bulk import via Excel (upload -> preview -> confirm) ───────────────────────
+# Thin wrappers over app.roster_import, which the client portal shares. The
+# client comes from the URL here because operators work across companies; the
+# staged file is checked against it again on confirm.
+
+_SESSION_KEY = "emp_import_token"
 
 
 @employees_bp.route("/clients/<int:client_id>/roster-template")
 @role_required(*REP_ROLES)
 def roster_template(client_id):
-    """Serve a minimal Excel template so reps know exactly what columns to use."""
+    """The Excel template, so reps know exactly which columns are read."""
     db.get_or_404(ClientCompany, client_id)
-    df = pd.DataFrame(
-        columns=["Employee ID", "Full Name", "Email", "Phone", "Department", "Bank Account"]
-    )
-    df.loc[0] = [
-        "DCL001",
-        "Kwame Mensah",
-        "kwame@example.com",
-        "+233244000000",
-        "Operations",
-        "1234567890",
-    ]
-    buf = io.BytesIO()
-    df.to_excel(buf, index=False)
-    buf.seek(0)
     return send_file(
-        buf,
-        download_name="payrolla_employee_roster_template.xlsx",
+        roster_import.build_template(),
+        download_name=roster_import.TEMPLATE_FILENAME,
         as_attachment=True,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        mimetype=roster_import.TEMPLATE_MIMETYPE,
     )
-
-
-# ── Bulk import via Excel (upload -> preview -> confirm) ───────────────────────
-
-COLUMN_ALIASES = {
-    "staff_id": ["employee id", "emp id", "staff id", "id", "clk no", "staff no",
-                 "emp no", "employee_id"],
-    "full_name": ["full name", "name", "employee name", "emp name", "staff name",
-                  "full_name"],
-    "email": ["email", "email address", "e-mail", "mail"],
-    "phone": ["phone", "phone number", "mobile", "whatsapp", "contact", "tel"],
-    "department": ["department", "dept", "division", "unit"],
-    "bank_account": ["bank account", "account number", "acct no", "bank acct", "account",
-                     "a/c number", "a/c no"],
-}
-
-
-def _clean(value):
-    text = str(value).strip()
-    if not text or text.lower() == "nan":
-        return None
-    return text
 
 
 @employees_bp.route("/clients/<int:client_id>/bulk-import", methods=["GET", "POST"])
@@ -564,103 +523,47 @@ def bulk_import(client_id):
     client = db.get_or_404(ClientCompany, client_id)
 
     if request.method == "GET":
-        return render_template("employees/bulk_import.html", client=client)
+        return render_template(
+            "employees/bulk_import.html", client=client, columns=roster_import.ROSTER_COLUMNS
+        )
 
     file = request.files.get("file")
-    if not file or not file.filename:
-        flash("No file uploaded.", "danger")
-        return redirect(request.url)
-
-    # Validate before pandas sees the stream: this route previously handed an
-    # unchecked upload straight to read_excel, which opens (and expands) whatever
-    # it is given. .csv is not offered here, so the workbook extensions only.
     try:
-        validate_spreadsheet_upload(
+        safe_name, _ext, _size = validate_spreadsheet_upload(
             file, allowed=ZIP_WORKBOOK_EXTENSIONS | LEGACY_WORKBOOK_EXTENSIONS
         )
-        # read_excel needs a real file to seek over for the bomb check, so stage
-        # it first; the roster import is a one-shot parse and the temp file goes
-        # away in the finally below.
-        staged = save_temporary_upload(file)
+        staged_path = save_temporary_upload(file)
     except SpreadsheetValidationError as exc:
         flash(str(exc), "danger")
         return redirect(request.url)
-
     try:
-        df = pd.read_excel(staged, dtype=str)
-    except Exception as exc:  # noqa: BLE001 - surfaced to the rep
-        flash(f"Could not read file: {exc}", "danger")
+        existing = roster_import.existing_by_staff_id(
+            Employee.query.filter_by(client_company_id=client_id)
+        )
+        parsed = roster_import.parse_roster(staged_path, existing)
+    except roster_import.RosterImportError as exc:
+        flash(str(exc), "danger")
         return redirect(request.url)
     finally:
         try:
-            os.unlink(staged)
+            os.unlink(staged_path)
         except OSError:
             pass
 
-    reverse = {}
-    for canonical, aliases in COLUMN_ALIASES.items():
-        for alias in aliases:
-            reverse[alias.lower().strip()] = canonical
-
-    col_map = {}
-    for col in df.columns:
-        canonical = reverse.get(str(col).lower().strip())
-        if canonical and canonical not in col_map:
-            col_map[canonical] = col
-
-    if "staff_id" not in col_map or "full_name" not in col_map:
-        flash(
-            "Could not find required columns 'Employee ID' and 'Full Name'. "
-            "Check the column headers in your file.",
-            "danger",
-        )
-        return redirect(request.url)
-
-    existing_ids = {
-        e.staff_id
-        for e in Employee.query.filter_by(client_company_id=client_id).all()
-    }
-
-    to_create, to_update, errors, seen = [], [], [], set()
-    for i, row in df.iterrows():
-        raw_id = _clean(row.get(col_map["staff_id"]))
-        if not raw_id:
-            continue
-        norm_id = normalise_emp_id(raw_id)
-        full_name = _clean(row.get(col_map["full_name"]))
-        if not full_name:
-            errors.append({"row": i + 2, "staff_id": norm_id, "issue": "Full Name is blank"})
-            continue
-        if norm_id in seen:
-            errors.append({"row": i + 2, "staff_id": norm_id,
-                           "issue": "Duplicate Employee ID within the file"})
-            continue
-        seen.add(norm_id)
-
-        record = {
-            "staff_id": norm_id,
-            "full_name": full_name,
-            "email": _clean(row.get(col_map["email"])) if "email" in col_map else None,
-            "phone": _clean(row.get(col_map["phone"])) if "phone" in col_map else None,
-            "department": _clean(row.get(col_map["department"])) if "department" in col_map else None,
-            "bank_account": _clean(row.get(col_map["bank_account"])) if "bank_account" in col_map else None,
-        }
-        (to_update if norm_id in existing_ids else to_create).append(record)
-
-    token = uuid.uuid4().hex
-    with open(_stage_path(token), "w", encoding="utf-8") as handle:
-        json.dump(
-            {"client_id": client_id, "to_create": to_create, "to_update": to_update},
-            handle,
-        )
-    session["emp_import_token"] = token
+    previous = session.pop(_SESSION_KEY, None)
+    if previous:
+        roster_import.discard_staged(previous)
+    token = roster_import.stage_roster(client_id, parsed, safe_name)
+    session[_SESSION_KEY] = token
 
     return render_template(
         "employees/bulk_import_preview.html",
         client=client,
-        to_create=to_create,
-        to_update=to_update,
-        errors=errors,
+        to_create=parsed["to_create"],
+        to_update=parsed["to_update"],
+        errors=parsed["errors"],
+        warnings=parsed["warnings"],
+        unchanged=parsed["unchanged"],
         token=token,
     )
 
@@ -668,63 +571,23 @@ def bulk_import(client_id):
 @employees_bp.route("/clients/<int:client_id>/bulk-import/confirm", methods=["POST"])
 @role_required(*REP_ROLES)
 def bulk_import_confirm(client_id):
-    db.get_or_404(ClientCompany, client_id)  # 404 guard for an unknown client
-    token = request.form.get("token") or session.get("emp_import_token")
-    if not token or session.get("emp_import_token") != token:
+    client = db.get_or_404(ClientCompany, client_id)  # 404 guard for an unknown client
+    token = session.get(_SESSION_KEY)
+    if not token or request.form.get("token") not in (None, "", token):
         flash("Session mismatch — please re-upload the file.", "danger")
         return redirect(url_for("employees.bulk_import", client_id=client_id))
-
-    path = _stage_path(token)
-    if not os.path.exists(path):
+    staged = roster_import.load_staged(token, client_id)
+    if staged is None:
         flash("Import session expired — please re-upload the file.", "danger")
         return redirect(url_for("employees.bulk_import", client_id=client_id))
-    with open(path, "r", encoding="utf-8") as handle:
-        staged = json.load(handle)
-    if staged.get("client_id") != client_id:
-        flash("Session mismatch — please re-upload the file.", "danger")
-        return redirect(url_for("employees.bulk_import", client_id=client_id))
 
-    existing = {
-        e.staff_id: e
-        for e in Employee.query.filter_by(client_company_id=client_id).all()
-    }
-    created = updated = 0
-
-    for record in staged.get("to_create", []):
-        # Guard against a record created since the preview was generated.
-        if record["staff_id"] in existing:
-            continue
-        emp = Employee(
-            client_company_id=client_id,
-            staff_id=record["staff_id"],
-            full_name=record["full_name"],
-            email=record["email"],
-            phone=record["phone"],
-            department=record["department"],
-            bank_account_number=record["bank_account"],
-            status=ACTIVE,
-        )
-        db.session.add(emp)
-        created += 1
-
-    for record in staged.get("to_update", []):
-        emp = existing.get(record["staff_id"])
-        if not emp:
-            continue
-        emp.full_name = record["full_name"]
-        emp.email = record["email"] or emp.email
-        emp.phone = record["phone"] or emp.phone
-        emp.department = record["department"] or emp.department
-        emp.bank_account_number = record["bank_account"] or emp.bank_account_number
-        updated += 1
-
+    existing = roster_import.existing_by_staff_id(
+        Employee.query.filter_by(client_company_id=client_id)
+    )
+    created, updated = roster_import.apply_roster(staged, client, existing)
     db.session.commit()
 
-    session.pop("emp_import_token", None)
-    try:
-        os.remove(path)
-    except OSError:
-        pass
-
-    flash(f"{created} employees added, {updated} updated.", "success")
+    session.pop(_SESSION_KEY, None)
+    roster_import.discard_staged(token)
+    flash(roster_import.result_message(created, updated), "success")
     return redirect(url_for("employees.roster", client_id=client_id))

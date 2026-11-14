@@ -165,6 +165,7 @@ class NoUnboundedCollectionRendersTests(unittest.TestCase):
         "app/templates/distribution/_dashboard_fragment.html": "recent/running batches are LIMITed in collect_dashboard_stats",
         "app/templates/payroll_preview.html": "one row per matched client sheet in one workbook",
         "app/templates/employees/bulk_import_preview.html": "one upload's rows, shown before commit",
+        "app/templates/client/employee_import_preview.html": "one upload's rows, shown before commit; the importer caps a sheet at 2,000 (roster_import.MAX_ROWS)",
         "app/templates/statutory_rate_form.html": "band_rows is one rate version's PAYE bands (six in the 2026 GRA table)",
         "app/templates/audit.html": "trail is paged; the expense form lists clients and the 100 most recent runs (LIMIT in app/audit.py)",
         "app/templates/search_results.html": "server-side LIMIT 25 clients / 50 items; see main.search",
