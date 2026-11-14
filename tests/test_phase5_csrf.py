@@ -60,7 +60,7 @@ class CsrfEnforcementTests(unittest.TestCase):
         from app.models import User
 
         with self.app.app_context():
-            uid = User.query.filter_by(email="admin@msc.com").first().id
+            uid = User.query.filter_by(email="admin@contoso.com").first().id
         # Seed a logged-in session directly. The real /login POST calls
         # session.clear(); combined with the test client's cookie jar that drops
         # the pre-login token, so seeding the session lets us exercise genuine

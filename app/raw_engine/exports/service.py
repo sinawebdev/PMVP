@@ -2,7 +2,7 @@
 
 Reuses the standard writers where they already fit (wage sheet, GRA PAYE return,
 payslip PDFs — all run off ``PayrollItem`` rows) and adds the raw-specific
-outputs (AKOTO bank grouping, PV cash list, ICU distribution). Returns a
+outputs (bank grouping, PV cash list, ICU distribution). Returns a
 manifest of the files written plus the bank/PV routing summary.
 """
 from app.excel_utils import export_gra_paye_schedule, export_wages_sheet

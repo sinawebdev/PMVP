@@ -349,7 +349,7 @@ class RiskOversightRoutesTestCase(unittest.TestCase):
         self.assertEqual(db.session.get(PayrollRun, self.run_id).status, APPROVED)
 
     def test_tenant_user_cannot_reach_oversight(self):
-        self._login("admin@msc.com")  # a tenant user
+        self._login("admin@contoso.com")  # a tenant user
         resp = self.client.get("/oversight/risk")
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.headers["Location"].endswith("/company"))

@@ -35,7 +35,7 @@ class SettleTests(unittest.TestCase):
         self.ctx.push()
         sla.reset()
         self.operator = User.query.filter_by(email="admin@payrolla.com").first()
-        tenant = User.query.filter_by(email="admin@msc.com").first()
+        tenant = User.query.filter_by(email="admin@contoso.com").first()
         self.run = PayrollRun.query.filter_by(
             client_company_id=tenant.client_company_id, status="Approved"
         ).first()
@@ -139,7 +139,7 @@ class SettleTests(unittest.TestCase):
         self.assertEqual(self.settle("delivered").status_code, 400)
 
     def test_a_company_admin_cannot_reach_it(self):
-        self.login("admin@msc.com")
+        self.login("admin@contoso.com")
         response = self.settle("sent")
         self.assertEqual(response.status_code, 302)
         self.assertNotIn(f"/distribution/run/{self.run.id}", response.headers["Location"])

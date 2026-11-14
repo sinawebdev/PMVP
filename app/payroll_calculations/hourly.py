@@ -16,7 +16,7 @@ DZ's own formulas, AR44/AU47/AY51):
   * 'allowance' lines (afternoon, night, 6-to-6, 4-crew shift allowances)
     are ordinary taxable income with no SSF and no concession.
 
-Regression fixture: Richard Woode (DCL9) — basic 631.35, overtime 978.59,
+Regression fixture: an hourly worker from the reference client workbook (DCL9) — basic 631.35, overtime 978.59,
 bonus 120.97, shift allowances 315.68; see tests/test_calculations.py.
 
 Pay codes with no configured rate are never guessed — they are collected on

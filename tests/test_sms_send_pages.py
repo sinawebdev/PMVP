@@ -41,7 +41,7 @@ class _PagesCase(unittest.TestCase):
         self.http = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        tenant = User.query.filter_by(email="admin@msc.com").first()
+        tenant = User.query.filter_by(email="admin@contoso.com").first()
         self.run = PayrollRun.query.filter_by(
             client_company_id=tenant.client_company_id, status="Approved"
         ).first()
@@ -192,7 +192,7 @@ class TenantConfirmTests(_PagesCase):
         self.base = f"/company/runs/{self.run.id}/distribute"
 
     def test_a_company_admin_confirms_an_sms_send(self):
-        self.login("admin@msc.com")
+        self.login("admin@contoso.com")
         response = self.http.post(f"{self.base}/send", data={"channel": "sms", "nonce": "t1"})
         self.assertIn(f"{self.base}/confirm?", response.headers["Location"])
         self.assertEqual(self.batches(), [])
@@ -203,12 +203,12 @@ class TenantConfirmTests(_PagesCase):
         self.assertEqual(len(self.batches()), 1)
 
     def test_only_a_company_admin_reaches_the_step(self):
-        preparer = User(name="MSC Preparer", email="preparer@msc.test", role="client_preparer",
+        preparer = User(name="CONTOSO Preparer", email="preparer@contoso.test", role="client_preparer",
                         client_company_id=self.run.client_company_id)
         preparer.set_password("password123")
         db.session.add(preparer)
         db.session.commit()
-        self.login("preparer@msc.test")
+        self.login("preparer@contoso.test")
         response = self.http.get(f"{self.base}/confirm?channel=sms&action=send")
         self.assertNotEqual(response.status_code, 200)
 
@@ -307,7 +307,7 @@ class StatusDisplayTests(_PagesCase):
         self.assertIn("Mark not sent", operator)
         self.assertIn("<dt>Unconfirmed</dt><dd>1</dd>", operator)
         self.http.get("/logout")
-        self.login("admin@msc.com")
+        self.login("admin@contoso.com")
         tenant = self.http.get(f"/company/runs/{self.run.id}/distribute").get_data(as_text=True)
         self.assertIn("Unconfirmed. Payrolla is checking.", tenant)
         self.assertNotIn("Mark sent", tenant)

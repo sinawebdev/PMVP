@@ -87,27 +87,27 @@ class EventFanoutTestCase(unittest.TestCase):
         self.assertEqual(len(self._notes_for(self.co_admin)), 2)  # held + released
 
     def test_client_distribution_notifies_platform_admins(self):
-        # Seeded MSC has a client_admin (admin@msc.com) and an Approved run.
-        msc = User.query.filter_by(email="admin@msc.com").first()
-        msc_run = PayrollRun.query.filter_by(client_company_id=msc.client_company_id).first()
-        self._login("admin@msc.com")
+        # Seeded CONTOSO has a client_admin (admin@contoso.com) and an Approved run.
+        contoso = User.query.filter_by(email="admin@contoso.com").first()
+        contoso_run = PayrollRun.query.filter_by(client_company_id=contoso.client_company_id).first()
+        self._login("admin@contoso.com")
         self.client.post(
-            f"/company/runs/{msc_run.id}/distribute/send",
+            f"/company/runs/{contoso_run.id}/distribute/send",
             data={"channel": "auto", "confirmed": "1", "nonce": "n1"},
         )
         # Sending only queues the batch now; a worker runs it and fires the event.
         process_all_queued()
         event = DomainEvent.query.filter_by(event_type="payslips.distributed").first()
         self.assertIsNotNone(event)
-        self.assertEqual(event.client_company_id, msc.client_company_id)
+        self.assertEqual(event.client_company_id, contoso.client_company_id)
         # The payslips.distributed (tenant -> platform) event notifies platform
         # admins, NOT the client_admin.
         chrisnat = User.query.filter_by(email="operator@payrolla.com").first()
         self.assertGreaterEqual(len(self._notes_for(chrisnat)), 1)
-        msc_notes_for_event = [
-            n for n in self._notes_for(msc) if n.event_id == event.id
+        contoso_notes_for_event = [
+            n for n in self._notes_for(contoso) if n.event_id == event.id
         ]
-        self.assertEqual(len(msc_notes_for_event), 0)
+        self.assertEqual(len(contoso_notes_for_event), 0)
         # The client_admin who initiated it IS notified of completion, though
         # (Phase 3, Slice 8) — a separate distribution.completed event.
         self.assertIsNotNone(
@@ -122,10 +122,10 @@ class NotificationInboxTestCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        self.msc = User.query.filter_by(email="admin@msc.com").first()
+        self.contoso = User.query.filter_by(email="admin@contoso.com").first()
         self.stellar = User.query.filter_by(email="admin@acme.com").first()
         self.mine = Notification(
-            user_id=self.msc.id, title="Yours", body="A note for MSC", level="info"
+            user_id=self.contoso.id, title="Yours", body="A note for CONTOSO", level="info"
         )
         self.theirs = Notification(
             user_id=self.stellar.id, title="Theirs", body="A note for Stellar", level="info"
@@ -144,14 +144,14 @@ class NotificationInboxTestCase(unittest.TestCase):
         )
 
     def test_inbox_shows_only_my_notifications(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         html = self.client.get("/notifications").get_data(as_text=True)
         self.assertEqual(self.client.get("/notifications").status_code, 200)
-        self.assertIn("A note for MSC", html)
+        self.assertIn("A note for CONTOSO", html)
         self.assertNotIn("A note for Stellar", html)
 
     def test_mark_read_only_my_own(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         self.assertEqual(
             self.client.post(f"/notifications/{self.mine_id}/read").status_code, 302
         )
@@ -164,9 +164,9 @@ class NotificationInboxTestCase(unittest.TestCase):
 
     def test_record_event_dedups_recipients(self):
         # Same user passed twice yields one notification.
-        record_event("test.event", summary="hi", recipients=[self.msc, self.msc])
+        record_event("test.event", summary="hi", recipients=[self.contoso, self.contoso])
         db.session.commit()
-        made = Notification.query.filter_by(user_id=self.msc.id, title="Test Event").all()
+        made = Notification.query.filter_by(user_id=self.contoso.id, title="Test Event").all()
         self.assertEqual(len(made), 1)
 
 

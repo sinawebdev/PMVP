@@ -8,7 +8,7 @@ raw path needs on top:
 
   * `bank_routing` — split every net-pay worker into exactly one of {bank, PV}
     using the **config** bank whitelist (never a hardcoded formula list).
-  * `writers` — the AKOTO bank-grouped schedule, the PV (cash) voucher list, and
+  * `writers` — the bank-grouped schedule, the PV (cash) voucher list, and
     the ICU union-distribution export.
   * `service` — one call that regenerates the full export family for a run.
 """

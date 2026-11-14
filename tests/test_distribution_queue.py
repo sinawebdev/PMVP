@@ -44,7 +44,7 @@ class DistributionQueueTestCase(unittest.TestCase):
         self.run = PayrollRun.query.filter_by(status="Approved").first()
         self.assertIsNotNone(self.run, "expected a seeded Approved payroll run")
         self.operator = User.query.filter_by(email="admin@payrolla.com").first()
-        self.tenant_admin = User.query.filter_by(email="admin@msc.com").first()
+        self.tenant_admin = User.query.filter_by(email="admin@contoso.com").first()
 
     def tearDown(self):
         db.session.remove()
@@ -127,14 +127,14 @@ class DistributionQueueTestCase(unittest.TestCase):
         self.assertEqual(process_all_queued(), [])
 
     def test_client_initiated_batch_notifies_platform_admins(self):
-        self.assertIsNotNone(self.tenant_admin, "expected seeded admin@msc.com")
-        msc_run = PayrollRun.query.filter_by(
+        self.assertIsNotNone(self.tenant_admin, "expected seeded admin@contoso.com")
+        contoso_run = PayrollRun.query.filter_by(
             client_company_id=self.tenant_admin.client_company_id
         ).first()
-        self.assertIsNotNone(msc_run)
+        self.assertIsNotNone(contoso_run)
         before = Notification.query.count()
 
-        enqueue_distribution(msc_run, "auto", False, self.tenant_admin)
+        enqueue_distribution(contoso_run, "auto", False, self.tenant_admin)
         process_all_queued()
 
         self.assertGreater(Notification.query.count(), before)

@@ -145,7 +145,7 @@ class ImportNoContactWarningTests(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
         self.company_id = (
-            User.query.filter_by(email="admin@msc.com").first().client_company_id
+            User.query.filter_by(email="admin@contoso.com").first().client_company_id
         )
         for staff_id, contact in self.CASES.items():
             values = {"email": None, "phone": None, "momo_number": None}

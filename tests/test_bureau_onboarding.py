@@ -88,11 +88,11 @@ class BureauOnboardingTestCase(unittest.TestCase):
         resp = self.client.post(f"/invite/{token}", data={"password": "a-long-password-1", "confirm": "a-long-password-1"})
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(self.client.get("/dashboard").status_code, 200)
-        self.assertNotIn("MSC Limited", self.client.get("/clients").get_data(as_text=True))
+        self.assertNotIn("Contoso Ltd", self.client.get("/clients").get_data(as_text=True))
 
     def test_an_email_already_in_use_creates_nothing(self):
         entry = self._bureau_request()
-        entry.email = "admin@msc.com"
+        entry.email = "admin@contoso.com"
         db.session.commit()
         self._login("admin@payrolla.com")
         self.client.post(f"/clients/requests/{entry.id}/approve-bureau")
@@ -125,7 +125,7 @@ class BureauOnboardingTestCase(unittest.TestCase):
         self._login("md@chrisnat.example", "owner-pass-1")
         html = self.client.get("/clients").get_data(as_text=True)
         self.assertIn("Chrisnat Test Ltd", html)
-        self.assertNotIn("MSC Limited", html)
+        self.assertNotIn("Contoso Ltd", html)
         self.assertEqual(self.client.get("/statutory-rates/").status_code, 200)
 
         # Doing it twice does nothing.
@@ -135,7 +135,7 @@ class BureauOnboardingTestCase(unittest.TestCase):
 
     def test_only_payrolla_staff_can_create_bureaus(self):
         entry = self._bureau_request()
-        msc = ClientCompany.query.filter_by(company_code="MSC").one()
+        contoso = ClientCompany.query.filter_by(company_code="CONTOSO").one()
         bureau = Bureau(name="Echo Bureau", code="ECHO")
         db.session.add(bureau)
         db.session.flush()
@@ -145,10 +145,10 @@ class BureauOnboardingTestCase(unittest.TestCase):
         db.session.commit()
         self._login("e@echo.example", "echo-pass-1")
         self.assertEqual(self.client.post(f"/clients/requests/{entry.id}/approve-bureau").status_code, 404)
-        self.assertEqual(self.client.post(f"/clients/{msc.id}/make-bureau").status_code, 404)
-        self._login("admin@msc.com")
-        self.client.post(f"/clients/{msc.id}/make-bureau")
-        self.assertIsNone(db.session.get(ClientCompany, msc.id).bureau_id)
+        self.assertEqual(self.client.post(f"/clients/{contoso.id}/make-bureau").status_code, 404)
+        self._login("admin@contoso.com")
+        self.client.post(f"/clients/{contoso.id}/make-bureau")
+        self.assertIsNone(db.session.get(ClientCompany, contoso.id).bureau_id)
 
     def test_unique_codes(self):
         from app.bureaus import unique_bureau_code

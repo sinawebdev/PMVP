@@ -49,7 +49,7 @@ class _WebhookCase(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
         request_limit.reset()
-        tenant = User.query.filter_by(email="admin@msc.com").first()
+        tenant = User.query.filter_by(email="admin@contoso.com").first()
         self.run = PayrollRun.query.filter_by(client_company_id=tenant.client_company_id).first()
         self.run.status = APPROVED
         PayslipDelivery.query.filter_by(payroll_run_id=self.run.id).delete()
@@ -271,7 +271,7 @@ class DeliveredOnScreenTests(_WebhookCase):
     def test_both_portals_show_what_was_confirmed(self):
         self._report("delivered", metadata=self._by_id())
         for email, path in (("admin@payrolla.com", f"/distribution/run/{self.run.id}"),
-                            ("admin@msc.com", f"/company/runs/{self.run.id}/distribute")):
+                            ("admin@contoso.com", f"/company/runs/{self.run.id}/distribute")):
             with self.subTest(path=path):
                 html = self._page(email, path)
                 self.assertIn("<dt>Delivered</dt><dd>1</dd>", html)
@@ -292,7 +292,7 @@ class PageCatchesUpTests(_WebhookCase):
 
     def _portals(self):
         return (("admin@payrolla.com", f"/distribution/run/{self.run.id}/status-fragment"),
-                ("admin@msc.com", f"/company/runs/{self.run.id}/distribute/status-fragment"))
+                ("admin@contoso.com", f"/company/runs/{self.run.id}/distribute/status-fragment"))
 
     def test_the_poll_that_finds_nothing_live_reloads_the_page(self):
         for email, path in self._portals():

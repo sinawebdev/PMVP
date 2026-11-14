@@ -1,8 +1,8 @@
 """Union (ICU) dues: ``icu_member_rate`` of the basic wage for seeded members,
 0 otherwise. Post-tax, derived (never uploaded), and config-rated.
 
-Verified against DZ cell BC: 3% of basic 631.35 -> 18.94 for a member; George
-Akoto (non-member) pays 0.
+Verified against the reference workbook's cell BC: 3% of basic 631.35 -> 18.94
+for a member; a non-member pays 0.
 """
 
 

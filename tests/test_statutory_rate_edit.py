@@ -161,7 +161,7 @@ class RateEditTestCase(unittest.TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertNotIn("/statutory-rates", resp.headers["Location"])
         self.client.post(f"/statutory-rates/{self.version.id}/edit", data=self._form())
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         self.assertEqual(self.client.get(f"/statutory-rates/{self.version.id}/edit").status_code, 302)
         self.client.post(f"/statutory-rates/{self.version.id}/edit", data=self._form())
         self.assertEqual(self._reload().ssf_employee_rate, 0.055)

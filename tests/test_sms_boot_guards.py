@@ -169,11 +169,11 @@ class DesktopBlocksSmsTests(unittest.TestCase):
         self.client = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        tenant = User.query.filter_by(email="admin@msc.com").first()
+        tenant = User.query.filter_by(email="admin@contoso.com").first()
         self.run = PayrollRun.query.filter_by(
             client_company_id=tenant.client_company_id, status="Approved"
         ).first()
-        self.assertIsNotNone(self.run, "expected a seeded Approved MSC run")
+        self.assertIsNotNone(self.run, "expected a seeded Approved CONTOSO run")
 
     def tearDown(self):
         db.session.remove()
@@ -205,7 +205,7 @@ class DesktopBlocksSmsTests(unittest.TestCase):
         self.assertIn('value="email"', operator)
         self.assertNotIn('value="sms"', operator)
         self.client.get("/logout")
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         tenant = self.client.get(f"/company/runs/{self.run.id}/distribute").get_data(as_text=True)
         self.assertIn('value="email"', tenant)
         self.assertNotIn('value="sms"', tenant)
@@ -226,7 +226,7 @@ class DesktopBlocksSmsTests(unittest.TestCase):
         self.assertEqual(self._batches(), before)
 
     def test_an_explicit_sms_send_is_refused_on_the_tenant_portal(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         before = self._batches()
         response = self.client.post(
             f"/company/runs/{self.run.id}/distribute/send",

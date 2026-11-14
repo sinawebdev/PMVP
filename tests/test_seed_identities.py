@@ -37,9 +37,9 @@ EXPECTED_PLATFORM = {
 }
 
 EXPECTED_TENANT = {
-    "admin@msc.com": ("MSC Limited", CLIENT_ADMIN),
-    "finance@msc.com": ("MSC Limited", CLIENT_ADMIN),
-    "payroll@msc.com": ("MSC Limited", CLIENT_PREPARER),
+    "admin@contoso.com": ("Contoso Ltd", CLIENT_ADMIN),
+    "finance@contoso.com": ("Contoso Ltd", CLIENT_ADMIN),
+    "payroll@contoso.com": ("Contoso Ltd", CLIENT_PREPARER),
     "admin@acme.com": ("Acme Manufacturing Ltd", CLIENT_ADMIN),
     "finance@acme.com": ("Acme Manufacturing Ltd", CLIENT_ADMIN),
     "payroll@acme.com": ("Acme Manufacturing Ltd", CLIENT_PREPARER),
@@ -90,9 +90,9 @@ class SeedIdentityTestCase(unittest.TestCase):
 
     def test_demo_companies_are_exactly_the_two_professional_tenants(self):
         names = {c.name for c in ClientCompany.query.all()}
-        self.assertEqual(names, {"MSC Limited", "Acme Manufacturing Ltd"})
+        self.assertEqual(names, {"Contoso Ltd", "Acme Manufacturing Ltd"})
         codes = {c.company_code for c in ClientCompany.query.all()}
-        self.assertEqual(codes, {"MSC", "ACME"})
+        self.assertEqual(codes, {"CONTOSO", "ACME"})
         for spec in DEMO_COMPANIES:
             company = ClientCompany.query.filter_by(name=spec["name"]).first()
             self.assertTrue(company.address, f"{spec['name']} should carry an address")
@@ -126,7 +126,7 @@ class SeedIdentityTestCase(unittest.TestCase):
         self.app.config["SHOW_DEMO_LOGINS"] = True
         body = self.client.get("/login").get_data(as_text=True)
         self.assertIn("Demo sign-in accounts", body)
-        for email in ("admin@payrolla.com", "admin@msc.com", "payroll@acme.com"):
+        for email in ("admin@payrolla.com", "admin@contoso.com", "payroll@acme.com"):
             self.assertIn(email, body)
 
     def test_login_hints_are_suppressed_when_disabled(self):

@@ -42,8 +42,8 @@ class RosterImportTestCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        self.msc_user = User.query.filter_by(email="admin@msc.com").first()
-        self.msc_id = self.msc_user.client_company_id
+        self.contoso_user = User.query.filter_by(email="admin@contoso.com").first()
+        self.contoso_id = self.contoso_user.client_company_id
         self.acme_id = User.query.filter_by(email="admin@acme.com").first().client_company_id
 
     def tearDown(self):
@@ -68,14 +68,14 @@ class RosterImportTestCase(unittest.TestCase):
 
     # --- the page and the template -------------------------------------------
     def test_employees_page_offers_bulk_import_next_to_add(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         html = self.client.get("/company/employees").get_data(as_text=True)
         self.assertIn("/company/employees/import", html)
         self.assertIn("Bulk import", html)
         self.assertEqual(html.count('class="btn primary"'), 1, "one primary action")
 
     def test_template_downloads_with_every_column_and_no_example_row(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         resp = self.client.get("/company/employees/import/template")
         self.assertEqual(resp.status_code, 200)
         workbook = load_workbook(BytesIO(resp.data))
@@ -95,14 +95,14 @@ class RosterImportTestCase(unittest.TestCase):
 
     # --- upload -> preview -> confirm ----------------------------------------
     def test_preview_then_confirm_creates_employees(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         resp = self._upload(_sheet([
             ("NEW-1", "Ama Owusu", "Cashier", "024 123 4567", "ama@example.com", "001122", "2,500.00"),
             ("new 2", "Kofi Asante", "", "", "", "", ""),
         ]))
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.headers["Location"].endswith("/company/employees/import/preview"))
-        self.assertIsNone(self._emp(self.msc_id, "NEW-1"), "nothing is saved before confirm")
+        self.assertIsNone(self._emp(self.contoso_id, "NEW-1"), "nothing is saved before confirm")
 
         preview = self.client.get("/company/employees/import/preview").get_data(as_text=True)
         self.assertIn("Ama Owusu", preview)
@@ -110,23 +110,23 @@ class RosterImportTestCase(unittest.TestCase):
 
         resp = self.client.post("/company/employees/import/confirm")
         self.assertEqual(resp.status_code, 302)
-        ama = self._emp(self.msc_id, "NEW-1")
+        ama = self._emp(self.contoso_id, "NEW-1")
         self.assertIsNotNone(ama)
         self.assertEqual(ama.job_title, "Cashier")
         self.assertEqual(ama.basic_salary, 2500.0)
         self.assertEqual(ama.status, "Active")
         self.assertEqual(ama.bank_account_number, "001122")
-        self.assertIsNotNone(self._emp(self.msc_id, "NEW2"), "staff IDs are normalised")
+        self.assertIsNotNone(self._emp(self.contoso_id, "NEW2"), "staff IDs are normalised")
         audit = AuditTrail.query.filter_by(action="Employees imported").order_by(AuditTrail.id.desc()).first()
         self.assertIsNotNone(audit)
         self.assertIn("2 added", audit.notes)
 
     def test_update_fills_only_the_cells_given(self):
-        existing = Employee.query.filter_by(client_company_id=self.msc_id).first()
+        existing = Employee.query.filter_by(client_company_id=self.contoso_id).first()
         existing.email = "keep@example.com"
         existing.bank_account_number = "999"
         db.session.commit()
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         self._upload(_sheet([(existing.staff_id, existing.full_name, "Supervisor", "", "", "", "")]))
         preview = self.client.get("/company/employees/import/preview").get_data(as_text=True)
         self.assertIn("Job title", preview)
@@ -137,11 +137,11 @@ class RosterImportTestCase(unittest.TestCase):
         self.assertEqual(updated.email, "keep@example.com", "an empty cell never blanks a saved value")
         self.assertEqual(updated.bank_account_number, "999")
         self.assertEqual(
-            Employee.query.filter_by(client_company_id=self.msc_id, staff_id=existing.staff_id).count(), 1
+            Employee.query.filter_by(client_company_id=self.contoso_id, staff_id=existing.staff_id).count(), 1
         )
 
     def test_bad_rows_are_skipped_and_listed_the_rest_import(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         self._upload(_sheet([
             ("DUP-1", "First Copy", "", "", "", "", ""),
             ("DUP-1", "Second Copy", "", "", "", "", ""),
@@ -151,7 +151,7 @@ class RosterImportTestCase(unittest.TestCase):
             ("BADPAY", "Bad Pay", "", "", "", "", "lots"),
             ("OK-1", "Good Row", "", "0201234567", "", "", ""),
         ]))
-        staged = roster_import.load_staged(self._session_token(), self.msc_id)
+        staged = roster_import.load_staged(self._session_token(), self.contoso_id)
         issues = {e["staff_id"] or e["name"]: e["issue"] for e in staged["errors"]}
         self.assertIn("more than once", issues["DUP-1"])
         self.assertIn("Full name is blank", issues["NONAME"])
@@ -160,63 +160,63 @@ class RosterImportTestCase(unittest.TestCase):
         self.assertIn("not an amount", issues["BADPAY"])
         self.assertEqual({r["staff_id"] for r in staged["to_create"]}, {"DUP-1", "OK-1"})
         self.client.post("/company/employees/import/confirm")
-        self.assertIsNotNone(self._emp(self.msc_id, "OK-1"))
-        self.assertIsNone(self._emp(self.msc_id, "BADMAIL"))
+        self.assertIsNotNone(self._emp(self.contoso_id, "OK-1"))
+        self.assertIsNone(self._emp(self.contoso_id, "BADMAIL"))
 
     def test_non_mobile_phone_is_kept_but_flagged(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         self._upload(_sheet([("LAND-1", "Landline Worker", "", "0302 123456", "", "", "")]))
-        staged = roster_import.load_staged(self._session_token(), self.msc_id)
+        staged = roster_import.load_staged(self._session_token(), self.contoso_id)
         self.assertEqual(len(staged["warnings"]), 1)
         self.client.post("/company/employees/import/confirm")
-        self.assertEqual(self._emp(self.msc_id, "LAND-1").phone, "0302 123456")
+        self.assertEqual(self._emp(self.contoso_id, "LAND-1").phone, "0302 123456")
 
     def test_missing_required_column_is_refused_up_front(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         resp = self._upload(_sheet([("Ama",)], headers=("Full name",)))
         self.assertEqual(resp.status_code, 200)
         self.assertIn("Staff ID", resp.get_data(as_text=True))
 
     def test_a_non_workbook_is_refused(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         resp = self._upload(BytesIO(b"staff id,full name\nA,B\n"), filename="roster.csv")
         self.assertEqual(resp.status_code, 200)
-        self.assertIsNone(self._emp(self.msc_id, "A"))
+        self.assertIsNone(self._emp(self.contoso_id, "A"))
 
     def test_discard_saves_nothing(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         self._upload(_sheet([("GONE-1", "Never Saved", "", "", "", "", "")]))
         self.client.post("/company/employees/import/discard")
-        self.assertIsNone(self._emp(self.msc_id, "GONE-1"))
+        self.assertIsNone(self._emp(self.contoso_id, "GONE-1"))
         resp = self.client.post("/company/employees/import/confirm")
         self.assertEqual(resp.status_code, 302)
-        self.assertIsNone(self._emp(self.msc_id, "GONE-1"))
+        self.assertIsNone(self._emp(self.contoso_id, "GONE-1"))
 
     # --- tenant isolation -----------------------------------------------------
     def test_company_in_the_form_is_ignored(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         self._upload(_sheet([("SPOOF-1", "Spoof Worker", "", "", "", "", "")]),
                      extra={"client_company_id": str(self.acme_id), "client_id": str(self.acme_id)})
         self.client.post("/company/employees/import/confirm",
                          data={"client_company_id": str(self.acme_id)})
-        self.assertIsNotNone(self._emp(self.msc_id, "SPOOF-1"))
+        self.assertIsNotNone(self._emp(self.contoso_id, "SPOOF-1"))
         self.assertIsNone(self._emp(self.acme_id, "SPOOF-1"))
 
     def test_another_tenants_staged_import_cannot_be_confirmed(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         self._upload(_sheet([("CROSS-1", "Cross Worker", "", "", "", "", "")]))
-        msc_token = self._session_token()
+        contoso_token = self._session_token()
 
         # Single client + logout/login is the project's tenant-switch idiom (two
         # test clients share the app context, and with it the logged-in user).
         self.client.get("/logout")
         self._login("admin@acme.com")
         with self.client.session_transaction() as sess:
-            sess["client_emp_import_token"] = msc_token  # replayed token from another tenant
+            sess["client_emp_import_token"] = contoso_token  # replayed token from another tenant
         resp = self.client.post("/company/employees/import/confirm")
         self.assertEqual(resp.status_code, 302)
         self.assertIsNone(self._emp(self.acme_id, "CROSS-1"))
-        self.assertIsNone(self._emp(self.msc_id, "CROSS-1"))
+        self.assertIsNone(self._emp(self.contoso_id, "CROSS-1"))
 
     def test_operator_cannot_use_the_client_route(self):
         self._login("admin@payrolla.com")
@@ -253,8 +253,8 @@ class RosterImportTestCase(unittest.TestCase):
             data={"file": (_sheet([("MOVE-1", "Moved Worker", "", "", "", "", "")]), "r.xlsx")},
             content_type="multipart/form-data",
         )
-        self.client.post(f"/employees/clients/{self.msc_id}/bulk-import/confirm")
-        self.assertIsNone(self._emp(self.msc_id, "MOVE-1"))
+        self.client.post(f"/employees/clients/{self.contoso_id}/bulk-import/confirm")
+        self.assertIsNone(self._emp(self.contoso_id, "MOVE-1"))
         self.assertIsNone(self._emp(self.acme_id, "MOVE-1"))
 
     # --- unit -------------------------------------------------------------------
@@ -267,9 +267,9 @@ class RosterImportTestCase(unittest.TestCase):
             roster_import.parse_amount("abc")
 
     def test_overlong_cell_is_a_row_error_not_a_failed_confirm(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         self._upload(_sheet([("LONG-1", "Long Title", "x" * 200, "", "", "", "")]))
-        staged = roster_import.load_staged(self._session_token(), self.msc_id)
+        staged = roster_import.load_staged(self._session_token(), self.contoso_id)
         self.assertEqual(staged["to_create"], [])
         self.assertIn("longer than", staged["errors"][0]["issue"])
 

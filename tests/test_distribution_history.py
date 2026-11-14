@@ -103,7 +103,7 @@ class HistoryRouteTestCase(unittest.TestCase):
         self.assertIn("Initiated by", detail.get_data(as_text=True))
 
     def test_tenant_user_is_blocked_from_history(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         resp = self.http.get("/distribution/history", follow_redirects=False)
         self.assertEqual(resp.status_code, 302)
         self.assertNotIn("/distribution/history", resp.headers["Location"])

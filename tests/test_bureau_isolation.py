@@ -1,6 +1,6 @@
 """Payroll bureaus, part B: a bureau works the operator pages over its own clients only.
 
-Bureau A, bureau B and Payrolla's own managed companies (the seeded MSC and
+Bureau A, bureau B and Payrolla's own managed companies (the seeded CONTOSO and
 Acme) share one database. Signed in as bureau A, every list page must show A's
 clients and nothing of B's or Payrolla's; every object of theirs must be a 404,
 by URL and by form; and a POST aimed at one must change nothing. Payrolla's own
@@ -57,10 +57,10 @@ class BureauIsolationTestCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        self.msc = ClientCompany.query.filter_by(company_code="MSC").one()
-        self.msc_run = PayrollRun.query.filter_by(client_company_id=self.msc.id).first()
-        self.msc_item = PayrollItem.query.filter_by(payroll_run_id=self.msc_run.id).first()
-        self.msc_emp = Employee.query.filter_by(client_company_id=self.msc.id).first()
+        self.contoso = ClientCompany.query.filter_by(company_code="CONTOSO").one()
+        self.contoso_run = PayrollRun.query.filter_by(client_company_id=self.contoso.id).first()
+        self.contoso_item = PayrollItem.query.filter_by(payroll_run_id=self.contoso_run.id).first()
+        self.contoso_emp = Employee.query.filter_by(client_company_id=self.contoso.id).first()
 
         self.bureau_a = Bureau(name="Alpha Payroll Services", code="ALPHA")
         self.bureau_b = Bureau(name="Beta Payroll Services", code="BETA")
@@ -130,7 +130,7 @@ class BureauIsolationTestCase(unittest.TestCase):
                 resp = self.client.get(path)
                 self.assertEqual(resp.status_code, 200)
                 html = resp.get_data(as_text=True)
-                for foreign in ("MSC Limited", "Acme Manufacturing", "Beta Client Gadgets",
+                for foreign in ("Contoso Ltd", "Acme Manufacturing", "Beta Client Gadgets",
                                 "Beta Worker Quentin", "Gamma Applicant"):
                     self.assertNotIn(foreign, html)
         self.assertIn("Alpha Client Widgets", self.client.get("/clients").get_data(as_text=True))
@@ -147,13 +147,13 @@ class BureauIsolationTestCase(unittest.TestCase):
     def test_anyone_elses_objects_are_404(self):
         self._as_alpha()
         for path in (
-            f"/clients/{self.b_co.id}", f"/clients/{self.msc.id}", f"/clients/{self.msc.id}/edit",
-            f"/employees/clients/{self.msc.id}/roster", f"/employees/clients/{self.b_co.id}/edit/{self.b_emp.id}",
-            f"/employees/clients/{self.a_co.id}/edit/{self.msc_emp.id}",
-            f"/payroll/runs/{self.b_run.id}", f"/payroll/runs/{self.msc_run.id}/export",
-            f"/payroll/items/{self.msc_item.id}/payslip", f"/distribution/run/{self.msc_run.id}",
-            f"/payroll/runs?client_id={self.msc.id}", f"/payslip?client_id={self.msc.id}",
-            f"/distribution/history?company_id={self.msc.id}",
+            f"/clients/{self.b_co.id}", f"/clients/{self.contoso.id}", f"/clients/{self.contoso.id}/edit",
+            f"/employees/clients/{self.contoso.id}/roster", f"/employees/clients/{self.b_co.id}/edit/{self.b_emp.id}",
+            f"/employees/clients/{self.a_co.id}/edit/{self.contoso_emp.id}",
+            f"/payroll/runs/{self.b_run.id}", f"/payroll/runs/{self.contoso_run.id}/export",
+            f"/payroll/items/{self.contoso_item.id}/payslip", f"/distribution/run/{self.contoso_run.id}",
+            f"/payroll/runs?client_id={self.contoso.id}", f"/payslip?client_id={self.contoso.id}",
+            f"/distribution/history?company_id={self.contoso.id}",
         ):
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 404)
@@ -161,16 +161,16 @@ class BureauIsolationTestCase(unittest.TestCase):
     def test_posts_at_anyone_elses_objects_change_nothing(self):
         self._as_alpha()
         self.assertEqual(self.client.post(f"/payroll/runs/{self.b_run.id}/delete").status_code, 404)
-        self.assertEqual(self.client.post(f"/employees/clients/{self.msc.id}/deactivate/{self.msc_emp.id}").status_code, 404)
+        self.assertEqual(self.client.post(f"/employees/clients/{self.contoso.id}/deactivate/{self.contoso_emp.id}").status_code, 404)
         resp = self.client.post("/payroll/runs/bulk/reject",
                                 data={"run_ids": [str(self.a_run.id), str(self.b_run.id)]})
         self.assertEqual(resp.status_code, 404)
         self.assertEqual(self.client.post("/audit/expenses", data={
-            "title": "x", "amount": "10", "client_company_id": str(self.msc.id)}).status_code, 404)
+            "title": "x", "amount": "10", "client_company_id": str(self.contoso.id)}).status_code, 404)
         db.session.expire_all()
         self.assertIsNotNone(db.session.get(PayrollRun, self.b_run.id))
         self.assertEqual(db.session.get(PayrollRun, self.b_run.id).status, DRAFT)
-        self.assertEqual(db.session.get(Employee, self.msc_emp.id).status, "Active")
+        self.assertEqual(db.session.get(Employee, self.contoso_emp.id).status, "Active")
 
     def test_payrolla_only_pages_are_404(self):
         self._as_alpha()
@@ -193,9 +193,9 @@ class BureauIsolationTestCase(unittest.TestCase):
 
     def test_name_clash_does_not_reveal_other_firms(self):
         self._as_alpha()
-        resp = self.client.post("/clients/add", data={"name": "MSC Limited", "company_code": "MSCX",
+        resp = self.client.post("/clients/add", data={"name": "Contoso Ltd", "company_code": "CTSX",
                                                       "status": "Active"})
-        self.assertNotIn("registered as MSC Limited", resp.get_data(as_text=True))
+        self.assertNotIn("registered as Contoso Ltd", resp.get_data(as_text=True))
 
     def test_bureau_hears_about_its_clients(self):
         record_event("run.risk_held", summary="Held for review", subject=self.a_run,
@@ -210,7 +210,7 @@ class BureauIsolationTestCase(unittest.TestCase):
     def test_payrolla_staff_still_see_everything(self):
         self._login("admin@payrolla.com")
         html = self.client.get("/clients").get_data(as_text=True)
-        for name in ("MSC Limited", "Alpha Client Widgets", "Beta Client Gadgets"):
+        for name in ("Contoso Ltd", "Alpha Client Widgets", "Beta Client Gadgets"):
             self.assertIn(name, html)
         self.assertEqual(self.client.get(f"/payroll/runs/{self.b_run.id}").status_code, 200)
 

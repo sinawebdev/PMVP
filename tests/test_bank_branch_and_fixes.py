@@ -105,7 +105,7 @@ class LooksLikeHeaderLabelTestCase(unittest.TestCase):
 
     def test_does_not_flag_real_names_or_companies(self):
         for real in ("SAMPSON K. KLUVIE", "David Kwame Tetteh", "ACS/GMT Shipping",
-                     "MSC Limited"):
+                     "Contoso Ltd"):
             with self.subTest(real=real):
                 self.assertFalse(looks_like_header_label(real, numeric_is_suspicious=True))
 
@@ -284,7 +284,7 @@ class HeaderMisdetectionWarningTestCase(unittest.TestCase):
         ws.append(["AC1", "0", 1000, "RELEASE", "ACS", "GHA-1", "012", 1000])
         wb.save(path)
 
-        detected = detect_company_name(path, ["MSC Limited"])
+        detected = detect_company_name(path, ["Contoso Ltd"])
         self.assertTrue(
             looks_like_header_label(detected),
             f"detected company {detected!r} should look like a header label",

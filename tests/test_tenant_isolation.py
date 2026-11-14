@@ -8,7 +8,7 @@ Proves a tenant (client) user can never reach another tenant's data:
     objects — direct-owned (Employee, PayrollRun) and child-via-run (PayrollItem)
     — returning 404, never the row.
 
-In-memory SQLite, seeded with demo data (one MSC payroll run with items).
+In-memory SQLite, seeded with demo data (one CONTOSO payroll run with items).
 """
 
 import os
@@ -38,17 +38,17 @@ class TenantIsolationTestCase(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
 
-        self.msc_user = User.query.filter_by(email="admin@msc.com").first()
+        self.contoso_user = User.query.filter_by(email="admin@contoso.com").first()
         self.stellar_user = User.query.filter_by(email="admin@acme.com").first()
         self.platform_user = User.query.filter_by(email="operator@payrolla.com").first()
-        # The seeded MSC payroll run (+ an item) and an MSC employee — the
+        # The seeded CONTOSO payroll run (+ an item) and an CONTOSO employee — the
         # cross-tenant objects a Stellar user must be denied.
-        self.msc_run = PayrollRun.query.filter_by(
-            client_company_id=self.msc_user.client_company_id
+        self.contoso_run = PayrollRun.query.filter_by(
+            client_company_id=self.contoso_user.client_company_id
         ).first()
-        self.msc_item = PayrollItem.query.filter_by(payroll_run_id=self.msc_run.id).first()
-        self.msc_emp = Employee.query.filter_by(
-            client_company_id=self.msc_user.client_company_id
+        self.contoso_item = PayrollItem.query.filter_by(payroll_run_id=self.contoso_run.id).first()
+        self.contoso_emp = Employee.query.filter_by(
+            client_company_id=self.contoso_user.client_company_id
         ).first()
         self.stellar_company_id = self.stellar_user.client_company_id
 
@@ -63,10 +63,10 @@ class TenantIsolationTestCase(unittest.TestCase):
 
     # --- route level: tenant user is bounced, never served -----------------
     def test_tenant_user_bounced_from_oversight_routes(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         routes = OVERSIGHT_ROUTES + [
             f"/clients/{self.stellar_company_id}",      # another tenant's client page
-            f"/payroll/runs/{self.msc_run.id}",         # operator run detail
+            f"/payroll/runs/{self.contoso_run.id}",         # operator run detail
         ]
         for route in routes:
             resp = self.client.get(route)
@@ -78,8 +78,8 @@ class TenantIsolationTestCase(unittest.TestCase):
 
     def test_tenant_user_bounced_from_operator_action_route(self):
         # A role_required operator route (GET on an edit view) also bounces.
-        self._login("admin@msc.com")
-        resp = self.client.get(f"/payroll/runs/{self.msc_run.id}/items/edit")
+        self._login("admin@contoso.com")
+        resp = self.client.get(f"/payroll/runs/{self.contoso_run.id}/items/edit")
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.headers["Location"].endswith("/company"))
 
@@ -92,49 +92,49 @@ class TenantIsolationTestCase(unittest.TestCase):
     # --- object level: helpers deny cross-tenant, allow own ----------------
     def test_owns_object_cross_tenant(self):
         with self.app.test_request_context():
-            login_user(self.msc_user)
-            self.assertTrue(owns_object(self.msc_run))
-            self.assertTrue(owns_object(self.msc_emp))
-            self.assertTrue(owns_object(self.msc_item))  # child via run
+            login_user(self.contoso_user)
+            self.assertTrue(owns_object(self.contoso_run))
+            self.assertTrue(owns_object(self.contoso_emp))
+            self.assertTrue(owns_object(self.contoso_item))  # child via run
         with self.app.test_request_context():
             login_user(self.stellar_user)
-            self.assertFalse(owns_object(self.msc_run))
-            self.assertFalse(owns_object(self.msc_emp))
-            self.assertFalse(owns_object(self.msc_item))
+            self.assertFalse(owns_object(self.contoso_run))
+            self.assertFalse(owns_object(self.contoso_emp))
+            self.assertFalse(owns_object(self.contoso_item))
         with self.app.test_request_context():
             login_user(self.platform_user)
-            self.assertTrue(owns_object(self.msc_run))  # platform spans tenants
+            self.assertTrue(owns_object(self.contoso_run))  # platform spans tenants
 
     def test_tenant_get_or_404_cross_tenant(self):
         # Owner resolves; other tenant gets NotFound (404), never the row.
         with self.app.test_request_context():
-            login_user(self.msc_user)
-            self.assertEqual(tenant_get_or_404(PayrollRun, self.msc_run.id).id, self.msc_run.id)
-            self.assertEqual(tenant_get_or_404(PayrollItem, self.msc_item.id).id, self.msc_item.id)
+            login_user(self.contoso_user)
+            self.assertEqual(tenant_get_or_404(PayrollRun, self.contoso_run.id).id, self.contoso_run.id)
+            self.assertEqual(tenant_get_or_404(PayrollItem, self.contoso_item.id).id, self.contoso_item.id)
         with self.app.test_request_context():
             login_user(self.stellar_user)
             for model, ident in [
-                (PayrollRun, self.msc_run.id),
-                (Employee, self.msc_emp.id),
-                (PayrollItem, self.msc_item.id),  # child via run join
+                (PayrollRun, self.contoso_run.id),
+                (Employee, self.contoso_emp.id),
+                (PayrollItem, self.contoso_item.id),  # child via run join
             ]:
                 with self.assertRaises(NotFound):
                     tenant_get_or_404(model, ident)
 
     # --- write level: a mutation endpoint is isolated too (Phase 5) --------
     def test_tenant_user_cannot_write_another_tenants_resource(self):
-        # A POST that mutates, not just a GET: a Stellar user deactivating an MSC
+        # A POST that mutates, not just a GET: a Stellar user deactivating an CONTOSO
         # employee is denied (404) and the employee is left untouched — proving no
         # write leaks across tenants.
-        self.msc_emp.status = "Active"
+        self.contoso_emp.status = "Active"
         db.session.commit()
         self._login("admin@acme.com")
         resp = self.client.post(
-            f"/company/employees/{self.msc_emp.id}/deactivate"
+            f"/company/employees/{self.contoso_emp.id}/deactivate"
         )
         self.assertEqual(resp.status_code, 404)
-        db.session.refresh(self.msc_emp)
-        self.assertEqual(self.msc_emp.status, "Active")  # unchanged
+        db.session.refresh(self.contoso_emp)
+        self.assertEqual(self.contoso_emp.status, "Active")  # unchanged
 
     def test_tenant_user_can_write_own_resource(self):
         # Positive control: the same endpoint works on the caller's own employee,

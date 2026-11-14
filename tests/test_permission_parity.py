@@ -50,7 +50,7 @@ SUPERUSERS = {normalise_role(r) for r in perms.SUPERUSERS}
 # The seeded tenant logins for one demo company, as (email, role). Derived from
 # the seed definitions rather than hardcoded, so adding a tenant role to the demo
 # roster automatically widens the parity check instead of silently escaping it.
-DEMO_TENANT = "MSC Limited"
+DEMO_TENANT = "Contoso Ltd"
 
 
 def _tenant_logins(company_name=DEMO_TENANT):

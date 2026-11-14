@@ -84,7 +84,7 @@ def _thin_rows():
         ["Staff ID", "Name", "Normal hours", "Weekday overtime", "Saturday overtime",
          "Sun/Holiday overtime", "Afternoon allowance", "Night allowance",
          "6to6 day allowance", "Prod/Bonus Allowance", "Loan", "ICU Member"],
-        ["DZ048", "GEORGE AKOTO", 40, 0, 0, 0, 0, 0, 0, 0, 0, "Member"],
+        ["DZ048", "KOFI ASARE", 40, 0, 0, 0, 0, 0, 0, 0, 0, "Member"],
     ]
 
 
@@ -96,7 +96,7 @@ def _rich_rows():
          "AFT'NOON", "NIGHT", "6 TO 6", "4CREW"],
         [],
         [None, "NAMES"],
-        ["DZ048", "GEORGE AKOTO", None, 40, 0, 0, 0, 0, 0, 0, 0],
+        ["DZ048", "KOFI ASARE", None, 40, 0, 0, 0, 0, 0, 0, 0],
     ]
 
 

@@ -40,10 +40,10 @@ class ClientInterfaceTestCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        self.msc = User.query.filter_by(email="admin@msc.com").first()
-        self.msc_run = PayrollRun.query.filter_by(client_company_id=self.msc.client_company_id).first()
-        self.msc_item = PayrollItem.query.filter_by(payroll_run_id=self.msc_run.id).first()
-        self.msc_emp = Employee.query.filter_by(client_company_id=self.msc.client_company_id).first()
+        self.contoso = User.query.filter_by(email="admin@contoso.com").first()
+        self.contoso_run = PayrollRun.query.filter_by(client_company_id=self.contoso.client_company_id).first()
+        self.contoso_item = PayrollItem.query.filter_by(payroll_run_id=self.contoso_run.id).first()
+        self.contoso_emp = Employee.query.filter_by(client_company_id=self.contoso.client_company_id).first()
 
     def tearDown(self):
         self.ctx.pop()
@@ -52,12 +52,12 @@ class ClientInterfaceTestCase(unittest.TestCase):
         self.assertEqual(self.client.post("/login", data={"email": email, "password": "password123"}).status_code, 302)
 
     def test_tenant_user_reaches_all_client_pages(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         for page in CLIENT_PAGES:
             self.assertEqual(self.client.get(page).status_code, 200, page)
         # own run detail + payslip PDF
-        self.assertEqual(self.client.get(f"/company/runs/{self.msc_run.id}").status_code, 200)
-        self.assertEqual(self.client.get(f"/company/items/{self.msc_item.id}/payslip").status_code, 200)
+        self.assertEqual(self.client.get(f"/company/runs/{self.contoso_run.id}").status_code, 200)
+        self.assertEqual(self.client.get(f"/company/items/{self.contoso_item.id}/payslip").status_code, 200)
 
     def test_platform_user_bounced_from_client_plane(self):
         self._login("operator@payrolla.com")
@@ -67,49 +67,49 @@ class ClientInterfaceTestCase(unittest.TestCase):
             self.assertTrue(resp.headers["Location"].endswith("/dashboard"))
 
     def test_employee_self_service_add_is_tenant_bound(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         resp = self.client.post(
             "/company/employees/add",
-            data={"staff_id": "msc new 7", "full_name": "New Worker", "basic_salary": "1500"},
+            data={"staff_id": "cts new 7", "full_name": "New Worker", "basic_salary": "1500"},
         )
         self.assertEqual(resp.status_code, 302)
-        emp = Employee.query.filter_by(staff_id="MSCNEW7").first()
+        emp = Employee.query.filter_by(staff_id="CTSNEW7").first()
         self.assertIsNotNone(emp)
-        self.assertEqual(emp.client_company_id, self.msc.client_company_id)  # forced to tenant
+        self.assertEqual(emp.client_company_id, self.contoso.client_company_id)  # forced to tenant
         self.assertEqual(emp.full_name, "New Worker")
 
     def test_cross_tenant_objects_404_through_client_routes(self):
         self._login("admin@acme.com")  # different tenant
         for path in [
-            f"/company/employees/{self.msc_emp.id}/edit",
-            f"/company/runs/{self.msc_run.id}",
-            f"/company/items/{self.msc_item.id}/payslip",
+            f"/company/employees/{self.contoso_emp.id}/edit",
+            f"/company/runs/{self.contoso_run.id}",
+            f"/company/items/{self.contoso_item.id}/payslip",
         ]:
             self.assertEqual(self.client.get(path).status_code, 404, path)
 
     def test_audit_trail_is_tenant_scoped(self):
-        # MSC user's action is auditable and shows in MSC's audit; a different
+        # CONTOSO user's action is auditable and shows in Contoso's audit; a different
         # tenant never sees it.
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         self.client.post(
             "/company/employees/add",
-            data={"staff_id": "MSCAUD1", "full_name": "Audit Marker Worker"},
+            data={"staff_id": "CTSAUD1", "full_name": "Audit Marker Worker"},
         )
         html = self.client.get("/company/audit").get_data(as_text=True)
         self.assertEqual(self.client.get("/company/audit").status_code, 200)
         self.assertIn("Audit Marker Worker", html)
-        # Stellar user must not see MSC's audit entry.
+        # Stellar user must not see Contoso's audit entry.
         self.client.get("/logout")
         self._login("admin@acme.com")
         stellar_html = self.client.get("/company/audit").get_data(as_text=True)
         self.assertNotIn("Audit Marker Worker", stellar_html)
 
     def test_employee_list_is_scoped(self):
-        self._login("admin@msc.com")
-        # Every employee shown belongs to MSC (checked via DB — the list query is tenant_query).
+        self._login("admin@contoso.com")
+        # Every employee shown belongs to CONTOSO (checked via DB — the list query is tenant_query).
         html = self.client.get("/company/employees").get_data(as_text=True)
         stellar_emp = Employee.query.filter(
-            Employee.client_company_id != self.msc.client_company_id
+            Employee.client_company_id != self.contoso.client_company_id
         ).first()
         self.assertNotIn(stellar_emp.staff_id, html)
 
@@ -117,7 +117,7 @@ class ClientInterfaceTestCase(unittest.TestCase):
     def _upload_payroll_draft(self):
         """Create an import DRAFT so the preview page has something to render.
 
-        A period the seeded MSC run does not already use, so the duplicate-period
+        A period the seeded CONTOSO run does not already use, so the duplicate-period
         guard does not reject it. Confirming the draft is deliberately not done —
         the preview is the page under test.
         """
@@ -165,7 +165,7 @@ class ClientInterfaceTestCase(unittest.TestCase):
         field on the GRA schedule — is page content, not identity chrome.
         """
         body = re.sub(r"<title>.*?</title>", "", html, flags=re.S)
-        name = re.escape(self.msc.client_company.name)
+        name = re.escape(self.contoso.client_company.name)
         return (
             len(re.findall(r'class="portal-pagehead"', body))
             + len(re.findall(r"<h1[^>]*>\s*" + name + r"\s*</h1>", body))
@@ -196,14 +196,14 @@ class ClientInterfaceTestCase(unittest.TestCase):
         expense_detail.html was reachable only through the object-bound
         route and was the one template a page-level sample had missed.
         """
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         self._upload_payroll_draft()
         draft = ImportBatch.query.filter_by(
-            client_company_id=self.msc.client_company_id
+            client_company_id=self.contoso.client_company_id
         ).order_by(ImportBatch.id.desc()).first()
         self.assertIsNotNone(draft, "fixture: the preview page needs a draft to render")
         expense = Expense.query.filter_by(
-            client_company_id=self.msc.client_company_id
+            client_company_id=self.contoso.client_company_id
         ).first()
         self.assertIsNotNone(expense, "fixture: the expense pages need a seeded expense")
         self._stage_roster_import()
@@ -212,14 +212,14 @@ class ClientInterfaceTestCase(unittest.TestCase):
             "/company",
             "/company/employees",
             "/company/employees/add",
-            f"/company/employees/{self.msc_emp.id}/edit",
+            f"/company/employees/{self.contoso_emp.id}/edit",
             "/company/employees/import",
             "/company/employees/import/preview",   # staged below
             "/company/runs",
-            f"/company/runs/{self.msc_run.id}",
+            f"/company/runs/{self.contoso_run.id}",
             "/company/runs/upload",
-            f"/company/runs/{self.msc_run.id}/reports",
-            f"/company/runs/{self.msc_run.id}/distribute",
+            f"/company/runs/{self.contoso_run.id}/reports",
+            f"/company/runs/{self.contoso_run.id}/distribute",
             f"/company/imports/{draft.id}/preview",
             "/company/statutory",
             "/company/expenses",
@@ -236,7 +236,7 @@ class ClientInterfaceTestCase(unittest.TestCase):
             self.assertIn(resp.status_code, (200, 404), path)
             html = resp.get_data(as_text=True)
             self.assertEqual(self._identity_renders(html), 1, f"identity count on {path}")
-            self.assertIn(self.msc.client_company.name, html, path)
+            self.assertIn(self.contoso.client_company.name, html, path)
 
     def test_tenant_error_page_stays_on_the_tenant_plane(self):
         """A tenant's 404 must not hand them the operator console.
@@ -246,7 +246,7 @@ class ClientInterfaceTestCase(unittest.TestCase):
         redirects a tenant straight back to /company — beside a sidebar link to
         Client Companies, a page belonging to the other plane entirely.
         """
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         resp = self.client.get("/company/no-such-page")
         self.assertEqual(resp.status_code, 404)
         html = resp.get_data(as_text=True)

@@ -62,14 +62,14 @@ PLATFORM_USERS = [
 # demonstration needs and nothing an audience has to be told to ignore.
 DEMO_COMPANIES = [
     {
-        "name": "MSC Limited",
-        "company_code": "MSC",
+        "name": "Contoso Ltd",
+        "company_code": "CONTOSO",
         "contact_person": "Ama Mensah",
-        "email": "admin@msc.com",
+        "email": "admin@contoso.com",
         "phone": "0302 700 100",
-        "address": "18 Harbour Road, Tema Port",
-        "location": "Tema",
-        "service_type": "Port operations support",
+        "address": "18 Harper Road, Adum",
+        "location": "Kumasi",
+        "service_type": "Facilities management",
         "notes": "Monthly payroll, bank transfer settlement.",
     },
     {
@@ -97,7 +97,7 @@ TENANT_USER_TEMPLATE = [
 
 def company_domain(company):
     """The email domain a company's staff logins use, derived from its own
-    contact address ("admin@msc.com" -> "msc.com") so identities stay tied to
+    contact address ("admin@contoso.com" -> "contoso.com") so identities stay tied to
     the company rather than to a demo domain."""
     return (company["email"].split("@", 1)[1]).lower()
 
@@ -291,25 +291,25 @@ def seed_employees():
     if Employee.query.count():
         return
     names = [
-        ("CN-001", "Kwame Mensah", "MSC Limited", 2600),
-        ("CN-002", "Akosua Osei", "MSC Limited", 2400),
+        ("CN-001", "Kwame Mensah", "Contoso Ltd", 2600),
+        ("CN-002", "Akosua Osei", "Contoso Ltd", 2400),
         ("CN-003", "Yaw Boateng", "Acme Manufacturing Ltd", 2800),
-        ("CN-004", "Ama Serwaa", "MSC Limited", 2300),
+        ("CN-004", "Ama Serwaa", "Contoso Ltd", 2300),
         ("CN-005", "Kofi Appiah", "Acme Manufacturing Ltd", 3100),
         ("CN-006", "Efua Nyarko", "Acme Manufacturing Ltd", 2500),
         ("CN-007", "Kojo Antwi", "Acme Manufacturing Ltd", 2700),
-        ("CN-008", "Abena Darko", "MSC Limited", 2350),
+        ("CN-008", "Abena Darko", "Contoso Ltd", 2350),
         ("CN-009", "Nana Adu", "Acme Manufacturing Ltd", 2950),
         ("CN-010", "Esi Amponsah", "Acme Manufacturing Ltd", 2450),
-        ("CN-011", "Akua Boateng", "MSC Limited", 2550),
-        ("CN-012", "Kojo Addai", "MSC Limited", 2650),
-        ("CN-013", "Afia Darko", "MSC Limited", 2350),
+        ("CN-011", "Akua Boateng", "Contoso Ltd", 2550),
+        ("CN-012", "Kojo Addai", "Contoso Ltd", 2650),
+        ("CN-013", "Afia Darko", "Contoso Ltd", 2350),
         ("CN-014", "Yaw Antwi", "Acme Manufacturing Ltd", 2750),
         ("CN-015", "Abigail Tetteh", "Acme Manufacturing Ltd", 2300),
         ("CN-016", "Samuel Nartey", "Acme Manufacturing Ltd", 2850),
         ("CN-017", "Linda Ofori", "Acme Manufacturing Ltd", 2450),
-        ("CN-018", "Isaac Quaye", "MSC Limited", 2650),
-        ("CN-019", "Mavis Adjei", "MSC Limited", 2500),
+        ("CN-018", "Isaac Quaye", "Contoso Ltd", 2650),
+        ("CN-019", "Mavis Adjei", "Contoso Ltd", 2500),
         ("CN-020", "Daniel Asamoah", "Acme Manufacturing Ltd", 2700),
     ]
     for index, (staff_id, full_name, client_name, salary) in enumerate(names, start=1):
@@ -339,7 +339,7 @@ def seed_payroll():
         return
     admin = User.query.filter_by(email="admin@payrolla.com").first()
     director = User.query.filter_by(email="director@payrolla.com").first()
-    client = ClientCompany.query.filter_by(name="MSC Limited").first()
+    client = ClientCompany.query.filter_by(name="Contoso Ltd").first()
     now = datetime.now()
     employees = Employee.query.filter(
         Employee.client_company_id == client.id,
@@ -355,7 +355,7 @@ def seed_payroll():
         total_workers=len(employees),
         total_rows_imported=len(employees),
         duplicate_workers_found=0,
-        source_filename="seed_msc_payroll.xlsx",
+        source_filename="seed_contoso_payroll.xlsx",
         import_type="Single Company Upload",
         # Company detection retired — leave detected_company_name null (see app/payroll.py).
         notes="Seed payroll run for demo.",
@@ -403,7 +403,7 @@ def seed_expenses():
     if Expense.query.count():
         return
     accounts = User.query.filter_by(email="accounts@payrolla.com").first()
-    client = ClientCompany.query.filter_by(name="MSC Limited").first()
+    client = ClientCompany.query.filter_by(name="Contoso Ltd").first()
     db.session.add(
         Expense(
             title="Office internet",

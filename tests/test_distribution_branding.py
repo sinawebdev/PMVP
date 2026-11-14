@@ -45,14 +45,14 @@ class BrandingRenderTestCase(unittest.TestCase):
 
     def test_tenant_brand_overrides_global(self):
         run = _Obj(month="June", year=2026)
-        branded = _Obj(name="MSC Limited", brand_name="MSC Payroll", brand_color="#123456")
+        branded = _Obj(name="Contoso Ltd", brand_name="Contoso Payroll", brand_color="#123456")
         _, _, html = render_payslip_email(_item(), run, branded, link="https://x/p/t")
-        self.assertIn("MSC Payroll", html)
+        self.assertIn("Contoso Payroll", html)
         self.assertIn("#123456", html)
 
     def test_falls_back_to_global_when_unset(self):
         run = _Obj(month="June", year=2026)
-        plain = _Obj(name="MSC Limited", brand_name=None, brand_color=None)
+        plain = _Obj(name="Contoso Ltd", brand_name=None, brand_color=None)
         _, _, html = render_payslip_email(_item(), run, plain, link="https://x/p/t")
         # Default accent from config (Payrolla Deep Teal).
         self.assertIn("#0D4D4D", html)
@@ -94,14 +94,14 @@ class BrandingSenderTestCase(unittest.TestCase):
             SmtpEmailSender().send(
                 OutboundMessage(
                     "email", "worker@example.com", "Subj", "body", "<p>b</p>",
-                    from_name="MSC Payroll", reply_to="hr@msc.example",
+                    from_name="Contoso Payroll", reply_to="hr@contoso.example",
                 )
             )
         finally:
             channels_mod.smtplib.SMTP = original
         mime = captured["mime"]
-        self.assertIn("MSC Payroll", mime["From"])
-        self.assertEqual(mime["Reply-To"], "hr@msc.example")
+        self.assertIn("Contoso Payroll", mime["From"])
+        self.assertEqual(mime["Reply-To"], "hr@contoso.example")
 
 
 class BrandingRouteTestCase(unittest.TestCase):
@@ -111,10 +111,10 @@ class BrandingRouteTestCase(unittest.TestCase):
         self.http = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        self.msc = User.query.filter_by(email="admin@msc.com").first()
-        self.company_id = self.msc.client_company_id
+        self.contoso = User.query.filter_by(email="admin@contoso.com").first()
+        self.company_id = self.contoso.client_company_id
         self.preparer = User(
-            name="MSC Preparer", email="preparer2@msc.demo",
+            name="CONTOSO Preparer", email="preparer2@contoso.demo",
             role="client_preparer", client_company_id=self.company_id,
         )
         self.preparer.set_password("password123")
@@ -129,21 +129,21 @@ class BrandingRouteTestCase(unittest.TestCase):
         self.http.post("/login", data={"email": email, "password": "password123"})
 
     def test_admin_saves_branding(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         resp = self.http.post(
             "/company/branding",
-            data={"brand_name": "MSC Payroll", "brand_color": "#123456",
-                  "email_from_name": "MSC HR", "email_reply_to": "hr@msc.example"},
+            data={"brand_name": "Contoso Payroll", "brand_color": "#123456",
+                  "email_from_name": "CONTOSO HR", "email_reply_to": "hr@contoso.example"},
             follow_redirects=True,
         )
         self.assertEqual(resp.status_code, 200)
         company = db.session.get(ClientCompany, self.company_id)
-        self.assertEqual(company.brand_name, "MSC Payroll")
+        self.assertEqual(company.brand_name, "Contoso Payroll")
         self.assertEqual(company.brand_color, "#123456")
-        self.assertEqual(company.email_reply_to, "hr@msc.example")
+        self.assertEqual(company.email_reply_to, "hr@contoso.example")
 
     def test_invalid_color_is_rejected(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         self.http.post(
             "/company/branding",
             data={"brand_color": "notacolor"}, follow_redirects=True,
@@ -152,7 +152,7 @@ class BrandingRouteTestCase(unittest.TestCase):
         self.assertIsNone(company.brand_color)
 
     def test_invalid_reply_to_is_rejected(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         self.http.post(
             "/company/branding",
             data={"email_reply_to": "not-an-email"}, follow_redirects=True,
@@ -161,7 +161,7 @@ class BrandingRouteTestCase(unittest.TestCase):
         self.assertIsNone(company.email_reply_to)
 
     def test_preparer_cannot_edit_branding(self):
-        self._login("preparer2@msc.demo")
+        self._login("preparer2@contoso.demo")
         resp = self.http.post(
             "/company/branding", data={"brand_name": "Nope"}, follow_redirects=False
         )

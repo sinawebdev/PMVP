@@ -72,7 +72,7 @@ Collapsing Statutory + Audit into a single "Compliance" parent to reach 5 items.
 
 ### Company identity
 
-The sidebar currently carries company identity (avatar `MS`, "MSC Limited", "Company portal · MSC Administrator"). Horizontal nav has no room for a three-line block. It moves to the page header, which already renders the company name — merge them so identity appears once, not twice.
+The sidebar currently carries company identity (avatar `CL`, "Contoso Ltd", "Company portal · CONTOSO Administrator"). Horizontal nav has no room for a three-line block. It moves to the page header, which already renders the company name — merge them so identity appears once, not twice.
 
 ---
 
@@ -85,7 +85,7 @@ Container: max-width 1280px, centred, on a light neutral page background. Inner 
 │  logo    Dashboard Employees Payroll Statutory Expenses Audit│  shell
 │                                        🔔  ⚙  [AN] Ama ▾     │
 ├──────────────────────────────────────────────────────────────┤
-│  MSC Limited                                                 │  header
+│  Contoso Ltd                                                 │  header
 │  Reporting on July 2026 · pay date 28 Jul     Next run 28 Aug│
 ├────────────────────────────────────┬─────────────────────────┤
 │  ROW 1 — cols 1-8                  │  cols 9-12              │

@@ -35,7 +35,7 @@ class Phase5TestCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        self.tenant = User.query.filter_by(email="admin@msc.com").first()
+        self.tenant = User.query.filter_by(email="admin@contoso.com").first()
         self.run = PayrollRun.query.filter_by(
             client_company_id=self.tenant.client_company_id
         ).first()
@@ -77,7 +77,7 @@ class OneDeliveryImplementationTests(Phase5TestCase):
         operator = self.client.get(f"/distribution/run/{self.run.id}").get_data(as_text=True)
         self._logout()
 
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         tenant = self.client.get(
             f"/company/runs/{self.run.id}/distribute"
         ).get_data(as_text=True)
@@ -93,7 +93,7 @@ class OneDeliveryImplementationTests(Phase5TestCase):
         operator = self.client.get(f"/distribution/run/{self.run.id}").get_data(as_text=True)
         self._logout()
 
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         tenant = self.client.get(
             f"/company/runs/{self.run.id}/distribute"
         ).get_data(as_text=True)
@@ -157,7 +157,7 @@ class OneNotificationInboxTests(Phase5TestCase):
         operator = self.client.get("/notifications").get_data(as_text=True)
         self._logout()
 
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         tenant = self.client.get("/notifications").get_data(as_text=True)
         self._logout()
 

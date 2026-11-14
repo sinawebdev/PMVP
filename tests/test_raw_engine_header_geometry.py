@@ -75,7 +75,7 @@ def build_merged_two_row():
     ws.merge_cells(start_row=10, start_column=COL_ICU_DUES, end_row=11, end_column=COL_ICU_DUES)
     ws.cell(11, 2, "NAMES")
     ws.cell(12, 1, 1)
-    ws.cell(12, 2, "GEORGE AKOTO")
+    ws.cell(12, 2, "KOFI ASARE")
     return ws
 
 
@@ -94,7 +94,7 @@ def build_stacked_three_row():
     ws.cell(11, COL_ICU_DUES, "DUES")
     ws.cell(12, 2, "NAMES")
     ws.cell(13, 1, 1)
-    ws.cell(13, 2, "GEORGE AKOTO")
+    ws.cell(13, 2, "KOFI ASARE")
     return ws
 
 

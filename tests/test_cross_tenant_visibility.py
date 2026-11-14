@@ -32,19 +32,19 @@ class CrossTenantVisibilityTestCase(unittest.TestCase):
         self.ctx = self.app.app_context()
         self.ctx.push()
 
-        self.msc = User.query.filter_by(email="admin@msc.com").first()
+        self.contoso = User.query.filter_by(email="admin@contoso.com").first()
         self.stellar = User.query.filter_by(email="admin@acme.com").first()
-        self.msc_cid = self.msc.client_company_id
+        self.contoso_cid = self.contoso.client_company_id
         self.stellar_cid = self.stellar.client_company_id
 
         # Uniquely-tokenised markers per tenant.
-        self._seed_markers("MSC", self.msc_cid, self.msc.id)
+        self._seed_markers("CONTOSO", self.contoso_cid, self.contoso.id)
         self._seed_markers("STELLAR", self.stellar_cid, self.stellar.id)
         db.session.commit()
 
         # A token unique to each tenant that must never cross over.
         self.markers = {
-            self.msc_cid: ["ZZMSCEMP", "ZZMSCEXP", "ZZMSCNOTE"],
+            self.contoso_cid: ["ZZCONTOSOEMP", "ZZCONTOSOEXP", "ZZCONTOSONOTE"],
             self.stellar_cid: ["ZZSTELLAREMP", "ZZSTELLAREXP", "ZZSTELLARNOTE"],
         }
 
@@ -82,22 +82,22 @@ class CrossTenantVisibilityTestCase(unittest.TestCase):
                 self.assertNotIn(token, html, f"{token} leaked into {page} for {email}")
         self.client.get("/logout")
 
-    def test_msc_never_sees_stellar_markers(self):
-        self._sweep("admin@msc.com", self.msc_cid, self.stellar_cid)
+    def test_contoso_never_sees_stellar_markers(self):
+        self._sweep("admin@contoso.com", self.contoso_cid, self.stellar_cid)
 
-    def test_stellar_never_sees_msc_markers(self):
-        self._sweep("admin@acme.com", self.stellar_cid, self.msc_cid)
+    def test_stellar_never_sees_contoso_markers(self):
+        self._sweep("admin@acme.com", self.stellar_cid, self.contoso_cid)
 
     def test_each_tenant_sees_its_own_markers(self):
         # Guard the test: the markers ARE visible to their owner, so a passing
         # cross-visibility sweep is meaningful (not just empty pages).
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         emp_html = self.client.get("/company/employees").get_data(as_text=True)
-        self.assertIn("ZZMSCEMP", emp_html)
+        self.assertIn("ZZCONTOSOEMP", emp_html)
         exp_html = self.client.get("/company/expenses").get_data(as_text=True)
-        self.assertIn("ZZMSCEXP", exp_html)
+        self.assertIn("ZZCONTOSOEXP", exp_html)
         note_html = self.client.get("/notifications").get_data(as_text=True)
-        self.assertIn("ZZMSCNOTE", note_html)
+        self.assertIn("ZZCONTOSONOTE", note_html)
 
 
 if __name__ == "__main__":

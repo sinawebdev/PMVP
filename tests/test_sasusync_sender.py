@@ -34,7 +34,7 @@ from app.distribution.service import distribute_run  # noqa: E402
 from app.models import DELIVERY_FAILED, PayrollRun, PayslipDelivery  # noqa: E402
 
 API_KEY = "sk_live_THIS-MUST-NEVER-BE-LOGGED"
-BODY = "MSC Limited: your September 2026 payslip is ready."
+BODY = "Contoso Ltd: your September 2026 payslip is ready."
 OK_BODY = (
     '{"success": true, "balance": {"deducted": 1, "remaining": 1649}, '
     '"data": {"recipients_count": 1, "status": "queued", '

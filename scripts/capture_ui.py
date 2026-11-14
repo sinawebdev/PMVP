@@ -40,7 +40,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(REPO_ROOT, ".screenshots")
 
 # The seeded tenant admin. Same identity the tests use.
-DEMO_EMAIL = "admin@msc.com"
+DEMO_EMAIL = "admin@contoso.com"
 DEMO_PASSWORD = "password123"
 # The seeded platform admin, for operator-console captures.
 OPERATOR_EMAIL = "admin@payrolla.com"

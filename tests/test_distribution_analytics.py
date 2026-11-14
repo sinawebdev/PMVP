@@ -119,7 +119,7 @@ class AnalyticsRouteTestCase(unittest.TestCase):
         self.assertTrue(xlsx_resp.get_data().startswith(b"PK"))
 
     def test_tenant_user_is_blocked(self):
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         resp = self.http.get("/distribution/analytics", follow_redirects=False)
         self.assertEqual(resp.status_code, 302)
         self.assertNotIn("/distribution/analytics", resp.headers["Location"])

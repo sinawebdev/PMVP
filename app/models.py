@@ -77,7 +77,7 @@ class Bureau(db.Model):
 class ClientCompany(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(160), nullable=False, unique=True)
-    # Short operator-facing handle for the tenant ("MSC", "ACME"), quoted on
+    # Short operator-facing handle for the tenant ("CONTOSO", "ACME"), quoted on
     # exports, support tickets, and the onboarding summary. Unique and
     # normalised to uppercase on save (see app.routes.normalise_company_code).
     # Nullable so companies onboarded before the column existed stay valid.

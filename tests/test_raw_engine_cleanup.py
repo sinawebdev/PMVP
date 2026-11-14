@@ -133,12 +133,12 @@ class PayTypeChangeGuardTests(unittest.TestCase):
             self.cid = client.id
             # George: salaried, flat basic 1800, NO hourly basic rate on file.
             george = Employee(
-                staff_id="DZ048", full_name="GEORGE AKOTO", client_company_id=self.cid,
+                staff_id="DZ048", full_name="KOFI ASARE", client_company_id=self.cid,
                 basic_salary=1800, pay_type="salaried", status="Active",
             )
             # Richard: genuinely hourly, carries a basic hourly rate profile.
             richard = Employee(
-                staff_id="DCL9", full_name="RICHARD WOODE", client_company_id=self.cid,
+                staff_id="DCL9", full_name="SAMUEL OTOO", client_company_id=self.cid,
                 basic_salary=0, pay_type="salaried", status="Active",
             )
             db.session.add_all([george, richard])
@@ -161,7 +161,7 @@ class PayTypeChangeGuardTests(unittest.TestCase):
         # Unconfirmed salaried->hourly for a worker with no hourly basic rate.
         resp = self.http.post(
             self._edit_url(self.george_id),
-            data={"full_name": "GEORGE AKOTO", "pay_type": "hourly"},
+            data={"full_name": "KOFI ASARE", "pay_type": "hourly"},
         )
         self.assertEqual(resp.status_code, 200)  # re-render, NOT a redirect/commit
         body = resp.get_data(as_text=True)
@@ -174,7 +174,7 @@ class PayTypeChangeGuardTests(unittest.TestCase):
     def test_confirmed_change_is_applied(self):
         resp = self.http.post(
             self._edit_url(self.george_id),
-            data={"full_name": "GEORGE AKOTO", "pay_type": "hourly", "confirm_pay_type": "1"},
+            data={"full_name": "KOFI ASARE", "pay_type": "hourly", "confirm_pay_type": "1"},
         )
         self.assertEqual(resp.status_code, 302)  # committed -> redirect to roster
         with self.app.app_context():
@@ -185,7 +185,7 @@ class PayTypeChangeGuardTests(unittest.TestCase):
         # is NOT a zeroing — the preview says basic is derived from hours × rate.
         resp = self.http.post(
             self._edit_url(self.richard_id),
-            data={"full_name": "RICHARD WOODE", "pay_type": "hourly"},
+            data={"full_name": "SAMUEL OTOO", "pay_type": "hourly"},
         )
         self.assertEqual(resp.status_code, 200)
         body = resp.get_data(as_text=True)

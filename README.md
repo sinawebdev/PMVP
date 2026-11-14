@@ -131,9 +131,9 @@ its credentials in Supabase Authentication. All demo accounts use the password
 
 | Company | Code | Email | Role string |
 |---|---|---|---|
-| MSC Limited | `MSC` | `admin@msc.com` | `client_admin` |
-| MSC Limited | `MSC` | `finance@msc.com` | `client_admin` |
-| MSC Limited | `MSC` | `payroll@msc.com` | `client_preparer` |
+| Contoso Ltd | `CONTOSO` | `admin@contoso.com` | `client_admin` |
+| Contoso Ltd | `CONTOSO` | `finance@contoso.com` | `client_admin` |
+| Contoso Ltd | `CONTOSO` | `payroll@contoso.com` | `client_preparer` |
 | Acme Manufacturing Ltd | `ACME` | `admin@acme.com` | `client_admin` |
 | Acme Manufacturing Ltd | `ACME` | `finance@acme.com` | `client_admin` |
 | Acme Manufacturing Ltd | `ACME` | `payroll@acme.com` | `client_preparer` |
@@ -162,7 +162,7 @@ Without `--yes` it only reports what it would do:
 
 ```
 demo-reset would:
-  keep and rebuild : MSC Limited, Acme Manufacturing Ltd
+  keep and rebuild : Contoso Ltd, Acme Manufacturing Ltd
   delete entirely  : Test Co 3, Old Client Ltd
 
 Re-run with --yes to apply.
@@ -177,7 +177,7 @@ With `--yes` it:
 2. removes platform logins outside the professional roster, **re-pointing** the
    history they own (approved runs, recorded expenses, statutory rate versions)
    at the retained platform admin rather than deleting it;
-3. empties and rebuilds MSC Limited and Acme Manufacturing Ltd with a roster,
+3. empties and rebuilds Contoso Ltd and Acme Manufacturing Ltd with a roster,
    six months of payroll history, expenses across every category, and delivered
    payslips for the closed runs.
 

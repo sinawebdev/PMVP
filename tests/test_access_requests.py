@@ -160,7 +160,7 @@ class AccessRequestTestCase(unittest.TestCase):
     def test_tenant_users_cannot_review_requests(self):
         self.client.post("/request-access", data=_request_form())
         entry = AccessRequest.query.one()
-        self.client.post("/login", data={"email": "admin@msc.com", "password": "password123"})
+        self.client.post("/login", data={"email": "admin@contoso.com", "password": "password123"})
         resp = self.client.get(f"/clients/requests/{entry.id}")
         self.assertNotEqual(resp.status_code, 200)
 
@@ -213,7 +213,7 @@ class InviteTestCase(unittest.TestCase):
         self.assertIn("/invite/", self.sent[0].body_text)
 
     def test_duplicate_email_is_rejected(self):
-        resp = self._invite(email="admin@msc.com")
+        resp = self._invite(email="admin@contoso.com")
         self.assertEqual(resp.status_code, 400)
         self.assertIn("Someone already signs in with this email.", resp.get_data(as_text=True))
 

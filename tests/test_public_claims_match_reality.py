@@ -43,7 +43,7 @@ class _SeededCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        tenant = User.query.filter_by(email="admin@msc.com").first()
+        tenant = User.query.filter_by(email="admin@contoso.com").first()
         self.run = PayrollRun.query.filter_by(client_company_id=tenant.client_company_id).first()
         self.run.status = APPROVED
         db.session.commit()
