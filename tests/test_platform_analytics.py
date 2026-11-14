@@ -304,6 +304,16 @@ class PlatformDashboardRenderTestCase(unittest.TestCase):
         self.assertIn('class="topbar-sub"', body)
         self.assertIn("Welcome, ", body)
 
+    def test_the_account_button_skips_courtesy_titles(self):
+        """"Mr Nartey" showed as "Mr", which identifies nobody."""
+        from app import account_label
+
+        self.assertEqual(account_label("Mr Nartey"), ("Nartey", "N"))
+        self.assertEqual(account_label("Dr. Ama Boateng"), ("Ama", "AB"))
+        self.assertEqual(account_label("Ama Boateng"), ("Ama", "AB"))
+        self.assertEqual(account_label("Mr"), ("Mr", "M"))
+        self.assertEqual(account_label(""), ("", ""))
+
     def test_dashboard_carries_no_removed_or_duplicated_section(self):
         """The redesign's subtractions, asserted so they cannot creep back.
 

@@ -104,6 +104,7 @@ def convert_company(client_id):
     db.session.add(bureau)
     db.session.flush()
     company.bureau_id = bureau.id
+    company.bureau_home = True
     moved = []
     for user in User.query.filter_by(client_company_id=company.id).all():
         role = ROLE_ON_CONVERSION.get(normalise_role(user.role))

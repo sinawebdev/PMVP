@@ -109,6 +109,10 @@ class ClientCompany(db.Model):
     bureau_id = db.Column(
         db.Integer, db.ForeignKey("bureau.id", name="fk_client_company_bureau"), index=True
     )
+    # True for the company a bureau grew out of ("set up as payroll bureau").
+    # Its people sign in as the bureau's staff, so it needs no logins of its
+    # own and must never be flagged as awaiting credentials.
+    bureau_home = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
     bureau = db.relationship("Bureau", back_populates="companies")
     employees = db.relationship("Employee", back_populates="client_company")
@@ -127,9 +131,17 @@ class ClientCompany(db.Model):
 
     @property
     def awaiting_credentials(self):
-        """True when no login identity points at this company yet."""
+        """True when nobody can sign in for this company yet.
+
+        A bureau's home company counts its bureau's staff: they are the
+        company's own people, moved to the bureau when it was set up."""
         if self.id is None:
             return True
+        if self.bureau_home and self.bureau_id is not None:
+            if db.session.query(
+                db.session.query(User.id).filter(User.bureau_id == self.bureau_id).exists()
+            ).scalar():
+                return False
         return not db.session.query(
             db.session.query(User.id)
             .filter(User.client_company_id == self.id)
@@ -142,9 +154,15 @@ class ClientCompany(db.Model):
 
         One query for a whole list page. ``awaiting_credentials`` above is the
         single-company form; calling it per row would be an N+1."""
+        staff = db.aliased(User)  # the outer query already joins User
+        bureau_staff = db.session.query(staff.id).filter(
+            staff.bureau_id == ClientCompany.bureau_id
+        ).exists()
         query = db.session.query(ClientCompany.id).outerjoin(
             User, User.client_company_id == ClientCompany.id
-        ).filter(User.id.is_(None))
+        ).filter(User.id.is_(None)).filter(
+            db.not_(db.and_(ClientCompany.bureau_home.is_(True), bureau_staff))
+        )
         if company_ids is not None:
             ids = list(company_ids)
             if not ids:
