@@ -66,7 +66,7 @@ a{ text-underline-offset:3px }
 .form-check-input{border-color:var(--line-control);accent-color:var(--brand)}
 .form-check-input:checked{background-color:var(--brand);border-color:var(--brand)}
 .toolbar,.filterbar,.filters,.action-bar{gap:12px}
-.dt-wrap,.table-responsive{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow-x:auto;overscroll-behavior-x:contain}
+.dt-wrap,.table-responsive{position:relative;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow-x:auto;overscroll-behavior-x:contain}
 .panel.dt-wrap{padding:0}
 .dt-wrap table,.table-responsive table{margin-bottom:0}
 .dt-table th,.table thead th,.portal-main table th{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.055em;white-space:nowrap;color:var(--muted);background:var(--surface-alt);padding:14px 16px;border-bottom:1px solid var(--line)}
