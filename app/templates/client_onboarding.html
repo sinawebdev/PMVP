@@ -59,6 +59,12 @@
     </div>
 </section>
 
+{% macro send_reset(login) %}
+            <form method="post" action="{{ url_for('password_reset.admin_send', client_id=client.id, user_id=login.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-key"></i>Send reset link</button>
+            </form>
+{% endmacro %}
 {# The invite. Creating the company made no login (app.routes module note);
    this form makes the first one and emails a set-password link (app.invites).
    "Awaiting credentials" is derived from the User table, so it clears the
@@ -68,14 +74,14 @@
         <h2><i class="bi bi-envelope-paper"></i>{{ "Next step — invite the client admin" if client.awaiting_credentials else "Who can sign in" }}</h2>
         {% if client.awaiting_credentials %}
         <span class="badge text-bg-warning">Awaiting credentials</span>
-        {% elif logins | selectattr('invite_pending') | list | length == logins | length %}
+        {% elif logins and logins | selectattr('invite_pending') | list | length == logins | length %}
         <span class="badge text-bg-info">Invite sent</span>
         {% else %}
         <span class="badge text-bg-success">Can sign in</span>
         {% endif %}
     </div>
     {% if client.awaiting_credentials %}
-    <p class="mb-3">Nobody at {{ client.name }} can sign in yet. Invite the person who will run payroll there: they get an email with a link to choose a password, and they can then add their own colleagues.</p>
+    <p class="mb-3">Nobody at {{ client.name }} can sign in yet. Invite the person who will run payroll there: they get an email with a link to choose a password.</p>
     {% if source_request %}<p class="mini-note mb-3"><i class="bi bi-inbox"></i> From the access request sent by {{ source_request.contact_name }} on {{ source_request.created_at.strftime('%d %b %Y') }}.</p>{% endif %}
     <form method="post" action="{{ url_for('invites.invite_admin', client_id=client.id) }}" class="invite-form" novalidate>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -112,10 +118,19 @@
             </form>
             {% else %}
             <span class="badge text-bg-success">Active</span>
+            {{ send_reset(login) }}
             {% endif %}
         </li>
         {% endfor %}
+        {% for login in bureau_logins %}
+        <li>
+            <div><strong>{{ login.name }}</strong><span>{{ login.email }} · signs in through {{ client.bureau.name }} (payroll bureau)</span></div>
+            <span class="badge text-bg-success">Active</span>
+            {{ send_reset(login) }}
+        </li>
+        {% endfor %}
     </ul>
+    <p class="mini-note mb-0">Forgot their password? Send a reset link: they get an email to choose a new one, and the link works for 1 hour.</p>
 </section>
 <div class="toolbar mt-3">
     <a class="btn btn-primary" href="{{ url_for('main.client_detail', client_id=client.id) }}"><i class="bi bi-building"></i>Open company</a>

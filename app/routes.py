@@ -694,6 +694,14 @@ def render_onboarding(client, invite_errors=None, invite_form=None):
     logins = (
         User.query.filter_by(client_company_id=client.id).order_by(User.id).all()
     )
+    # A bureau's home company signs in through the bureau's staff. Only Payrolla
+    # staff see them here: a bureau is kept to its clients' logins.
+    from app.bureau_scope import is_payrolla_staff
+
+    bureau_logins = (
+        User.query.filter_by(bureau_id=client.bureau_id).order_by(User.id).all()
+        if client.bureau_home and client.bureau_id is not None and is_payrolla_staff() else []
+    )
     source = (
         AccessRequest.query.filter_by(client_company_id=client.id)
         .order_by(AccessRequest.id.desc())
@@ -708,6 +716,7 @@ def render_onboarding(client, invite_errors=None, invite_form=None):
         "client_onboarding.html",
         client=client,
         logins=logins,
+        bureau_logins=bureau_logins,
         source_request=source,
         invite_form=invite_form,
         invite_errors=invite_errors or {},

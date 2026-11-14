@@ -30,7 +30,7 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="email">Email address</label>
         <input class="form-control {% if login_error %}is-invalid{% endif %}" type="email" id="email" name="email" value="{{ email or '' }}" autocomplete="username" required {% if not login_error %}autofocus{% else %}aria-describedby="login-error" aria-invalid="true"{% endif %}>
-        <div class="auth-label-row"><label for="password">Password</label><a href="{{ url_for('auth.forgot_password') }}">Forgot password?</a></div>
+        <div class="auth-label-row"><label for="password">Password</label><a href="{{ url_for('password_reset.forgot') }}">Forgot password?</a></div>
         <div class="auth-password">
           <input class="form-control {% if login_error %}is-invalid{% endif %}" type="password" id="password" name="password" autocomplete="current-password" required {% if login_error %}autofocus aria-describedby="login-error" aria-invalid="true"{% endif %}>
           <button type="button" class="password-toggle" aria-controls="password" aria-pressed="false">Show</button>

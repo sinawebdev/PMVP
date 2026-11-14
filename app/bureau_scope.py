@@ -31,7 +31,9 @@ from app.roles import is_bureau_user
 
 
 # Endpoints every signed-in bureau user needs that carry no client data.
-SHARED_ENDPOINTS = frozenset({"static", "auth.logout"})
+# The password-reset pages are public; a bureau user still signed in must be
+# able to open their own emailed link.
+SHARED_ENDPOINTS = frozenset({"static", "auth.logout", "password_reset.forgot", "password_reset.choose"})
 
 # Operator endpoints a bureau may use. Each one either takes the company from an
 # id the gate checks (OWNERSHIP_RESOLVERS) or scopes its lists through
@@ -45,7 +47,7 @@ BUREAU_ENDPOINTS = frozenset({
     "main.index", "main.dashboard", "main.search",
     "main.clients", "main.client_detail", "main.client_onboarding",
     "main.add_client", "main.edit_client",
-    "invites.invite_admin", "invites.resend_invite",
+    "invites.invite_admin", "invites.resend_invite", "password_reset.admin_send",
     "employees.roster", "employees.add", "employees.edit", "employees.deactivate",
     "employees.reactivate", "employees.delete", "employees.roster_template",
     "employees.bulk_import", "employees.bulk_import_confirm",
