@@ -168,6 +168,25 @@ def resolve_display_name(user):
     return humanised.title() if humanised else local_part
 
 
+# Courtesy titles a name may start with. The account button shows one short
+# word, and "Mr" alone identifies nobody.
+_TITLES = {"mr", "mrs", "ms", "miss", "mx", "dr", "prof", "rev", "sir", "madam", "hon"}
+
+
+def account_label(name):
+    """``(short name, initials)`` for the account button.
+
+    Leading courtesy titles are skipped while a name remains: "Mr Nartey" ->
+    ("Nartey", "N"), "Ama Boateng" -> ("Ama", "AB"). A bare title is kept, so
+    the button never goes blank."""
+    parts = (name or "").split()
+    while len(parts) > 1 and parts[0].rstrip(".").lower() in _TITLES:
+        parts = parts[1:]
+    if not parts:
+        return "", ""
+    return parts[0], "".join(part[:1] for part in parts[:2]).upper()
+
+
 def format_role_label(value):
     """Human-readable name for a role string.
 
@@ -905,9 +924,12 @@ def create_app():
             name = resolve_display_name(current_user)
         except Exception:  # noqa: BLE001 - context processors must never raise
             name = ""
+        short, initials = account_label(name)
         return {
             "user_display_name": name,
             "user_greeting": f"Welcome, {name}" if name else "Welcome",
+            "user_short_name": short,
+            "user_initials": initials,
         }
 
     @app.context_processor

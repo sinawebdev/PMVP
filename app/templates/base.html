@@ -45,11 +45,6 @@
 {% import "macros/ui.html" as shell_ui %}
 {% import "macros/brand.html" as brand with context %}
 <a class="skip-link" href="#main-content">Skip to content</a>
-{# Initials for the account button, from the same resolve_display_name string
-   the dashboard greeting uses. Sliced rather than indexed so a blank name is ''
-   and not an IndexError; the button falls back to a glyph. #}
-{% set _parts = (user_display_name or '').split() %}
-{% set _initials = ((_parts[0][:1] if _parts else '') ~ (_parts[1][:1] if _parts | length > 1 else '')) | upper %}
 <div class="portal-shell">
 
     {# --- Shell chrome ----------------------------------------------------
@@ -103,16 +98,20 @@
 
           <details class="utility-menu utility-menu--account">
             <summary class="utility-btn account-btn">
-              <span class="account-avatar" aria-hidden="true">{{ _initials or '·' }}</span>
+              <span class="account-avatar" aria-hidden="true">{{ user_initials or '·' }}</span>
               {# First name only. The full name is one line down in the menu and
                  in the accessible name, so the button carries the shortest
                  thing that still identifies a person. #}
-              <span class="account-name">{{ _parts[0] if _parts else 'Account' }}</span>
+              {# A bureau's staff also see which bureau they are working as. #}
+              <span class="account-label">
+                <span class="account-name">{{ user_short_name or 'Account' }}</span>
+                {% if current_bureau %}<span class="account-org">{{ current_bureau.name }}</span>{% endif %}
+              </span>
               {{ shell_ui.icon('chevron-down', 15) }}
               <span class="sr-only">Account menu</span>
             </summary>
             <div class="utility-pop">
-              <p class="utility-pop-head">{{ user_display_name or 'Signed in' }}</p>
+              <p class="utility-pop-head">{{ user_display_name or 'Signed in' }}{% if current_bureau %}<span class="utility-pop-org">{{ current_bureau.name }} · payroll bureau</span>{% endif %}</p>
               <a class="utility-pop-logout" href="{{ url_for('auth.logout') }}">{{ shell_ui.icon('logout', 17) }}Log out</a>
             </div>
           </details>

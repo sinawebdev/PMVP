@@ -133,6 +133,52 @@ class BureauOnboardingTestCase(unittest.TestCase):
         self.client.post(f"/clients/{company.id}/make-bureau")
         self.assertEqual(Bureau.query.filter_by(name="Chrisnat Test Ltd").count(), 1)
 
+    def test_the_home_company_is_not_awaiting_credentials(self):
+        """Its logins moved to the bureau, so it has none of its own; its people
+        still sign in. A later client of the bureau with no logins is flagged."""
+        company = ClientCompany(name="Chrisnat Test Ltd", company_code="CNT")
+        db.session.add(company)
+        db.session.flush()
+        owner = User(name="Mr Test", email="md@chrisnat.example", role=CLIENT_ADMIN,
+                     client_company_id=company.id)
+        owner.set_password("owner-pass-1")
+        db.session.add(owner)
+        db.session.commit()
+        self._login("admin@payrolla.com")
+        self.client.post(f"/clients/{company.id}/make-bureau")
+        db.session.expire_all()
+        home = db.session.get(ClientCompany, company.id)
+        self.assertTrue(home.bureau_home)
+        self.assertFalse(home.awaiting_credentials)
+
+        later = ClientCompany(name="Bureau Client Ltd", company_code="BCL", bureau_id=home.bureau_id)
+        db.session.add(later)
+        db.session.commit()
+        self.assertTrue(later.awaiting_credentials)
+        self.assertEqual(ClientCompany.ids_awaiting_credentials([home.id, later.id]), {later.id})
+
+        self._login("md@chrisnat.example", "owner-pass-1")
+        html = self.client.get("/clients").get_data(as_text=True)
+        home_row = html.split("Chrisnat Test Ltd", 1)[1].split("</tr>", 1)[0]
+        self.assertNotIn("Awaiting credentials", home_row)
+
+    def test_bureau_staff_see_which_bureau_they_work_as(self):
+        bureau = Bureau(name="Delta Payroll Services", code="DPS")
+        db.session.add(bureau)
+        db.session.flush()
+        staff = User(name="Mr Dede Mensah", email="dede@delta.example", role=BUREAU_ADMIN,
+                     bureau_id=bureau.id)
+        staff.set_password("bureau-pass-1")
+        db.session.add(staff)
+        db.session.commit()
+        self._login("dede@delta.example", "bureau-pass-1")
+        html = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn('<span class="account-org">Delta Payroll Services</span>', html)
+        self.assertIn('<span class="account-name">Dede</span>', html)
+
+        self._login("admin@payrolla.com")
+        self.assertNotIn("account-org", self.client.get("/dashboard").get_data(as_text=True))
+
     def test_only_payrolla_staff_can_create_bureaus(self):
         entry = self._bureau_request()
         contoso = ClientCompany.query.filter_by(company_code="CONTOSO").one()

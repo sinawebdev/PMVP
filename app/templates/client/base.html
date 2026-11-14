@@ -47,11 +47,6 @@
 {% import "macros/ui.html" as shell_ui %}
   <a class="skip-link" href="#main-content">Skip to content</a>
   {% set ep = request.endpoint %}
-  {# Initials for the account button, from the same resolve_display_name string
-     the greeting uses. Sliced rather than indexed so a blank name is '' and not
-     an IndexError; the template falls back to a glyph below. #}
-  {% set _parts = (user_display_name or '').split() %}
-  {% set _initials = ((_parts[0][:1] if _parts else '') ~ (_parts[1][:1] if _parts | length > 1 else '')) | upper %}
   <div class="portal-shell">
 
     {# --- Shell chrome ----------------------------------------------------
@@ -118,14 +113,14 @@
 
           <details class="utility-menu utility-menu--account">
             <summary class="utility-btn account-btn">
-              <span class="account-avatar" aria-hidden="true">{{ _initials or '·' }}</span>
+              <span class="account-avatar" aria-hidden="true">{{ user_initials or '·' }}</span>
               {# First name only. The full name is one line down in the menu and
                  in the accessible name, so the button carries the shortest thing
                  that still identifies a person. The seeded "CONTOSO Administrator"
                  degrades to "CONTOSO", which reads like the company — that is a
                  fixture artefact, not a naming rule, and a real name ("Ama
                  Boateng" -> "Ama") reads correctly. #}
-              <span class="account-name">{{ _parts[0] if _parts else 'Account' }}</span>
+              <span class="account-name">{{ user_short_name or 'Account' }}</span>
               {{ shell_ui.icon('chevron-down', 15) }}
               <span class="sr-only">Account menu</span>
             </summary>

@@ -1157,6 +1157,19 @@
 .utility-pop a:hover .ico { color: var(--brand); }
 
 /* The signed-in name labels the menu it sits in; it is not a destination. */
+/* Two lines on the button for a bureau's staff: name, then the bureau. */
+.account-label { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; text-align: left; }
+.account-org {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
+    max-width: 22ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.utility-pop-org { color: var(--muted); display: block; font-size: 11px; margin-top: 2px; }
+
 .utility-pop-head {
     border-bottom: 1px solid var(--line);
     color: var(--muted);
@@ -1320,7 +1333,7 @@
 
     /* The name is the widest thing in the cluster and the avatar already
        identifies the account. */
-    .account-name { display: none; }
+    .account-name, .account-org { display: none; }
 }
 
 /* Between the ultra-wide ceiling and the drawer, the search field is the only
