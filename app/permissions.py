@@ -41,7 +41,14 @@ from app.payroll_status import (
     PENDING_STATUSES,
     SENDABLE_STATUSES,
 )
-from app.roles import CLIENT_ADMIN, CLIENT_PREPARER, PAYROLLA_ADMIN, normalise_role
+from app.roles import (
+    BUREAU_ADMIN,
+    BUREAU_OFFICER,
+    CLIENT_ADMIN,
+    CLIENT_PREPARER,
+    PAYROLLA_ADMIN,
+    normalise_role,
+)
 
 # The two operator superusers. Every group below contains both, which is what
 # retires the old role_required bypass: "superuser" is now membership, not an
@@ -51,34 +58,46 @@ SUPERUSERS = ("md", PAYROLLA_ADMIN)
 
 # Full payroll operations: upload, process, view payslips, export, distribute.
 PAYROLL_ROLES = frozenset(
-    {"admin", "payroll_officer", "accounts_officer", *SUPERUSERS}
+    {"admin", "payroll_officer", "accounts_officer", *SUPERUSERS, BUREAU_ADMIN, BUREAU_OFFICER}
 )
 
 # Employee-roster maintenance. ``md`` reached these routes through the bypass
 # rather than the list; it is now a member outright, which is also what puts the
 # roster's own controls in front of it.
-REP_ROLES = frozenset({"admin", "payroll_officer", "accounts_officer", *SUPERUSERS})
+REP_ROLES = frozenset(
+    {"admin", "payroll_officer", "accounts_officer", *SUPERUSERS, BUREAU_ADMIN, BUREAU_OFFICER}
+)
 
 # Oversight of expenses + the audit trail.
-AUDIT_ROLES = frozenset({"admin", *SUPERUSERS})
+AUDIT_ROLES = frozenset({"admin", *SUPERUSERS, BUREAU_ADMIN})
 
 # Statutory-rate administration. ``md`` reached these routes via the bypass.
-STATUTORY_ROLES = frozenset({"admin", *SUPERUSERS})
+# bureau_admin keeps its own versions for its own clients (app.statutory); it
+# can never edit the defaults.
+STATUTORY_ROLES = frozenset({"admin", *SUPERUSERS, BUREAU_ADMIN})
 
 # Destructive roster action: remove an employee record outright.
-ROSTER_DELETE_ROLES = frozenset({"admin", *SUPERUSERS})
+ROSTER_DELETE_ROLES = frozenset({"admin", *SUPERUSERS, BUREAU_ADMIN})
 
 # The payroll import pipeline: preview an upload, read its error report, confirm it.
-PAYROLL_IMPORT_ROLES = frozenset({"admin", *SUPERUSERS})
+PAYROLL_IMPORT_ROLES = frozenset({"admin", *SUPERUSERS, BUREAU_ADMIN})
 
 # Per-client hourly wage-rate profiles.
-WAGE_RATE_ROLES = frozenset({"admin", *SUPERUSERS})
+WAGE_RATE_ROLES = frozenset({"admin", *SUPERUSERS, BUREAU_ADMIN})
 
 # The raw-hours engine: upload/confirm raw timesheets and pull its exports.
-RAW_ENGINE_ROLES = frozenset({"admin", *SUPERUSERS})
+RAW_ENGINE_ROLES = frozenset({"admin", *SUPERUSERS, BUREAU_ADMIN})
 
 # Create/edit client company records on the platform plane.
-CLIENT_MANAGEMENT_ROLES = frozenset({"admin", *SUPERUSERS})
+CLIENT_MANAGEMENT_ROLES = frozenset({"admin", *SUPERUSERS, BUREAU_ADMIN})
+
+# Payroll bureaus (app.roles.BUREAU_ROLES) join the groups above the way the
+# platform roles they mirror do: bureau_admin wherever "admin" is, bureau_officer
+# wherever "payroll_officer" is (never APPROVAL, which keeps maker-checker).
+# Statutory rates follow in their own change. A group only says what a role may
+# DO; which companies a bureau may do it to is app.bureau_scope's job, and its
+# gate keeps bureaus off every endpoint not opened to them (access requests,
+# licences and database health among them) whatever group they are in.
 
 # Platform infrastructure surfaces (database health). Operator-only telemetry —
 # not business function; Phase 3 moves its links out of user-facing nav.
@@ -159,24 +178,24 @@ def can_view_platform_ops(role):
 # remove. Pinned by test_md_approves_and_deletes_but_cannot_submit.
 
 # Recalculate statutory pay (Calculate Pay) — admin only, historically.
-CALCULATE_ROLES = frozenset({"admin", PAYROLLA_ADMIN})
+CALCULATE_ROLES = frozenset({"admin", PAYROLLA_ADMIN, BUREAU_ADMIN})
 
 # Open the raw-figures grid (Edit Figures). Row edits are further gated to Draft
 # inside the route; the grid is viewable read-only at any status.
-EDIT_FIGURES_ROLES = frozenset({"admin", "payroll_officer", PAYROLLA_ADMIN})
+EDIT_FIGURES_ROLES = frozenset({"admin", "payroll_officer", PAYROLLA_ADMIN, BUREAU_ADMIN, BUREAU_OFFICER})
 
 # Move a Draft run to Pending Approval (Submit for Approval).
-SUBMIT_APPROVAL_ROLES = frozenset({"admin", "accounts_officer", PAYROLLA_ADMIN})
+SUBMIT_APPROVAL_ROLES = frozenset({"admin", "accounts_officer", PAYROLLA_ADMIN, BUREAU_ADMIN})
 
 # Approve or reject a run awaiting sign-off.
-APPROVAL_ROLES = frozenset({"admin", *SUPERUSERS})
+APPROVAL_ROLES = frozenset({"admin", *SUPERUSERS, BUREAU_ADMIN})
 
 # Close an approved run (Mark Processed).
-MARK_PROCESSED_ROLES = frozenset({"admin", "accounts_officer", *SUPERUSERS})
+MARK_PROCESSED_ROLES = frozenset({"admin", "accounts_officer", *SUPERUSERS, BUREAU_ADMIN})
 
 # Hard-delete a run. Deliberately narrower than export: destroying payroll
 # history is admin/MD only (see the delete route).
-DELETE_ROLES = frozenset({"admin", *SUPERUSERS})
+DELETE_ROLES = frozenset({"admin", *SUPERUSERS, BUREAU_ADMIN})
 
 
 def can_calculate_run(role, run):

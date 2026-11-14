@@ -42,6 +42,12 @@ INTERESTS = {
     "desktop": "Desktop app for Windows",
     "both": "Both",
 }
+# "Do you run payroll for other companies?" A bureau is approved as a payroll
+# bureau (app/bureaus.py), with the operator interface for its own clients.
+ACCOUNT_TYPES = {
+    "company": "No, it's for our own staff",
+    "bureau": "Yes, we run payroll for other companies",
+}
 HONEYPOT_FIELD = "website"
 
 # --- Per-IP cap ---------------------------------------------------------------
@@ -92,6 +98,7 @@ def blank_form(interest="web"):
         "company_name": "", "contact_name": "", "email": "", "phone": "",
         "location": "", "employee_band": "",
         "interest": interest if interest in INTERESTS else "web", "message": "",
+        "account_type": "company",
     }
 
 
@@ -123,6 +130,9 @@ def validate(form):
         errors["employee_band"] = "Choose a team size from the list."
     if values["interest"] not in INTERESTS:
         errors["interest"] = "Choose web, desktop or both."
+    values["account_type"] = values["account_type"] or "company"
+    if values["account_type"] not in ACCOUNT_TYPES:
+        errors["account_type"] = "Choose yes or no."
     if len(values["message"]) > 2000:
         errors["message"] = "Keep the message under 2,000 characters."
     return values, errors
@@ -137,6 +147,7 @@ def render_landing(form=None, errors=None, status=200, sent=False):
         request_sent=sent,
         employee_bands=EMPLOYEE_BANDS,
         interests=INTERESTS,
+        account_types=ACCOUNT_TYPES,
         trial_offer_ends=_trial_offer_label(),
     ), status
 
@@ -172,6 +183,7 @@ def submit():
         location=values["location"] or None,
         employee_band=values["employee_band"] or None,
         interest=values["interest"],
+        account_type=values["account_type"],
         message=values["message"] or None,
         status=ACCESS_NEW,
     )
@@ -181,7 +193,10 @@ def submit():
 
     record_event(
         "access.requested",
-        summary=f"{entry.company_name} asked for access ({INTERESTS[entry.interest].lower()}).",
+        summary=(
+            f"{entry.company_name} asked for access ({INTERESTS[entry.interest].lower()})"
+            + (", and runs payroll for other companies." if entry.account_type == "bureau" else ".")
+        ),
         subject=entry,
         recipients=platform_admins(),
     )
@@ -223,6 +238,7 @@ def detail(request_id):
     from app.desktop_licences import licences_enabled
 
     return render_template("access_request.html", entry=entry, interests=INTERESTS,
+                           account_types=ACCOUNT_TYPES,
                            licence=entry.licences.first(), licences_enabled=licences_enabled())
 
 

@@ -8,7 +8,7 @@
    between the header and the panel, which is the only place on the operator
    plane a page action did that. btn-light, because this bar is the teal
    header — the same pair those pages use. #}
-{% if config.TRIAL_LICENCE_SIGNING_KEY %}<a class="btn btn-outline-light btn-sm" href="{{ url_for('licences.ledger') }}"><i class="bi bi-key"></i>Desktop licences</a>{% endif %}
+{% if is_payrolla_staff and config.TRIAL_LICENCE_SIGNING_KEY %}<a class="btn btn-outline-light btn-sm" href="{{ url_for('licences.ledger') }}"><i class="bi bi-key"></i>Desktop licences</a>{% endif %}
 <a class="btn btn-light btn-sm" href="{{ url_for('main.add_client') }}"><i class="bi bi-building-add"></i>Add Client Company</a>
 {% endblock %}
 {% block content %}

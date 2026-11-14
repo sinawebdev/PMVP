@@ -46,6 +46,7 @@ from app.permissions import (
 )
 from app.htmx_utils import wants_htmx, with_toast
 from app.tenancy import platform_required
+from app.bureau_scope import operator_query
 from app.excel_utils import (
     allowed_excel_file,
     calculate_status_breakdown,
@@ -394,7 +395,10 @@ def build_single_payload(file_path, source_filename, client, month, year, select
 
 
 def build_multi_client_payload(file_path, source_filename, month, year):
-    clients = ClientCompany.query.filter_by(status="Active").all()
+    # A bureau's workbook is matched only against the bureau's own clients, so a
+    # sheet named after someone else's company can never create or replace
+    # their run (the gate re-checks every company in the payload on confirm).
+    clients = operator_query(ClientCompany).filter_by(status="Active").all()
     candidates = payroll_sheet_candidates(file_path)
     current_app.logger.info(
         "Smart Excel Import Engine multi-client: workbook sheets=%s candidates=%s",
@@ -406,7 +410,7 @@ def build_multi_client_payload(file_path, source_filename, month, year):
 
     runs = []
     unmatched_sheets = []
-    known_names = [company.name for company in ClientCompany.query.all()]
+    known_names = [company.name for company in operator_query(ClientCompany).all()]
     for candidate in candidates:
         if is_consolidated_sheet(candidate["sheet_name"]):
             extraction = extract_payroll_sheet(file_path, candidate["sheet_name"])
@@ -598,7 +602,7 @@ def new_run():
         return handle_payroll_upload(now)
     return render_template(
         "payroll_new_run.html",
-        clients=ClientCompany.query.filter_by(status="Active")
+        clients=operator_query(ClientCompany).filter_by(status="Active")
         .order_by(ClientCompany.name)
         .all(),
         current_month=now.strftime("%B"),
@@ -626,7 +630,7 @@ def _runs_body_response(category, message):
 
 def _runs_context():
     selected_client = None
-    query = PayrollRun.query
+    query = operator_query(PayrollRun)
     client_id = request.args.get("client_id")
     status_filter = request.args.get("status", "")
     if client_id:

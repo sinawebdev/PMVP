@@ -351,6 +351,15 @@
           </div>
           {% if errors.interest %}<p class="field-error" id="ra-interest-error">{{ errors.interest }}</p>{% endif %}
         </fieldset>
+        <fieldset class="field field--wide interest {{ 'has-error' if errors.account_type }}" {% if errors.account_type %}aria-describedby="ra-account_type-error"{% endif %}>
+          <legend>Do you run payroll for other companies?</legend>
+          <div class="interest-options">
+            {% for value, label in account_types.items() %}
+            <label class="interest-option"><input type="radio" name="account_type" value="{{ value }}" {{ 'checked' if form.account_type == value }}><span>{{ label }}</span></label>
+            {% endfor %}
+          </div>
+          {% if errors.account_type %}<p class="field-error" id="ra-account_type-error">{{ errors.account_type }}</p>{% endif %}
+        </fieldset>
         <div class="field field--wide {{ 'has-error' if errors.message }}">
           <label for="ra-message">Anything we should know? <span class="optional">(optional)</span></label>
           <textarea id="ra-message" name="message" rows="3" maxlength="2000" placeholder="e.g. we pay weekly, or we currently use a spreadsheet" {% if errors.message %}aria-invalid="true" aria-describedby="ra-message-error"{% endif %}>{{ form.message }}</textarea>

@@ -5,6 +5,7 @@ from app.audit import record_audit
 from app.paging import paginate
 from app.models import ClientCompany, PayrollItem, PayrollRun
 from app.tenancy import platform_required
+from app.bureau_scope import operator_query
 
 payslip_bp = Blueprint("payslip", __name__, url_prefix="/payslip")
 
@@ -15,7 +16,7 @@ def index():
     items_page = None
     client_id = request.args.get("client_id", type=int)
     run_id = request.args.get("run_id", type=int)
-    clients = ClientCompany.query.order_by(ClientCompany.name).all()
+    clients = operator_query(ClientCompany).order_by(ClientCompany.name).all()
     runs = []
     selected_client = None
     selected_run = None

@@ -829,6 +829,7 @@ def create_app():
 
     from app.access_requests import access_bp
     from app.desktop_licences import licences_bp
+    from app.bureaus import bureaus_bp
     from app.desktop_release import desktop_release_bp
     from app.audit import audit_bp
     from app.auth import auth_bp
@@ -848,6 +849,7 @@ def create_app():
 
     app.register_blueprint(access_bp)
     app.register_blueprint(licences_bp)
+    app.register_blueprint(bureaus_bp)
     app.register_blueprint(desktop_release_bp)
     app.register_blueprint(invites_bp)
     app.register_blueprint(legal_bp)
@@ -868,6 +870,12 @@ def create_app():
     app.register_blueprint(raw_engine_bp)
     app.register_blueprint(oversight_bp)
     app.register_blueprint(notifications_bp)
+
+    # Payroll bureaus: hold a bureau's staff to their own client companies on
+    # the operator plane. Deny by default (app/bureau_scope.py).
+    from app import bureau_scope
+
+    bureau_scope.register(app)
 
     @app.context_processor
     def inject_app_identity():

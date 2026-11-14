@@ -5,6 +5,7 @@ from flask_login import current_user
 
 from app import db
 from app.auth import role_required
+from app.bureau_scope import current_bureau_id, operator_query, scoped_company_ids
 from app.permissions import AUDIT_ROLES
 from app.models import AuditTrail, ClientCompany, Expense, PayrollRun
 
@@ -88,8 +89,17 @@ def audit_trail():
     page_num = page_arg("page")
     depth = page_num * AUDIT_PER_PAGE
     entries, expenses, total = [], [], 0
+    scope = scoped_company_ids()
     if f["kind"] in ("all", "actions"):
         query = AuditTrail.query
+        if scope is not None:
+            # A bureau sees what its own people and its clients' people did.
+            from app.models import User
+
+            people = db.session.query(User.id).filter(
+                db.or_(User.bureau_id == current_bureau_id(), User.client_company_id.in_(scope))
+            )
+            query = query.filter(AuditTrail.user_id.in_(people))
         if f["q"]:
             like = f"%{f['q']}%"
             query = query.filter(db.or_(AuditTrail.action.ilike(like), AuditTrail.notes.ilike(like)))
@@ -104,6 +114,8 @@ def audit_trail():
     # Expenses all carry module "Audit", so another module filter excludes them.
     if f["kind"] in ("all", "expenses") and f["module"] in ("", "Audit"):
         query = Expense.query
+        if scope is not None:
+            query = query.filter(Expense.client_company_id.in_(scope))
         if f["q"]:
             like = f"%{f['q']}%"
             query = query.filter(db.or_(Expense.title.ilike(like), Expense.description.ilike(like),
@@ -118,8 +130,8 @@ def audit_trail():
     rows = build_audit_rows(entries, expenses)
     start = (page_num - 1) * AUDIT_PER_PAGE
     page = _ListPage(rows[start:start + AUDIT_PER_PAGE], page_num, AUDIT_PER_PAGE, total)
-    clients = ClientCompany.query.order_by(ClientCompany.name).all()
-    payroll_runs = PayrollRun.query.order_by(PayrollRun.created_at.desc()).limit(100).all()
+    clients = operator_query(ClientCompany).order_by(ClientCompany.name).all()
+    payroll_runs = operator_query(PayrollRun).order_by(PayrollRun.created_at.desc()).limit(100).all()
     params = {k: v for k, v in {
         "q": f["q"], "kind": f["kind"] if f["kind"] != "all" else "", "module": f["module"],
         "from": request.args.get("from") if f["date_from"] else "",
@@ -177,6 +189,13 @@ def add_expense():
         return redirect(url_for("audit.audit_trail", _anchor="add-expense"))
     if run is not None and client_id and run.client_company_id != client_id:
         flash("The payroll run belongs to a different client. Nothing was saved.", "danger")
+        return redirect(url_for("audit.audit_trail", _anchor="add-expense"))
+    if scoped_company_ids() is not None and run is not None and not client_id:
+        client_id = run.client_company_id
+    if scoped_company_ids() is not None and not client_id:
+        # A bureau's expense must belong to one of its clients, or the bureau
+        # could never see it again (and it would read as Payrolla's own spend).
+        flash("Choose the client this expense is for. Nothing was saved.", "danger")
         return redirect(url_for("audit.audit_trail", _anchor="add-expense"))
     expense = Expense(
         title=title or description[:180],

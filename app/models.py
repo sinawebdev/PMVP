@@ -17,6 +17,12 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(40), nullable=False, default="viewer")
     client_company_id = db.Column(db.Integer, db.ForeignKey("client_company.id"))
+    # A payroll bureau's own staff (app.bureau_scope). Never set together with
+    # client_company_id: a login is a company user, a bureau user, or Payrolla
+    # staff (both NULL), and the check constraint keeps it that way.
+    bureau_id = db.Column(
+        db.Integer, db.ForeignKey("bureau.id", name="fk_user_bureau"), index=True
+    )
     # Set when an invited user first chooses a password (app.invites). NULL on an
     # invited-but-not-yet-accepted login; seeded and pre-invite users are
     # treated as active because they have a usable password already.
@@ -24,6 +30,14 @@ class User(UserMixin, db.Model):
     activated_at = db.Column(db.DateTime)
 
     client_company = db.relationship("ClientCompany")
+    bureau = db.relationship("Bureau", foreign_keys=[bureau_id])
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "NOT (client_company_id IS NOT NULL AND bureau_id IS NOT NULL)",
+            name="ck_user_one_scope",
+        ),
+    )
 
     @property
     def invite_pending(self):
@@ -34,6 +48,30 @@ class User(UserMixin, db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+
+class Bureau(db.Model):
+    """A payroll bureau: a firm that runs payroll for its own client companies.
+
+    Its staff (``User.bureau_id``) get the operator interface limited to the
+    companies whose ``bureau_id`` is this bureau, and may keep their own
+    statutory-rate overrides (``StatutoryRate.bureau_id``). Companies Payrolla
+    runs itself have no bureau.
+    """
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(160), nullable=False, unique=True)
+    code = db.Column(db.String(20), nullable=False, unique=True)
+    status = db.Column(db.String(20), nullable=False, default="Active")
+    contact_email = db.Column(db.String(160))
+    phone = db.Column(db.String(40))
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+    companies = db.relationship("ClientCompany", back_populates="bureau")
+
+    @property
+    def is_active(self):
+        return self.status == "Active"
 
 
 class ClientCompany(db.Model):
@@ -65,7 +103,14 @@ class ClientCompany(db.Model):
     email_from_name = db.Column(db.String(120))
     email_reply_to = db.Column(db.String(160))
     created_at = db.Column(db.DateTime, default=utc_now)
+    # The payroll bureau that runs this company's payroll. NULL means Payrolla
+    # runs it (a managed company). Only that bureau's staff and Payrolla staff
+    # can reach the company on the operator plane (app.bureau_scope).
+    bureau_id = db.Column(
+        db.Integer, db.ForeignKey("bureau.id", name="fk_client_company_bureau"), index=True
+    )
 
+    bureau = db.relationship("Bureau", back_populates="companies")
     employees = db.relationship("Employee", back_populates="client_company")
     payroll_runs = db.relationship("PayrollRun", back_populates="client_company")
     proposals = db.relationship("Proposal", back_populates="client_company")
@@ -908,9 +953,29 @@ class StatutoryRate(db.Model):
     """
 
     __tablename__ = "statutory_rates"
+    # Default versions (bureau_id NULL) are unique by date; a bureau's overrides
+    # are unique by date within that bureau. Partial indexes, because Postgres
+    # never treats two NULL bureau_ids as equal in a plain unique constraint.
+    __table_args__ = (
+        db.Index(
+            "uq_statutory_rates_default_date", "effective_from", unique=True,
+            sqlite_where=db.text("bureau_id IS NULL"),
+            postgresql_where=db.text("bureau_id IS NULL"),
+        ),
+        db.Index(
+            "uq_statutory_rates_bureau_date", "bureau_id", "effective_from", unique=True,
+            sqlite_where=db.text("bureau_id IS NOT NULL"),
+            postgresql_where=db.text("bureau_id IS NOT NULL"),
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    effective_from = db.Column(db.Date, nullable=False, unique=True, index=True)
+    effective_from = db.Column(db.Date, nullable=False, index=True)
+    # NULL = the default rates every company uses. Set = this bureau's override,
+    # used for that bureau's client companies only (see active_for).
+    bureau_id = db.Column(
+        db.Integer, db.ForeignKey("bureau.id", name="fk_statutory_rates_bureau"), index=True
+    )
     ssf_employee_rate = db.Column(db.Float, nullable=False)  # e.g. 0.055
     ssf_employer_rate = db.Column(db.Float, nullable=False)  # e.g. 0.13
     paye_bands_json = db.Column(db.Text, nullable=False)
@@ -969,13 +1034,24 @@ class StatutoryRate(db.Model):
         return json.loads(self.paye_bands_json or "[]")
 
     @classmethod
-    def active_for(cls, on_date):
-        """The rate version in force on ``on_date`` (latest effective_from <= date)."""
-        return (
-            cls.query.filter(cls.effective_from <= on_date)
-            .order_by(cls.effective_from.desc())
-            .first()
-        )
+    def active_for(cls, on_date, bureau_id=None):
+        """The rate version in force on ``on_date`` (latest effective_from <= date).
+
+        With ``bureau_id``, the bureau's own overrides compete with the default
+        versions: the latest start date wins, and on the same date the bureau's
+        version wins. So a newer default (a change in the law) supersedes an
+        older override until the bureau overrides it again. Without one, only
+        the defaults are considered.
+        """
+        query = cls.query.filter(cls.effective_from <= on_date)
+        if bureau_id is None:
+            query = query.filter(cls.bureau_id.is_(None))
+            return query.order_by(cls.effective_from.desc()).first()
+        query = query.filter(db.or_(cls.bureau_id.is_(None), cls.bureau_id == bureau_id))
+        return query.order_by(
+            cls.effective_from.desc(),
+            db.case((cls.bureau_id.is_(None), 1), else_=0),
+        ).first()
 
     def compute_paye(self, taxable_income):
         """Monthly PAYE for ``taxable_income`` using this version's bands.
@@ -1184,6 +1260,9 @@ class AccessRequest(db.Model):
     # A band, not a count: applicants estimate, and the band is what pricing uses.
     employee_band = db.Column(db.String(20))
     interest = db.Column(db.String(20), nullable=False, default="web")  # web|desktop|both
+    # "company" (wants its own payroll run) or "bureau" (runs payroll for other
+    # companies, so it is approved as a payroll bureau). See app/bureaus.py.
+    account_type = db.Column(db.String(20), nullable=False, default="company", server_default="company")
     message = db.Column(db.Text)
     status = db.Column(db.String(20), nullable=False, default=ACCESS_NEW, index=True)
     decline_reason = db.Column(db.String(255))
@@ -1235,3 +1314,14 @@ class DesktopLicence(db.Model):
     def filename(self):
         return f"{self.install_id}.license.json"
 
+
+# A login is a company user, a bureau user, or Payrolla staff, never a mix. The
+# database check (ck_user_one_scope) covers company + bureau; this also refuses
+# a bureau role without a bureau and a bureau login with an operator role,
+# either of which would put someone on the operator plane unscoped.
+@db.event.listens_for(User, "before_insert")
+@db.event.listens_for(User, "before_update")
+def _user_scope_is_consistent(_mapper, _connection, user):
+    from app.bureau_scope import require_bureau_consistency
+
+    require_bureau_consistency(user)
