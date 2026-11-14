@@ -857,6 +857,7 @@ def create_app():
     from app.distribution.webhooks import distribution_webhooks_bp
     from app.employees import employees_bp
     from app.invites import invites_bp
+    from app.password_reset import password_reset_bp
     from app.legal import legal_bp
     from app.notifications import notifications_bp
     from app.oversight import oversight_bp
@@ -871,6 +872,7 @@ def create_app():
     app.register_blueprint(bureaus_bp)
     app.register_blueprint(desktop_release_bp)
     app.register_blueprint(invites_bp)
+    app.register_blueprint(password_reset_bp)
     app.register_blueprint(legal_bp)
     app.register_blueprint(audit_bp)
     app.register_blueprint(auth_bp)
