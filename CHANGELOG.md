@@ -33,7 +33,7 @@ multi-tenant SaaS built on top of the original single-operator payroll app.
   executable is refused. Receipts are reachable only through their expense, so
   tenant isolation is the same 404 the rest of the plane already gives.
 - **Professional login identities.** The demo roster moved to `@payrolla.com`
-  (platform) and per-company domains (`@msc.com`, `@acme.com`), with an optional
+  (platform) and per-company domains (`@contoso.com`, `@acme.com`), with an optional
   login-page hint panel built from the seed itself. Role strings — and therefore
   every permission check — are unchanged.
 - **Executive analytics on the admin dashboard.** Book-wide quick stats, a

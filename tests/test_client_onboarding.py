@@ -59,7 +59,7 @@ class ClientOnboardingTestCase(unittest.TestCase):
 
     # --- code normalisation --------------------------------------------------
     def test_company_code_is_normalised(self):
-        self.assertEqual(normalise_company_code("  msc  "), "MSC")
+        self.assertEqual(normalise_company_code("  contoso  "), "CONTOSO")
         self.assertEqual(normalise_company_code("acme ghana"), "ACME-GHANA")
         self.assertEqual(normalise_company_code("acme__gh"), "ACME-GH")
         self.assertEqual(normalise_company_code("-acme-"), "ACME")

@@ -48,7 +48,7 @@ class _MonitorCase(unittest.TestCase):
         self.ctx.push()
         sla.reset()
         self.operator = User.query.filter_by(email="admin@payrolla.com").first()
-        self.tenant = User.query.filter_by(email="admin@msc.com").first()
+        self.tenant = User.query.filter_by(email="admin@contoso.com").first()
         self.run = PayrollRun.query.filter_by(
             client_company_id=self.tenant.client_company_id, status="Approved"
         ).first()

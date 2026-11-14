@@ -38,7 +38,7 @@
             <label class="form-label" for="company_code">Company Code <span class="text-danger">*</span></label>
             <input class="form-control text-uppercase {{ 'is-invalid' if errors.get('company_code') }}"
                    id="company_code" name="company_code" value="{{ values.company_code }}"
-                   placeholder="MSC" maxlength="20" required
+                   placeholder="CONTOSO" maxlength="20" required
                    aria-describedby="company-code-help">
             {{ field_error('company_code') }}
             <div class="form-text" id="company-code-help">Short unique handle used on exports and support requests.</div>

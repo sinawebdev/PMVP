@@ -76,7 +76,7 @@ RUN_STATUS_TAIL = (PENDING_APPROVAL, HELD, APPROVED)
 
 # (staff suffix, name, job title, department, monthly basic).
 DEMO_ROSTERS = {
-    "MSC": [
+    "CONTOSO": [
         ("001", "Kwame Mensah", "Operations Supervisor", "Operations", 4200),
         ("002", "Akosua Osei", "Finance Officer", "Finance", 3800),
         ("003", "Yaw Boateng", "Crane Operator", "Terminal", 3100),

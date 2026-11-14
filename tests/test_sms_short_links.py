@@ -191,13 +191,13 @@ class SmsBodyTests(unittest.TestCase):
 
     def test_the_wording(self):
         self.assertEqual(
-            self.body("MSC Limited"),
-            f"MSC Limited: your September 2026 payslip is ready. View (valid 30 days): {self.LINK}",
+            self.body("Contoso Ltd"),
+            f"Contoso Ltd: your September 2026 payslip is ready. View (valid 30 days): {self.LINK}",
         )
 
     def test_always_one_gsm7_part(self):
         for name in (
-            "MSC Limited",
+            "Contoso Ltd",
             "Société Générale de Construction et de Travaux Publics du Ghana Limited",
             "“Kwame’s” Building – Supplies & Sons — Accra",
             "Ñandú Ölçer Ğıda Şirketi Ltd",
@@ -222,9 +222,9 @@ class SmsBodyTests(unittest.TestCase):
         app = Flask(__name__)
         with app.app_context():
             app.config["PAYSLIP_SMS_LINK_DAYS"] = 1
-            self.assertIn("(valid 1 day):", self.body("MSC Limited"))
+            self.assertIn("(valid 1 day):", self.body("Contoso Ltd"))
             app.config["PAYSLIP_SMS_LINK_DAYS"] = 7
-            self.assertIn("(valid 7 days):", self.body("MSC Limited"))
+            self.assertIn("(valid 7 days):", self.body("Contoso Ltd"))
 
     def test_cleanup_rules(self):
         self.assertEqual(clean_for_sms("“O’Neil”"), '"O\'Neil"')

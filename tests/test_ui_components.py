@@ -148,12 +148,12 @@ class ComponentContractTests(unittest.TestCase):
     # --- 2.3 Decision header -----------------------------------------------
     def test_decision_header_states_the_reason_for_the_action(self):
         out = self._render(
-            "{{ ui.decision_header('July 2026', 'MSC Limited', action=act, figures=figs) }}",
+            "{{ ui.decision_header('July 2026', 'Contoso Ltd', action=act, figures=figs) }}",
             act={"key": "approve", "label": "Approve", "why": "Waiting for sign-off."},
             figs=[{"label": "Workers", "value": 42}, {"label": "Net", "value": "GHS 91,000"}],
         )
         self.assertIn("July 2026", out)
-        self.assertIn("MSC Limited", out)
+        self.assertIn("Contoso Ltd", out)
         self.assertIn("Waiting for sign-off.", out)
         self.assertIn("Workers", out)
         self.assertIn("GHS 91,000", out)
@@ -162,10 +162,10 @@ class ComponentContractTests(unittest.TestCase):
     def test_a_whole_page_can_be_built_from_these_components_alone(self):
         page_src = """
         {% import "macros/ui.html" as ui %}
-        {{ ui.decision_header('July 2026', 'MSC Limited', action=act,
+        {{ ui.decision_header('July 2026', 'Contoso Ltd', action=act,
                               figures=figs, action_html=ui.action_bar(acts)) }}
-        {% call ui.data_table(cols, page=page, params={'q': 'msc'}, sort='month') %}
-          <tr><td>July 2026</td><td>MSC Limited</td><td class="num">91,000</td></tr>
+        {% call ui.data_table(cols, page=page, params={'q': 'contoso'}, sort='month') %}
+          <tr><td>July 2026</td><td>Contoso Ltd</td><td class="num">91,000</td></tr>
         {% endcall %}
         """
         out = render_template_string(

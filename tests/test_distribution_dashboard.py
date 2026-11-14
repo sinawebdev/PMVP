@@ -185,7 +185,7 @@ class DashboardRouteTestCase(unittest.TestCase):
         self.assertIn("distribution-monitor", frag.get_data(as_text=True))
 
     def test_tenant_user_is_blocked_from_the_operator_dashboard(self):
-        self._login("admin@msc.com")  # a client_admin
+        self._login("admin@contoso.com")  # a client_admin
         resp = self.http.get("/distribution/dashboard", follow_redirects=False)
         self.assertEqual(resp.status_code, 302)
         self.assertNotIn("/distribution/dashboard", resp.headers["Location"])

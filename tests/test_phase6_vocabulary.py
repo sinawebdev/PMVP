@@ -119,7 +119,7 @@ class ContactCompletenessRendersIdenticallyTests(unittest.TestCase):
         self.client = self.app.test_client()
         self.ctx = self.app.app_context()
         self.ctx.push()
-        self.tenant = User.query.filter_by(email="admin@msc.com").first()
+        self.tenant = User.query.filter_by(email="admin@contoso.com").first()
         self.company_id = self.tenant.client_company_id
         self.unreachable = Employee(
             client_company_id=self.company_id,
@@ -167,7 +167,7 @@ class ContactCompletenessRendersIdenticallyTests(unittest.TestCase):
         ).get_data(as_text=True)
         self.client.get("/logout")
 
-        self._login("admin@msc.com")
+        self._login("admin@contoso.com")
         tenant = self.client.get("/company/employees").get_data(as_text=True)
         self.client.get("/logout")
 

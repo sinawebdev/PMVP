@@ -494,7 +494,7 @@ COMPANY_CODE_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9-]{1,19}$")
 
 def normalise_company_code(value):
     """Canonical form of a typed company code: uppercase, separators collapsed
-    to single dashes, no leading/trailing dash ("msc  ltd" -> "MSC-LTD")."""
+    to single dashes, no leading/trailing dash ("contoso  ltd" -> "CONTOSO-LTD")."""
     code = re.sub(r"[\s_]+", "-", str(value or "").strip().upper())
     return re.sub(r"-{2,}", "-", code).strip("-")
 
@@ -543,7 +543,7 @@ def validate_client_form(form, client=None):
         errors["company_code"] = "Company code is required."
     elif not COMPANY_CODE_PATTERN.match(values["company_code"]):
         errors["company_code"] = (
-            "Use 2-20 letters, digits or dashes (e.g. MSC or ACME-GH)."
+            "Use 2-20 letters, digits or dashes (e.g. CONTOSO or ACME-GH)."
         )
     elif (
         ClientCompany.query.filter(

@@ -35,7 +35,7 @@ from app.models import (  # noqa: E402
 )
 from app.payroll_status import PROCESSED  # noqa: E402
 
-PROFESSIONAL_TENANTS = {"MSC Limited", "Acme Manufacturing Ltd"}
+PROFESSIONAL_TENANTS = {"Contoso Ltd", "Acme Manufacturing Ltd"}
 
 # Months of history the fixture builds (see setUp).
 MONTHS = 4
@@ -116,7 +116,7 @@ class DemoResetTestCase(unittest.TestCase):
         )
         # History owned by the stale user but attached to a tenant that SURVIVES —
         # this must be reassigned, not deleted.
-        survivor = ClientCompany.query.filter_by(name="MSC Limited").first()
+        survivor = ClientCompany.query.filter_by(name="Contoso Ltd").first()
         db.session.add(
             AuditTrail(
                 user_id=stale.id, user_role="admin", action="Payroll approval",
@@ -143,7 +143,7 @@ class DemoResetTestCase(unittest.TestCase):
         self.assertIsNone(User.query.filter_by(email="old.admin@legacy.invalid").first())
 
     def test_tenant_logins_survive_the_rebuild(self):
-        for email in ("admin@msc.com", "payroll@msc.com", "finance@acme.com"):
+        for email in ("admin@contoso.com", "payroll@contoso.com", "finance@acme.com"):
             with self.subTest(email=email):
                 user = User.query.filter_by(email=email).first()
                 self.assertIsNotNone(user)
@@ -285,7 +285,7 @@ class DemoResetTestCase(unittest.TestCase):
                 "Companies by payroll cost", "No payroll processed yet",
             ),
             (
-                "admin@msc.com", "/company",
+                "admin@contoso.com", "/company",
                 "Employee cost distribution", "No payroll run yet",
             ),
             (
@@ -307,7 +307,7 @@ class DemoResetTestCase(unittest.TestCase):
 
     def test_client_expense_page_is_populated(self):
         self.client.post(
-            "/login", data={"email": "admin@msc.com", "password": "password123"}
+            "/login", data={"email": "admin@contoso.com", "password": "password123"}
         )
         body = self.client.get("/company/expenses").get_data(as_text=True)
         self.assertIn("Category breakdown", body)

@@ -27,12 +27,12 @@ def _period(payroll_run):
 
 
 def export_bank_grouping(payroll_run, export_folder, routing=None, whitelist=None):
-    """AKOTO-style bank schedule: banked workers grouped by bank, one block per
+    """Bank schedule: banked workers grouped by bank, one block per
     bank with a subtotal, and a grand total equal to the banked net total. This
     is the terminal transfer-submission document."""
     routing = routing or route_payments(payroll_run.items, whitelist=whitelist)
     client_name = _client_name(payroll_run)
-    title = f"{client_name} Bank Grouping (AKOTO) {_period(payroll_run)}"
+    title = f"{client_name} Bank Grouping {_period(payroll_run)}"
     workbook, sheet = create_workbook(title)
 
     groups = {}

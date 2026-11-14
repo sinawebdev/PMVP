@@ -431,8 +431,8 @@ class CalculationTestCase(unittest.TestCase):
         self.assertAlmostEqual(result.ordinary_paye, base.ordinary_paye, delta=0.01)
         self.assertAlmostEqual(result.paye, base.paye + 25.00, delta=0.01)
 
-    def test_hourly_richard_woode_regression(self):
-        """DZ workbook, Richard Woode (DCL9) — verified against DZ's own
+    def test_hourly_ot_and_bonus_regression(self):
+        """Reference client workbook, hourly worker DCL9 — verified against its own
         formulas (AR44/AU47/AY51). Exercises OT-over-threshold + bonus on the
         hourly path: overtime concessionary, bonus flat within the annual cap,
         shift allowances as ordinary taxable income, SSF on basic wage only.

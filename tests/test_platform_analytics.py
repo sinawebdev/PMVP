@@ -78,8 +78,8 @@ class PlatformAnalyticsUnitTestCase(unittest.TestCase):
     """The aggregation, exercised without a database or a request."""
 
     def setUp(self):
-        self.msc = FakeCompany(
-            "MSC Limited", "MSC",
+        self.contoso = FakeCompany(
+            "Contoso Ltd", "CONTOSO",
             runs=[
                 FakeRun("May", 2026, net=1000, gross=1200, employer=150),
                 FakeRun("June", 2026, net=1500, gross=1800, employer=220),
@@ -96,7 +96,7 @@ class PlatformAnalyticsUnitTestCase(unittest.TestCase):
         self.dormant = FakeCompany(
             "Dormant Ltd", "DORM", status="Inactive", created_at=datetime(2026, 4, 1)
         )
-        self.companies = [self.msc, self.acme, self.dormant]
+        self.companies = [self.contoso, self.acme, self.dormant]
 
     def _analytics(self, **kwargs):
         return platform_dashboard_analytics(
@@ -106,8 +106,8 @@ class PlatformAnalyticsUnitTestCase(unittest.TestCase):
     def test_revenue_trend_sums_every_company_per_month(self):
         trend = self._analytics()["revenue_trend"]
         self.assertEqual([p["label"] for p in trend], ["May", "Jun"])
-        self.assertEqual(trend[0]["value"], 1000)   # MSC only
-        self.assertEqual(trend[1]["value"], 2000)   # MSC 1500 + Acme 500
+        self.assertEqual(trend[0]["value"], 1000)   # CONTOSO only
+        self.assertEqual(trend[1]["value"], 2000)   # CONTOSO 1500 + Acme 500
 
     def test_revenue_trend_is_range_scaled_and_declares_its_axis(self):
         """The trend is drawn as a LINE, so it is scaled to its own min..max
@@ -139,8 +139,8 @@ class PlatformAnalyticsUnitTestCase(unittest.TestCase):
 
     def test_companies_are_ranked_by_payroll_cost(self):
         ranked = self._analytics()["companies_by_cost"]
-        self.assertEqual([p["label"] for p in ranked], ["MSC", "ACME", "DORM"])
-        self.assertEqual(ranked[0]["full_label"], "MSC Limited")
+        self.assertEqual([p["label"] for p in ranked], ["CONTOSO", "ACME", "DORM"])
+        self.assertEqual(ranked[0]["full_label"], "Contoso Ltd")
         # gross + employer SSF across the charted months
         self.assertEqual(ranked[0]["value"], 1200 + 150 + 1800 + 220)
         self.assertEqual(ranked[1]["value"], 600 + 70)
@@ -186,8 +186,8 @@ class PlatformAnalyticsUnitTestCase(unittest.TestCase):
 
     def test_top_clients_table_shape(self):
         rows = top_clients(self.companies)
-        self.assertEqual(rows[0]["company"], "MSC Limited")
-        self.assertEqual(rows[0]["code"], "MSC")
+        self.assertEqual(rows[0]["company"], "Contoso Ltd")
+        self.assertEqual(rows[0]["code"], "CONTOSO")
         self.assertEqual(rows[0]["employees"], 4)
         self.assertEqual(rows[0]["payroll"], 2500)
         self.assertEqual(rows[0]["last_run"], "June 2026")
@@ -346,7 +346,7 @@ class PlatformDashboardRenderTestCase(unittest.TestCase):
     def test_dashboard_is_platform_only(self):
         self.client.get("/logout")
         self.client.post(
-            "/login", data={"email": "admin@msc.com", "password": "password123"}
+            "/login", data={"email": "admin@contoso.com", "password": "password123"}
         )
         resp = self.client.get("/dashboard")
         self.assertEqual(resp.status_code, 302)
