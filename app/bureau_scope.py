@@ -49,7 +49,7 @@ BUREAU_ENDPOINTS = frozenset({
     "employees.roster", "employees.add", "employees.edit", "employees.deactivate",
     "employees.reactivate", "employees.delete", "employees.roster_template",
     "employees.bulk_import", "employees.bulk_import_confirm",
-    "payroll.runs", "payroll.new_run", "payroll.preview", "payroll.error_report",
+    "payroll.runs", "payroll.new_run", "payroll.payroll_template", "payroll.preview", "payroll.error_report",
     "payroll.confirm", "payroll.detail", "payroll.calculate", "payroll.edit_items",
     "payroll.submit_for_approval", "payroll.approve", "payroll.reject",
     "payroll.bulk_approve", "payroll.bulk_reject", "payroll.bulk_distribute",

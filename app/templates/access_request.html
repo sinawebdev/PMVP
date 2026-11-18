@@ -99,7 +99,16 @@
     </form>
     {% endif %}
     {% elif entry.is_open %}
-    <a class="btn btn-primary" href="{{ url_for('main.add_client', request=entry.id) }}"><i class="bi bi-building-add"></i>Approve and create company</a>
+    {# A company running its own payroll gets the whole cycle in one click: the
+       company, a bureau of its own with it as the home client, and its contact
+       invited as admin (app/bureaus.py approve_own_payroll). The client-portal
+       company, where Payrolla calculates and approves, stays as the alternative. #}
+    <form method="post" action="{{ url_for('bureaus.approve_own_payroll', request_id=entry.id) }}"
+          data-confirm="Set up {{ entry.company_name }} to run its own payroll and invite {{ entry.email }} as its admin?" data-confirm-title="Approve: runs own payroll" data-confirm-ok="Approve">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-primary" type="submit"><i class="bi bi-person-check"></i>Approve: runs own payroll</button>
+    </form>
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.add_client', request=entry.id) }}"><i class="bi bi-building-add"></i>Create company (client portal) instead</a>
     {% if can_licence %}
     <form method="post" action="{{ url_for('licences.issue_for_request', request_id=entry.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

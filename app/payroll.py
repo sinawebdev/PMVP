@@ -594,6 +594,16 @@ RUNS_PER_PAGE = 50
 # the upload that produces one.
 
 
+@payroll_bp.route("/runs/template")
+@role_required(*PAYROLL_IMPORT_ROLES)
+def payroll_template():
+    """The standard-upload workbook, so whoever uploads knows the columns read."""
+    from app import payroll_template as template
+
+    return send_file(template.build_template(), download_name=template.TEMPLATE_FILENAME,
+                     as_attachment=True, mimetype=template.TEMPLATE_MIMETYPE)
+
+
 @payroll_bp.route("/runs/new", methods=["GET", "POST"])
 @role_required(*PAYROLL_IMPORT_ROLES)
 def new_run():

@@ -47,6 +47,7 @@ PAYROLLA_ONLY = {
     "main.db_health", "main.db_health_json",                         # infrastructure
     "distribution.dashboard", "distribution.dashboard_fragment",     # worker health across every tenant
     "bureaus.approve_request", "bureaus.convert_company",            # creating bureaus is Payrolla's
+    "bureaus.approve_own_payroll",                                   # approving applications is Payrolla's
 }
 
 
