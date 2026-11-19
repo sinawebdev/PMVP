@@ -99,6 +99,86 @@ class BureauOnboardingTestCase(unittest.TestCase):
         self.assertIsNone(Bureau.query.filter_by(name="Delta Payroll Services").first())
         self.assertTrue(db.session.get(AccessRequest, entry.id).is_open)
 
+    # --- approving a company that runs its own payroll (one click) --------------------
+    def _company_request(self, company_name="Kente Foods Ltd"):
+        self.client.post("/request-access", data=dict(
+            FORM, company_name=company_name, email="ama@kente.example", account_type="company"))
+        return AccessRequest.query.filter_by(email="ama@kente.example").one()
+
+    def test_own_payroll_approval_sets_up_the_whole_cycle_in_one_click(self):
+        entry = self._company_request()
+        self._login("admin@payrolla.com")
+        page = self.client.get(f"/clients/requests/{entry.id}").get_data(as_text=True)
+        self.assertIn("Approve: runs own payroll", page)
+        self.assertIn("Create company (client portal) instead", page)
+        self.assertNotIn("Approve as payroll bureau", page)
+
+        resp = self.client.post(f"/clients/requests/{entry.id}/approve-own-payroll")
+        self.assertEqual(resp.status_code, 302)
+        db.session.expire_all()
+        company = ClientCompany.query.filter_by(name="Kente Foods Ltd").one()
+        bureau = Bureau.query.filter_by(name="Kente Foods Ltd").one()
+        self.assertEqual((company.company_code, bureau.code), ("KENTE", "KENTE"))
+        self.assertEqual((company.bureau_id, company.bureau_home), (bureau.id, True))
+        self.assertEqual((company.email, company.contact_person), ("ama@kente.example", "Dede Mensah"))
+        admin = User.query.filter_by(email="ama@kente.example").one()
+        self.assertEqual((admin.role, admin.bureau_id, admin.client_company_id), (BUREAU_ADMIN, bureau.id, None))
+        self.assertTrue(admin.invite_pending)
+        approved = db.session.get(AccessRequest, entry.id)
+        self.assertEqual((approved.status, approved.client_company_id), ("approved", company.id))
+
+        # The invite lands them in their own bureau, with their company as its
+        # first client and nothing of anyone else's, ready to upload a run.
+        from app.invites import make_token
+
+        token = make_token(db.session.get(User, admin.id))
+        self.client.get("/logout")
+        resp = self.client.post(f"/invite/{token}", data={"password": "a-long-password-1", "confirm": "a-long-password-1"})
+        self.assertEqual(resp.status_code, 302)
+        html = self.client.get("/clients").get_data(as_text=True)
+        self.assertIn("Kente Foods Ltd", html)
+        self.assertNotIn("Contoso Ltd", html)
+        self.assertNotIn("Awaiting credentials", html.split("Kente Foods Ltd", 1)[1].split("</tr>", 1)[0])
+        new_run = self.client.get("/payroll/runs/new")
+        self.assertEqual(new_run.status_code, 200)
+        self.assertIn("Kente Foods Ltd", new_run.get_data(as_text=True))
+
+        # Deciding it twice does nothing.
+        self._login("admin@payrolla.com")
+        self.client.post(f"/clients/requests/{entry.id}/approve-own-payroll")
+        self.assertEqual(Bureau.query.filter_by(name="Kente Foods Ltd").count(), 1)
+
+    def test_own_payroll_approval_with_a_taken_name_or_email_creates_nothing(self):
+        entry = self._company_request(company_name="Contoso Ltd")
+        self._login("admin@payrolla.com")
+        self.client.post(f"/clients/requests/{entry.id}/approve-own-payroll")
+        self.assertIsNone(Bureau.query.filter_by(name="Contoso Ltd").first())
+        self.assertIsNone(User.query.filter_by(email="ama@kente.example").first())
+        self.assertTrue(db.session.get(AccessRequest, entry.id).is_open)
+
+        entry.company_name, entry.email = "Kente Foods Ltd", "admin@contoso.com"
+        db.session.commit()
+        self.client.post(f"/clients/requests/{entry.id}/approve-own-payroll")
+        self.assertIsNone(ClientCompany.query.filter_by(name="Kente Foods Ltd").first())
+        self.assertIsNone(Bureau.query.filter_by(name="Kente Foods Ltd").first())
+        self.assertTrue(db.session.get(AccessRequest, entry.id).is_open)
+
+    def test_only_payrolla_staff_can_approve_own_payroll(self):
+        entry = self._company_request()
+        bureau = Bureau(name="Echo Bureau", code="ECHO")
+        db.session.add(bureau)
+        db.session.flush()
+        echo_admin = User(name="E", email="e@echo.example", role=BUREAU_ADMIN, bureau_id=bureau.id)
+        echo_admin.set_password("echo-pass-1")
+        db.session.add(echo_admin)
+        db.session.commit()
+        self._login("e@echo.example", "echo-pass-1")
+        self.assertEqual(self.client.post(f"/clients/requests/{entry.id}/approve-own-payroll").status_code, 404)
+        self._login("admin@contoso.com")
+        self.client.post(f"/clients/requests/{entry.id}/approve-own-payroll")
+        self.assertIsNone(ClientCompany.query.filter_by(name="Kente Foods Ltd").first())
+        self.assertTrue(db.session.get(AccessRequest, entry.id).is_open)
+
     # --- converting an existing company (the Chrisnat path) --------------------------
     def test_a_company_can_become_a_bureau_with_its_logins(self):
         company = ClientCompany(name="Chrisnat Test Ltd", company_code="CNT")
@@ -203,6 +283,18 @@ class BureauOnboardingTestCase(unittest.TestCase):
         db.session.commit()
         self.assertEqual(unique_bureau_code("Zeta Two"), "ZETA-2")
         self.assertTrue(re.fullmatch(r"[A-Z0-9-]+", unique_bureau_code("  ")))
+
+    def test_unique_company_codes_pass_the_company_form_rule(self):
+        from app.bureaus import unique_company_code
+        from app.routes import COMPANY_CODE_PATTERN
+
+        db.session.add(ClientCompany(name="Zeta One", company_code="ZETA"))
+        db.session.commit()
+        self.assertEqual(unique_company_code("Zeta Two"), "ZETA-2")
+        self.assertEqual(unique_company_code("X Ltd"), "XCO")
+        for name in ("Zeta Two", "X Ltd", "  ", "A Very-Long-Named Organisation Of Ghana", "Kente Foods Ltd"):
+            with self.subTest(name=name):
+                self.assertTrue(COMPANY_CODE_PATTERN.match(unique_company_code(name)))
 
 
 if __name__ == "__main__":

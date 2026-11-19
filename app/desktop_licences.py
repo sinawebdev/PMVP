@@ -171,7 +171,7 @@ def issue_for_request(request_id):
     )
     db.session.add(record)
     # A desktop-only request is fully answered by its licence. "Both" still
-    # needs its web company, so it stays open for "Approve and create company".
+    # needs its web company, so it stays open for the web approval.
     if entry.is_open and entry.interest == "desktop":
         entry.status = ACCESS_APPROVED
         entry.reviewed_by_id = current_user.id

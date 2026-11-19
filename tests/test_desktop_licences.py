@@ -148,7 +148,8 @@ class IssueFromRequestTests(unittest.TestCase):
     def test_both_keeps_the_request_open_for_the_web_company(self):
         entry = self._request(interest="both")
         html = self.client.get(f"/clients/requests/{entry.id}").get_data(as_text=True)
-        self.assertIn("Approve and create company", html)
+        self.assertIn("Approve: runs own payroll", html)
+        self.assertIn("Create company (client portal) instead", html)
         self.assertIn("Send desktop trial licence", html)
         self._issue(entry, _Capture())
         self.assertEqual(db.session.get(AccessRequest, entry.id).status, "new")

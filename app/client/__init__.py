@@ -362,6 +362,16 @@ def _client_replace_runs(company_id, month, year):
     return True, None
 
 
+@client_bp.route("/runs/template")
+@tenant_role_required(CLIENT_ADMIN, CLIENT_PREPARER)
+def payroll_template():
+    """The standard payroll workbook template (same file as the operator side)."""
+    from app import payroll_template as template
+
+    return send_file(template.build_template(), download_name=template.TEMPLATE_FILENAME,
+                     as_attachment=True, mimetype=template.TEMPLATE_MIMETYPE)
+
+
 @client_bp.route("/runs/upload", methods=["GET", "POST"])
 @tenant_role_required(CLIENT_ADMIN, CLIENT_PREPARER)
 def run_upload():

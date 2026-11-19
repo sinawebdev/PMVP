@@ -52,8 +52,10 @@
           <progress id="upload-progress" max="100" value="0"></progress>
           <span id="upload-status-text" class="sub"></span>
         </div>
-        <div class="form-foot">
+        <div class="form-foot actions">
           <button id="upload-submit" class="btn primary" type="submit">Upload &amp; preview</button>
+          {# Same shape as the raw pane's "Monthly template" beside it. #}
+          <a class="btn" href="{{ url_for('client.payroll_template') }}">Payroll template</a>
         </div>
       </form>
     </div>
