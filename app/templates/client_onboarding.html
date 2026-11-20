@@ -104,7 +104,9 @@
         {% for login in logins %}
         <li>
             <div><strong>{{ login.name }}</strong><span>{{ login.email }}</span></div>
-            {% if login.invite_pending %}
+            {% if login.disabled_at %}
+            <span class="badge text-bg-secondary">Removed {{ login.disabled_at.strftime('%d %b %Y') }}</span>
+            {% elif login.invite_pending %}
             <span class="badge text-bg-info">Invited {{ login.invited_at.strftime('%d %b, %H:%M') }}</span>
             <form method="post" action="{{ url_for('invites.resend_invite', client_id=client.id, user_id=login.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
