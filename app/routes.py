@@ -767,17 +767,18 @@ def client_detail(client_id):
 @main_bp.route("/search")
 @platform_required
 def search():
-    q = request.args.get("q", "").strip()
+    from app.page_search import find_pages, operator_records
+
+    q = request.args.get("q", "").strip()[:100]
+    pages = []
     clients = []
+    employees = []
     items = []
     if q:
         like = f"%{q}%"
-        clients = (
-            operator_query(ClientCompany).filter(ClientCompany.name.ilike(like))
-            .order_by(ClientCompany.name)
-            .limit(25)
-            .all()
-        )
+        # Pages first: "paye" or "upload" means a task, not a record.
+        pages = find_pages(q)
+        clients, employees = operator_records(q)
         items = (
             operator_query(PayrollItem).filter(
                 or_(
@@ -789,4 +790,16 @@ def search():
             .limit(50)
             .all()
         )
-    return render_template("search_results.html", q=q, clients=clients, items=items)
+    return render_template("search_results.html", q=q, pages=pages, clients=clients,
+                           employees=employees, items=items)
+
+
+@main_bp.route("/search/suggest")
+@platform_required
+def search_suggest():
+    """What the top-bar search box offers while typing (static/search.js)."""
+    from flask import jsonify
+
+    from app.page_search import suggestions
+
+    return jsonify(suggestions(request.args.get("q")))

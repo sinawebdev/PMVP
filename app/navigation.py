@@ -86,6 +86,7 @@ _ENDPOINT_OVERRIDES = {
     "main.edit_client": "clients",
     "main.client_onboarding": "clients",
     "main.search": "clients",
+    "main.search_suggest": "clients",
 }
 
 

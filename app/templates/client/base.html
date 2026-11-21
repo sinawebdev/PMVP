@@ -93,6 +93,15 @@
            exactly like its neighbours; see the note in portal.css for why a
            reversible action gets no danger affordance. #}
         <div class="portal-utility">
+          {# The same search box as the operator console, over this company's
+             pages and employees (app.page_search, static/search.js). #}
+          <form class="portal-search" method="get" action="{{ url_for('client.search') }}" role="search"
+                data-suggest-url="{{ url_for('client.search_suggest') }}">
+            <label class="sr-only" for="global-search">Search pages and employees</label>
+            {{ shell_ui.icon('search', 16) }}
+            <input id="global-search" type="search" name="q" placeholder="Search…" value="{{ request.args.get('q', '') if ep == 'client.search' else '' }}">
+          </form>
+
           <a class="utility-btn" href="{{ url_for('notifications.inbox') }}"
              {% if ep and ep.startswith('notifications.') %}aria-current="page"{% endif %}>
             {{ shell_ui.icon('bell', 19) }}
@@ -156,6 +165,7 @@
   </div>
   <script src="{{ url_for('static', filename='vendor/htmx.min.js') }}" defer></script>
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='search.js') }}" defer></script>
   <script>
   (function () {
     // Mobile navigation drawer — same contract as the operator shell
