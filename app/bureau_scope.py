@@ -42,7 +42,7 @@ SHARED_ENDPOINTS = frozenset({"static", "auth.logout"})
 # (app.statutory). tests/test_bureau_isolation.py checks these pages show a
 # bureau nothing of anyone else's.
 BUREAU_ENDPOINTS = frozenset({
-    "main.index", "main.dashboard", "main.search",
+    "main.index", "main.dashboard", "main.search", "main.search_suggest",
     "main.clients", "main.client_detail", "main.client_onboarding",
     "main.add_client", "main.edit_client",
     "invites.invite_admin", "invites.resend_invite",

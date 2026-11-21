@@ -1029,6 +1029,70 @@
 
 .portal-search input::placeholder { color: var(--muted); }
 
+/* Suggestions under the search box (static/search.js): pages first ("Go to"),
+   then a few records. Anchored to the box's right edge, because the box sits
+   at the right of the bar and a list running off-screen is a list you can't
+   read. */
+.search-suggest {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    list-style: none;
+    margin: 0;
+    max-height: min(70vh, 460px);
+    overflow-y: auto;
+    padding: 6px;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    width: min(360px, calc(100vw - 32px));
+    z-index: 1060;
+}
+
+.search-suggest-head {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    padding: 8px 10px 4px;
+    text-transform: uppercase;
+}
+
+.search-suggest-item {
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 7px 10px;
+}
+
+.search-suggest-item[aria-selected="true"],
+.search-suggest-item:hover { background: var(--surface-alt); }
+.search-suggest-item[aria-selected="true"] .search-suggest-label { color: var(--brand); }
+.search-suggest-label { color: var(--ink); font-size: 14px; font-weight: 600; }
+.search-suggest-hint { color: var(--muted); font-size: 12.5px; }
+
+/* The "Go to" group on both results pages: a ruled list of page links, each a
+   name and one line of what the page is for. */
+.goto-list { list-style: none; margin: 0 0 18px; padding: 0; }
+.goto-list li + li { border-top: 1px solid var(--line); }
+.goto-list a {
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 4px;
+    text-decoration: none;
+}
+.goto-list a:hover strong, .goto-list a:focus-visible strong { color: var(--brand); }
+.goto-list span { color: var(--muted); font-size: 13px; }
+
+/* The client portal's search page: field and button on one row. */
+.search-page-form { align-items: center; display: flex; gap: 10px; margin-bottom: 18px; }
+.search-page-form input { flex: 1; }
+
 .portal-search input:focus {
     background: var(--surface);
     border-color: var(--brand);
@@ -1345,7 +1409,7 @@
    one part of this bar that changes width, and a placeholder that fits at
    1680 and is cut off at 1440 reads as a bug rather than as a hint. The
    accessible name on the label still says what is searchable. The tenant bar
-   has no search field and is unaffected. */
+   carries the same field since Nov 2026 and shrinks with it. */
 @media (max-width: 1450px) {
     .portal-search input { width: 140px; }
 }

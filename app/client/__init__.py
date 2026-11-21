@@ -784,3 +784,7 @@ from app.client import distribute_confirm as _distribute_confirm  # noqa: E402,F
 # Bulk import of employees from one Excel sheet (upload -> preview -> confirm),
 # shared with the operator console through app.roster_import.
 from app.client import employee_import as _employee_import  # noqa: E402,F401
+
+# Search: the company's pages and employees, with suggestions while typing
+# (app.page_search). Same import-at-the-bottom pattern.
+from app.client import search as _search  # noqa: E402,F401

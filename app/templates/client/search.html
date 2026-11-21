@@ -1,0 +1,50 @@
+{% extends "client/base.html" %}
+{% block title %}Search — {{ company.name }}{% endblock %}
+{# The company's pages and employees (app.page_search). Pages first: "paye" or
+   "add employee" is a task, and the page that does it is the answer. #}
+{% block body %}
+  <div class="page-bar">
+    <div class="page-head">
+      <h1>Search</h1>
+      <p class="sub">Find a page or one of your employees.</p>
+    </div>
+  </div>
+
+  <form class="card form search-page-form" method="get" action="{{ url_for('client.search') }}" role="search">
+    <label class="sr-only" for="q">Search</label>
+    <input id="q" name="q" type="search" value="{{ q }}" placeholder="A page, an employee or a staff ID" autofocus>
+    <button class="btn primary" type="submit">Search</button>
+  </form>
+
+  {% if q %}
+    {% if pages %}
+    <h2>Go to</h2>
+    <ul class="goto-list">
+      {% for page in pages %}
+      <li><a href="{{ page.url }}"><strong>{{ page.label }}</strong><span>{{ page.hint }}</span></a></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    <h2>Employees</h2>
+    {% if employees %}
+    <div class="panel dt-wrap">
+      <table class="emp-table">
+        <thead><tr><th>Employee</th><th>Role</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody>
+          {% for e in employees %}
+          <tr>
+            <td><span class="cell-main">{{ e.full_name }}</span><span class="cell-sub">{{ e.staff_id }}</span></td>
+            <td>{{ e.job_title or '—' }}</td>
+            <td>{% if e.status == 'Active' %}<span class="badge ok">Active</span>{% else %}<span class="badge warn">{{ e.status }}</span>{% endif %}</td>
+            <td class="end"><a class="btn sm" href="{{ url_for('client.employee_edit', emp_id=e.id) }}">Open</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">No employee matches “{{ q }}”.</div>
+    {% endif %}
+  {% endif %}
+{% endblock %}
