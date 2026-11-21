@@ -242,6 +242,10 @@ def bureau_team_required(view):
             abort(404)
         return view(*args, **kwargs)
 
+    # Read by the page search (app.page_search.can_open) so it never offers
+    # this page to someone it would 404. functools.wraps in role_required
+    # copies the marker onto the outer view.
+    wrapped._bureau_only = True
     return wrapped
 
 
