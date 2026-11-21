@@ -62,6 +62,9 @@ def persist_seed(
     caller, so the web confirm path can persist the run, its seed and its computed
     items in one atomic transaction — never a committed run with no items.
     """
+    from app.employee_audit import set_change_source
+
+    set_change_source(f"raw hours upload ({source_filename or 'a workbook'})")
     result = SeedResult()
     try:
         cid = context.client_company_id
