@@ -1,0 +1,86 @@
+{% extends "client/base.html" %}
+{% import "macros/ui.html" as ui %}
+{% block title %}Team — {{ company.name }}{% endblock %}
+{# The company's logins (app.team). Same rules as the bureau page: the invite
+   is the one primary action, and your own row has no actions, which is what
+   keeps the company from ever losing its last administrator. #}
+{% block body %}
+  <div class="page-bar">
+    <div class="page-head">
+      <h1>Team</h1>
+      <p class="sub">{{ page.total }} {{ 'person' if page.total == 1 else 'people' }} can sign in to {{ company.name }}.</p>
+    </div>
+  </div>
+
+  <div class="panel dt-wrap">
+    <table class="emp-table">
+      <thead><tr><th>Person</th><th>Role</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>
+        {% for member in page.items %}
+        {% set is_me = member.id == current_user.id %}
+        <tr>
+          <td><span class="cell-main">{{ member.name }}{% if is_me %} (you){% endif %}</span><span class="cell-sub">{{ member.email }}</span></td>
+          <td>{{ team.role_label(member.role) }}</td>
+          <td>
+            {% if member.disabled_at %}<span class="badge warn">Removed {{ member.disabled_at.strftime('%d %b %Y') }}</span>
+            {% elif member.invite_pending %}<span class="badge">Invited {{ member.invited_at.strftime('%d %b, %H:%M') }}</span>
+            {% else %}<span class="badge ok">Active</span>{% endif %}
+          </td>
+          <td class="end">
+            {% if not is_me %}
+            <div class="row-actions">
+              {% if member.disabled_at %}
+              <form class="inline" method="post" action="{{ url_for('team.company_restore', member_id=member.id) }}"><button class="btn sm" type="submit">Restore</button></form>
+              {% else %}
+              {% if member.invite_pending %}
+              <form class="inline" method="post" action="{{ url_for('team.company_resend', member_id=member.id) }}"><button class="btn sm" type="submit">Resend invite</button></form>
+              {% endif %}
+              {% for choice in team.choices if choice.value != member.role %}
+              <form class="inline" method="post" action="{{ url_for('team.company_change_role', member_id=member.id) }}">
+                <input type="hidden" name="role" value="{{ choice.value }}">
+                <button class="btn sm" type="submit">Make {{ choice.label | lower }}</button>
+              </form>
+              {% endfor %}
+              <form class="inline" method="post" action="{{ url_for('team.company_remove', member_id=member.id) }}"
+                    data-confirm="Remove {{ member.name }}? They can't sign in from now on. Their past work stays on record, and you can restore them later." data-confirm-title="Remove from team" data-confirm-ok="Remove" data-confirm-danger="1">
+                <button class="btn sm danger" type="submit">Remove</button>
+              </form>
+              {% endif %}
+            </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page.pages > 1 %}{{ ui.pagination(page) }}{% endif %}
+
+  <h2 id="invite">Invite a colleague</h2>
+  <div class="card form stack">
+    <p class="sub">They get an email with a link to choose a password. The link works once and expires in 72 hours.</p>
+    <form method="post" action="{{ url_for('team.company_invite') }}" class="stack" novalidate>
+      <div>
+        <label for="invite_name">Full name</label>
+        <input id="invite_name" name="invite_name" value="{{ invite_form.name }}" maxlength="120" autocomplete="off" required>
+        {% if invite_errors.invite_name %}<small class="field-error">{{ invite_errors.invite_name }}</small>{% endif %}
+      </div>
+      <div>
+        <label for="invite_email">Email</label>
+        <input id="invite_email" type="email" name="invite_email" value="{{ invite_form.email }}" maxlength="160" autocomplete="off" required>
+        {% if invite_errors.invite_email %}<small class="field-error">{{ invite_errors.invite_email }}</small>{% endif %}
+      </div>
+      <fieldset class="stack choice-group">
+        <legend>Role</legend>
+        {% for choice in team.choices %}
+        <label class="choice">
+          <input type="radio" name="invite_role" value="{{ choice.value }}" {{ 'checked' if invite_form.role == choice.value }}>
+          <span><strong>{{ choice.label }}</strong> <small class="sub">{{ choice.summary }}</small></span>
+        </label>
+        {% endfor %}
+        {% if invite_errors.invite_role %}<small class="field-error">{{ invite_errors.invite_role }}</small>{% endif %}
+      </fieldset>
+      <button class="btn primary" type="submit">Send invite</button>
+    </form>
+  </div>
+{% endblock %}

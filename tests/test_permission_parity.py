@@ -41,7 +41,7 @@ GROUPS = {
 
 # Operator-plane groups only: the tenant groups govern the client portal, whose
 # roles are gated by tenant_role_required and never see an operator route.
-TENANT_GROUP_NAMES = {"EXPENSE_ROLES", "BRANDING_ROLES", "DISTRIBUTION_SEND_ROLES"}
+TENANT_GROUP_NAMES = {"EXPENSE_ROLES", "BRANDING_ROLES", "DISTRIBUTION_SEND_ROLES", "COMPANY_TEAM_ROLES"}
 OPERATOR_GROUPS = {n: g for n, g in GROUPS.items() if n not in TENANT_GROUP_NAMES}
 TENANT_GROUPS = {n: g for n, g in GROUPS.items() if n in TENANT_GROUP_NAMES}
 

@@ -28,6 +28,10 @@ class User(UserMixin, db.Model):
     # treated as active because they have a usable password already.
     invited_at = db.Column(db.DateTime)
     activated_at = db.Column(db.DateTime)
+    # Set when an admin removes the login from its team (app.team). The row
+    # stays, because runs, expenses and the audit trail point at it; the login
+    # just stops working (is_active below, and the user loader in app/__init__).
+    disabled_at = db.Column(db.DateTime)
 
     client_company = db.relationship("ClientCompany")
     bureau = db.relationship("Bureau", foreign_keys=[bureau_id])
@@ -42,6 +46,11 @@ class User(UserMixin, db.Model):
     @property
     def invite_pending(self):
         return self.invited_at is not None and self.activated_at is None
+
+    @property
+    def is_active(self):
+        # Flask-Login's hook: login_user() refuses an inactive user.
+        return self.disabled_at is None
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

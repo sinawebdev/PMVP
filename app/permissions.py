@@ -99,6 +99,13 @@ CLIENT_MANAGEMENT_ROLES = frozenset({"admin", *SUPERUSERS, BUREAU_ADMIN})
 # gate keeps bureaus off every endpoint not opened to them (access requests,
 # licences and database health among them) whatever group they are in.
 
+# A payroll bureau's own staff list: invite colleagues, change their role, remove
+# them (app.team). Only bureau_admin uses it; the superusers are members because
+# every operator group carries them (tests/test_permission_parity.py), but the
+# page is a 404 for anyone who isn't on a bureau's staff (team.bureau_team_required),
+# so it never lets Payrolla staff mint logins.
+TEAM_ROLES = frozenset({*SUPERUSERS, BUREAU_ADMIN})
+
 # Platform infrastructure surfaces (database health). Operator-only telemetry —
 # not business function; Phase 3 moves its links out of user-facing nav.
 PLATFORM_OPS_ROLES = frozenset({"admin", *SUPERUSERS})
@@ -116,6 +123,12 @@ def can_operate_payroll(role):
 def can_maintain_roster(role):
     """May create/edit/deactivate employees on the operator plane."""
     return _in(role, REP_ROLES)
+
+
+def can_manage_team(role):
+    """May manage their bureau's staff list. Templates also require a bureau
+    (``current_bureau``), the same condition the route enforces."""
+    return _in(role, TEAM_ROLES)
 
 
 def can_view_audit(role):
@@ -293,6 +306,16 @@ BRANDING_ROLES = frozenset({CLIENT_ADMIN})
 def can_manage_branding(role):
     """May edit their own company's payslip branding (tenant plane)."""
     return _in(role, BRANDING_ROLES)
+
+
+# The company's own logins: invite colleagues, change their role, remove them
+# (app.team). client_admin-only, like branding.
+COMPANY_TEAM_ROLES = frozenset({CLIENT_ADMIN})
+
+
+def can_manage_company_team(role):
+    """May manage their own company's logins (tenant plane)."""
+    return _in(role, COMPANY_TEAM_ROLES)
 
 
 # Send, resend or cancel the company's own payslip distribution. client_admin-only,
