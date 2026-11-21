@@ -36,7 +36,8 @@ PASSWORD = "bureau-pass-1"
 
 # Endpoints that are not on the operator plane at all.
 NOT_OPERATOR_PREFIXES = ("client.", "legal.", "payslip_link.", "distribution_webhooks.",
-                         "desktop_release.", "auth.")
+                         "desktop_release.", "auth.",
+                         "team.company_")  # the client portal's Team page (tenant plane)
 NOT_OPERATOR = {"static", "main.health", "main.robots_txt", "main.sitemap_xml", "main.favicon_ico",
                 "main.company_dashboard", "invites.accept", "access.submit"}
 # Operator endpoints deliberately kept from bureaus. Adding a route means

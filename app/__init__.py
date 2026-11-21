@@ -770,6 +770,8 @@ def create_app():
         can_manage_wage_rates,
         can_maintain_roster,
         can_manage_branding,
+        can_manage_company_team,
+        can_manage_team,
         can_mark_run_processed,
         can_use_raw_engine,
         can_view_platform_ops,
@@ -844,6 +846,9 @@ def create_app():
         # Tenant-plane capabilities (client portal).
         can_record_expenses=can_record_expenses,
         can_manage_branding=can_manage_branding,
+        can_manage_company_team=can_manage_company_team,
+        # Bureau staff list (operator plane); templates pair it with current_bureau.
+        can_manage_team=can_manage_team,
     )
 
     from app.access_requests import access_bp
@@ -865,6 +870,7 @@ def create_app():
     from app.raw_engine.web import raw_engine_bp
     from app.routes import main_bp
     from app.statutory import statutory_bp
+    from app.team import team_bp
 
     app.register_blueprint(access_bp)
     app.register_blueprint(licences_bp)
@@ -889,12 +895,19 @@ def create_app():
     app.register_blueprint(raw_engine_bp)
     app.register_blueprint(oversight_bp)
     app.register_blueprint(notifications_bp)
+    app.register_blueprint(team_bp)
 
     # Payroll bureaus: hold a bureau's staff to their own client companies on
     # the operator plane. Deny by default (app/bureau_scope.py).
     from app import bureau_scope
 
     bureau_scope.register(app)
+
+    # Every change to an employee record lands in the audit trail, whichever
+    # route or import made it (app/employee_audit.py).
+    from app import employee_audit
+
+    employee_audit.register(db)
 
     @app.context_processor
     def inject_app_identity():
@@ -1336,4 +1349,9 @@ def initialize_database(app):
 def load_user(user_id):
     from app.models import User
 
-    return db.session.get(User, int(user_id))
+    user = db.session.get(User, int(user_id))
+    # A login removed from its team (app.team) is signed out on its next request,
+    # not when its session cookie happens to expire.
+    if user is not None and user.disabled_at is not None:
+        return None
+    return user

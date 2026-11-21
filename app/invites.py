@@ -57,6 +57,8 @@ def load_user_from_token(token):
     user = db.session.get(User, data.get("u"))
     if user is None or user.password_hash[-16:] != data.get("h"):
         return None
+    if user.disabled_at is not None:  # removed from the team before accepting
+        return None
     return user
 
 
@@ -66,25 +68,35 @@ def invite_url(user):
     return base + path
 
 
-def send_invite(user, company):
+def send_invite(user, company, *, invited_by=None, role_label=None):
     """Rotate the user's placeholder password, then email a fresh link.
 
     Rotating first is what makes a resend cancel the previous link. Returns the
-    SendResult so the caller can tell the operator whether the email went out."""
+    SendResult so the caller can tell the operator whether the email went out.
+
+    ``company`` is anything with a ``name`` (a company or a bureau). With
+    ``invited_by`` (a colleague adding them from the Team page, app.team) the
+    email says who added them and as what, instead of announcing a new account.
+    """
     user.set_password(secrets.token_urlsafe(32))
     user.invited_at = datetime.now(timezone.utc)
     link = invite_url(user)
     app_name = current_app.config.get("APP_BRAND_NAME") or current_app.config.get("APP_NAME", "Payrolla")
     hours = INVITE_MAX_AGE // 3600
+    if invited_by is not None:
+        role_text = f" as {role_label}" if role_label else ""
+        opening = f"{invited_by} has added you to {company.name}'s {app_name} account{role_text}."
+    else:
+        opening = f"{company.name} now has a {app_name} account, and you are its administrator."
     text = (
         f"Hello {user.name},\n\n"
-        f"{company.name} now has a {app_name} account, and you are its administrator.\n\n"
+        f"{opening}\n\n"
         f"Choose your password here (the link works once and expires in {hours} hours):\n{link}\n\n"
         f"After that, sign in with {user.email}.\n"
     )
     html = (
         f"<p>Hello {escape(user.name)},</p>"
-        f"<p>{escape(company.name)} now has a {escape(app_name)} account, and you are its administrator.</p>"
+        f"<p>{escape(opening)}</p>"
         f'<p><a href="{escape(link)}">Choose your password</a></p>'
         f"<p>The link works once and expires in {hours} hours. After that, sign in with {escape(user.email)}.</p>"
     )
@@ -143,6 +155,9 @@ def resend_invite(client_id, user_id):
     user = db.get_or_404(User, user_id)
     if user.client_company_id != company.id or not user.invite_pending:
         flash("That invite has already been accepted.", "info")
+        return redirect(url_for("main.client_onboarding", client_id=company.id))
+    if user.disabled_at is not None:
+        flash(f"{user.name} was removed from the team, so there is nothing to resend.", "info")
         return redirect(url_for("main.client_onboarding", client_id=company.id))
     result = send_invite(user, company)
     record_audit("Client admin invite resent", company, f"Invite resent to {user.email}.")

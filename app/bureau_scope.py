@@ -70,6 +70,10 @@ BUREAU_ENDPOINTS = frozenset({
     "audit.audit_trail", "audit.add_expense",
     "notifications.inbox", "notifications.mark_read", "notifications.mark_all_read",
     "statutory.index", "statutory.new", "statutory.copy", "statutory.edit",
+    # The bureau's own staff list (app.team). Teammate ids go through
+    # OWNERSHIP_RESOLVERS["member_id"], which accepts only this bureau's logins.
+    "team.bureau_team", "team.bureau_invite", "team.bureau_resend",
+    "team.bureau_change_role", "team.bureau_remove", "team.bureau_restore",
 })
 
 
@@ -244,6 +248,17 @@ def _user_of_company(value):
     return user.client_company_id if user is not None else None
 
 
+def _own_teammate(value):
+    """A login on the signed-in user's own bureau staff (the Team page)."""
+    from app.models import User
+
+    user = db.session.get(User, _as_int(value))
+    bureau_id = current_bureau_id()
+    if user is None or bureau_id is None or user.bureau_id != bureau_id:
+        return None
+    return IN_SCOPE
+
+
 def _as_int(value):
     try:
         return int(value)
@@ -268,6 +283,7 @@ OWNERSHIP_RESOLVERS = {
     "batch_id": _company_of("DistributionBatch"),
     "note_id": _own_notification,
     "user_id": _user_of_company,
+    "member_id": _own_teammate,
     "rate_id": _rate_version,
 }
 

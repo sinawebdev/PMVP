@@ -203,7 +203,16 @@ def login():
             ), 429
 
         user = User.query.filter_by(email=email).first()
-        if _verify_credentials(user, password):
+        verified = _verify_credentials(user, password)
+        if verified and user.disabled_at is not None:
+            # Only someone who knows the password learns the login was removed,
+            # so saying so plainly tells an attacker nothing new.
+            _record_audit("login.failure", related_record=user,
+                          notes=f"email={email} ip={ip} agent={agent} known=yes removed=yes")
+            db.session.commit()
+            return _render("This login has been removed from its team. "
+                           "Ask your administrator if you still need access.")
+        if verified:
             session.clear()
             login_user(user)
             # Only the account's own count. Clearing the address's count too let

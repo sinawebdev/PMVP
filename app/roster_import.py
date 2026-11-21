@@ -406,6 +406,9 @@ def apply_roster(staged, company, existing):
     hand between preview and confirm is updated rather than duplicated. The
     caller commits.
     """
+    from app.employee_audit import set_change_source
+
+    set_change_source(f"employee list import ({staged.get('filename') or 'a spreadsheet'})")
     created = updated = 0
     for record in staged.get("to_create", []) + staged.get("to_update", []):
         employee = existing.get(record["staff_id"])

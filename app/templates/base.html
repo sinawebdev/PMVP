@@ -115,6 +115,7 @@
             </summary>
             <div class="utility-pop">
               <p class="utility-pop-head">{{ user_display_name or 'Signed in' }}{% if current_bureau %}<span class="utility-pop-org">{{ current_bureau.name }} · payroll bureau</span>{% endif %}</p>
+              {% if current_bureau and can_manage_team(role) %}<a href="{{ url_for('team.bureau_team') }}">{{ shell_ui.icon('users', 17) }}Team</a>{% endif %}
               <a class="utility-pop-logout" href="{{ url_for('auth.logout') }}">{{ shell_ui.icon('logout', 17) }}Log out</a>
             </div>
           </details>

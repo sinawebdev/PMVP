@@ -109,13 +109,14 @@
             {% if notif_unread %}<span class="utility-badge" aria-hidden="true">{{ notif_unread }}</span>{% endif %}
           </a>
 
-          {% if can_manage_branding(role) %}
+          {% if can_manage_branding(role) or can_manage_company_team(role) %}
           <details class="utility-menu">
-            <summary class="utility-btn" {% if ep == 'client.branding' %}aria-current="page"{% endif %}>
+            <summary class="utility-btn" {% if ep in ('client.branding', 'team.company_team') %}aria-current="page"{% endif %}>
               {{ shell_ui.icon('settings', 19) }}<span class="sr-only">Settings</span>
             </summary>
             <div class="utility-pop">
-              <a href="{{ url_for('client.branding') }}">{{ shell_ui.icon('palette', 17) }}Branding</a>
+              {% if can_manage_company_team(role) %}<a href="{{ url_for('team.company_team') }}">{{ shell_ui.icon('users', 17) }}Team</a>{% endif %}
+              {% if can_manage_branding(role) %}<a href="{{ url_for('client.branding') }}">{{ shell_ui.icon('palette', 17) }}Branding</a>{% endif %}
             </div>
           </details>
           {% endif %}
