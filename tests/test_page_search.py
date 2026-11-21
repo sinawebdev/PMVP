@@ -17,10 +17,6 @@ from app import create_app, db  # noqa: E402
 from app.models import ClientCompany, User  # noqa: E402
 from app.page_search import COMPANY_PAGES, OPERATOR_PAGES, pages_for  # noqa: E402
 
-# Pages that arrive with branches not yet merged when this was written. Once
-# they exist, the "every endpoint exists" check covers them like any other.
-LATER = {"team.bureau_team", "team.company_team"}
-
 
 class PageSearchTestCase(unittest.TestCase):
     def setUp(self):
@@ -52,7 +48,7 @@ class PageSearchTestCase(unittest.TestCase):
     # --- the list itself ---------------------------------------------------------
     def test_every_listed_endpoint_exists(self):
         listed = {p.endpoint for p in OPERATOR_PAGES + COMPANY_PAGES}
-        missing = {e for e in listed if e not in self.app.view_functions} - LATER
+        missing = {e for e in listed if e not in self.app.view_functions}
         self.assertEqual(missing, set())
 
     def test_every_offered_page_opens_for_the_person_offered_it(self):
