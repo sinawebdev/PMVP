@@ -896,6 +896,12 @@ def create_app():
 
     bureau_scope.register(app)
 
+    # Every change to an employee record lands in the audit trail, whichever
+    # route or import made it (app/employee_audit.py).
+    from app import employee_audit
+
+    employee_audit.register(db)
+
     @app.context_processor
     def inject_app_identity():
         # Product-name strings for templates (title, brand, footer attribution).

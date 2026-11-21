@@ -159,8 +159,7 @@ def employee_edit(emp_id):
 def employee_deactivate(emp_id):
     employee = tenant_get_or_404(Employee, emp_id)
     employee.status = "Inactive"
-    record_audit("Employee deactivated", employee, f"{employee.full_name} deactivated by client.")
-    db.session.commit()
+    db.session.commit()  # audited by app.employee_audit ("Employee deactivated")
     flash(f"{employee.full_name} deactivated.", "success")
     return redirect(url_for("client.employees"))
 
@@ -170,8 +169,7 @@ def employee_deactivate(emp_id):
 def employee_reactivate(emp_id):
     employee = tenant_get_or_404(Employee, emp_id)
     employee.status = "Active"
-    record_audit("Employee reactivated", employee, f"{employee.full_name} reactivated by client.")
-    db.session.commit()
+    db.session.commit()  # audited by app.employee_audit ("Employee reactivated")
     flash(f"{employee.full_name} reactivated.", "success")
     return redirect(url_for("client.employees"))
 
@@ -218,11 +216,7 @@ def _save_employee(employee, company):
     employee.status = request.form.get("status", "Active") or "Active"
     # Keep the tenant binding invariant even on edit.
     employee.client_company_id = company.id
-    record_audit(
-        "Employee saved",
-        employee,
-        f"{employee.full_name} ({employee.staff_id}) saved by client.",
-    )
+    # Audited by app.employee_audit: one row naming each changed field.
     db.session.commit()
     flash(f"{employee.full_name} saved.", "success")
     return None

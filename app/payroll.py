@@ -877,6 +877,11 @@ def confirm_multi_client_import(import_id, payload):
 
 
 def create_payroll_run_from_payload(payload, client, validation, import_mode):
+    from app.employee_audit import set_change_source
+
+    # A payroll upload creates workers it hasn't seen and overwrites the bank,
+    # MoMo and salary details of those it has; the audit rows say so.
+    set_change_source(f"payroll upload for {payload['month']} {payload['year']}")
     status_breakdown = payload.get("status_breakdown") or {}
     payroll_run = PayrollRun(
         month=payload["month"],
