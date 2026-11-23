@@ -81,6 +81,7 @@ class MigrationChainBuildsTheSchemaTests(unittest.TestCase):
         with app.app_context():
             upgrade()
             cls.migrated = describe(db.engine)
+            cls.migrated_url = db.engine.url.render_as_string(hide_password=False)
 
         # Route 2: the models, straight to a second file. No second app needed —
         # the metadata is already loaded and can build itself anywhere.
@@ -136,6 +137,27 @@ class MigrationChainBuildsTheSchemaTests(unittest.TestCase):
                         self.migrated[table][aspect],
                         self.from_models[table][aspect],
                     )
+
+    def test_existing_rows_are_not_demo_rows(self):
+        """d8f2026b1123: a row written without is_demo (every row on the live
+        database when it deploys) reads back as not demo, so the demo
+        workspace's Remove can never count it as its own."""
+        from sqlalchemy import text
+
+        engine = create_engine(self.migrated_url)
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("INSERT INTO bureau (name, code, status) VALUES ('Old Bureau', 'OLD', 'Active')"))
+                conn.execute(text("INSERT INTO client_company (name, status) VALUES ('Old Company', 'Active')"))
+                flags = [
+                    conn.execute(text("SELECT is_demo FROM bureau WHERE code = 'OLD'")).scalar(),
+                    conn.execute(text("SELECT is_demo FROM client_company WHERE name = 'Old Company'")).scalar(),
+                ]
+                conn.execute(text("DELETE FROM client_company WHERE name = 'Old Company'"))
+                conn.execute(text("DELETE FROM bureau WHERE code = 'OLD'"))
+        finally:
+            engine.dispose()
+        self.assertEqual([bool(flag) for flag in flags], [False, False])
 
     def test_the_archived_ops_tables_do_not_survive(self):
         """The root creates 14 legacy tables purely so f969702561b6 can drop them.

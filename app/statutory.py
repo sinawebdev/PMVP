@@ -136,25 +136,35 @@ def rate_locks():
     A run stamped with a version (``PayrollRun.statutory_rate_id``) depends on
     that one. Runs calculated before the stamp existed (NULL) depend on the
     version that was in force for their period, so those are counted too.
+
+    A demo workspace run (app.demo_workspace) locks only its own bureau's
+    versions. Its made-up payroll must not freeze the default rates that every
+    real company depends on.
     """
     versions = StatutoryRate.query.all()
-    bureau_of = dict(db.session.query(ClientCompany.id, ClientCompany.bureau_id).all())
+    version_bureau = {v.id: v.bureau_id for v in versions}
+    companies = db.session.query(ClientCompany.id, ClientCompany.bureau_id, ClientCompany.is_demo).all()
+    bureau_of = {cid: bureau_id for cid, bureau_id, _demo in companies}
+    demo_ids = {cid for cid, _bureau_id, is_demo in companies if is_demo}
     counts = defaultdict(int)
     closed = PayrollRun.query.filter(PayrollRun.status.in_(CLOSED_STATUSES)).with_entities(
         PayrollRun.month, PayrollRun.year, PayrollRun.statutory_rate_id,
         PayrollRun.client_company_id,
     )
     for month, year, stamped, company_id in closed:
-        if stamped:
-            counts[stamped] += 1
+        rate_id = stamped
+        if not rate_id:
+            try:
+                start = period_start(month, year)
+            except (TypeError, ValueError):
+                continue
+            in_force = _in_force(versions, start, bureau_of.get(company_id))
+            rate_id = in_force.id if in_force is not None else None
+        if rate_id is None:
             continue
-        try:
-            start = period_start(month, year)
-        except (TypeError, ValueError):
+        if company_id in demo_ids and version_bureau.get(rate_id) is None:
             continue
-        in_force = _in_force(versions, start, bureau_of.get(company_id))
-        if in_force is not None:
-            counts[in_force.id] += 1
+        counts[rate_id] += 1
     return {
         rate_id: (
             f"{n} approved or processed payroll run{'' if n == 1 else 's'} "

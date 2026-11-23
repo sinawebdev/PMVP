@@ -237,10 +237,14 @@ def _do_send(run_id, only_failed):
         flash("A distribution is already in progress for this run.", "warning")
     else:
         note = " (already queued)" if replayed else ""
-        flash(
-            f"Distribution queued{note}: {summary['total']} payslip(s) will be sent shortly.",
-            "success",
-        )
+        from app.distribution.demo import is_demo_company
+
+        if is_demo_company(run.client_company):
+            outcome = (f"{summary['total']} payslip(s) will be recorded as sent. This is a demo "
+                       "company, so no SMS or email goes out.")
+        else:
+            outcome = f"{summary['total']} payslip(s) will be sent shortly."
+        flash(f"Distribution queued{note}: {outcome}", "success")
     return redirect(url_for("distribution.run_status", run_id=run.id))
 
 

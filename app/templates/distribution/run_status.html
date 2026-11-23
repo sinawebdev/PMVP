@@ -58,7 +58,7 @@
     {% endif %}
 {% endblock %}
 {% block content %}
-{{ dm.simulated_notice() }}
+{{ dm.simulated_notice(company=run.client_company) }}
 {% if confirm %}
 <section class="panel">{{ ds.send_confirm(confirm) }}</section>
 {% else %}

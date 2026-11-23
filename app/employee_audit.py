@@ -29,6 +29,7 @@ Rules:
   are only written at the flush, which is often after the import function has
   returned.
 """
+from contextlib import contextmanager
 from datetime import date
 
 from flask import g, has_request_context
@@ -80,6 +81,23 @@ def set_change_source(label):
     request (seeding, CLI), where nothing is recorded anyway."""
     if has_request_context():
         g._employee_change_source = label
+
+
+@contextmanager
+def seeding():
+    """Employee rows written inside this block are generated sample data, not a
+    person's change, even though a staff click in a web request started it (the
+    demo workspace's Set up and Refresh). They are left out of the trail, as
+    seeding outside a request always is."""
+    if not has_request_context():
+        yield
+        return
+    previous = getattr(g, "_employee_audit_seeding", False)
+    g._employee_audit_seeding = True
+    try:
+        yield
+    finally:
+        g._employee_audit_seeding = previous
 
 
 def _masked(value):
@@ -148,7 +166,7 @@ def _after_flush(session, flush_context):
     from app.models import AuditTrail, Employee
 
     user = _signed_in_user()
-    if user is None:
+    if user is None or getattr(g, "_employee_audit_seeding", False):
         return
     source = getattr(g, "_employee_change_source", None)
     suffix = f" Via {source}." if source else ""

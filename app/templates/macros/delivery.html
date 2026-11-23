@@ -10,9 +10,19 @@
    console is Bootstrap-styled and the tenant portal is not. Renders nothing at
    all once any real provider is configured, because the channels without one are
    then no longer offered (see sendable_channels).
+
+   A demo workspace company's payslips are never sent even when the providers
+   are live (app.distribution.demo), so for one (``company``, or ``any_demo``
+   when a bulk selection holds one) the notice says that instead.
 #}
-{% macro simulated_notice(wrapper="alert alert-warning") %}
-{%- if delivery_is_simulated() %}
+{% macro simulated_notice(wrapper="alert alert-warning", company=None, any_demo=False) %}
+{%- if any_demo or is_demo_company(company) %}
+<div class="{{ wrapper }}" role="status">
+    <strong>Demo company: payslips are never sent.</strong>
+    A &ldquo;Sent&rdquo; status here means the payslip was prepared and recorded.
+    No SMS or email goes out for a demo company.
+</div>
+{%- elif delivery_is_simulated() %}
 <div class="{{ wrapper }}" role="status">
     <strong>Delivery channels are not connected yet.</strong>
     Payslips are generated and recorded, but nothing is actually sent over

@@ -173,6 +173,7 @@ class NoUnboundedCollectionRendersTests(unittest.TestCase):
         "app/templates/payroll_detail.html": "comparison.rows is a fixed metric set; the items grid pages via ui.data_table",
         "app/templates/wage_rates.html": "one row per configured pay code for one client, not per worker",
         "app/templates/macros/distribution.html": "delivery rows and the SMS confirm step's unreachable workers both come in as pages (rows_page, problems); `channels` is the three delivery channels; the bulk confirm's `runs` is one page of the runs list's selection",
+        "app/templates/demo_workspace.html": "the demo workspace's own companies: three, plus any the demo bureau adds while trying it",
     }
 
     # Only loops that generate ROWS count. A <select> of filter options in a

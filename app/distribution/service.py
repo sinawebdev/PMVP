@@ -37,6 +37,7 @@ from app.models import (
 
 from .channels import OutboundMessage, get_sender, sendable_channels
 from .contacts import SOURCE_INVALID, roster_employee, sms_contact
+from .demo import DemoSender, is_demo_company
 from .links import short_payslip_url
 from .render import (
     SMS_TEMPLATE_VERSION,
@@ -229,7 +230,7 @@ def _payslip_pdf_attachment(item):
         return None
 
 
-def _build_message(channel, item, run, client, recipient, delivery=None):
+def _build_message(channel, item, run, client, recipient, delivery=None, attach_pdf=True):
     item_id = getattr(item, "id", None)
     delivery_id = getattr(delivery, "id", None)
     subject = f"Payslip {run.month} {run.year}".strip()
@@ -247,7 +248,7 @@ def _build_message(channel, item, run, client, recipient, delivery=None):
     if channel == CHANNEL_EMAIL:
         subject, text, html = render_payslip_email(item, run, client, link=link)
         attachments = []
-        if current_app.config.get("EMAIL_ATTACH_PAYSLIP_PDF"):
+        if attach_pdf and current_app.config.get("EMAIL_ATTACH_PAYSLIP_PDF"):
             attachment = _payslip_pdf_attachment(item)
             if attachment is not None:
                 attachments.append(attachment)
@@ -261,6 +262,13 @@ def _build_message(channel, item, run, client, recipient, delivery=None):
     text = render_payslip_text(item, run, client, link=link)
     return OutboundMessage(channel, recipient, subject, text,
                            item_id=item_id, delivery_id=delivery_id)
+
+
+def sender_for_company(channel, company):
+    """The sender a run of ``company`` may use on ``channel``. A demo company
+    never has a live sender constructed at all; :func:`_attempt_send` checks
+    again regardless."""
+    return DemoSender(channel) if is_demo_company(company) else get_sender(channel)
 
 
 def claim_delivery(delivery_id, claimable, *, batch_id=None, require_scheduled_retry=False):
@@ -340,12 +348,19 @@ def _attempt_send(delivery, item, run, client, ch, sender, max_attempts, backoff
         db.session.commit()
         return delivery.status
 
-    # Pace sends to the channel/provider's configured rate before the real call.
-    from .throttle import throttle
+    # A demo company's payslips never reach a provider, whichever sender the
+    # caller passed in (app.distribution.demo). Read after the claim committed,
+    # so the flag is fresh from the database.
+    demo = is_demo_company(run.client_company)
+    if demo:
+        sender = DemoSender(ch)
+    else:
+        # Pace sends to the channel/provider's configured rate before the real call.
+        from .throttle import throttle
 
-    throttle(ch)
+        throttle(ch)
     try:
-        message = _build_message(ch, item, run, client, recipient, delivery)
+        message = _build_message(ch, item, run, client, recipient, delivery, attach_pdf=not demo)
         # Commit before sending: the short link minted for an SMS has to exist
         # before the SMS carrying it does.
         db.session.commit()
@@ -378,7 +393,7 @@ def distribute_run(run, channel=CHANNEL_AUTO, only_failed=False, batch_id=None):
 
     def sender_for(ch):
         if ch not in senders:
-            senders[ch] = get_sender(ch)
+            senders[ch] = sender_for_company(ch, client)
         return senders[ch]
 
     summary = {"total": 0, "sent": 0, "failed": 0, "unknown": 0, "skipped": 0,
@@ -451,7 +466,7 @@ def retry_delivery(delivery):
     max_attempts, backoff_base = _retry_config()
     status = _attempt_send(
         delivery, item, run, run.client_company, delivery.channel,
-        get_sender(delivery.channel), max_attempts, backoff_base,
+        sender_for_company(delivery.channel, run.client_company), max_attempts, backoff_base,
         claimable=CLAIMABLE_FOR_RETRY, require_scheduled_retry=True,
     )
     return status == DELIVERY_SENT
