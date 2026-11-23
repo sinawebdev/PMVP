@@ -19,7 +19,7 @@
 
   <div class="card form stack">
     <h2>Send to workers</h2>
-    {{ dm.simulated_notice("flash warning") }}
+    {{ dm.simulated_notice("flash warning", company=run.client_company) }}
     {% if confirm %}
       {{ ds.send_confirm(confirm) }}
     {% elif not sendable %}

@@ -794,6 +794,7 @@ def create_app():
         delivery_is_simulated,
         simulated_channel_labels,
     )
+    from app.distribution.demo import is_demo_company
 
     app.jinja_env.globals.update(
         # Whether payslip "delivery" is still the console no-op. A console send
@@ -802,6 +803,9 @@ def create_app():
         # honest disclosure on it.
         delivery_is_simulated=delivery_is_simulated,
         simulated_channel_labels=simulated_channel_labels,
+        # A demo workspace company (app.demo_workspace): its payslips are never
+        # really sent, whatever providers are live, and the screens say so.
+        is_demo_company=is_demo_company,
         # Risk-gate verdict badge (label + semantic tone) from the run's persisted
         # risk_status — one mapping in app/risk.py for the operator run page and
         # the tenant portal, so a released run stops reading as held in both.
@@ -854,6 +858,7 @@ def create_app():
     from app.access_requests import access_bp
     from app.desktop_licences import licences_bp
     from app.bureaus import bureaus_bp
+    from app.demo_page import demo_bp
     from app.desktop_release import desktop_release_bp
     from app.audit import audit_bp
     from app.auth import auth_bp
@@ -875,6 +880,7 @@ def create_app():
     app.register_blueprint(access_bp)
     app.register_blueprint(licences_bp)
     app.register_blueprint(bureaus_bp)
+    app.register_blueprint(demo_bp)
     app.register_blueprint(desktop_release_bp)
     app.register_blueprint(invites_bp)
     app.register_blueprint(legal_bp)

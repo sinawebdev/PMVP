@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% import "macros/breadcrumbs.html" as bc %}
+{% block title %}Demo workspace · {{ app_name }}{% endblock %}
+{% block page_title %}Demo workspace{% endblock %}
+{% block breadcrumbs %}
+{{ bc.trail([
+    ("Dashboard", url_for('main.dashboard')),
+    ("Client Companies", url_for('main.clients')),
+    ("Demo workspace", None),
+]) }}
+{% endblock %}
+{% block content %}
+{# Sample logins on the live site so staff can see what a bureau and a client
+   company see (app.demo_workspace, app.demo_page). Payrolla staff only. #}
+<section class="panel">
+    <p class="mb-2">A sample payroll bureau with two client companies and six months of made-up payroll, with logins for the bureau and for one client company. Sign in as them to see exactly what a bureau and a client see.</p>
+    <p class="mini-note mb-0"><i class="bi bi-shield-check"></i> Demo payslips are never sent. Clicking Send in the demo records them as sent, but no SMS or email leaves {{ app_brand_name }}. The login invites are real emails.</p>
+</section>
+
+{% if state.problem %}
+<section class="panel mt-3">
+    <p class="mb-0 text-danger"><i class="bi bi-exclamation-triangle"></i> {{ state.problem }} Ask a developer to look at the demo rows before using this page.</p>
+</section>
+
+{% elif not state.exists %}
+<section class="panel mt-3" aria-labelledby="setup-heading">
+    <div class="panel-header"><h2 id="setup-heading"><i class="bi bi-magic"></i>Set up the demo workspace</h2></div>
+    <p>Each login gets an invite email to choose its password. Use addresses you can read; a Gmail address with a plus part (yourname+demo-bureau@gmail.com) lands in the same inbox.</p>
+    <form method="post" action="{{ url_for('demo.setup') }}" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% for key, role, label in login_roles %}
+        <fieldset class="mb-3">
+            <legend class="h6">{{ label }}</legend>
+            <div class="row g-2">
+                <div class="col-md-5">
+                    <label class="form-label" for="{{ key }}_name">Name</label>
+                    <input class="form-control {{ 'is-invalid' if errors[key ~ '_name'] }}" id="{{ key }}_name" name="{{ key }}_name" value="{{ form[key ~ '_name'] or '' }}" maxlength="120" autocomplete="off" required>
+                    {% if errors[key ~ '_name'] %}<div class="invalid-feedback">{{ errors[key ~ '_name'] }}</div>{% endif %}
+                </div>
+                <div class="col-md-7">
+                    <label class="form-label" for="{{ key }}_email">Email</label>
+                    <input class="form-control {{ 'is-invalid' if errors[key ~ '_email'] }}" type="email" id="{{ key }}_email" name="{{ key }}_email" value="{{ form[key ~ '_email'] or '' }}" maxlength="160" autocomplete="off" required>
+                    {% if errors[key ~ '_email'] %}<div class="invalid-feedback">{{ errors[key ~ '_email'] }}</div>{% endif %}
+                </div>
+            </div>
+        </fieldset>
+        {% endfor %}
+        <button class="btn btn-primary" type="submit"><i class="bi bi-magic"></i>Set up demo workspace</button>
+    </form>
+</section>
+
+{% else %}
+<section class="panel mt-3" aria-labelledby="companies-heading">
+    <div class="panel-header"><h2 id="companies-heading"><i class="bi bi-diagram-3"></i>{{ state.bureau.name }}</h2></div>
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <caption class="visually-hidden">Demo companies</caption>
+            <thead><tr><th scope="col">Company</th><th scope="col">Code</th><th scope="col">What it shows</th><th scope="col" class="num">Workers</th><th scope="col" class="num">Payroll runs</th></tr></thead>
+            <tbody>
+            {% for company in state.companies %}
+                <tr>
+                    <td><a href="{{ url_for('main.client_detail', client_id=company.id) }}">{{ company.name }}</a></td>
+                    <td><code>{{ company.company_code or "—" }}</code></td>
+                    <td>{% if company.bureau_home %}The bureau's own payroll{% elif company.id == state.portal_company_id %}A client with its own portal logins{% else %}A client the bureau runs{% endif %}</td>
+                    <td class="num">{{ company.employees | length }}</td>
+                    <td class="num">{{ company.payroll_runs | length }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel mt-3" aria-labelledby="logins-heading">
+    <div class="panel-header"><h2 id="logins-heading"><i class="bi bi-person-badge"></i>Demo logins</h2></div>
+    <p class="mini-note">Accept each invite in a private window: accepting an invite signs out whoever is signed in in that browser. The bureau admin sees the bureau interface; the client logins see the company portal.</p>
+    <ul class="invite-list">
+        {% for login in state.logins %}
+        <li>
+            <div><strong>{{ login.name }}</strong><span>{{ login.email }} · {{ role_labels.get(login.role, login.role) }}</span></div>
+            {% if login.disabled_at %}
+            <span class="badge text-bg-secondary">Removed {{ login.disabled_at.strftime('%d %b %Y') }}</span>
+            {% elif login.invite_pending %}
+            <span class="badge text-bg-info">Invite sent</span>
+            <form method="post" action="{{ url_for('demo.resend', login_id=login.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-envelope"></i>Resend</button>
+            </form>
+            {% else %}
+            <span class="badge text-bg-success">Can sign in</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+
+<section class="panel mt-3" aria-labelledby="actions-heading">
+    <div class="panel-header"><h2 id="actions-heading"><i class="bi bi-arrow-repeat"></i>Start again</h2></div>
+    <p>Refresh throws away everything done in the demo and rebuilds the six months of sample payroll up to this month. The logins and their passwords stay.</p>
+    <form method="post" action="{{ url_for('demo.refresh_workspace') }}" class="mb-4"
+          data-confirm="Rebuild the demo data? Everything done in the demo since it was set up is thrown away. The logins stay." data-confirm-title="Refresh demo data" data-confirm-ok="Refresh">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-primary" type="submit"><i class="bi bi-arrow-repeat"></i>Refresh demo data</button>
+    </form>
+    <form method="post" action="{{ url_for('demo.remove_workspace') }}"
+          data-confirm="Delete the demo bureau, its companies, all their data and the demo logins? This can't be undone." data-confirm-title="Remove demo workspace" data-confirm-ok="Remove" data-confirm-danger="1">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="confirm-remove" name="confirm" value="remove" required>
+            <label class="form-check-label" for="confirm-remove">Delete the demo workspace and its logins for good</label>
+        </div>
+        <button class="btn btn-outline-danger" type="submit"><i class="bi bi-trash"></i>Remove demo workspace</button>
+    </form>
+</section>
+{% endif %}
+{% endblock %}

@@ -35,7 +35,7 @@
         <div class="col-md-6">
             <strong>Payroll run by</strong>
             {% if client.bureau %}
-            <p class="mb-0">{{ client.bureau.name }} <span class="text-muted">(payroll bureau)</span></p>
+            <p class="mb-0">{{ client.bureau.name }} <span class="text-muted">(payroll bureau)</span>{% if client.is_demo %} <span class="badge text-bg-info">Demo</span> <a href="{{ url_for('demo.index') }}">Demo workspace</a>{% endif %}</p>
             {% else %}
             <p class="mb-1">{{ app_brand_name }}</p>
             <form method="post" action="{{ url_for('bureaus.convert_company', client_id=client.id) }}"

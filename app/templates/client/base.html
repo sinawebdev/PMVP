@@ -151,6 +151,10 @@
           <div class="flash {{ category }}" role="status">{{ message }}</div>
         {% endfor %}
       {% endwith %}
+      {% if company and company.is_demo %}
+      {#- The staff-only demo workspace (app.demo_workspace): say so on every page. -#}
+      <div class="flash info demo-banner" role="note"><strong>Demo company.</strong> Made-up staff and payroll. Payslips are never sent.</div>
+      {% endif %}
       {#- Whose data is this? Rendered once here for every client page rather
           than in each template, because that is exactly how four pages ended up
           with no tenant identity at all when the sidebar was removed. A page

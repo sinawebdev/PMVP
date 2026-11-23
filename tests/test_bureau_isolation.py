@@ -49,6 +49,8 @@ PAYROLLA_ONLY = {
     "distribution.dashboard", "distribution.dashboard_fragment",     # worker health across every tenant
     "bureaus.approve_request", "bureaus.convert_company",            # creating bureaus is Payrolla's
     "bureaus.approve_own_payroll",                                   # approving applications is Payrolla's
+    "demo.index", "demo.setup", "demo.refresh_workspace",            # the staff-only demo workspace
+    "demo.remove_workspace", "demo.resend",
 }
 
 

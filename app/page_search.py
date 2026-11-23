@@ -49,6 +49,8 @@ OPERATOR_PAGES = (
     _page("Statutory rates", "statutory.index", "statutory rates paye gra tax bands ssnit ssf tier pension rate versions", "PAYE bands and SSNIT rates in use"),
     _page("New statutory rate version", "statutory.new", "new rate version paye bands update change rates tax", "Record a change to PAYE or SSNIT"),
     _page("Desktop licences", "licences.ledger", "licences licence license desktop trial keys app", "Licences issued for the desktop app"),
+    _page("Demo workspace", "demo.index", "demo sample showcase example walkthrough practice test logins",
+          "Sample bureau and client logins"),
     _page("Database health", "main.db_health", "database health db status ops connection", "Is the database reachable and current"),
     _page("Team", "team.bureau_team", "team colleagues colleague staff users user people logins login invite access members officer administrator admin",
           "Who can sign in, and invite colleagues"),

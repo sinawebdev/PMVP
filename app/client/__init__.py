@@ -672,8 +672,14 @@ def _do_client_send(run, only_failed):
         # so the confirmation must not promise the worker will receive anything.
         # The page itself carries the fuller disclosure (macros/delivery.html).
         from app.distribution.channels import delivery_is_simulated
+        from app.distribution.demo import is_demo_company
 
-        if delivery_is_simulated():
+        if is_demo_company(run.client_company):
+            outcome = (
+                "this is a demo company, so the payslips will be prepared and "
+                "recorded as sent, but no SMS or email goes out."
+            )
+        elif delivery_is_simulated():
             outcome = (
                 "delivery channels are not yet connected for your account, so the "
                 "payslips will be prepared and recorded but not actually sent."

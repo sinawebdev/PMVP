@@ -75,6 +75,9 @@ class Bureau(db.Model):
     contact_email = db.Column(db.String(160))
     phone = db.Column(db.String(40))
     created_at = db.Column(db.DateTime, default=utc_now)
+    # The staff-only demo workspace (app.demo_workspace): fake data whose
+    # payslips are never really sent, and which Remove may delete outright.
+    is_demo = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
     companies = db.relationship("ClientCompany", back_populates="bureau")
 
@@ -122,6 +125,10 @@ class ClientCompany(db.Model):
     # Its people sign in as the bureau's staff, so it needs no logins of its
     # own and must never be flagged as awaiting credentials.
     bureau_home = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    # A demo workspace company (app.demo_workspace). Payslips for it are never
+    # handed to a real provider (app.distribution.demo). Set for every company
+    # of a demo bureau by _demo_bureau_companies_are_demo below.
+    is_demo = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
     bureau = db.relationship("Bureau", back_populates="companies")
     employees = db.relationship("Employee", back_populates="client_company")
@@ -1352,3 +1359,19 @@ def _user_scope_is_consistent(_mapper, _connection, user):
     from app.bureau_scope import require_bureau_consistency
 
     require_bureau_consistency(user)
+
+
+# Every company a demo bureau runs is a demo company, whichever screen made it.
+# Without this, a client the demo bureau admin adds through the ordinary "add
+# client" form would be a real company: its payslips would really go out, and
+# the workspace's Remove would refuse to delete a bureau that still owns it.
+@db.event.listens_for(ClientCompany, "before_insert")
+@db.event.listens_for(ClientCompany, "before_update")
+def _demo_bureau_companies_are_demo(_mapper, connection, company):
+    if company.is_demo or company.bureau_id is None:
+        return
+    bureau_is_demo = connection.scalar(
+        db.select(Bureau.is_demo).where(Bureau.id == company.bureau_id)
+    )
+    if bureau_is_demo:
+        company.is_demo = True

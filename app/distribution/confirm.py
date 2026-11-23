@@ -222,12 +222,16 @@ def bulk_confirm_context(args, role, *, post_url, back_url):
     workers = f"{counts['reachable']} worker{'' if counts['reachable'] == 1 else 's'}"
     in_runs = f"{len(included)} run{'' if len(included) == 1 else 's'}"
     filters = {"status": args.get("status") or "", "client_id": args.get("client_id") or ""}
+    from .demo import is_demo_company
+
     return {
         **counts,
         "channel": CHANNEL_AUTO,
         "action": "send",
         "auto": True,
         "runs": runs,
+        # The confirm page says demo payslips are not really sent (macros/delivery.html).
+        "any_demo": any(is_demo_company(found[run_id].client_company) for run_id in included),
         "problems": paginate_list(problems, per_page=PROBLEMS_PER_PAGE),
         "button": f"Send to {workers} in {in_runs}",
         "hidden": {"confirmed": "1", "run_ids": included, **filters},

@@ -166,6 +166,10 @@
                 </noscript>
             {% endif %}
         {% endwith %}
+        {% if current_bureau and current_bureau.is_demo %}
+        {# The staff-only demo workspace (app.demo_workspace): say so on every page. #}
+        <div class="alert alert-info demo-banner" role="note"><strong>Demo workspace.</strong> Sample companies and made-up payroll. Payslips are never sent.</div>
+        {% endif %}
         <div class="content-enter">
             {% block content %}{% endblock %}
         </div>

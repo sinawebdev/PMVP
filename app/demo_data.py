@@ -33,35 +33,32 @@ identical to production ones.
 from calendar import month_name
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import or_
-
 from app import db
 from app.models import (
     DELIVERY_SENT,
     AuditTrail,
     ClientCompany,
-    DistributionBatch,
-    DomainEvent,
     Employee,
-    EmployeeDeployment,
     Expense,
-    ImportBatch,
-    Notification,
-    PaymentVoucher,
     PayrollItem,
     PayrollRun,
     PayslipDelivery,
-    Proposal,
-    RawPayEntry,
-    RawUploadArchive,
-    Remittance,
     StatutoryRate,
     User,
-    WageRateProfile,
 )
 from app.payroll_calculations.salaried import SalariedCalculator
 from app.payroll_status import APPROVED, HELD, PENDING_APPROVAL, PROCESSED
 from app.seed import DEMO_COMPANIES, PLATFORM_USERS, seed_clients, seed_tenant_users, seed_users
+
+# The purge helpers live in app.tenant_purge (shared with app.demo_workspace);
+# re-exported here so existing imports keep working.
+from app.tenant_purge import (  # noqa: F401
+    _bulk_delete,
+    _ids,
+    delete_stored_files,
+    purge_client_company,
+    release_user_references,
+)
 
 # How many months of payroll history each demo tenant gets. Six fills the
 # dashboard's six-period charts exactly.
@@ -118,153 +115,6 @@ BANKS = ("GCB Bank", "Ecobank Ghana", "Absa Bank Ghana", "Fidelity Bank", "Stanb
 # --- Purge -------------------------------------------------------------------
 
 
-def _ids(query):
-    return [row[0] for row in query.all()]
-
-
-def _bulk_delete(model, condition):
-    """Delete rows matching ``condition`` without loading them.
-
-    ``synchronize_session=False`` because the caller discards the session's
-    identity map immediately afterwards (``db.session.expire_all()`` at the end
-    of the purge); loading every row just to evict it would make a reset of a
-    real dataset needlessly slow.
-    """
-    return model.query.filter(condition).delete(synchronize_session=False)
-
-
-def release_user_references(user_ids, replacement_user_id=None):
-    """Re-point every column that references a departing user.
-
-    Rows owned by OTHER records (an approved payroll run, a recorded expense, a
-    statutory rate version) are never deleted just because the user who touched
-    them is going away — that would destroy real history. Each such column is
-    set to ``replacement_user_id`` (normally the retained platform admin) so the
-    record keeps a human attribution, or NULL when there is no replacement.
-
-    ``Notification.user_id`` is the one exception: a notification exists only for
-    its recipient, so an unread notice for a deleted user is deleted, not
-    reassigned.
-    """
-    if not user_ids:
-        return
-    columns = [
-        (PayrollRun, ("created_by", "reviewed_by", "approved_by")),
-        (PaymentVoucher, ("prepared_by", "reviewed_by", "approved_by")),
-        (Expense, ("paid_by", "approved_by", "recorded_by")),
-        (ImportBatch, ("uploaded_by",)),
-        (Proposal, ("drafted_by",)),
-        (DistributionBatch, ("initiated_by_user_id",)),
-        (StatutoryRate, ("created_by",)),
-        (DomainEvent, ("actor_user_id",)),
-        (AuditTrail, ("user_id",)),
-    ]
-    for model, names in columns:
-        for name in names:
-            column = getattr(model, name)
-            model.query.filter(column.in_(user_ids)).update(
-                {column: replacement_user_id}, synchronize_session=False
-            )
-    _bulk_delete(Notification, Notification.user_id.in_(user_ids))
-
-
-def purge_client_company(company, replacement_user_id=None, drop_company=True):
-    """Delete everything belonging to ``company``, child-first.
-
-    With ``drop_company=False`` the company row itself survives — that is how a
-    retained demo tenant is emptied before being rebuilt. Staged only; the caller
-    owns the commit, so a failure rolls the whole reset back rather than leaving
-    a half-deleted tenant.
-    """
-    cid = company.id
-    run_ids = _ids(db.session.query(PayrollRun.id).filter_by(client_company_id=cid))
-    employee_ids = _ids(db.session.query(Employee.id).filter_by(client_company_id=cid))
-    user_ids = _ids(db.session.query(User.id).filter_by(client_company_id=cid))
-
-    # 1. Grandchildren of a run: deliveries reference items AND batches, so they
-    #    must go before either.
-    if run_ids:
-        _bulk_delete(PayslipDelivery, PayslipDelivery.payroll_run_id.in_(run_ids))
-        _bulk_delete(RawUploadArchive, RawUploadArchive.payroll_run_id.in_(run_ids))
-        _bulk_delete(RawPayEntry, RawPayEntry.payroll_run_id.in_(run_ids))
-        _bulk_delete(Remittance, Remittance.payroll_run_id.in_(run_ids))
-        _bulk_delete(PaymentVoucher, PaymentVoucher.payroll_run_id.in_(run_ids))
-        _bulk_delete(PayrollItem, PayrollItem.payroll_run_id.in_(run_ids))
-
-    # 2. Records attached to the tenant or to one of its runs.
-    _bulk_delete(
-        DistributionBatch,
-        or_(
-            DistributionBatch.client_company_id == cid,
-            DistributionBatch.payroll_run_id.in_(run_ids or [-1]),
-        ),
-    )
-    _bulk_delete(
-        Expense,
-        or_(
-            Expense.client_company_id == cid,
-            Expense.payroll_run_id.in_(run_ids or [-1]),
-        ),
-    )
-    _bulk_delete(
-        ImportBatch,
-        or_(
-            ImportBatch.client_company_id == cid,
-            ImportBatch.payroll_run_id.in_(run_ids or [-1]),
-        ),
-    )
-
-    # 3. Event log + its fan-out. Notifications point at events, so they go first.
-    event_ids = _ids(
-        db.session.query(DomainEvent.id).filter(
-            or_(
-                DomainEvent.client_company_id == cid,
-                DomainEvent.actor_user_id.in_(user_ids or [-1]),
-            )
-        )
-    )
-    _bulk_delete(
-        Notification,
-        or_(
-            Notification.client_company_id == cid,
-            Notification.event_id.in_(event_ids or [-1]),
-            Notification.user_id.in_(user_ids or [-1]),
-        ),
-    )
-    if event_ids:
-        _bulk_delete(DomainEvent, DomainEvent.id.in_(event_ids))
-
-    # 4. Roster satellites, then the roster and the runs themselves.
-    _bulk_delete(
-        WageRateProfile,
-        or_(
-            WageRateProfile.client_company_id == cid,
-            WageRateProfile.employee_id.in_(employee_ids or [-1]),
-        ),
-    )
-    _bulk_delete(
-        EmployeeDeployment,
-        or_(
-            EmployeeDeployment.client_company_id == cid,
-            EmployeeDeployment.employee_id.in_(employee_ids or [-1]),
-        ),
-    )
-    _bulk_delete(Proposal, Proposal.client_company_id == cid)
-    _bulk_delete(PayrollRun, PayrollRun.client_company_id == cid)
-    _bulk_delete(Employee, Employee.client_company_id == cid)
-
-    # 5. The tenant's own users. Their audit entries go with them — an audit row
-    #    for a deleted demo tenant has nothing left to explain.
-    if user_ids:
-        _bulk_delete(AuditTrail, AuditTrail.user_id.in_(user_ids))
-        release_user_references(user_ids, replacement_user_id)
-        _bulk_delete(User, User.id.in_(user_ids))
-
-    if drop_company:
-        db.session.delete(company)
-    db.session.flush()
-
-
 def purge_obsolete_platform_users(replacement_user_id=None):
     """Remove platform logins that are not part of the professional roster.
 
@@ -304,13 +154,17 @@ def _recent_periods(months, today=None):
     return list(reversed(periods))
 
 
-def build_employees(company):
-    """The company's roster, keyed off its company code. Returns the employees."""
-    roster = DEMO_ROSTERS.get(company.company_code, [])
+def build_employees(company, roster=None, staff_prefix=None):
+    """The company's roster, keyed off its company code unless ``roster`` is
+    given, with staff ids ``<staff_prefix or company code><suffix>``. Returns
+    the employees."""
+    if roster is None:
+        roster = DEMO_ROSTERS.get(company.company_code, [])
+    prefix = staff_prefix or company.company_code
     employees = []
     for index, (suffix, full_name, job_title, department, basic) in enumerate(roster):
         employee = Employee(
-            staff_id=f"{company.company_code}{suffix}",
+            staff_id=f"{prefix}{suffix}",
             full_name=full_name,
             job_title=job_title,
             department=department,
@@ -320,7 +174,7 @@ def build_employees(company):
             momo_number=f"0554{index:03d}{company.id:03d}",
             email=f"{full_name.split()[0].lower()}.{full_name.split()[-1].lower()}"
             f"@{company.email.split('@', 1)[1]}",
-            ssnit_number=f"SSN{company.company_code}{suffix}",
+            ssnit_number=f"SSN{prefix}{suffix}",
             ghana_card_number=f"GHA-{company.id:04d}{suffix}-1",
             bank_name=BANKS[index % len(BANKS)],
             bank_branch="Main Branch",
@@ -370,19 +224,27 @@ def run_status_for(index, total, offset=0):
 def build_payroll_history(company, employees, periods, operator, approver, status_offset=0):
     """One payroll run per period with real calculated items. Returns the runs."""
     runs = []
+    latest = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=2)
     for index, (month, year) in enumerate(periods):
         status = run_status_for(index, len(periods), status_offset)
-        rate = StatutoryRate.active_for(date(year, list(month_name).index(month), 1))
+        # The rates the company's bureau would really calculate with (its own
+        # override when it has one), stamped on the run like a real calculation.
+        rate = StatutoryRate.active_for(
+            date(year, list(month_name).index(month), 1), company.bureau_id
+        )
         if rate is None:
             continue
         calculator = SalariedCalculator(rate)
-        created_at = datetime(year, list(month_name).index(month), 26, 9, 0)
+        # The 26th, or two days ago for a month that hasn't reached it yet, so
+        # no run, approval or payslip is dated in the future.
+        created_at = min(datetime(year, list(month_name).index(month), 26, 9, 0), latest)
 
         run = PayrollRun(
             month=month,
             year=year,
             status=status,
             client_company_id=company.id,
+            statutory_rate_id=rate.id,
             created_by=operator.id if operator else None,
             approved_by=approver.id if approver and status in (APPROVED, PROCESSED) else None,
             approved_at=created_at + timedelta(days=1) if status in (APPROVED, PROCESSED) else None,
@@ -442,13 +304,18 @@ def build_payroll_history(company, employees, periods, operator, approver, statu
     return runs
 
 
-def build_deliveries(runs):
+def build_deliveries(runs, provider="console"):
     """Mark a closed run's payslips as delivered, so the delivery-rate stat and
-    the distribution surfaces have something real to show."""
+    the distribution surfaces have something real to show.
+
+    ``updated_at`` is back-dated with ``sent_at``: left at "now", months of
+    seeded sends would all count as recent in the SLA failure-rate window
+    (app.sla) and dilute a real failure spike."""
     for run in runs:
         if run.status != PROCESSED:
             continue
         for item in run.items:
+            sent_at = (run.approved_at or run.created_at) + timedelta(hours=2)
             db.session.add(
                 PayslipDelivery(
                     payroll_item_id=item.id,
@@ -456,9 +323,11 @@ def build_deliveries(runs):
                     channel="email" if item.email else "sms",
                     recipient=item.email or item.momo_number,
                     status=DELIVERY_SENT,
-                    provider="console",
+                    provider=provider,
                     attempts=1,
-                    sent_at=(run.approved_at or run.created_at) + timedelta(hours=2),
+                    sent_at=sent_at,
+                    created_at=sent_at,
+                    updated_at=sent_at,
                 )
             )
 

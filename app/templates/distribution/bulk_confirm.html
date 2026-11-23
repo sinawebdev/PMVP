@@ -15,6 +15,6 @@
 ]) }}
 {% endblock %}
 {% block content %}
-{{ dm.simulated_notice() }}
+{{ dm.simulated_notice(any_demo=confirm.any_demo) }}
 <section class="panel">{{ ds.send_confirm(confirm) }}</section>
 {% endblock %}
